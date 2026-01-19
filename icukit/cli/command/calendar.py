@@ -2,13 +2,8 @@
 
 import argparse
 
-from ...calendar import (
-    CalendarError,
-    get_calendar_info,
-    is_valid_calendar,
-    list_calendars,
-    list_calendars_info,
-)
+from ...calendar import get_calendar_info, is_valid_calendar, list_calendars, list_calendars_info
+from ...errors import CalendarError
 from ...formatters import print_output
 from ..subcommand_base import SubcommandBase, handles_errors
 
