@@ -1380,7 +1380,7 @@ Example:
     >>> fmt.format(seconds=3661)
     '1 hour, 1 minute, 1 second'
 
-#### `DurationFormatter(locale: str = 'en_US', width: str = 'WIDE')`
+#### `DurationFormatter(locale: 'str' = 'en_US', width: 'str' = 'WIDE')`
 
 Create a DurationFormatter.
 
@@ -1388,7 +1388,7 @@ Args:
     locale: Locale code (e.g., "en_US", "de_DE")
     width: Width style (WIDE, SHORT, NARROW)
 
-#### `format(seconds: float | None = None, minutes: float = 0, hours: float = 0, days: float = 0, weeks: float = 0, months: float = 0, years: float = 0) -> str`
+#### `format(seconds: 'float | None' = None, minutes: 'float' = 0, hours: 'float' = 0, days: 'float' = 0, weeks: 'float' = 0, months: 'float' = 0, years: 'float' = 0) -> 'str'`
 
 Format a duration.
 
@@ -1411,7 +1411,7 @@ Example:
     >>> fmt.format(hours=2, minutes=30)
     '2 hours, 30 minutes'
 
-#### `format_iso(iso_string: str) -> str`
+#### `format_iso(iso_string: 'str') -> 'str'`
 
 Format an ISO 8601 duration string.
 
@@ -1425,7 +1425,7 @@ Example:
     >>> fmt.format_iso("P2DT3H30M")
     '2 days, 3 hours, 30 minutes'
 
-### `format_duration(seconds: float | None = None, locale: str = 'en_US', width: str = 'WIDE', **kwargs) -> str`
+### `format_duration(seconds: 'float | None' = None, locale: 'str' = 'en_US', width: 'str' = 'WIDE', **kwargs) -> 'str'`
 
 Format a duration (convenience function).
 
@@ -1446,7 +1446,7 @@ Example:
     >>> format_duration(hours=2, minutes=30)
     '2 hours, 30 minutes'
 
-### `parse_iso_duration(iso_string: str) -> dict`
+### `parse_iso_duration(iso_string: 'str') -> 'dict'`
 
 Parse an ISO 8601 duration string.
 
@@ -1725,7 +1725,7 @@ Example:
         >>> add_likely_subtags('zh')
         'zh_Hans_CN'
 
-### `add_likely_subtags(locale_str: str) -> str`
+### `add_likely_subtags(locale_str: 'str') -> 'str'`
 
 Add likely subtags to a locale identifier.
 
@@ -1743,7 +1743,7 @@ Example:
     >>> add_likely_subtags('sr')
     'sr_Cyrl_RS'
 
-### `canonicalize_locale(locale_str: str) -> str`
+### `canonicalize_locale(locale_str: 'str') -> 'str'`
 
 Canonicalize a locale identifier.
 
@@ -1759,7 +1759,7 @@ Example:
     >>> canonicalize_locale('iw')  # deprecated Hebrew code
     'he'
 
-### `format_compact(value: int | float, locale_str: str = 'en_US', style: str = 'SHORT') -> str`
+### `format_compact(value: 'int | float', locale_str: 'str' = 'en_US', style: 'str' = 'SHORT') -> 'str'`
 
 Format a number in compact form with locale-appropriate abbreviations.
 
@@ -1779,7 +1779,7 @@ Example:
     >>> format_compact(1234567, 'en_US', COMPACT_LONG)
     '1.2 million'
 
-### `format_currency(value: float, locale_str: str = 'en_US', currency: str = None) -> str`
+### `format_currency(value: 'float', locale_str: 'str' = 'en_US', currency: 'str' = None) -> 'str'`
 
 Format a value as currency.
 
@@ -1799,7 +1799,7 @@ Example:
     >>> format_currency(1234.56, 'en_US', 'EUR')
     '€1,234.56'
 
-### `format_number(value: float, locale_str: str = 'en_US') -> str`
+### `format_number(value: 'float', locale_str: 'str' = 'en_US') -> 'str'`
 
 Format a number according to locale conventions.
 
@@ -1816,7 +1816,7 @@ Example:
     >>> format_number(1234567.89, 'de_DE')
     '1.234.567,89'
 
-### `format_ordinal(value: int, locale_str: str = 'en_US') -> str`
+### `format_ordinal(value: 'int', locale_str: 'str' = 'en_US') -> 'str'`
 
 Format a number as an ordinal.
 
@@ -1835,7 +1835,7 @@ Example:
     >>> format_ordinal(1, 'de_DE')
     '1.'
 
-### `format_percent(value: float, locale_str: str = 'en_US') -> str`
+### `format_percent(value: 'float', locale_str: 'str' = 'en_US') -> 'str'`
 
 Format a value as a percentage.
 
@@ -1852,7 +1852,7 @@ Example:
     >>> format_percent(0.15, 'de_DE')
     '15 %'
 
-### `format_scientific(value: float, locale_str: str = 'en_US') -> str`
+### `format_scientific(value: 'float', locale_str: 'str' = 'en_US') -> 'str'`
 
 Format a value in scientific notation.
 
@@ -1867,7 +1867,7 @@ Example:
     >>> format_scientific(1234567.89, 'en_US')
     '1.234568E6'
 
-### `format_spellout(value: int, locale_str: str = 'en_US') -> str`
+### `format_spellout(value: 'int', locale_str: 'str' = 'en_US') -> 'str'`
 
 Spell out a number in words.
 
@@ -1884,7 +1884,7 @@ Example:
     >>> format_spellout(42, 'de_DE')
     'zwei­und­vierzig'
 
-### `get_default_locale() -> str`
+### `get_default_locale() -> 'str'`
 
 Get the system default locale.
 
@@ -1895,7 +1895,7 @@ Example:
     >>> get_default_locale()
     'en_US'  # or whatever the system default is
 
-### `get_display_name(locale_str: str, display_locale: str = 'en') -> str`
+### `get_display_name(locale_str: 'str', display_locale: 'str' = 'en') -> 'str'`
 
 Get the display name for a locale.
 
@@ -1912,7 +1912,7 @@ Example:
     >>> get_display_name('el_GR', 'el')
     'Ελληνικά (Ελλάδα)'
 
-### `get_exemplar_characters(locale_str: str = 'en_US', exemplar_type: str = 'standard') -> str`
+### `get_exemplar_characters(locale_str: 'str' = 'en_US', exemplar_type: 'str' = 'standard') -> 'str'`
 
 Get exemplar characters for a locale.
 
@@ -1938,7 +1938,7 @@ Example:
     >>> get_exemplar_characters("ja_JP", "index")
     '[あかさたなはまやらわ]'
 
-### `get_exemplar_info(locale_str: str = 'en_US') -> Dict[str, str]`
+### `get_exemplar_info(locale_str: 'str' = 'en_US') -> 'Dict[str, str]'`
 
 Get all exemplar character sets for a locale.
 
@@ -1955,7 +1955,7 @@ Example:
     >>> info["index"]
     '[A-Z]'
 
-### `get_language_display_name(language: str, display_locale: str = 'en') -> str`
+### `get_language_display_name(language: 'str', display_locale: 'str' = 'en') -> 'str'`
 
 Get the display name for a language code.
 
@@ -1972,7 +1972,7 @@ Example:
     >>> get_language_display_name('ja')
     'Japanese'
 
-### `get_locale_attributes(locale_str: str, display_locale: str = 'en') -> Dict[str, Any]`
+### `get_locale_attributes(locale_str: 'str', display_locale: 'str' = 'en') -> 'Dict[str, Any]'`
 
 Get comprehensive locale attributes.
 
@@ -1995,7 +1995,7 @@ Example:
     >>> attrs['quote_start']
     '"'
 
-### `get_locale_extended(locale_str: str) -> Dict[str, Any]`
+### `get_locale_extended(locale_str: 'str') -> 'Dict[str, Any]'`
 
 Get extended locale attributes.
 
@@ -2014,7 +2014,7 @@ Example:
     >>> ext['index_labels'][:3]
     ['あ', 'か', 'さ']
 
-### `get_locale_info(locale_str: str, display_locale: str = 'en', extended: bool = False) -> Dict[str, Any]`
+### `get_locale_info(locale_str: 'str', display_locale: 'str' = 'en', extended: 'bool' = False) -> 'Dict[str, Any]'`
 
 Get detailed information about a locale.
 
@@ -2036,7 +2036,7 @@ Example:
     >>> info['extended']['currency']
     'JPY'
 
-### `get_locale_scripts(locale_str: str) -> List[str]`
+### `get_locale_scripts(locale_str: 'str') -> 'List[str]'`
 
 Get the scripts used by a locale.
 
@@ -2054,7 +2054,7 @@ Example:
     >>> get_locale_scripts('en_US')
     ['Latin']
 
-### `get_number_symbols(locale_str: str = 'en_US') -> Dict[str, str]`
+### `get_number_symbols(locale_str: 'str' = 'en_US') -> 'Dict[str, str]'`
 
 Get number formatting symbols for a locale.
 
@@ -2085,7 +2085,7 @@ Example:
     >>> get_number_symbols("fr_FR")
     {'decimal': ',', 'grouping': ' ', 'percent': '%', ...}
 
-### `is_valid_locale(locale_str: str) -> bool`
+### `is_valid_locale(locale_str: 'str') -> 'bool'`
 
 Check if a locale string is valid.
 
@@ -2101,7 +2101,7 @@ Example:
     >>> is_valid_locale('xx_YY')
     False
 
-### `list_exemplar_types() -> List[str]`
+### `list_exemplar_types() -> 'List[str]'`
 
 List available exemplar character set types.
 
@@ -2112,7 +2112,7 @@ Example:
     >>> list_exemplar_types()
     ['standard', 'auxiliary', 'index', 'punctuation']
 
-### `list_languages() -> List[str]`
+### `list_languages() -> 'List[str]'`
 
 List all available language codes.
 
@@ -2126,7 +2126,7 @@ Example:
     >>> 'el' in langs
     True
 
-### `list_locales() -> List[str]`
+### `list_locales() -> 'List[str]'`
 
 List all available locale identifiers.
 
@@ -2140,7 +2140,7 @@ Example:
     >>> len(locales)
     851
 
-### `list_locales_info(display_locale: str = 'en') -> List[Dict[str, Any]]`
+### `list_locales_info(display_locale: 'str' = 'en') -> 'List[Dict[str, Any]]'`
 
 List all locales with their info.
 
@@ -2156,7 +2156,7 @@ Example:
     >>> el['display_name']
     'Greek (Greece)'
 
-### `minimize_subtags(locale_str: str) -> str`
+### `minimize_subtags(locale_str: 'str') -> 'str'`
 
 Remove likely subtags from a locale identifier.
 
@@ -2174,7 +2174,7 @@ Example:
     >>> minimize_subtags('en_Latn_US')
     'en'
 
-### `parse_locale(locale_str: str) -> Dict[str, Any]`
+### `parse_locale(locale_str: 'str') -> 'Dict[str, Any]'`
 
 Parse a locale string into components.
 
@@ -2775,7 +2775,7 @@ Example:
     >>> list_plural_categories("ar")
     ['zero', 'one', 'two', 'few', 'many', 'other']
 
-### `get_ordinal_category(number: int | float, locale: str = 'en_US') -> str`
+### `get_ordinal_category(number: 'int | float', locale: 'str' = 'en_US') -> 'str'`
 
 Get the ordinal category for a number.
 
@@ -2798,7 +2798,7 @@ Example:
     >>> get_ordinal_category(4, "en")
     'other'
 
-### `get_plural_category(number: int | float, locale: str = 'en_US') -> str`
+### `get_plural_category(number: 'int | float', locale: 'str' = 'en_US') -> 'str'`
 
 Get the plural category for a number.
 
@@ -2819,7 +2819,7 @@ Example:
     >>> get_plural_category(5, "ru")
     'many'
 
-### `get_plural_rules_info(locale: str = 'en_US') -> dict`
+### `get_plural_rules_info(locale: 'str' = 'en_US') -> 'dict'`
 
 Get detailed plural rules information for a locale.
 
@@ -2838,7 +2838,7 @@ Example:
     >>> info["cardinal_categories"]
     ['one', 'few', 'many', 'other']
 
-### `list_ordinal_categories(locale: str = 'en_US') -> list[str]`
+### `list_ordinal_categories(locale: 'str' = 'en_US') -> 'list[str]'`
 
 List the ordinal categories used by a locale.
 
@@ -2852,7 +2852,7 @@ Example:
     >>> list_ordinal_categories("en")
     ['one', 'two', 'few', 'other']
 
-### `list_plural_categories(locale: str = 'en_US') -> list[str]`
+### `list_plural_categories(locale: 'str' = 'en_US') -> 'list[str]'`
 
 List the plural categories used by a locale.
 
