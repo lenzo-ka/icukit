@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional
 
 import icukit
 from icukit.cli.command_trie import get_all_commands, get_command_info
-from icukit.cli.main import create_parser
 
 
 def get_api_exports() -> List[str]:
@@ -56,6 +55,9 @@ def get_cli_commands() -> Dict[str, Dict[str, Any]]:
     Returns:
         Dictionary mapping command names to their info (aliases, minimal_prefix)
     """
+    # Import lazily to avoid circular import
+    from icukit.cli.main import create_parser
+
     # Trigger command registration by building the parser
     create_parser()
 

@@ -13,6 +13,8 @@ Example:
     {'start': 4, 'end': 8, 'text': 'café'}
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import icu

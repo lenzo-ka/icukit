@@ -12,6 +12,8 @@ Example:
     ['Ol', 'Öl', 'öl']
 """
 
+from __future__ import annotations
+
 import icu
 
 from .errors import CollatorError
