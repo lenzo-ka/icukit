@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "icukit"
+version = "0.1.0"
+description = "ICU toolkit - library and CLI for Unicode and internationalization"
+authors = [
+    {name = "Kevin Lenzo", email = "kevinlenzo@gmail.com"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = [
+    "icukit-pyicu>=2.14",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+]
+
+[project.scripts]
+icukit = "icukit.cli:main"
+ik = "icukit.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
