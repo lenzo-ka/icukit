@@ -26,6 +26,8 @@ Example:
     '2時間30分'
 """
 
+from __future__ import annotations
+
 import re
 
 import icu
