@@ -31,7 +31,7 @@ classifiers = [
     "Topic :: Text Processing",
 ]
 dependencies = [
-    "icukit-pyicu>=2.14",
+    "icukit-pyicu>=78.2.1",
 ]
 
 [project.urls]
