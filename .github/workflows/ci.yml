@@ -130,8 +130,7 @@ jobs:
   publish-pypi:
     needs: [test, build-wheels]
     runs-on: ubuntu-latest
-    if: false  # Disabled until CI is stable
-    # if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     environment: pypi
 
     steps:
