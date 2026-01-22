@@ -14,31 +14,9 @@ macOS does not expose system ICU headers, so the bundled approach is the only pr
 
 ## Linux
 
-On Linux, icukit expects PyICU to be available. You have two options:
+On Linux, icukit automatically installs PyICU, which builds against your system's ICU libraries.
 
-### Option 1: System ICU (Recommended)
-
-Install your distribution's ICU development packages, then PyICU:
-
-```bash
-pip install icukit PyICU
-```
-
-This uses your system's ICU libraries, which is typically smaller and integrates better with system updates.
-
-### Option 2: Bundled ICU
-
-If you prefer a self-contained installation without system dependencies:
-
-```bash
-pip install icukit[bundled]
-# or equivalently:
-pip install icukit icukit-pyicu
-```
-
-This installs `icukit-pyicu` with pre-built ICU libraries.
-
-### Installing System ICU Packages
+First, install the ICU development packages for your distribution:
 
 **Ubuntu/Debian:**
 ```bash
@@ -54,6 +32,22 @@ sudo dnf install libicu-devel pkg-config
 ```bash
 sudo pacman -S icu
 ```
+
+Then install icukit:
+
+```bash
+pip install icukit
+```
+
+### Alternative: Bundled ICU
+
+If you prefer a self-contained installation without system ICU dependencies:
+
+```bash
+pip install icukit[bundled]
+```
+
+This installs `icukit-pyicu` instead of PyICU, with pre-built ICU libraries included.
 
 ## Verifying Installation
 
@@ -71,18 +65,6 @@ ik locale info en_US
 ```
 
 ## Troubleshooting
-
-### "No module named 'icu'" (Linux)
-
-This means PyICU is not installed. Either:
-
-```bash
-# Install system ICU packages (see above), then:
-pip install PyICU
-
-# Or use bundled ICU:
-pip install icukit[bundled]
-```
 
 ### PyICU build fails on Linux
 

@@ -12,17 +12,17 @@ pip install icukit
 
 On **macOS**, this automatically includes bundled ICU libraries (via `icukit-pyicu`).
 
-On **Linux**, you need PyICU installed. Either install system ICU packages first:
+On **Linux**, this installs PyICU, which requires system ICU libraries:
 
 ```bash
 # Ubuntu/Debian
-sudo apt install libicu-dev && pip install PyICU
+sudo apt install libicu-dev
 
 # Fedora/RHEL
-sudo dnf install libicu-devel && pip install PyICU
+sudo dnf install libicu-devel
 ```
 
-Or use bundled ICU: `pip install icukit[bundled]` or `pip install icukit icukit-pyicu`
+Alternatively, use bundled ICU on any platform: `pip install icukit[bundled]`
 
 See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/install.md) for details.
 

@@ -2,7 +2,7 @@
 
 ## 0.1.3
 
-- Make icukit-pyicu dependency conditional on macOS only
+- Platform-conditional ICU dependencies: icukit-pyicu on macOS, PyICU on Linux
 - Add `[bundled]` extra for explicit bundled ICU installation on any platform
 - Add runtime check with helpful error message when PyICU is not installed
 - Add installation documentation (`docs/install.md`)

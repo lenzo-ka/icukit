@@ -20,16 +20,25 @@ def _check_icu_available():
                 "icukit requires PyICU but it is not installed.\n\n"
                 "Run: pip install icukit[bundled]"
             )
+        elif sys.platform == "linux":
+            # PyICU should auto-install, but may fail if system ICU is missing
+            msg = (
+                "icukit requires PyICU but it is not installed.\n\n"
+                "PyICU may have failed to build. Install system ICU libraries:\n"
+                "  Ubuntu/Debian: sudo apt install libicu-dev\n"
+                "  Fedora/RHEL:   sudo dnf install libicu-devel\n"
+                "  Arch:          sudo pacman -S icu\n\n"
+                "Then reinstall: pip install --force-reinstall icukit\n\n"
+                "Or use bundled ICU: pip install icukit[bundled]\n\n"
+                "See https://github.com/lenzo-ka/icukit/blob/main/docs/install.md"
+            )
         else:
+            # Other platforms (Windows, BSD, etc.)
             msg = (
                 "icukit requires PyICU but it is not installed.\n\n"
                 "Install options:\n"
                 "  pip install PyICU             # If you have system ICU libraries\n"
                 "  pip install icukit-pyicu      # Bundled ICU, no system deps needed\n\n"
-                "To install system ICU development packages:\n"
-                "  Ubuntu/Debian: sudo apt install libicu-dev\n"
-                "  Fedora/RHEL:   sudo dnf install libicu-devel\n"
-                "  Arch:          sudo pacman -S icu\n\n"
                 "See https://github.com/lenzo-ka/icukit/blob/main/docs/install.md"
             )
         raise ImportError(msg) from e

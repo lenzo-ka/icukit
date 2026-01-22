@@ -32,6 +32,7 @@ classifiers = [
 ]
 dependencies = [
     "icukit-pyicu>=78.2.1; sys_platform == 'darwin'",
+    "PyICU>=2.0; sys_platform == 'linux'",
 ]
 
 [project.urls]
