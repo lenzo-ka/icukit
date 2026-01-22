@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "icukit"
-version = "0.1.2"
+version = "0.1.3"
 description = "ICU toolkit - library and CLI for Unicode and internationalization"
 authors = [
     {name = "Kevin Lenzo", email = "kevinlenzo@gmail.com"}
@@ -31,7 +31,8 @@ classifiers = [
     "Topic :: Text Processing",
 ]
 dependencies = [
-    "icukit-pyicu>=78.2.1",
+    "icukit-pyicu>=78.2.1; sys_platform == 'darwin'",
+    "PyICU>=2.0; sys_platform == 'linux'",
 ]
 
 [project.urls]
@@ -40,6 +41,9 @@ Repository = "https://github.com/lenzo-ka/icukit"
 Issues = "https://github.com/lenzo-ka/icukit/issues"
 
 [project.optional-dependencies]
+bundled = [
+    "icukit-pyicu>=78.2.1",
+]
 dev = [
     "pytest>=9.0",
 ]
