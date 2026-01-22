@@ -3,6 +3,8 @@
 import subprocess
 import sys
 
+import icukit
+
 
 def run_cli(*args, input_text=None):
     """Run icukit CLI and return (returncode, stdout, stderr)."""
@@ -30,7 +32,7 @@ class TestCLIBasics:
         """CLI should show version."""
         code, out, err = run_cli("--version")
         assert code == 0
-        assert "0.1.0" in out
+        assert icukit.__version__ in out
 
     def test_no_args_shows_help(self):
         """CLI with no args should show help."""
