@@ -4,7 +4,7 @@ Provides a Pythonic interface to the ICU library for Unicode and
 internationalization support.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.3"
 
 
 def _check_icu_available():
