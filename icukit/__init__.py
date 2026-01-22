@@ -6,6 +6,39 @@ internationalization support.
 
 __version__ = "0.1.0"
 
+
+def _check_icu_available():
+    """Check that PyICU is available, with a helpful error message if not."""
+    try:
+        import icu  # noqa: F401
+    except ImportError as e:
+        import sys
+
+        if sys.platform == "darwin":
+            # Should not happen since icukit-pyicu is auto-installed on macOS
+            msg = (
+                "icukit requires PyICU but it is not installed.\n\n"
+                "Run: pip install icukit[bundled]"
+            )
+        else:
+            msg = (
+                "icukit requires PyICU but it is not installed.\n\n"
+                "Install options:\n"
+                "  pip install PyICU             # If you have system ICU libraries\n"
+                "  pip install icukit-pyicu      # Bundled ICU, no system deps needed\n\n"
+                "To install system ICU development packages:\n"
+                "  Ubuntu/Debian: sudo apt install libicu-dev\n"
+                "  Fedora/RHEL:   sudo dnf install libicu-devel\n"
+                "  Arch:          sudo pacman -S icu\n\n"
+                "See https://github.com/lenzo-ka/icukit/blob/main/docs/install.md"
+            )
+        raise ImportError(msg) from e
+
+
+_check_icu_available()
+
+# ruff: noqa: E402
+# flake8: noqa: E402
 from .alpha_index import (
     AlphabeticIndex,
     create_index_buckets,

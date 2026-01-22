@@ -31,7 +31,7 @@ classifiers = [
     "Topic :: Text Processing",
 ]
 dependencies = [
-    "icukit-pyicu>=78.2.1",
+    "icukit-pyicu>=78.2.1; sys_platform == 'darwin'",
 ]
 
 [project.urls]
@@ -40,6 +40,9 @@ Repository = "https://github.com/lenzo-ka/icukit"
 Issues = "https://github.com/lenzo-ka/icukit/issues"
 
 [project.optional-dependencies]
+bundled = [
+    "icukit-pyicu>=78.2.1",
+]
 dev = [
     "pytest>=9.0",
 ]
