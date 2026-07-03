@@ -86,16 +86,6 @@ Examples:
         return parser
 
     @classmethod
-    def _add_locale_option(cls, parser):
-        """Add locale option."""
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for breaking rules (default: en_US)",
-        )
-
-    @classmethod
     def _configure_sentences(cls, parser):
         """Configure sentences subcommand."""
         cls._add_locale_option(parser)

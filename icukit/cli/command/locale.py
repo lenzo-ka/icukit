@@ -214,9 +214,7 @@ Examples:
     def _configure_format(cls, parser):
         """Configure format subcommand."""
         parser.add_argument("value", type=float, help="Number to format")
-        parser.add_argument(
-            "--locale", "-l", default="en_US", help="Locale for formatting (default: en_US)"
-        )
+        cls._add_locale_option(parser, help="Locale for formatting (default: en_US)")
         parser.add_argument(
             "--type",
             "-t",
@@ -232,25 +230,19 @@ Examples:
     def _configure_spellout(cls, parser):
         """Configure spellout subcommand."""
         parser.add_argument("value", type=int, help="Integer to spell out")
-        parser.add_argument(
-            "--locale", "-l", default="en_US", help="Locale for spelling (default: en_US)"
-        )
+        cls._add_locale_option(parser, help="Locale for spelling (default: en_US)")
 
     @classmethod
     def _configure_ordinal(cls, parser):
         """Configure ordinal subcommand."""
         parser.add_argument("value", type=int, help="Integer to format as ordinal")
-        parser.add_argument(
-            "--locale", "-l", default="en_US", help="Locale for formatting (default: en_US)"
-        )
+        cls._add_locale_option(parser, help="Locale for formatting (default: en_US)")
 
     @classmethod
     def _configure_compact(cls, parser):
         """Configure compact subcommand."""
         parser.add_argument("value", type=float, help="Number to format in compact form")
-        parser.add_argument(
-            "--locale", "-l", default="en_US", help="Locale for formatting (default: en_US)"
-        )
+        cls._add_locale_option(parser, help="Locale for formatting (default: en_US)")
         parser.add_argument(
             "--style",
             "-s",
@@ -567,12 +559,7 @@ Examples:
     @classmethod
     def _configure_sort(cls, parser):
         """Configure sort subcommand."""
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for sorting rules (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for sorting rules (default: en_US)")
         parser.add_argument(
             "--reverse",
             "-r",
@@ -603,12 +590,7 @@ Examples:
         """Configure compare subcommand."""
         parser.add_argument("string_a", help="First string")
         parser.add_argument("string_b", help="Second string")
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for comparison (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for comparison (default: en_US)")
         parser.add_argument(
             "--strength",
             "-s",

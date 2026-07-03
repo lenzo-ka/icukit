@@ -97,12 +97,7 @@ Examples:
     @classmethod
     def _configure_sort(cls, parser):
         """Configure sort subcommand."""
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for sorting rules (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for sorting rules (default: en_US)")
         parser.add_argument(
             "--reverse",
             "-r",
@@ -139,12 +134,7 @@ Examples:
             "string_b",
             help="Second string",
         )
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for comparison (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for comparison (default: en_US)")
         parser.add_argument(
             "--strength",
             "-s",

@@ -109,12 +109,7 @@ Examples:
     @classmethod
     def _add_common_args(cls, parser):
         """Add common arguments for search commands."""
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for collation rules (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for collation rules (default: en_US)")
         parser.add_argument(
             "--strength",
             "-s",

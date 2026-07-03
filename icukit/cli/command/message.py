@@ -94,12 +94,7 @@ Examples:
             metavar="NAME=VALUE",
             help="Argument in name=value format (can be repeated)",
         )
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for formatting (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for formatting (default: en_US)")
 
     @classmethod
     def _parse_args(cls, arg_list: list[str] | None) -> dict:

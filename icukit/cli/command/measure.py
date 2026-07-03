@@ -136,12 +136,7 @@ Examples:
         """Configure the format subcommand."""
         parser.add_argument("value", type=float, help="Numeric value")
         parser.add_argument("unit", help="Unit name (e.g., kilometer, fahrenheit)")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -156,12 +151,7 @@ Examples:
         parser.add_argument("value", type=float, help="Value to convert")
         parser.add_argument("from_unit", help="Source unit (e.g., kilometer)")
         parser.add_argument("to_unit", help="Target unit (e.g., mile)")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale for formatted output (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for formatted output (default: en_US)")
         parser.add_argument(
             "-w",
             "--width",
@@ -182,12 +172,7 @@ Examples:
         parser.add_argument("low", type=float, help="Low value")
         parser.add_argument("high", type=float, help="High value")
         parser.add_argument("unit", help="Unit name")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -314,12 +299,7 @@ Examples:
             "measures",
             help="Comma-separated measures (e.g., '5 foot, 10 inch')",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -339,12 +319,7 @@ Examples:
             default="default",
             help="Usage context (default, road, person-height, weather, etc.)",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",

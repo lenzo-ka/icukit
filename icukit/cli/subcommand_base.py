@@ -149,6 +149,22 @@ class SubcommandBase:
             )
 
     @classmethod
+    def _add_locale_option(cls, parser, default="en_US", help=None):
+        """Add the common -l/--locale option.
+
+        Args:
+            parser: The (sub)parser to add the option to.
+            default: Default locale (use "en" for display-name style flags).
+            help: Override help text; defaults to "Locale (default: <default>)".
+        """
+        parser.add_argument(
+            "-l",
+            "--locale",
+            default=default,
+            help=help or f"Locale (default: {default})",
+        )
+
+    @classmethod
     def _add_input_options(cls, parser):
         """Add common input options: -t, FILE..."""
         input_group = parser.add_argument_group(

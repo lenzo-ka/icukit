@@ -96,12 +96,7 @@ Examples:
             nargs="?",
             help="Total seconds (optional if using component flags)",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -124,12 +119,7 @@ Examples:
             "duration",
             help="ISO 8601 duration string (e.g., P2DT3H30M)",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",

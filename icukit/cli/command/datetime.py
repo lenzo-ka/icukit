@@ -168,12 +168,7 @@ Examples:
             nargs="?",
             help="Date/time to format (ISO format, default: now)",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-s",
             "--style",
@@ -211,12 +206,7 @@ Examples:
             default=0,
             help="Day offset (negative for past)",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument("--hours", type=int, default=0, help="Hour offset")
         parser.add_argument("--minutes", type=int, default=0, help="Minute offset")
         parser.add_argument("--seconds", type=int, default=0, help="Second offset")
@@ -226,12 +216,7 @@ Examples:
         """Configure the interval subcommand."""
         parser.add_argument("start", help="Start date (ISO format)")
         parser.add_argument("end", help="End date (ISO format)")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-k",
             "--skeleton",
@@ -248,12 +233,7 @@ Examples:
     def _configure_parse(cls, parser):
         """Configure the parse subcommand."""
         parser.add_argument("text", help="Date/time string to parse")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-p",
             "--pattern",
@@ -268,12 +248,7 @@ Examples:
     @classmethod
     def _configure_patterns(cls, parser):
         """Configure the patterns subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale for examples (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for examples (default: en_US)")
 
     @classmethod
     def _configure_calendars(cls, parser):
@@ -412,12 +387,7 @@ Examples:
     @classmethod
     def _configure_months(cls, parser):
         """Configure the months subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -435,12 +405,7 @@ Examples:
     @classmethod
     def _configure_weekdays(cls, parser):
         """Configure the weekdays subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -458,12 +423,7 @@ Examples:
     @classmethod
     def _configure_eras(cls, parser):
         """Configure the eras subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -481,12 +441,7 @@ Examples:
     @classmethod
     def _configure_ampm(cls, parser):
         """Configure the ampm subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-c",
             "--calendar",
@@ -497,12 +452,7 @@ Examples:
     @classmethod
     def _configure_symbols(cls, parser):
         """Configure the symbols subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-c",
             "--calendar",

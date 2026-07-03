@@ -39,12 +39,7 @@ Examples:
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
 
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for sorting rules (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for sorting rules (default: en_US)")
         parser.add_argument(
             "--reverse",
             "-r",
