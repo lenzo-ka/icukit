@@ -58,7 +58,6 @@ class TestImports:
             "icukit.cli.main",
             "icukit.cli.command_trie",
             "icukit.cli.base",
-            "icukit.cli.output_helpers",
             "icukit.cli.locale_helpers",
             "icukit.cli.command",
             "icukit.cli.command.transliterate",

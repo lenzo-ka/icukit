@@ -1,6 +1,5 @@
 """Base utilities for CLI commands."""
 
-import json
 import sys
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator, Optional, TextIO
@@ -62,26 +61,3 @@ def _process_content(processor: Callable, content: str, output: TextIO):
                 print(item, file=output)
     elif result is not None:
         print(result, file=output)
-
-
-def add_input_args(parser):
-    """Add common input arguments to a parser."""
-    parser.add_argument("-t", "--text", help="Text to process (instead of files/stdin)")
-    parser.add_argument("files", nargs="*", help="Files to process (default: stdin)")
-
-
-class OutputFormatters:
-    """Common output formatting functions."""
-
-    @staticmethod
-    def one_per_line(items, output: TextIO):
-        for item in items:
-            print(item, file=output)
-
-    @staticmethod
-    def json_output(data: Any, output: TextIO, pretty: bool = True):
-        if pretty:
-            json.dump(data, output, ensure_ascii=False, indent=2)
-        else:
-            json.dump(data, output, ensure_ascii=False)
-        output.write("\n")
