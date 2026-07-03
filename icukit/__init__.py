@@ -17,8 +17,7 @@ def _check_icu_available():
         if sys.platform == "darwin":
             # Should not happen since icukit-pyicu is auto-installed on macOS
             msg = (
-                "icukit requires PyICU but it is not installed.\n\n"
-                "Run: pip install icukit[bundled]"
+                "icukit requires PyICU but it is not installed.\n\nRun: pip install icukit[bundled]"
             )
         elif sys.platform == "linux":
             # PyICU should auto-install, but may fail if system ICU is missing

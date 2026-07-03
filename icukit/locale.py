@@ -790,7 +790,7 @@ def get_exemplar_characters(
     """
     if exemplar_type not in _EXEMPLAR_TYPE_MAP:
         raise LocaleError(
-            f"Invalid exemplar type: {exemplar_type}. " f"Valid: {list(_EXEMPLAR_TYPE_MAP.keys())}"
+            f"Invalid exemplar type: {exemplar_type}. Valid: {list(_EXEMPLAR_TYPE_MAP.keys())}"
         )
 
     try:

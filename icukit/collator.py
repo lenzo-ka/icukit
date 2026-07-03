@@ -57,7 +57,7 @@ def _get_collator(locale: str, strength: str | None = None) -> icu.Collator:
         if strength:
             if strength not in _STRENGTH_MAP:
                 raise CollatorError(
-                    f"Invalid strength: {strength}. " f"Valid: {list(_STRENGTH_MAP.keys())}"
+                    f"Invalid strength: {strength}. Valid: {list(_STRENGTH_MAP.keys())}"
                 )
             collator.setStrength(_STRENGTH_MAP[strength])
         return collator

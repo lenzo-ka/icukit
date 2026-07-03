@@ -46,6 +46,7 @@ bundled = [
 ]
 dev = [
     "pytest>=9.0",
+    "ruff>=0.6",
 ]
 
 [project.scripts]
@@ -54,3 +55,11 @@ ik = "icukit.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+# UP (pyupgrade) is enabled in a later pass once `from __future__ import annotations`
+# is added across the tree; enabling it now would flag ~150 not-yet-converted hints.
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
