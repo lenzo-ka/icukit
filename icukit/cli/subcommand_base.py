@@ -22,10 +22,11 @@ def handles_errors(*error_classes, code=1):
     """Decorator to handle errors in CLI command methods.
 
     Catches specified exception types, prints error message to stderr,
-    and returns the specified exit code.
+    and returns the specified exit code. With no arguments it catches the
+    ICUKitError base class, matching the top-level backstop in cli.main.
 
     Args:
-        *error_classes: Exception classes to catch.
+        *error_classes: Exception classes to catch. Defaults to (ICUKitError,).
         code: Exit code to return on error (default: 1).
 
     Usage:
@@ -47,12 +48,14 @@ def handles_errors(*error_classes, code=1):
             ...
     """
 
+    caught = error_classes or (ICUKitError,)
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except error_classes as e:
+            except caught as e:
                 print(f"Error: {e}", file=sys.stderr)
                 return code
 
