@@ -4,12 +4,18 @@ import sys
 from contextlib import contextmanager
 from typing import Any, Callable, Iterator, Optional, TextIO
 
+from ..errors import ICUKitError
+
 
 @contextmanager
 def open_output(output_path: Optional[str]) -> Iterator[TextIO]:
     """Open output file or return stdout."""
     if output_path:
-        with open(output_path, "w") as f:
+        try:
+            f = open(output_path, "w")
+        except OSError as e:
+            raise ICUKitError(f"cannot write {output_path}: {e.strerror}") from e
+        with f:
             yield f
     else:
         yield sys.stdout
@@ -33,7 +39,11 @@ def process_input(
         _process_content(processor, args.text, output)
     elif hasattr(args, "files") and args.files:
         for filepath in args.files:
-            with open(filepath, "r") as infile:
+            try:
+                infile = open(filepath)
+            except OSError as e:
+                raise ICUKitError(f"cannot read {filepath}: {e.strerror}") from e
+            with infile:
                 if process_whole_file:
                     content = infile.read()
                     _process_content(processor, content, output)

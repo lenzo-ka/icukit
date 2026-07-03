@@ -157,20 +157,24 @@ Examples:
                 return 0
         except BidiError as e:
             print(f"Error: {e}", file=sys.stderr)
-            return 2
+            return 1
 
     @classmethod
     def cmd_list(cls, args):
         """List bidi control characters."""
-        as_json = getattr(args, "json", False)
-        no_header = getattr(args, "no_header", False)
+        try:
+            as_json = getattr(args, "json", False)
+            no_header = getattr(args, "no_header", False)
 
-        controls = list_bidi_controls()
+            controls = list_bidi_controls()
 
-        print_output(
-            controls,
-            as_json=as_json,
-            columns=["codepoint", "abbrev", "name"],
-            headers=not no_header,
-        )
-        return 0
+            print_output(
+                controls,
+                as_json=as_json,
+                columns=["codepoint", "abbrev", "name"],
+                headers=not no_header,
+            )
+            return 0
+        except BidiError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1

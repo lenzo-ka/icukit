@@ -3983,9 +3983,15 @@ Raises:
 
 Get the set of characters this transliterator can convert.
 
+Raises:
+    TransliteratorError: If the source set cannot be computed.
+
 #### `get_target_set() -> Set[str]`
 
 Get the set of characters this transliterator can produce.
+
+Raises:
+    TransliteratorError: If the target set cannot be computed.
 
 #### `transliterate(text: str) -> str`
 
@@ -3996,6 +4002,9 @@ Args:
 
 Returns:
     The transformed text.
+
+Raises:
+    TransliteratorError: If the transformation fails.
 
 ### `get_transliterator_info(transliterator_id: str) -> dict`
 

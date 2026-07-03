@@ -182,7 +182,7 @@ class UnicodeRegex:
         """Compile the regex pattern."""
         try:
             self._regex = icu.RegexPattern.compile(self.pattern, self.flags)
-        except Exception as e:
+        except icu.ICUError as e:
             raise PatternError(f"Invalid regex pattern '{self.pattern}': {e}") from e
 
     @classmethod

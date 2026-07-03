@@ -6,6 +6,7 @@ import sys
 from typing import List
 
 from .. import __version__
+from ..errors import ICUKitError
 from .command import (
     AlphaIndexCommand,
     BidiCommand,
@@ -225,7 +226,13 @@ def main():
 
     if hasattr(args, "func"):
         args._parser = parser
-        return args.func(args)
+        try:
+            return args.func(args)
+        except ICUKitError as e:
+            # Backstop: any icukit error that escapes a command handler is
+            # reported as a clean message rather than a raw traceback.
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
     else:
         parser.print_help()
         return 1

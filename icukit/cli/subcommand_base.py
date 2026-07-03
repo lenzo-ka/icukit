@@ -4,8 +4,18 @@ import sys
 from functools import wraps
 from typing import Dict
 
+from ..errors import ICUKitError
 from ..formatters import print_output
 from .command_trie import CommandTrie
+
+
+def _read_text_file(filepath: str) -> str:
+    """Read a file whole, raising ICUKitError on failure (no raw traceback)."""
+    try:
+        with open(filepath) as f:
+            return f.read()
+    except OSError as e:
+        raise ICUKitError(f"cannot read {filepath}: {e.strerror}") from e
 
 
 def handles_errors(*error_classes, code=1):
@@ -159,8 +169,7 @@ class SubcommandBase:
         elif hasattr(args, "files") and args.files:
             lines = []
             for filepath in args.files:
-                with open(filepath, "r") as f:
-                    lines.extend(line.rstrip("\n") for line in f)
+                lines.extend(_read_text_file(filepath).splitlines())
             return lines
         else:
             return [line.rstrip("\n") for line in sys.stdin]
@@ -175,7 +184,7 @@ class SubcommandBase:
         if getattr(args, "text", None):
             return args.text
         elif getattr(args, "files", None):
-            return "".join(open(f).read() for f in args.files)
+            return "".join(_read_text_file(f) for f in args.files)
         else:
             return sys.stdin.read()
 

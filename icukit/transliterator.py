@@ -54,7 +54,7 @@ class Transliterator:
             else:
                 self._trans = icu.Transliterator.createInstance(transliterator_id)
                 self.id = transliterator_id
-        except Exception as e:
+        except icu.ICUError as e:
             raise TransliteratorError(
                 f"Invalid transliterator ID '{transliterator_id}'. "
                 f"Error: {e}. Use list_transliterators() to see available IDs."
@@ -93,7 +93,7 @@ class Transliterator:
 
             return instance
 
-        except Exception as e:
+        except icu.ICUError as e:
             raise TransliteratorError(f"Invalid transliterator rules: {e}") from e
 
     def transliterate(self, text: str) -> str:
@@ -104,18 +104,38 @@ class Transliterator:
 
         Returns:
             The transformed text.
+
+        Raises:
+            TransliteratorError: If the transformation fails.
         """
-        return self._trans.transliterate(text)
+        try:
+            return self._trans.transliterate(text)
+        except icu.ICUError as e:
+            raise TransliteratorError(f"Transliteration failed for '{self.id}': {e}") from e
 
     def get_source_set(self) -> Set[str]:
-        """Get the set of characters this transliterator can convert."""
-        uset = self._trans.getSourceSet()
-        return set(icu.UnicodeSet(uset))
+        """Get the set of characters this transliterator can convert.
+
+        Raises:
+            TransliteratorError: If the source set cannot be computed.
+        """
+        try:
+            uset = self._trans.getSourceSet()
+            return set(icu.UnicodeSet(uset))
+        except icu.ICUError as e:
+            raise TransliteratorError(f"Cannot get source set for '{self.id}': {e}") from e
 
     def get_target_set(self) -> Set[str]:
-        """Get the set of characters this transliterator can produce."""
-        uset = self._trans.getTargetSet()
-        return set(icu.UnicodeSet(uset))
+        """Get the set of characters this transliterator can produce.
+
+        Raises:
+            TransliteratorError: If the target set cannot be computed.
+        """
+        try:
+            uset = self._trans.getTargetSet()
+            return set(icu.UnicodeSet(uset))
+        except icu.ICUError as e:
+            raise TransliteratorError(f"Cannot get target set for '{self.id}': {e}") from e
 
     def create_inverse(self) -> "Transliterator":
         """Create the inverse of this transliterator.
@@ -137,7 +157,7 @@ class Transliterator:
 
             return instance
 
-        except Exception as e:
+        except icu.ICUError as e:
             raise TransliteratorError(
                 f"Cannot create inverse of transliterator '{self.id}': {e}"
             ) from e
@@ -260,10 +280,10 @@ def get_transliterator_info(transliterator_id: str) -> dict:
         try:
             t.createInverse()
             info["reversible"] = True
-        except Exception:
+        except icu.ICUError:
             info["reversible"] = False
 
-    except Exception:
+    except icu.ICUError:
         info["elements"] = None
         info["max_context"] = None
         info["reversible"] = None

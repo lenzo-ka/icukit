@@ -51,7 +51,7 @@ from typing import Any, Dict, List
 import icu
 
 from .alpha_index import get_bucket_labels
-from .errors import LocaleError
+from .errors import ICUKitError, LocaleError
 
 # Measurement system mapping using ICU constants where available
 # PyICU's UMeasurementSystem is incomplete (missing UK=2), so we use getattr for forward-compat
@@ -307,7 +307,7 @@ def get_locale_extended(locale_str: str) -> Dict[str, Any]:
     # Alphabetic index labels (A-Z sidebar labels)
     try:
         ext["index_labels"] = get_bucket_labels(locale_str)
-    except Exception:
+    except (icu.ICUError, ICUKitError):
         ext["index_labels"] = None
 
     return ext
