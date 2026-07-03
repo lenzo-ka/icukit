@@ -21,6 +21,8 @@ Common Transliterators:
 
 from __future__ import annotations
 
+from typing import Any
+
 import icu
 
 from .errors import TransliteratorError
@@ -240,14 +242,14 @@ def list_transliterators() -> list[str]:
     return sorted(trans_id for trans_id in icu.Transliterator.getAvailableIDs())
 
 
-def get_transliterator_info(transliterator_id: str) -> dict:
+def get_transliterator_info(transliterator_id: str) -> dict[str, Any] | None:
     """Get detailed information about a transliterator.
 
     Args:
         transliterator_id: ICU transliterator ID.
 
     Returns:
-        Dictionary with transliterator info:
+        Dictionary with transliterator info, or None if the ID is invalid:
             - id: The transliterator ID
             - source: Source script (parsed from ID)
             - target: Target script (parsed from ID)
@@ -256,7 +258,7 @@ def get_transliterator_info(transliterator_id: str) -> dict:
             - elements: Number of sub-transliterators
             - max_context: Maximum context length needed
     """
-    info = {"id": transliterator_id}
+    info: dict[str, Any] = {"id": transliterator_id}
 
     # Parse ID for source/target/variant
     parts = transliterator_id.split("-")
@@ -284,14 +286,14 @@ def get_transliterator_info(transliterator_id: str) -> dict:
             info["reversible"] = False
 
     except icu.ICUError:
-        info["elements"] = None
-        info["max_context"] = None
-        info["reversible"] = None
+        # Invalid transliterator ID: signal not-found with None, matching the
+        # get_calendar_info / get_region_info / get_timezone_info contract.
+        return None
 
     return info
 
 
-def list_transliterators_info() -> list[dict]:
+def list_transliterators_info() -> list[dict[str, Any]]:
     """Get detailed info for all available transliterators.
 
     Returns:

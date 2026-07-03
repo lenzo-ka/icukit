@@ -186,7 +186,7 @@ Examples:
 
         data = []
         for name in sorted(api_exports):
-            info = details.get(name, {})
+            info = details.get(name) or {}
             data.append(
                 {
                     "name": name,

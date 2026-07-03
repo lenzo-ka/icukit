@@ -125,28 +125,32 @@ def search_features(query: str) -> dict[str, list[str]]:
     }
 
 
-def print_discovery_report():
-    """Print a formatted discovery report to stdout."""
-    features = discover_features()
+def render_discovery_report() -> str:
+    """Build a formatted discovery report string.
 
-    print(f"ICU Kit v{features['version']} - Feature Discovery")
-    print("=" * 50)
+    Returns:
+        The report as a multi-line string (the caller decides where to print).
+    """
+    features = discover_features()
+    lines = [
+        f"ICU Kit v{features['version']} - Feature Discovery",
+        "=" * 50,
+    ]
 
     # API summary
     api_exports = features["api"]["exports"]
-    print(f"\nAPI Exports ({len(api_exports)}):")
+    lines.append(f"\nAPI Exports ({len(api_exports)}):")
     for name in sorted(api_exports):
-        info = features["api"]["details"].get(name, {})
+        # details[name] may be None when an __all__ entry isn't importable
+        # from the package namespace (e.g. the discover functions themselves).
+        info = features["api"]["details"].get(name) or {}
         obj_type = info.get("type", "unknown")
         sig = info.get("signature", "")
-        if sig:
-            print(f"  {name}{sig} [{obj_type}]")
-        else:
-            print(f"  {name} [{obj_type}]")
+        lines.append(f"  {name}{sig} [{obj_type}]" if sig else f"  {name} [{obj_type}]")
 
     # CLI summary
     cli_commands = features["cli"]["commands"]
-    print(f"\nCLI Commands ({len(cli_commands)}):")
+    lines.append(f"\nCLI Commands ({len(cli_commands)}):")
     for cmd_name in sorted(cli_commands.keys()):
         cmd_info = cli_commands[cmd_name]
         aliases = cmd_info.get("aliases", [])
@@ -156,10 +160,11 @@ def print_discovery_report():
             parts.append(f"[{min_prefix}]")
         if aliases:
             parts.append(f"(aliases: {', '.join(aliases)})")
-        print(f"  {' '.join(parts)}")
+        lines.append(f"  {' '.join(parts)}")
 
-    print(f"\nTotal: {len(api_exports)} API exports, {len(cli_commands)} CLI commands")
+    lines.append(f"\nTotal: {len(api_exports)} API exports, {len(cli_commands)} CLI commands")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
-    print_discovery_report()
+    print(render_discovery_report())

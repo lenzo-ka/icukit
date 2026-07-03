@@ -1,6 +1,7 @@
 """Tests for Transliterator module."""
 
 from icukit import CommonTransliterators, Transliterator, list_transliterators, transliterate
+from icukit.transliterator import get_transliterator_info
 
 
 class TestTransliterator:
@@ -11,6 +12,21 @@ class TestTransliterator:
         result = transliterate("Hello", "Latin-Cyrillic")
         assert result is not None
         assert len(result) > 0
+
+    def test_get_info_valid(self):
+        """get_transliterator_info returns a populated dict for a valid ID."""
+        info = get_transliterator_info("Latin-Greek")
+        assert info is not None
+        assert info["id"] == "Latin-Greek"
+        assert info["reversible"] in (True, False)
+
+    def test_get_info_invalid_returns_none(self):
+        """get_transliterator_info returns None for an invalid ID.
+
+        Matches the get_calendar_info / get_region_info / get_timezone_info
+        contract rather than the old dict-of-Nones.
+        """
+        assert get_transliterator_info("No-Such-ID") is None
 
     def test_transliterator_class(self):
         """Test Transliterator class."""

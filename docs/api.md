@@ -1084,9 +1084,12 @@ Get available CLI commands with their details.
 Returns:
     Dictionary mapping command names to their info (aliases, minimal_prefix)
 
-### `print_discovery_report()`
+### `render_discovery_report() -> 'str'`
 
-Print a formatted discovery report to stdout.
+Build a formatted discovery report string.
+
+Returns:
+    The report as a multi-line string (the caller decides where to print).
 
 ### `search_features(query: 'str') -> 'dict[str, list[str]]'`
 
@@ -4006,7 +4009,7 @@ Returns:
 Raises:
     TransliteratorError: If the transformation fails.
 
-### `get_transliterator_info(transliterator_id: 'str') -> 'dict'`
+### `get_transliterator_info(transliterator_id: 'str') -> 'dict[str, Any] | None'`
 
 Get detailed information about a transliterator.
 
@@ -4014,7 +4017,7 @@ Args:
     transliterator_id: ICU transliterator ID.
 
 Returns:
-    Dictionary with transliterator info:
+    Dictionary with transliterator info, or None if the ID is invalid:
         - id: The transliterator ID
         - source: Source script (parsed from ID)
         - target: Target script (parsed from ID)
@@ -4030,7 +4033,7 @@ Get list of all available transliterator IDs.
 Returns:
     Sorted list of transliterator ID strings.
 
-### `list_transliterators_info() -> 'list[dict]'`
+### `list_transliterators_info() -> 'list[dict[str, Any]]'`
 
 Get detailed info for all available transliterators.
 

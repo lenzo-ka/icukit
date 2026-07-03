@@ -310,3 +310,20 @@ class TestErrorHandling:
         code, out, err = run_cli("bidi", "list")
         assert code == 0
         assert "Traceback" not in err
+
+    def test_discover_all(self):
+        """discover all should render without a traceback.
+
+        Regression: __all__ advertises the discover functions, which are not
+        importable from the package namespace, so their info is None.
+        """
+        code, out, err = run_cli("discover", "all")
+        assert code == 0
+        assert "Traceback" not in err
+        assert "API Exports" in out
+
+    def test_discover_search(self):
+        """discover search should render without a traceback."""
+        code, out, err = run_cli("discover", "search", "plural")
+        assert code == 0
+        assert "Traceback" not in err
