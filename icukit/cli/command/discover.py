@@ -1,5 +1,7 @@
 """CLI command for discovering icukit features."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...discover import discover_features, get_api_info, search_features

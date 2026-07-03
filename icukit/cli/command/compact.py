@@ -1,5 +1,7 @@
 """CLI command for compact number formatting."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 

@@ -1,5 +1,7 @@
 """Help command for showing help for other commands."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 

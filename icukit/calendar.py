@@ -37,7 +37,9 @@ Example:
         'islamic'
 """
 
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
+from typing import Any
 
 import icu
 
@@ -97,7 +99,7 @@ def _get_validated_calendars() -> set:
     return _validated_calendars
 
 
-def list_calendars() -> List[str]:
+def list_calendars() -> list[str]:
     """List all available calendar types.
 
     Returns:
@@ -113,7 +115,7 @@ def list_calendars() -> List[str]:
     return sorted(_get_validated_calendars())
 
 
-def list_calendars_info() -> List[Dict[str, Any]]:
+def list_calendars_info() -> list[dict[str, Any]]:
     """List all calendars with their info.
 
     Returns:
@@ -128,7 +130,7 @@ def list_calendars_info() -> List[Dict[str, Any]]:
     return [get_calendar_info(cal_type) for cal_type in list_calendars()]
 
 
-def get_calendar_info(cal_type: str) -> Optional[Dict[str, Any]]:
+def get_calendar_info(cal_type: str) -> dict[str, Any] | None:
     """Get information about a calendar type.
 
     Args:

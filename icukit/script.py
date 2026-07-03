@@ -41,7 +41,10 @@ Example:
         160
 """
 
-from typing import Any, Dict, Iterator, List, Optional
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
 
 import icu
 
@@ -64,7 +67,7 @@ def _iter_scripts() -> Iterator[icu.Script]:
             break
 
 
-def list_scripts() -> List[str]:
+def list_scripts() -> list[str]:
     """List all available Unicode scripts.
 
     Returns:
@@ -80,7 +83,7 @@ def list_scripts() -> List[str]:
     return sorted(script.getName() for script in _iter_scripts())
 
 
-def list_scripts_info() -> List[Dict[str, Any]]:
+def list_scripts_info() -> list[dict[str, Any]]:
     """List all scripts with their properties.
 
     Returns:
@@ -104,7 +107,7 @@ def list_scripts_info() -> List[Dict[str, Any]]:
     return sorted(results, key=lambda x: x["name"])
 
 
-def get_script_info(script: str, extended: bool = False) -> Optional[Dict[str, Any]]:
+def get_script_info(script: str, extended: bool = False) -> dict[str, Any] | None:
     """Get information about a script.
 
     Args:
@@ -174,7 +177,7 @@ def detect_script(text: str) -> str:
     return icu.Script.getScript(text[0]).getName()
 
 
-def detect_scripts(text: str) -> List[str]:
+def detect_scripts(text: str) -> list[str]:
     """Detect all scripts present in text.
 
     Args:

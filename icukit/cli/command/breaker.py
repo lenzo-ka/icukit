@@ -1,5 +1,7 @@
 """CLI command for text breaking/segmentation."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...breaker import Breaker

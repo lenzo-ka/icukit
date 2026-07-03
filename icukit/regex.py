@@ -81,7 +81,10 @@ See Also:
     * :func:`regex_split`: Convenience function for splitting
 """
 
-from typing import Any, Dict, Iterator, List, Optional
+from __future__ import annotations
+
+from collections.abc import Iterator
+from typing import Any
 
 import icu
 
@@ -186,7 +189,7 @@ class UnicodeRegex:
             raise PatternError(f"Invalid regex pattern '{self.pattern}': {e}") from e
 
     @classmethod
-    def list_properties(cls) -> Dict[str, str]:
+    def list_properties(cls) -> dict[str, str]:
         """List common Unicode properties and their patterns.
 
         Returns:
@@ -195,7 +198,7 @@ class UnicodeRegex:
         return cls.COMMON_PROPERTIES.copy()
 
     @classmethod
-    def list_categories(cls) -> Dict[str, str]:
+    def list_categories(cls) -> dict[str, str]:
         """List Unicode general categories.
 
         Returns:
@@ -235,7 +238,7 @@ class UnicodeRegex:
         return result
 
     @classmethod
-    def list_scripts(cls) -> List[str]:
+    def list_scripts(cls) -> list[str]:
         """List available Unicode scripts.
 
         Returns:
@@ -270,7 +273,7 @@ class UnicodeRegex:
         """
         return self._regex is not None
 
-    def find(self, text: str, start: int = 0) -> Optional[Dict[str, Any]]:
+    def find(self, text: str, start: int = 0) -> dict[str, Any] | None:
         """Find first match in text.
 
         Args:
@@ -297,7 +300,7 @@ class UnicodeRegex:
             return result
         return None
 
-    def find_all(self, text: str) -> List[Dict[str, Any]]:
+    def find_all(self, text: str) -> list[dict[str, Any]]:
         """Find all matches in text.
 
         Args:
@@ -410,7 +413,7 @@ class UnicodeRegex:
         result.append(text[last_end:])
         return "".join(result)
 
-    def split(self, text: str, limit: int = -1) -> List[str]:
+    def split(self, text: str, limit: int = -1) -> list[str]:
         """Split text by pattern.
 
         Args:
@@ -438,7 +441,7 @@ class UnicodeRegex:
 
         return parts
 
-    def iter_matches(self, text: str) -> Iterator[Dict[str, Any]]:
+    def iter_matches(self, text: str) -> Iterator[dict[str, Any]]:
         """Iterate over matches.
 
         Args:
@@ -470,7 +473,7 @@ DOTALL = icu.URegexpFlag.DOTALL
 COMMENTS = icu.URegexpFlag.COMMENTS
 
 
-def regex_find(pattern: str, text: str, flags: int = 0) -> List[Dict[str, Any]]:
+def regex_find(pattern: str, text: str, flags: int = 0) -> list[dict[str, Any]]:
     """Find all matches of pattern in text.
 
     Args:
@@ -504,7 +507,7 @@ def regex_replace(
     return regex.replace(text, replacement, limit)
 
 
-def regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> List[str]:
+def regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> list[str]:
     """Split text by pattern.
 
     Args:
@@ -520,7 +523,7 @@ def regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> Lis
     return regex.split(text, limit)
 
 
-def list_unicode_properties() -> List[Dict[str, Any]]:
+def list_unicode_properties() -> list[dict[str, Any]]:
     """List Unicode properties with structured info for TSV/JSON output.
 
     Returns:
@@ -579,7 +582,7 @@ def list_unicode_properties() -> List[Dict[str, Any]]:
     return result
 
 
-def list_unicode_categories() -> List[Dict[str, str]]:
+def list_unicode_categories() -> list[dict[str, str]]:
     """List Unicode general categories with structured info.
 
     Returns:
@@ -589,7 +592,7 @@ def list_unicode_categories() -> List[Dict[str, str]]:
     return [{"code": code, "description": desc} for code, desc in categories.items()]
 
 
-def list_unicode_scripts() -> List[Dict[str, str]]:
+def list_unicode_scripts() -> list[dict[str, str]]:
     """List Unicode scripts with structured info.
 
     Returns:

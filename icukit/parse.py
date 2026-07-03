@@ -22,6 +22,8 @@ Example:
     0.5
 """
 
+from __future__ import annotations
+
 import icu
 
 from .errors import ParseError

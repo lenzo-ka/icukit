@@ -1,5 +1,7 @@
 """CLI command for bidirectional text handling."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 

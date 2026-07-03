@@ -4,6 +4,8 @@ Provides a Pythonic interface to the ICU library for Unicode and
 internationalization support.
 """
 
+from __future__ import annotations
+
 __version__ = "0.1.3"
 
 

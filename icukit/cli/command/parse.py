@@ -1,5 +1,7 @@
 """CLI command for parsing locale-formatted values."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 

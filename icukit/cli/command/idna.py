@@ -1,5 +1,7 @@
 """CLI command for IDNA encoding/decoding."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...errors import IDNAError

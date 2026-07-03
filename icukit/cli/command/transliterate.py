@@ -1,5 +1,7 @@
 """Text transliteration command."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -354,7 +356,7 @@ Examples:
     def cmd_rules(cls, args):
         """Convert using custom rules."""
         try:
-            with open(args.rules_file, "r", encoding="utf-8") as f:
+            with open(args.rules_file, encoding="utf-8") as f:
                 rules = f.read()
             trans = Transliterator.from_rules(args.name, rules)
             with open_output(getattr(args, "output", None)) as output:

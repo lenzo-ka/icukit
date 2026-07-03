@@ -67,7 +67,13 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 
-# UP (pyupgrade) is enabled in a later pass once `from __future__ import annotations`
-# is added across the tree; enabling it now would flag ~150 not-yet-converted hints.
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "B"]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and the docs generator don't need postponed-annotation semantics.
+"tests/**" = ["I002"]
+"docs/**" = ["I002"]

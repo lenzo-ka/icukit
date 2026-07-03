@@ -1,5 +1,7 @@
 """CLI command for locale-aware text search."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 

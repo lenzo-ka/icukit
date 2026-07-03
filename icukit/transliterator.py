@@ -19,7 +19,7 @@ Common Transliterators:
     * Specialized: Any-Publishing (ASCII-safe), Any-Accents (remove accents)
 """
 
-from typing import List, Set
+from __future__ import annotations
 
 import icu
 
@@ -63,7 +63,7 @@ class Transliterator:
         self.display_name = self.id
 
     @classmethod
-    def from_rules(cls, name: str, rules: str, direction: str = "FORWARD") -> "Transliterator":
+    def from_rules(cls, name: str, rules: str, direction: str = "FORWARD") -> Transliterator:
         """Create a custom transliterator from rules.
 
         Args:
@@ -113,7 +113,7 @@ class Transliterator:
         except icu.ICUError as e:
             raise TransliteratorError(f"Transliteration failed for '{self.id}': {e}") from e
 
-    def get_source_set(self) -> Set[str]:
+    def get_source_set(self) -> set[str]:
         """Get the set of characters this transliterator can convert.
 
         Raises:
@@ -125,7 +125,7 @@ class Transliterator:
         except icu.ICUError as e:
             raise TransliteratorError(f"Cannot get source set for '{self.id}': {e}") from e
 
-    def get_target_set(self) -> Set[str]:
+    def get_target_set(self) -> set[str]:
         """Get the set of characters this transliterator can produce.
 
         Raises:
@@ -137,7 +137,7 @@ class Transliterator:
         except icu.ICUError as e:
             raise TransliteratorError(f"Cannot get target set for '{self.id}': {e}") from e
 
-    def create_inverse(self) -> "Transliterator":
+    def create_inverse(self) -> Transliterator:
         """Create the inverse of this transliterator.
 
         Returns:
@@ -231,7 +231,7 @@ def transliterate(text: str, transliterator_id: str, reverse: bool = False) -> s
     return trans.transliterate(text)
 
 
-def list_transliterators() -> List[str]:
+def list_transliterators() -> list[str]:
     """Get list of all available transliterator IDs.
 
     Returns:
@@ -291,7 +291,7 @@ def get_transliterator_info(transliterator_id: str) -> dict:
     return info
 
 
-def list_transliterators_info() -> List[dict]:
+def list_transliterators_info() -> list[dict]:
     """Get detailed info for all available transliterators.
 
     Returns:

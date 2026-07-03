@@ -1,5 +1,7 @@
 """Exception classes for icukit."""
 
+from __future__ import annotations
+
 
 class ICUKitError(Exception):
     """Base exception for all icukit errors."""

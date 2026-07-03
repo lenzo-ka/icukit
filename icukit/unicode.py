@@ -46,7 +46,9 @@ Example:
         'Nd'  # Number, decimal digit
 """
 
-from typing import Any, Dict, List
+from __future__ import annotations
+
+from typing import Any
 
 import icu
 
@@ -205,7 +207,7 @@ def get_char_category(char: str) -> str:
     return _get_category_short_name(cat)
 
 
-def get_char_info(char: str) -> Dict[str, Any]:
+def get_char_info(char: str) -> dict[str, Any]:
     """Get comprehensive information about a character.
 
     Args:
@@ -245,7 +247,7 @@ def get_char_info(char: str) -> Dict[str, Any]:
     }
 
 
-def list_categories() -> List[Dict[str, str]]:
+def list_categories() -> list[dict[str, str]]:
     """List all Unicode general categories.
 
     Returns:
@@ -290,7 +292,7 @@ def list_categories() -> List[Dict[str, str]]:
     ]
 
 
-def list_blocks() -> List[Dict[str, Any]]:
+def list_blocks() -> list[dict[str, Any]]:
     """List all Unicode blocks.
 
     Returns:
@@ -340,7 +342,7 @@ def list_blocks() -> List[Dict[str, Any]]:
     return sorted(results, key=lambda x: x["start"])
 
 
-def get_block_characters(block_name: str) -> List[str]:
+def get_block_characters(block_name: str) -> list[str]:
     """Get all characters in a specific Unicode block.
 
     Args:
@@ -361,7 +363,7 @@ def get_block_characters(block_name: str) -> List[str]:
         raise ValueError(f"Invalid Unicode block name: {block_name}") from e
 
 
-def get_category_characters(category_code: str) -> List[str]:
+def get_category_characters(category_code: str) -> list[str]:
     """Get all characters in a specific Unicode general category.
 
     Args:

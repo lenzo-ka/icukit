@@ -19,7 +19,9 @@ Example:
     ['Hello', 'world']
 """
 
-from typing import Iterator
+from __future__ import annotations
+
+from collections.abc import Iterator
 
 import icu
 

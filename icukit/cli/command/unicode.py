@@ -1,5 +1,7 @@
 """Unicode normalization and character properties CLI command."""
 
+from __future__ import annotations
+
 import argparse
 import codecs
 import re

@@ -1,5 +1,7 @@
 """CLI command for alphabetic index buckets."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...alpha_index import create_index_buckets, get_bucket_for_name, get_bucket_labels

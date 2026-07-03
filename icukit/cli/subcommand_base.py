@@ -1,8 +1,9 @@
 """Base class for CLI commands with subcommands."""
 
+from __future__ import annotations
+
 import sys
 from functools import wraps
-from typing import Dict
 
 from ..errors import ICUKitError
 from ..formatters import print_output
@@ -208,7 +209,7 @@ class SubcommandBase:
             return sys.stdin.read()
 
     @classmethod
-    def create_subcommand_parser(cls, parser, subcommands: Dict[str, Dict]):
+    def create_subcommand_parser(cls, parser, subcommands: dict[str, dict]):
         """Helper to create subcommand structure with prefix matching.
 
         Args:

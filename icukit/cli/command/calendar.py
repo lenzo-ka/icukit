@@ -1,5 +1,7 @@
 """Calendar CLI command."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...calendar import get_calendar_info, is_valid_calendar, list_calendars, list_calendars_info

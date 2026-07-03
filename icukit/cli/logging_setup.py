@@ -1,5 +1,7 @@
 """Logging configuration for icukit CLI."""
 
+from __future__ import annotations
+
 import logging
 import sys
 

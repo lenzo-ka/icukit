@@ -1,14 +1,17 @@
 """Base utilities for CLI commands."""
 
+from __future__ import annotations
+
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator, Optional, TextIO
+from typing import Any, Callable, TextIO
 
 from ..errors import ICUKitError
 
 
 @contextmanager
-def open_output(output_path: Optional[str]) -> Iterator[TextIO]:
+def open_output(output_path: str | None) -> Iterator[TextIO]:
     """Open output file or return stdout."""
     if output_path:
         try:

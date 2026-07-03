@@ -26,14 +26,16 @@ Example:
         True
 """
 
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
+from typing import Any
 
 import icu
 
 from .errors import TimezoneError
 
 
-def list_timezones(country: Optional[str] = None) -> List[str]:
+def list_timezones(country: str | None = None) -> list[str]:
     """List all available timezone IDs.
 
     Args:
@@ -57,7 +59,7 @@ def list_timezones(country: Optional[str] = None) -> List[str]:
     return sorted(list(tz_enum))
 
 
-def list_timezones_info(country: Optional[str] = None) -> List[Dict[str, Any]]:
+def list_timezones_info(country: str | None = None) -> list[dict[str, Any]]:
     """List all timezones with their info.
 
     Args:
@@ -76,7 +78,7 @@ def list_timezones_info(country: Optional[str] = None) -> List[Dict[str, Any]]:
     return [get_timezone_info(tz_id) for tz_id in ids]
 
 
-def get_timezone_info(tz_id: str, extended: bool = False) -> Optional[Dict[str, Any]]:
+def get_timezone_info(tz_id: str, extended: bool = False) -> dict[str, Any] | None:
     """Get information about a timezone.
 
     Args:
@@ -144,7 +146,7 @@ def get_timezone_info(tz_id: str, extended: bool = False) -> Optional[Dict[str, 
     return info
 
 
-def get_equivalent_timezones(tz_id: str) -> List[str]:
+def get_equivalent_timezones(tz_id: str) -> list[str]:
     """Get equivalent timezone IDs for a timezone.
 
     Args:

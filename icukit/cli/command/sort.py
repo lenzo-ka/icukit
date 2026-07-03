@@ -1,5 +1,7 @@
 """Direct sort command - top-level locale-aware sorting."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 

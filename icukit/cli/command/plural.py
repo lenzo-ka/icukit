@@ -1,5 +1,7 @@
 """CLI command for plural rules."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
