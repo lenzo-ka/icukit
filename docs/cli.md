@@ -59,13 +59,13 @@ Examples:
 **Options:**
 
 - `name`: Name to get bucket for
-- `--locale, -l`: Locale (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 
 ### `icukit alpha-index buckets` (aliases: b, create)
 
 **Options:**
 
-- `--locale, -l`: Locale for bucket labels (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for bucket labels (default: en_US) (default: `en_US`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-o, --output`: Output file (default: stdout)
@@ -167,7 +167,7 @@ Examples:
 
 **Options:**
 
-- `--locale, -l`: Locale for breaking rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--show-codepoints, -c`: Show Unicode codepoints for each grapheme (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
@@ -185,7 +185,7 @@ Examples:
 
 **Options:**
 
-- `--locale, -l`: Locale for breaking rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-o, --output`: Output file (default: stdout)
@@ -196,7 +196,7 @@ Examples:
 
 **Options:**
 
-- `--locale, -l`: Locale for breaking rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--skip-punctuation, -p`: Skip punctuation tokens (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
@@ -208,7 +208,7 @@ Examples:
 
 **Options:**
 
-- `--locale, -l`: Locale for breaking rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--skip-punctuation, -p`: Skip punctuation tokens (default: `False`)
 - `--include-whitespace`: Include whitespace tokens (excluded by default) (default: `False`)
 - `-t, --text`: Process TEXT directly
@@ -299,7 +299,7 @@ Examples:
 
 - `string_a`: First string
 - `string_b`: Second string
-- `--locale, -l`: Locale for comparison (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for comparison (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength
 
 ### `icukit collate help` (aliases: h)
@@ -331,7 +331,7 @@ Examples:
 
 **Options:**
 
-- `--locale, -l`: Locale for sorting rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for sorting rules (default: en_US) (default: `en_US`)
 - `--reverse, -r`: Sort in descending order (default: `False`)
 - `--unique, -u`: Remove duplicate lines (default: `False`)
 - `--strength, -s`: Collation strength (default: tertiary)
@@ -839,7 +839,7 @@ Examples:
 
 - `items`: Items to format (comma-separated, or use --delimiter)
 - `--style, -s`: List style (default: and) (default: `and`)
-- `--locale, -l`: Locale for formatting (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for formatting (default: en_US) (default: `en_US`)
 - `--delimiter, -d`: Input delimiter (default: comma) (default: `,`)
 
 ## `icukit locale`
@@ -906,7 +906,7 @@ Examples:
 **Options:**
 
 - `value`: Number to format in compact form
-- `--locale, -l`: Locale for formatting (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for formatting (default: en_US) (default: `en_US`)
 - `--style, -s`: Format style (default: SHORT) (default: `SHORT`)
 
 ### `icukit locale compare` (aliases: cmp)
@@ -915,7 +915,7 @@ Examples:
 
 - `string_a`: First string
 - `string_b`: Second string
-- `--locale, -l`: Locale for comparison (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for comparison (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength
 
 ### `icukit locale display` (aliases: n, name)
@@ -947,7 +947,7 @@ Examples:
 **Options:**
 
 - `value`: Number to format
-- `--locale, -l`: Locale for formatting (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for formatting (default: en_US) (default: `en_US`)
 - `--type, -t`: Format type (default: number) (default: `number`)
 - `--currency, -c`: Currency code for currency format (e.g., EUR)
 
@@ -993,7 +993,7 @@ Examples:
 **Options:**
 
 - `value`: Integer to format as ordinal
-- `--locale, -l`: Locale for formatting (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for formatting (default: en_US) (default: `en_US`)
 
 ### `icukit locale parse` (aliases: p)
 
@@ -1008,7 +1008,7 @@ Examples:
 
 **Options:**
 
-- `--locale, -l`: Locale for sorting rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for sorting rules (default: en_US) (default: `en_US`)
 - `--reverse, -r`: Sort in descending order (default: `False`)
 - `--unique, -u`: Remove duplicate lines (default: `False`)
 - `--strength, -s`: Collation strength (default: tertiary)
@@ -1021,7 +1021,7 @@ Examples:
 **Options:**
 
 - `value`: Integer to spell out
-- `--locale, -l`: Locale for spelling (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for spelling (default: en_US) (default: `en_US`)
 
 ### `icukit locale symbols` (aliases: numsym, sym)
 
@@ -1205,7 +1205,7 @@ Examples:
 
 - `pattern`: ICU message format pattern
 - `-a, --arg`: Argument in name=value format (can be repeated)
-- `--locale, -l`: Locale for formatting (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for formatting (default: en_US) (default: `en_US`)
 
 ### `icukit message help` (aliases: h)
 
@@ -1702,7 +1702,7 @@ Examples:
 - `pattern`: Pattern to search for
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `--locale, -l`: Locale for collation rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength (default: tertiary/exact)
 
 ### `icukit search first` (aliases: 1, all, f, find)
@@ -1712,7 +1712,7 @@ Examples:
 - `pattern`: Pattern to search for
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `--locale, -l`: Locale for collation rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength (default: tertiary/exact)
 - `-o, --output`: Output file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
@@ -1733,7 +1733,7 @@ Examples:
 - `--max, -n`: Maximum replacements (0=unlimited) (default: `0`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `--locale, -l`: Locale for collation rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength (default: tertiary/exact)
 
 ## `icukit sort`
@@ -1758,7 +1758,7 @@ Examples:
 
 **Options:**
 
-- `--locale, -l`: Locale for sorting rules (default: en_US) (default: `en_US`)
+- `-l, --locale`: Locale for sorting rules (default: en_US) (default: `en_US`)
 - `--reverse, -r`: Sort in descending order (default: `False`)
 - `--unique, -u`: Remove duplicate lines (default: `False`)
 - `--strength, -s`: Collation strength (default: tertiary)

@@ -18,6 +18,8 @@ Example:
     'helloworld'
 """
 
+from __future__ import annotations
+
 import icu
 
 from .errors import BidiError

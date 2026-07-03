@@ -263,3 +263,67 @@ class TestRegexCommand:
         code, out, err = run_cli("regex", "find", r"[invalid", input_text="test")
         assert code != 0
         assert "error" in err.lower() or "Error" in err
+
+
+class TestErrorHandling:
+    """CLI errors should be clean messages, never raw tracebacks."""
+
+    MISSING = "/no/such/icukit_missing_file.txt"
+
+    def test_missing_file_line_reader(self):
+        """A missing FILE for a line-oriented command exits 1, no traceback."""
+        code, out, err = run_cli("sort", self.MISSING)
+        assert code == 1
+        assert "Traceback" not in err
+        assert "Error" in err
+        assert "cannot read" in err.lower()
+
+    def test_missing_file_text_reader(self):
+        """A missing FILE for a whole-text command exits 1, no traceback."""
+        code, out, err = run_cli("transliterate", "name", "Latin-Greek", self.MISSING)
+        assert code == 1
+        assert "Traceback" not in err
+        assert "Error" in err
+
+    def test_missing_file_process_input(self):
+        """A missing FILE for a process_input command exits 1, no traceback."""
+        code, out, err = run_cli("unicode", "normalize", self.MISSING)
+        assert code == 1
+        assert "Traceback" not in err
+        assert "Error" in err
+
+    def test_invalid_transliterator_id(self):
+        """An invalid transliterator ID exits 1 with a clean message."""
+        code, out, err = run_cli("transliterate", "name", "No-Such-ID", input_text="hello\n")
+        assert code == 1
+        assert "Traceback" not in err
+        assert "Error" in err
+
+    def test_unknown_flag_rejected(self):
+        """An unknown flag is rejected, not silently ignored, with no traceback."""
+        code, out, err = run_cli("measure", "format", "5", "km", "--bogusflag")
+        assert code != 0
+        assert "Traceback" not in err
+
+    def test_bidi_list_works(self):
+        """bidi list should succeed and print control names."""
+        code, out, err = run_cli("bidi", "list")
+        assert code == 0
+        assert "Traceback" not in err
+
+    def test_discover_all(self):
+        """discover all should render without a traceback.
+
+        Regression: __all__ advertises the discover functions, which are not
+        importable from the package namespace, so their info is None.
+        """
+        code, out, err = run_cli("discover", "all")
+        assert code == 0
+        assert "Traceback" not in err
+        assert "API Exports" in out
+
+    def test_discover_search(self):
+        """discover search should render without a traceback."""
+        code, out, err = run_cli("discover", "search", "plural")
+        assert code == 0
+        assert "Traceback" not in err

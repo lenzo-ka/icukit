@@ -18,6 +18,8 @@ Example:
     'Äpfel, Orangen und Bananen'
 """
 
+from __future__ import annotations
+
 import icu
 
 from .errors import ListFormatError

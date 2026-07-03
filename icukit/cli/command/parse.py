@@ -1,5 +1,7 @@
 """CLI command for parsing locale-formatted values."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -86,12 +88,7 @@ Examples:
     def _configure_number(cls, parser):
         """Configure the number subcommand."""
         parser.add_argument("text", help="Number string to parse")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "--strict",
             action="store_true",
@@ -102,12 +99,7 @@ Examples:
     def _configure_currency(cls, parser):
         """Configure the currency subcommand."""
         parser.add_argument("text", help="Currency string to parse")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "--strict",
             action="store_true",
@@ -119,12 +111,7 @@ Examples:
     def _configure_percent(cls, parser):
         """Configure the percent subcommand."""
         parser.add_argument("text", help="Percentage string to parse")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "--strict",
             action="store_true",

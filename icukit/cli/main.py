@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 """Main CLI entry point for ICU Kit."""
 
+from __future__ import annotations
+
 import argparse
 import sys
-from typing import List
 
 from .. import __version__
+from ..errors import ICUKitError
 from .command import (
     AlphaIndexCommand,
     BidiCommand,
@@ -94,7 +96,7 @@ class PrefixArgumentParser(argparse.ArgumentParser):
 
         return super().parse_args(args, namespace)
 
-    def _show_ambiguous_error(self, prefix: str, suggestions: List[str]):
+    def _show_ambiguous_error(self, prefix: str, suggestions: list[str]):
         error_lines = [f"ambiguous command: '{prefix}'", "\nDid you mean one of these?"]
         for cmd in sorted(suggestions):
             error_lines.append(f"  {cmd}")
@@ -225,7 +227,13 @@ def main():
 
     if hasattr(args, "func"):
         args._parser = parser
-        return args.func(args)
+        try:
+            return args.func(args)
+        except ICUKitError as e:
+            # Backstop: any icukit error that escapes a command handler is
+            # reported as a clean message rather than a raw traceback.
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
     else:
         parser.print_help()
         return 1

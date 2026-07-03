@@ -1,5 +1,7 @@
 """CLI command for alphabetic index buckets."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...alpha_index import create_index_buckets, get_bucket_for_name, get_bucket_labels
@@ -70,12 +72,7 @@ Examples:
     @classmethod
     def _configure_buckets(cls, parser):
         """Configure buckets subcommand."""
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for bucket labels (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for bucket labels (default: en_US)")
         cls._add_input_options(parser)
         cls._add_output_options(parser)
 
@@ -93,12 +90,7 @@ Examples:
     def _configure_bucket(cls, parser):
         """Configure bucket subcommand."""
         parser.add_argument("name", help="Name to get bucket for")
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
 
     @classmethod
     @handles_errors(AlphaIndexError)

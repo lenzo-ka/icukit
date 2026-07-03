@@ -109,7 +109,7 @@ def _get_abbreviation_map(locale: str = "en_US") -> dict[str, str]:
         icu.UMeasureFormatWidth.SHORT,
     )
 
-    for unit_type, units in _get_units_by_type().items():
+    for _unit_type, units in _get_units_by_type().items():
         for unit_name in units:
             try:
                 mu = icu.MeasureUnit.forIdentifier(unit_name)

@@ -1,11 +1,12 @@
 """Unicode regex CLI commands."""
 
+from __future__ import annotations
+
 import argparse
-import json
 import sys
 
 from ...errors import PatternError
-from ...formatters import print_output
+from ...formatters import format_json, print_output
 from ...regex import (
     CASE_INSENSITIVE,
     DOTALL,
@@ -270,7 +271,7 @@ Common Scripts:
                     if args.only_matching:
                         result = [m["text"] for m in matches]
                         if getattr(args, "json", False):
-                            return json.dumps(result, ensure_ascii=False, indent=2)
+                            return format_json(result)
                         else:
                             return "\n".join(result)
                     elif args.groups:
@@ -285,12 +286,12 @@ Common Scripts:
                                 match_info["groups"] = list(m["groups"].values())
                             result.append(match_info)
                         if getattr(args, "json", False):
-                            return json.dumps(result, ensure_ascii=False, indent=2)
+                            return format_json(result)
                         else:
                             return "\n".join(m["match"] for m in result)
                     else:
                         if getattr(args, "json", False):
-                            return json.dumps(matches, ensure_ascii=False, indent=2)
+                            return format_json(matches)
                         else:
                             return "\n".join(m["text"] for m in matches)
                 else:
@@ -298,7 +299,7 @@ Common Scripts:
                     if matches:
                         match = matches[0]
                         if getattr(args, "json", False):
-                            return json.dumps(match, ensure_ascii=False, indent=2)
+                            return format_json(match)
                         else:
                             return match["text"]
                     else:
@@ -347,7 +348,7 @@ Common Scripts:
                     parts = parts[: args.limit]
 
                 if getattr(args, "json", False):
-                    return json.dumps(parts, ensure_ascii=False, indent=2)
+                    return format_json(parts)
                 else:
                     return "\n".join(parts)
 

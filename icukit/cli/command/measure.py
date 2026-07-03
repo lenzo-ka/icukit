@@ -1,5 +1,7 @@
 """CLI command for measurement formatting."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -136,12 +138,7 @@ Examples:
         """Configure the format subcommand."""
         parser.add_argument("value", type=float, help="Numeric value")
         parser.add_argument("unit", help="Unit name (e.g., kilometer, fahrenheit)")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -156,12 +153,7 @@ Examples:
         parser.add_argument("value", type=float, help="Value to convert")
         parser.add_argument("from_unit", help="Source unit (e.g., kilometer)")
         parser.add_argument("to_unit", help="Target unit (e.g., mile)")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale for formatted output (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for formatted output (default: en_US)")
         parser.add_argument(
             "-w",
             "--width",
@@ -182,12 +174,7 @@ Examples:
         parser.add_argument("low", type=float, help="Low value")
         parser.add_argument("high", type=float, help="High value")
         parser.add_argument("unit", help="Unit name")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -262,7 +249,7 @@ Examples:
             print_output(
                 [{"type": t, "unit_count": len(units_by_type[t])} for t in types],
                 columns=["type", "unit_count"],
-                json_output=True,
+                as_json=True,
             )
         else:
             for t in types:
@@ -288,7 +275,7 @@ Examples:
                         data.append({"unit": u, "type": t})
 
             if args.json:
-                print_output(data, columns=["unit", "type"], json_output=True)
+                print_output(data, columns=["unit", "type"], as_json=True)
             else:
                 if unit_type:
                     for item in data:
@@ -314,12 +301,7 @@ Examples:
             "measures",
             help="Comma-separated measures (e.g., '5 foot, 10 inch')",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -339,12 +321,7 @@ Examples:
             default="default",
             help="Usage context (default, road, person-height, weather, etc.)",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-w",
             "--width",
@@ -409,7 +386,7 @@ Examples:
         try:
             info = get_unit_info(args.unit)
             if args.json:
-                print_output([info], columns=list(info.keys()), json_output=True)
+                print_output([info], columns=list(info.keys()), as_json=True)
             else:
                 for key, value in info.items():
                     print(f"{key}: {value}")

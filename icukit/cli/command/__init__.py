@@ -1,5 +1,7 @@
 """CLI commands."""
 
+from __future__ import annotations
+
 from .alpha_index import AlphaIndexCommand
 from .bidi import BidiCommand
 from .breaker import BreakerCommand

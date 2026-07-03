@@ -1,5 +1,7 @@
 """CLI command for compact number formatting."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -60,12 +62,7 @@ Examples:
             nargs="+",
             help="Number(s) to format",
         )
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-s",
             "--style",

@@ -25,6 +25,8 @@ Example:
     '米ドル'
 """
 
+from __future__ import annotations
+
 import icu
 
 from .errors import DisplayNameError

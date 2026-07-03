@@ -14,7 +14,7 @@ import argparse
 import inspect
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,7 +25,7 @@ def get_module_doc(module) -> str:
     return inspect.getdoc(module) or ""
 
 
-def get_class_info(cls) -> Dict[str, Any]:
+def get_class_info(cls) -> dict[str, Any]:
     """Extract class documentation and methods."""
     info = {
         "name": cls.__name__,
@@ -53,7 +53,7 @@ def get_class_info(cls) -> Dict[str, Any]:
     return info
 
 
-def get_function_info(func) -> Dict[str, Any]:
+def get_function_info(func) -> dict[str, Any]:
     """Extract function documentation."""
     sig = ""
     try:
@@ -67,7 +67,7 @@ def get_function_info(func) -> Dict[str, Any]:
     }
 
 
-def extract_lib_docs() -> Dict[str, Any]:
+def extract_lib_docs() -> dict[str, Any]:
     """Extract documentation from the icukit library modules."""
     import importlib
 
@@ -128,7 +128,7 @@ def extract_lib_docs() -> Dict[str, Any]:
     return docs
 
 
-def extract_parser_info(parser: argparse.ArgumentParser, prefix: str = "") -> Dict[str, Any]:
+def extract_parser_info(parser: argparse.ArgumentParser, prefix: str = "") -> dict[str, Any]:
     """Recursively extract argparse parser information."""
     info = {
         "prog": parser.prog,
@@ -173,7 +173,7 @@ def extract_parser_info(parser: argparse.ArgumentParser, prefix: str = "") -> Di
     return info
 
 
-def extract_cli_docs() -> Dict[str, Any]:
+def extract_cli_docs() -> dict[str, Any]:
     """Extract documentation from the CLI."""
     from icukit.cli.main import create_parser
 
@@ -181,7 +181,7 @@ def extract_cli_docs() -> Dict[str, Any]:
     return extract_parser_info(parser)
 
 
-def generate_api_markdown(lib_docs: Dict[str, Any]) -> str:
+def generate_api_markdown(lib_docs: dict[str, Any]) -> str:
     """Generate markdown documentation for the library API."""
     lines = [
         "# icukit API Reference",
@@ -234,7 +234,7 @@ def generate_api_markdown(lib_docs: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def generate_cli_markdown(cli_docs: Dict[str, Any], level: int = 1, parent_cmd: str = "") -> str:
+def generate_cli_markdown(cli_docs: dict[str, Any], level: int = 1, parent_cmd: str = "") -> str:
     """Generate markdown documentation for the CLI."""
     lines = []
 
@@ -273,7 +273,7 @@ def generate_cli_markdown(cli_docs: Dict[str, Any], level: int = 1, parent_cmd: 
             args_sig = tuple((a["name"], a["help"]) for a in subcmd.get("arguments", []))
             return (subcmd.get("description", ""), args_sig)
 
-        sig_to_names: Dict[tuple, List[str]] = {}
+        sig_to_names: dict[tuple, list[str]] = {}
         for name, subcmd in cli_docs["subcommands"].items():
             sig = subcmd_signature(subcmd)
             sig_to_names.setdefault(sig, []).append(name)
@@ -313,7 +313,7 @@ def generate_cli_markdown(cli_docs: Dict[str, Any], level: int = 1, parent_cmd: 
     return "\n".join(lines)
 
 
-def write_docs(output_dir: Path) -> List[Path]:
+def write_docs(output_dir: Path) -> list[Path]:
     """Generate and write all documentation files."""
     output_dir.mkdir(parents=True, exist_ok=True)
 

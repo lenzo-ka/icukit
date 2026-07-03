@@ -1,5 +1,7 @@
 """CLI command for list formatting."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -59,12 +61,7 @@ Examples:
             default=STYLE_AND,
             help="List style (default: and)",
         )
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for formatting (default: en_US)",
-        )
+        cls._add_locale_option(parser, help="Locale for formatting (default: en_US)")
         parser.add_argument(
             "--delimiter",
             "-d",

@@ -1,6 +1,6 @@
 # icukit API Reference
 
-Version: 0.1.3
+Version: 0.2.0
 
 ## icukit.alpha_index
 
@@ -30,14 +30,14 @@ Example:
     >>> index.get_buckets()
     {'A': ['Alice'], 'B': ['Bob'], 'Z': ['Zebra']}
 
-#### `AlphabeticIndex(locale: str = 'en_US')`
+#### `AlphabeticIndex(locale: 'str' = 'en_US')`
 
 Create an alphabetic index for the given locale.
 
 Args:
     locale: Locale for bucket labels and sorting.
 
-#### `add(name: str, data: Any = None) -> 'AlphabeticIndex'`
+#### `add(name: 'str', data: 'Any' = None) -> 'AlphabeticIndex'`
 
 Add an item to the index.
 
@@ -48,7 +48,7 @@ Args:
 Returns:
     Self for chaining.
 
-#### `add_many(names: list[str]) -> 'AlphabeticIndex'`
+#### `add_many(names: 'list[str]') -> 'AlphabeticIndex'`
 
 Add multiple items to the index.
 
@@ -65,7 +65,7 @@ Clear all records from the index.
 Returns:
     Self for chaining.
 
-#### `get_bucket_for(name: str) -> str`
+#### `get_bucket_for(name: 'str') -> 'str'`
 
 Get the bucket label for a name without adding it.
 
@@ -75,21 +75,21 @@ Args:
 Returns:
     Bucket label.
 
-#### `get_buckets() -> dict[str, list[str]]`
+#### `get_buckets() -> 'dict[str, list[str]]'`
 
 Get all non-empty buckets with their items.
 
 Returns:
     Dict mapping bucket labels to lists of items.
 
-#### `get_labels() -> list[str]`
+#### `get_labels() -> 'list[str]'`
 
 Get all bucket labels for this locale.
 
 Returns:
     List of bucket label strings.
 
-### `create_index_buckets(items: list[str], locale: str = 'en_US') -> dict[str, list[str]]`
+### `create_index_buckets(items: 'list[str]', locale: 'str' = 'en_US') -> 'dict[str, list[str]]'`
 
 Create alphabetic index buckets for a list of items.
 
@@ -107,7 +107,7 @@ Example:
     >>> create_index_buckets(["Apple", "Banana", "Bob", "Zebra"], "en_US")
     {'A': ['Apple'], 'B': ['Banana', 'Bob'], 'Z': ['Zebra']}
 
-### `get_bucket_for_name(name: str, locale: str = 'en_US') -> str`
+### `get_bucket_for_name(name: 'str', locale: 'str' = 'en_US') -> 'str'`
 
 Get the bucket label for a given name.
 
@@ -124,7 +124,7 @@ Example:
     >>> get_bucket_for_name("山田", "ja_JP")
     'や'
 
-### `get_bucket_labels(locale: str = 'en_US') -> list[str]`
+### `get_bucket_labels(locale: 'str' = 'en_US') -> 'list[str]'`
 
 Get the bucket labels for a locale.
 
@@ -163,7 +163,7 @@ Example:
     >>> strip_bidi_controls('hello\u200fworld')
     'helloworld'
 
-### `get_base_direction(text: str) -> str`
+### `get_base_direction(text: 'str') -> 'str'`
 
 Get the base direction of text using the first strong directional character.
 
@@ -181,7 +181,7 @@ Example:
     >>> get_base_direction('123')
     'neutral'
 
-### `get_bidi_info(text: str) -> dict`
+### `get_bidi_info(text: 'str') -> 'dict'`
 
 Get bidirectional text information.
 
@@ -200,7 +200,7 @@ Example:
     >>> get_bidi_info('Hello שלום')
     {'direction': 'mixed', 'base_direction': 'ltr', 'has_rtl': True, ...}
 
-### `has_bidi_controls(text: str) -> bool`
+### `has_bidi_controls(text: 'str') -> 'bool'`
 
 Check if text contains any bidirectional control characters.
 
@@ -216,7 +216,7 @@ Example:
     >>> has_bidi_controls('hello\u200fworld')
     True
 
-### `list_bidi_controls() -> list[dict]`
+### `list_bidi_controls() -> 'list[dict]'`
 
 List all bidirectional control characters.
 
@@ -228,7 +228,7 @@ Example:
     >>> controls[0]
     {'char': '\u200e', 'codepoint': 'U+200E', 'abbrev': 'LRM', 'name': 'Left-to-Right Mark'}
 
-### `strip_bidi_controls(text: str) -> str`
+### `strip_bidi_controls(text: 'str') -> 'str'`
 
 Remove all bidirectional control characters from text.
 
@@ -282,7 +282,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: str = 'en_US')`
+#### `Breaker(locale: 'str' = 'en_US')`
 
 Initialize a Breaker instance.
 
@@ -292,7 +292,7 @@ Args:
 Raises:
     BreakerError: If the locale is invalid.
 
-#### `break_graphemes(text: str) -> list[str]`
+#### `break_graphemes(text: 'str') -> 'list[str]'`
 
 Break text into grapheme clusters (user-perceived characters).
 
@@ -309,7 +309,7 @@ Example:
     >>> breaker.break_graphemes('e\u0301')  # e + combining accent
     ['é']
 
-#### `break_lines(text: str) -> list[str]`
+#### `break_lines(text: 'str') -> 'list[str]'`
 
 Find line break opportunities in text.
 
@@ -321,7 +321,7 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-#### `break_sentences(text: str, skip_empty: bool = True) -> list[str]`
+#### `break_sentences(text: 'str', skip_empty: 'bool' = True) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -337,7 +337,7 @@ Example:
     >>> breaker.break_sentences('Hello world. How are you?')
     ['Hello world. ', 'How are you?']
 
-#### `break_words(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> list[str]`
+#### `break_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 
 Break text into words.
 
@@ -356,7 +356,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `iter_graphemes(text: str) -> Iterator[str]`
+#### `iter_graphemes(text: 'str') -> 'Iterator[str]'`
 
 Iterate over grapheme clusters.
 
@@ -366,7 +366,7 @@ Args:
 Yields:
     Individual grapheme clusters.
 
-#### `iter_lines(text: str) -> Iterator[str]`
+#### `iter_lines(text: 'str') -> 'Iterator[str]'`
 
 Iterate over line break segments.
 
@@ -376,7 +376,7 @@ Args:
 Yields:
     Segments at line break boundaries.
 
-#### `iter_sentences(text: str, skip_empty: bool = True) -> Iterator[str]`
+#### `iter_sentences(text: 'str', skip_empty: 'bool' = True) -> 'Iterator[str]'`
 
 Iterate over sentences in text.
 
@@ -389,7 +389,7 @@ Args:
 Yields:
     Individual sentence strings.
 
-#### `iter_words(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> Iterator[str]`
+#### `iter_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'Iterator[str]'`
 
 Iterate over words in text.
 
@@ -401,7 +401,7 @@ Args:
 Yields:
     Individual word/token strings.
 
-#### `tokenize_sentences(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> list[list[str]]`
+#### `tokenize_sentences(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[list[str]]'`
 
 Break text into sentences, then tokenize each sentence.
 
@@ -418,7 +418,7 @@ Example:
     >>> breaker.tokenize_sentences('Hello world. How are you?')
     [['Hello', 'world', '.'], ['How', 'are', 'you', '?']]
 
-### `break_graphemes(text: str, locale: str = 'en_US') -> list[str]`
+### `break_graphemes(text: 'str', locale: 'str' = 'en_US') -> 'list[str]'`
 
 Break text into grapheme clusters.
 
@@ -433,7 +433,7 @@ Example:
     >>> break_graphemes('👨‍👩‍👧‍👦')  # Family emoji
     ['👨‍👩‍👧‍👦']
 
-### `break_lines(text: str, locale: str = 'en_US') -> list[str]`
+### `break_lines(text: 'str', locale: 'str' = 'en_US') -> 'list[str]'`
 
 Find line break opportunities in text.
 
@@ -444,7 +444,7 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentences(text: str, locale: str = 'en_US', skip_empty: bool = True) -> list[str]`
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -462,7 +462,7 @@ Example:
     >>> break_sentences('Hello. World.', 'en')
     ['Hello. ', 'World.']
 
-### `break_words(text: str, locale: str = 'en_US', skip_whitespace: bool = True, skip_punctuation: bool = False) -> list[str]`
+### `break_words(text: 'str', locale: 'str' = 'en_US', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 
 Break text into words.
 
@@ -521,7 +521,7 @@ Example:
         >>> info['type']
         'islamic'
 
-### `get_calendar_info(cal_type: str) -> Optional[Dict[str, Any]]`
+### `get_calendar_info(cal_type: 'str') -> 'dict[str, Any] | None'`
 
 Get information about a calendar type.
 
@@ -536,7 +536,7 @@ Example:
     >>> info['type']
     'hebrew'
 
-### `is_valid_calendar(cal_type: str) -> bool`
+### `is_valid_calendar(cal_type: 'str') -> 'bool'`
 
 Check if a calendar type is valid.
 
@@ -552,7 +552,7 @@ Example:
     >>> is_valid_calendar('invalid')
     False
 
-### `list_calendars() -> List[str]`
+### `list_calendars() -> 'list[str]'`
 
 List all available calendar types.
 
@@ -566,7 +566,7 @@ Example:
     >>> 'hebrew' in cals
     True
 
-### `list_calendars_info() -> List[Dict[str, Any]]`
+### `list_calendars_info() -> 'list[dict[str, Any]]'`
 
 List all calendars with their info.
 
@@ -1053,21 +1053,21 @@ exports and commands rather than hardcoding them.
 Note: Import this module directly (from icukit.discover import ...) rather
 than from icukit to avoid circular imports.
 
-### `discover_features() -> Dict[str, Any]`
+### `discover_features() -> 'dict[str, Any]'`
 
 Discover all available features in icukit.
 
 Returns:
     Dictionary with API exports and CLI commands
 
-### `get_api_exports() -> List[str]`
+### `get_api_exports() -> 'list[str]'`
 
 Get all exported API functions and classes.
 
 Returns:
     List of exported names from icukit.__all__
 
-### `get_api_info(name: str) -> Optional[Dict[str, Any]]`
+### `get_api_info(name: 'str') -> 'dict[str, Any] | None'`
 
 Get information about an API export.
 
@@ -1077,18 +1077,21 @@ Args:
 Returns:
     Dictionary with name, type, signature, and docstring, or None if not found
 
-### `get_cli_commands() -> Dict[str, Dict[str, Any]]`
+### `get_cli_commands() -> 'dict[str, dict[str, Any]]'`
 
 Get available CLI commands with their details.
 
 Returns:
     Dictionary mapping command names to their info (aliases, minimal_prefix)
 
-### `print_discovery_report()`
+### `render_discovery_report() -> 'str'`
 
-Print a formatted discovery report to stdout.
+Build a formatted discovery report string.
 
-### `search_features(query: str) -> Dict[str, List[str]]`
+Returns:
+    The report as a multi-line string (the caller decides where to print).
+
+### `search_features(query: 'str') -> 'dict[str, list[str]]'`
 
 Search for features matching a query.
 
@@ -1140,14 +1143,14 @@ Example:
     >>> names.currency("USD")
     'US-Dollar'
 
-#### `DisplayNames(display_locale: str = 'en_US')`
+#### `DisplayNames(display_locale: 'str' = 'en_US')`
 
 Create a DisplayNames instance.
 
 Args:
     display_locale: Locale for the display names (e.g., "en", "de", "ja")
 
-#### `currency(currency_code: str) -> str`
+#### `currency(currency_code: 'str') -> 'str'`
 
 Get the display name for a currency.
 
@@ -1162,7 +1165,7 @@ Example:
     >>> names.currency("USD")
     'US-Dollar'
 
-#### `currency_symbol(currency_code: str) -> str`
+#### `currency_symbol(currency_code: 'str') -> 'str'`
 
 Get the currency symbol.
 
@@ -1179,7 +1182,7 @@ Example:
     >>> names.currency_symbol("EUR")
     '€'
 
-#### `language(language_code: str) -> str`
+#### `language(language_code: 'str') -> 'str'`
 
 Get the display name for a language.
 
@@ -1194,7 +1197,7 @@ Example:
     >>> names.language("zh")
     'Chinesisch'
 
-#### `locale(locale_code: str) -> str`
+#### `locale(locale_code: 'str') -> 'str'`
 
 Get the display name for a locale.
 
@@ -1209,7 +1212,7 @@ Example:
     >>> names.locale("zh_Hans_CN")
     'Chinese (Simplified, China)'
 
-#### `region(region_code: str) -> str`
+#### `region(region_code: 'str') -> 'str'`
 
 Get the display name for a region/country.
 
@@ -1224,7 +1227,7 @@ Example:
     >>> names.region("US")
     'アメリカ合衆国'
 
-#### `script(script_code: str) -> str`
+#### `script(script_code: 'str') -> 'str'`
 
 Get the display name for a script.
 
@@ -1241,7 +1244,7 @@ Example:
     >>> names.script("Hans")
     'Simplified Han'
 
-### `get_currency_name(currency_code: str, display_locale: str = 'en_US') -> str`
+### `get_currency_name(currency_code: 'str', display_locale: 'str' = 'en_US') -> 'str'`
 
 Get the display name for a currency (convenience function).
 
@@ -1258,7 +1261,7 @@ Example:
     >>> get_currency_name("USD", "ja")
     '米ドル'
 
-### `get_currency_symbol(currency_code: str, display_locale: str = 'en_US') -> str`
+### `get_currency_symbol(currency_code: 'str', display_locale: 'str' = 'en_US') -> 'str'`
 
 Get the currency symbol (convenience function).
 
@@ -1275,7 +1278,7 @@ Example:
     >>> get_currency_symbol("EUR", "de_DE")
     '€'
 
-### `get_language_name(language_code: str, display_locale: str = 'en_US') -> str`
+### `get_language_name(language_code: 'str', display_locale: 'str' = 'en_US') -> 'str'`
 
 Get the display name for a language (convenience function).
 
@@ -1292,7 +1295,7 @@ Example:
     >>> get_language_name("zh", "de")
     'Chinesisch'
 
-### `get_locale_name(locale_code: str, display_locale: str = 'en_US') -> str`
+### `get_locale_name(locale_code: 'str', display_locale: 'str' = 'en_US') -> 'str'`
 
 Get the display name for a locale (convenience function).
 
@@ -1307,7 +1310,7 @@ Example:
     >>> get_locale_name("zh_Hans_CN", "en")
     'Chinese (Simplified, China)'
 
-### `get_region_name(region_code: str, display_locale: str = 'en_US') -> str`
+### `get_region_name(region_code: 'str', display_locale: 'str' = 'en_US') -> 'str'`
 
 Get the display name for a region/country (convenience function).
 
@@ -1324,7 +1327,7 @@ Example:
     >>> get_region_name("JP", "ja")
     '日本'
 
-### `get_script_name(script_code: str, display_locale: str = 'en_US') -> str`
+### `get_script_name(script_code: 'str', display_locale: 'str' = 'en_US') -> 'str'`
 
 Get the display name for a script (convenience function).
 
@@ -1494,23 +1497,23 @@ Example:
 
 Create a new IDNA converter.
 
-#### `decode(domain: str) -> str`
+#### `decode(domain: 'str') -> 'str'`
 
 Decode ASCII domain to Unicode.
 
-#### `decode_label(label: str) -> str`
+#### `decode_label(label: 'str') -> 'str'`
 
 Decode single label to Unicode.
 
-#### `encode(domain: str) -> str`
+#### `encode(domain: 'str') -> 'str'`
 
 Encode Unicode domain to ASCII.
 
-#### `encode_label(label: str) -> str`
+#### `encode_label(label: 'str') -> 'str'`
 
 Encode single label to ASCII.
 
-### `idna_decode(domain: str) -> str`
+### `idna_decode(domain: 'str') -> 'str'`
 
 Decode an ASCII (Punycode) domain name to Unicode.
 
@@ -1531,7 +1534,7 @@ Example:
     >>> idna_decode("xn--r8jz45g.jp")
     '例え.jp'
 
-### `idna_decode_label(label: str) -> str`
+### `idna_decode_label(label: 'str') -> 'str'`
 
 Decode a single ASCII domain label to Unicode.
 
@@ -1545,7 +1548,7 @@ Example:
     >>> idna_decode_label("xn--mnchen-3ya")
     'münchen'
 
-### `idna_encode(domain: str) -> str`
+### `idna_encode(domain: 'str') -> 'str'`
 
 Encode a Unicode domain name to ASCII (Punycode).
 
@@ -1567,7 +1570,7 @@ Example:
     >>> idna_encode("例え.jp")
     'xn--r8jz45g.jp'
 
-### `idna_encode_label(label: str) -> str`
+### `idna_encode_label(label: 'str') -> 'str'`
 
 Encode a single domain label to ASCII.
 
@@ -1583,7 +1586,7 @@ Example:
     >>> idna_encode_label("münchen")
     'xn--mnchen-3ya'
 
-### `is_ascii_domain(domain: str) -> bool`
+### `is_ascii_domain(domain: 'str') -> 'bool'`
 
 Check if a domain name is already ASCII-only.
 
@@ -1630,7 +1633,7 @@ Example:
     >>> lf.format(['apples', 'oranges', 'bananas'])
     'apples, oranges, and bananas'
 
-#### `ListFormatter(locale: str = 'en_US', style: str = 'and')`
+#### `ListFormatter(locale: 'str' = 'en_US', style: 'str' = 'and')`
 
 Initialize a ListFormatter.
 
@@ -1641,7 +1644,7 @@ Args:
 Raises:
     ListFormatError: If locale or style is invalid.
 
-#### `format(items: list[str]) -> str`
+#### `format(items: 'list[str]') -> 'str'`
 
 Format a list of items.
 
@@ -1656,7 +1659,7 @@ Example:
     >>> lf.format(['a', 'b', 'c'])
     'a, b, and c'
 
-### `format_list(items: list[str], locale: str = 'en_US', style: str = 'and') -> str`
+### `format_list(items: 'list[str]', locale: 'str' = 'en_US', style: 'str' = 'and') -> 'str'`
 
 Format a list of items with locale-appropriate conjunctions.
 
@@ -1938,7 +1941,7 @@ Example:
     >>> get_exemplar_characters("ja_JP", "index")
     '[あかさたなはまやらわ]'
 
-### `get_exemplar_info(locale_str: 'str' = 'en_US') -> 'Dict[str, str]'`
+### `get_exemplar_info(locale_str: 'str' = 'en_US') -> 'dict[str, str]'`
 
 Get all exemplar character sets for a locale.
 
@@ -1972,7 +1975,7 @@ Example:
     >>> get_language_display_name('ja')
     'Japanese'
 
-### `get_locale_attributes(locale_str: 'str', display_locale: 'str' = 'en') -> 'Dict[str, Any]'`
+### `get_locale_attributes(locale_str: 'str', display_locale: 'str' = 'en') -> 'dict[str, Any]'`
 
 Get comprehensive locale attributes.
 
@@ -1995,7 +1998,7 @@ Example:
     >>> attrs['quote_start']
     '"'
 
-### `get_locale_extended(locale_str: 'str') -> 'Dict[str, Any]'`
+### `get_locale_extended(locale_str: 'str') -> 'dict[str, Any]'`
 
 Get extended locale attributes.
 
@@ -2014,7 +2017,7 @@ Example:
     >>> ext['index_labels'][:3]
     ['あ', 'か', 'さ']
 
-### `get_locale_info(locale_str: 'str', display_locale: 'str' = 'en', extended: 'bool' = False) -> 'Dict[str, Any]'`
+### `get_locale_info(locale_str: 'str', display_locale: 'str' = 'en', extended: 'bool' = False) -> 'dict[str, Any]'`
 
 Get detailed information about a locale.
 
@@ -2036,7 +2039,7 @@ Example:
     >>> info['extended']['currency']
     'JPY'
 
-### `get_locale_scripts(locale_str: 'str') -> 'List[str]'`
+### `get_locale_scripts(locale_str: 'str') -> 'list[str]'`
 
 Get the scripts used by a locale.
 
@@ -2054,7 +2057,7 @@ Example:
     >>> get_locale_scripts('en_US')
     ['Latin']
 
-### `get_number_symbols(locale_str: 'str' = 'en_US') -> 'Dict[str, str]'`
+### `get_number_symbols(locale_str: 'str' = 'en_US') -> 'dict[str, str]'`
 
 Get number formatting symbols for a locale.
 
@@ -2101,7 +2104,7 @@ Example:
     >>> is_valid_locale('xx_YY')
     False
 
-### `list_exemplar_types() -> 'List[str]'`
+### `list_exemplar_types() -> 'list[str]'`
 
 List available exemplar character set types.
 
@@ -2112,7 +2115,7 @@ Example:
     >>> list_exemplar_types()
     ['standard', 'auxiliary', 'index', 'punctuation']
 
-### `list_languages() -> 'List[str]'`
+### `list_languages() -> 'list[str]'`
 
 List all available language codes.
 
@@ -2126,7 +2129,7 @@ Example:
     >>> 'el' in langs
     True
 
-### `list_locales() -> 'List[str]'`
+### `list_locales() -> 'list[str]'`
 
 List all available locale identifiers.
 
@@ -2140,7 +2143,7 @@ Example:
     >>> len(locales)
     851
 
-### `list_locales_info(display_locale: 'str' = 'en') -> 'List[Dict[str, Any]]'`
+### `list_locales_info(display_locale: 'str' = 'en') -> 'list[dict[str, Any]]'`
 
 List all locales with their info.
 
@@ -2174,7 +2177,7 @@ Example:
     >>> minimize_subtags('en_Latn_US')
     'en'
 
-### `parse_locale(locale_str: 'str') -> 'Dict[str, Any]'`
+### `parse_locale(locale_str: 'str') -> 'dict[str, Any]'`
 
 Parse a locale string into components.
 
@@ -2524,7 +2527,7 @@ Example:
     >>> mf.format({'count': 5})
     '5 cats'
 
-#### `MessageFormatter(pattern: str, locale: str = 'en_US')`
+#### `MessageFormatter(pattern: 'str', locale: 'str' = 'en_US')`
 
 Initialize a MessageFormatter.
 
@@ -2535,7 +2538,7 @@ Args:
 Raises:
     MessageError: If the pattern is invalid.
 
-#### `format(args: dict[str, typing.Any]) -> str`
+#### `format(args: 'dict[str, Any]') -> 'str'`
 
 Format the message with the given arguments.
 
@@ -2553,7 +2556,7 @@ Example:
     >>> mf.format({'name': 'World'})
     'Hello, World!'
 
-### `format_message(pattern: str, args: dict[str, typing.Any], locale: str = 'en_US') -> str`
+### `format_message(pattern: 'str', args: 'dict[str, Any]', locale: 'str' = 'en_US') -> 'str'`
 
 Format a message with the given arguments.
 
@@ -2622,14 +2625,14 @@ Example:
     >>> parser.parse_currency("€1.234,56")
     {'value': 1234.56, 'currency': 'EUR'}
 
-#### `NumberParser(locale: str = 'en_US')`
+#### `NumberParser(locale: 'str' = 'en_US')`
 
 Create a NumberParser for the given locale.
 
 Args:
     locale: Locale code (e.g., "en_US", "de_DE", "ja_JP")
 
-#### `parse_currency(text: str, lenient: bool = True) -> dict`
+#### `parse_currency(text: 'str', lenient: 'bool' = True) -> 'dict'`
 
 Parse a locale-formatted currency string.
 
@@ -2648,7 +2651,7 @@ Example:
     >>> parser.parse_currency("$1,234.56")
     {'value': 1234.56, 'currency': 'USD'}
 
-#### `parse_number(text: str, lenient: bool = True) -> float`
+#### `parse_number(text: 'str', lenient: 'bool' = True) -> 'float'`
 
 Parse a locale-formatted number string.
 
@@ -2670,7 +2673,7 @@ Example:
     >>> parser.parse_number("1.234,56")
     1234.56
 
-#### `parse_percent(text: str, lenient: bool = True) -> float`
+#### `parse_percent(text: 'str', lenient: 'bool' = True) -> 'float'`
 
 Parse a locale-formatted percentage string.
 
@@ -2691,7 +2694,7 @@ Example:
     >>> parser.parse_percent("125%")
     1.25
 
-### `parse_currency(text: str, locale: str = 'en_US', lenient: bool = True) -> dict`
+### `parse_currency(text: 'str', locale: 'str' = 'en_US', lenient: 'bool' = True) -> 'dict'`
 
 Parse a locale-formatted currency string (convenience function).
 
@@ -2709,7 +2712,7 @@ Example:
     >>> parse_currency("€1.234,56", "de_DE")
     {'value': 1234.56, 'currency': 'EUR'}
 
-### `parse_number(text: str, locale: str = 'en_US', lenient: bool = True) -> float`
+### `parse_number(text: 'str', locale: 'str' = 'en_US', lenient: 'bool' = True) -> 'float'`
 
 Parse a locale-formatted number string (convenience function).
 
@@ -2727,7 +2730,7 @@ Example:
     >>> parse_number("1.234,56", "de_DE")
     1234.56
 
-### `parse_percent(text: str, locale: str = 'en_US', lenient: bool = True) -> float`
+### `parse_percent(text: 'str', locale: 'str' = 'en_US', lenient: 'bool' = True) -> 'float'`
 
 Parse a locale-formatted percentage string (convenience function).
 
@@ -3003,7 +3006,7 @@ Example:
         >>> print(match['groups'])
         {1: 'A', 2: '123'}
 
-#### `UnicodeRegex(pattern: str, flags: int = 0)`
+#### `UnicodeRegex(pattern: 'str', flags: 'int' = 0)`
 
 Initialize a Unicode regex.
 
@@ -3014,7 +3017,7 @@ Args:
 Raises:
     PatternError: If the pattern is invalid.
 
-#### `find(text: str, start: int = 0) -> Optional[Dict[str, Any]]`
+#### `find(text: 'str', start: 'int' = 0) -> 'dict[str, Any] | None'`
 
 Find first match in text.
 
@@ -3025,7 +3028,7 @@ Args:
 Returns:
     Match dict with text, start, end, and groups, or None if no match.
 
-#### `find_all(text: str) -> List[Dict[str, Any]]`
+#### `find_all(text: 'str') -> 'list[dict[str, Any]]'`
 
 Find all matches in text.
 
@@ -3035,7 +3038,7 @@ Args:
 Returns:
     List of match dictionaries.
 
-#### `iter_matches(text: str) -> Iterator[Dict[str, Any]]`
+#### `iter_matches(text: 'str') -> 'Iterator[dict[str, Any]]'`
 
 Iterate over matches.
 
@@ -3045,7 +3048,7 @@ Args:
 Yields:
     Match dictionaries.
 
-#### `match(text: str) -> bool`
+#### `match(text: 'str') -> 'bool'`
 
 Check if pattern matches entire text.
 
@@ -3055,7 +3058,7 @@ Args:
 Returns:
     True if entire text matches.
 
-#### `replace(text: str, replacement: str, limit: int = -1) -> str`
+#### `replace(text: 'str', replacement: 'str', limit: 'int' = -1) -> 'str'`
 
 Replace matches with replacement text.
 
@@ -3067,7 +3070,7 @@ Args:
 Returns:
     Text with replacements made.
 
-#### `replace_with_callback(text: str, callback) -> str`
+#### `replace_with_callback(text: 'str', callback) -> 'str'`
 
 Replace matches using a callback function.
 
@@ -3078,7 +3081,7 @@ Args:
 Returns:
     Text with replacements made.
 
-#### `search(text: str) -> bool`
+#### `search(text: 'str') -> 'bool'`
 
 Check if pattern exists anywhere in text.
 
@@ -3088,7 +3091,7 @@ Args:
 Returns:
     True if pattern found.
 
-#### `split(text: str, limit: int = -1) -> List[str]`
+#### `split(text: 'str', limit: 'int' = -1) -> 'list[str]'`
 
 Split text by pattern.
 
@@ -3099,35 +3102,35 @@ Args:
 Returns:
     List of split parts.
 
-#### `validate() -> bool`
+#### `validate() -> 'bool'`
 
 Check if the pattern is valid.
 
 Returns:
     True if pattern is valid.
 
-### `list_unicode_categories() -> List[Dict[str, str]]`
+### `list_unicode_categories() -> 'list[dict[str, str]]'`
 
 List Unicode general categories with structured info.
 
 Returns:
     List of dicts with 'code' and 'description' keys.
 
-### `list_unicode_properties() -> List[Dict[str, Any]]`
+### `list_unicode_properties() -> 'list[dict[str, Any]]'`
 
 List Unicode properties with structured info for TSV/JSON output.
 
 Returns:
     List of dicts with 'category', 'pattern', and 'description' keys.
 
-### `list_unicode_scripts() -> List[Dict[str, str]]`
+### `list_unicode_scripts() -> 'list[dict[str, str]]'`
 
 List Unicode scripts with structured info.
 
 Returns:
     List of dicts with 'name' and 'pattern' keys.
 
-### `regex_find(pattern: str, text: str, flags: int = 0) -> List[Dict[str, Any]]`
+### `regex_find(pattern: 'str', text: 'str', flags: 'int' = 0) -> 'list[dict[str, Any]]'`
 
 Find all matches of pattern in text.
 
@@ -3139,7 +3142,7 @@ Args:
 Returns:
     List of match dictionaries.
 
-### `regex_replace(pattern: str, text: str, replacement: str, flags: int = 0, limit: int = -1) -> str`
+### `regex_replace(pattern: 'str', text: 'str', replacement: 'str', flags: 'int' = 0, limit: 'int' = -1) -> 'str'`
 
 Replace pattern matches in text.
 
@@ -3153,7 +3156,7 @@ Args:
 Returns:
     Text with replacements.
 
-### `regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> List[str]`
+### `regex_split(pattern: 'str', text: 'str', flags: 'int' = 0, limit: 'int' = -1) -> 'list[str]'`
 
 Split text by pattern.
 
@@ -3204,7 +3207,7 @@ Example:
         >>> info['containing_region']
         '021'  # Northern America
 
-### `get_contained_regions(code: str) -> List[str]`
+### `get_contained_regions(code: 'str') -> 'list[str]'`
 
 Get regions directly contained by a region.
 
@@ -3219,7 +3222,7 @@ Example:
     >>> get_contained_regions('019')
     ['005', '013', '021', '029']  # South/Central/North America, Caribbean
 
-### `get_region_info(code: str, extended: bool = False) -> Optional[Dict[str, Any]]`
+### `get_region_info(code: 'str', extended: 'bool' = False) -> 'dict[str, Any] | None'`
 
 Get information about a region.
 
@@ -3242,7 +3245,7 @@ Example:
     >>> 'contained_regions' in info['extended']
     True
 
-### `list_region_types() -> List[Dict[str, str]]`
+### `list_region_types() -> 'list[dict[str, str]]'`
 
 List available region types.
 
@@ -3254,7 +3257,7 @@ Example:
     >>> types[0]
     {'type': 'continent', 'description': 'Continents (Africa, Americas, ...)'}
 
-### `list_regions(region_type: str = 'territory') -> List[str]`
+### `list_regions(region_type: 'str' = 'territory') -> 'list[str]'`
 
 List all regions of a given type.
 
@@ -3277,7 +3280,7 @@ Example:
     >>> len(continents)
     5
 
-### `list_regions_info(region_type: str = 'territory') -> List[Dict[str, Any]]`
+### `list_regions_info(region_type: 'str' = 'territory') -> 'list[dict[str, Any]]'`
 
 List all regions with their info.
 
@@ -3337,7 +3340,7 @@ Example:
         >>> len(scripts)
         160
 
-### `detect_script(text: str) -> str`
+### `detect_script(text: 'str') -> 'str'`
 
 Detect the primary script of text.
 
@@ -3360,7 +3363,7 @@ Example:
     >>> detect_script('مرحبا')
     'Arabic'
 
-### `detect_scripts(text: str) -> List[str]`
+### `detect_scripts(text: 'str') -> 'list[str]'`
 
 Detect all scripts present in text.
 
@@ -3376,7 +3379,7 @@ Example:
     >>> detect_scripts('abc123')
     ['Latin', 'Common']
 
-### `get_char_script(char: str) -> str`
+### `get_char_script(char: 'str') -> 'str'`
 
 Get the script of a single character.
 
@@ -3397,7 +3400,7 @@ Example:
     >>> get_char_script('你')
     'Han'
 
-### `get_script_info(script: str, extended: bool = False) -> Optional[Dict[str, Any]]`
+### `get_script_info(script: 'str', extended: 'bool' = False) -> 'dict[str, Any] | None'`
 
 Get information about a script.
 
@@ -3421,7 +3424,7 @@ Example:
     >>> info['extended']['sample_char']
     'ب'
 
-### `is_cased(script: str) -> bool`
+### `is_cased(script: 'str') -> 'bool'`
 
 Check if a script has case distinctions.
 
@@ -3447,7 +3450,7 @@ Example:
     >>> is_cased('Arabic')
     False
 
-### `is_rtl(text: str) -> bool`
+### `is_rtl(text: 'str') -> 'bool'`
 
 Check if text is in a right-to-left script.
 
@@ -3467,7 +3470,7 @@ Example:
     >>> is_rtl('שלום')
     True
 
-### `list_scripts() -> List[str]`
+### `list_scripts() -> 'list[str]'`
 
 List all available Unicode scripts.
 
@@ -3481,7 +3484,7 @@ Example:
     >>> 'Greek' in scripts
     True
 
-### `list_scripts_info() -> List[Dict[str, Any]]`
+### `list_scripts_info() -> 'list[dict[str, Any]]'`
 
 List all scripts with their properties.
 
@@ -3656,23 +3659,23 @@ Example:
 
 Create a new SpoofChecker.
 
-#### `are_confusable(string1: str, string2: str) -> bool`
+#### `are_confusable(string1: 'str', string2: 'str') -> 'bool'`
 
 Check if two strings are confusable.
 
-#### `check(text: str) -> dict[str, typing.Any]`
+#### `check(text: 'str') -> 'dict[str, Any]'`
 
 Check string for spoofing issues.
 
-#### `get_confusable_type(string1: str, string2: str) -> int`
+#### `get_confusable_type(string1: 'str', string2: 'str') -> 'int'`
 
 Get confusability type between two strings.
 
-#### `get_skeleton(text: str) -> str`
+#### `get_skeleton(text: 'str') -> 'str'`
 
 Get skeleton form of a string.
 
-### `are_confusable(string1: str, string2: str) -> bool`
+### `are_confusable(string1: 'str', string2: 'str') -> 'bool'`
 
 Check if two strings are visually confusable.
 
@@ -3692,7 +3695,7 @@ Example:
     >>> are_confusable("hello", "world")
     False
 
-### `check_string(text: str) -> dict[str, typing.Any]`
+### `check_string(text: 'str') -> 'dict[str, Any]'`
 
 Check a string for potential spoofing issues.
 
@@ -3718,7 +3721,7 @@ Example:
     >>> result['mixed_script']
     True
 
-### `get_confusable_info(string1: str, string2: str) -> dict[str, typing.Any]`
+### `get_confusable_info(string1: 'str', string2: 'str') -> 'dict[str, Any]'`
 
 Get detailed confusability information between two strings.
 
@@ -3742,7 +3745,7 @@ Example:
     >>> info['type_names']
     ['mixed_script']
 
-### `get_confusable_type(string1: str, string2: str) -> int`
+### `get_confusable_type(string1: 'str', string2: 'str') -> 'int'`
 
 Get the type of confusability between two strings.
 
@@ -3761,7 +3764,7 @@ Example:
     >>> get_confusable_type("paypal", "pаypal")
     2  # CONFUSABLE_MIXED_SCRIPT
 
-### `get_skeleton(text: str) -> str`
+### `get_skeleton(text: 'str') -> 'str'`
 
 Get the skeleton form of a string for confusability comparison.
 
@@ -3810,7 +3813,7 @@ Example:
         >>> info['uses_dst']
         True
 
-### `get_equivalent_timezones(tz_id: str) -> List[str]`
+### `get_equivalent_timezones(tz_id: 'str') -> 'list[str]'`
 
 Get equivalent timezone IDs for a timezone.
 
@@ -3825,7 +3828,7 @@ Example:
     >>> 'US/Eastern' in equivs
     True
 
-### `get_timezone_info(tz_id: str, extended: bool = False) -> Optional[Dict[str, Any]]`
+### `get_timezone_info(tz_id: 'str', extended: 'bool' = False) -> 'dict[str, Any] | None'`
 
 Get information about a timezone.
 
@@ -3846,7 +3849,7 @@ Example:
     >>> info['extended']['region']
     'US'
 
-### `get_timezone_offset(tz_id: str) -> float`
+### `get_timezone_offset(tz_id: 'str') -> 'float'`
 
 Get the current UTC offset for a timezone in hours.
 
@@ -3863,7 +3866,7 @@ Example:
     >>> get_timezone_offset('America/New_York')
     -5.0  # or -4.0 during DST
 
-### `list_timezones(country: Optional[str] = None) -> List[str]`
+### `list_timezones(country: 'str | None' = None) -> 'list[str]'`
 
 List all available timezone IDs.
 
@@ -3881,7 +3884,7 @@ Example:
     >>> 'America/New_York' in us_tzs
     True
 
-### `list_timezones_info(country: Optional[str] = None) -> List[Dict[str, Any]]`
+### `list_timezones_info(country: 'str | None' = None) -> 'list[dict[str, Any]]'`
 
 List all timezones with their info.
 
@@ -3923,31 +3926,31 @@ Common Transliterators:
 
 Common pre-configured transliterators for frequent use cases.
 
-#### `normalize(text: str, form: str = 'NFC') -> str`
+#### `normalize(text: 'str', form: 'str' = 'NFC') -> 'str'`
 
 Normalize Unicode text to a standard form (NFC, NFD, NFKC, NFKD).
 
-#### `remove_accents(text: str) -> str`
+#### `remove_accents(text: 'str') -> 'str'`
 
 Remove accents and diacritical marks from text.
 
-#### `to_ascii(text: str) -> str`
+#### `to_ascii(text: 'str') -> 'str'`
 
 Convert text to ASCII representation.
 
-#### `to_latin(text: str) -> str`
+#### `to_latin(text: 'str') -> 'str'`
 
 Convert text from any script to Latin script.
 
-#### `to_lower(text: str) -> str`
+#### `to_lower(text: 'str') -> 'str'`
 
 Convert text to lowercase using Unicode rules.
 
-#### `to_title(text: str) -> str`
+#### `to_title(text: 'str') -> 'str'`
 
 Convert text to title case using Unicode rules.
 
-#### `to_upper(text: str) -> str`
+#### `to_upper(text: 'str') -> 'str'`
 
 Convert text to uppercase using Unicode rules.
 
@@ -3958,7 +3961,7 @@ Text transliteration using ICU's transformation engine.
 Transliterators transform text from one writing system to another or apply
 other text transformations like normalization or case mapping.
 
-#### `Transliterator(transliterator_id: str, reverse: bool = False)`
+#### `Transliterator(transliterator_id: 'str', reverse: 'bool' = False)`
 
 Initialize a Transliterator.
 
@@ -3979,15 +3982,21 @@ Returns:
 Raises:
     TransliteratorError: If this transliterator has no inverse.
 
-#### `get_source_set() -> Set[str]`
+#### `get_source_set() -> 'set[str]'`
 
 Get the set of characters this transliterator can convert.
 
-#### `get_target_set() -> Set[str]`
+Raises:
+    TransliteratorError: If the source set cannot be computed.
+
+#### `get_target_set() -> 'set[str]'`
 
 Get the set of characters this transliterator can produce.
 
-#### `transliterate(text: str) -> str`
+Raises:
+    TransliteratorError: If the target set cannot be computed.
+
+#### `transliterate(text: 'str') -> 'str'`
 
 Transform text using this transliterator.
 
@@ -3997,7 +4006,10 @@ Args:
 Returns:
     The transformed text.
 
-### `get_transliterator_info(transliterator_id: str) -> dict`
+Raises:
+    TransliteratorError: If the transformation fails.
+
+### `get_transliterator_info(transliterator_id: 'str') -> 'dict[str, Any] | None'`
 
 Get detailed information about a transliterator.
 
@@ -4005,7 +4017,7 @@ Args:
     transliterator_id: ICU transliterator ID.
 
 Returns:
-    Dictionary with transliterator info:
+    Dictionary with transliterator info, or None if the ID is invalid:
         - id: The transliterator ID
         - source: Source script (parsed from ID)
         - target: Target script (parsed from ID)
@@ -4014,21 +4026,21 @@ Returns:
         - elements: Number of sub-transliterators
         - max_context: Maximum context length needed
 
-### `list_transliterators() -> List[str]`
+### `list_transliterators() -> 'list[str]'`
 
 Get list of all available transliterator IDs.
 
 Returns:
     Sorted list of transliterator ID strings.
 
-### `list_transliterators_info() -> List[dict]`
+### `list_transliterators_info() -> 'list[dict[str, Any]]'`
 
 Get detailed info for all available transliterators.
 
 Returns:
     List of info dicts for each transliterator.
 
-### `transliterate(text: str, transliterator_id: str, reverse: bool = False) -> str`
+### `transliterate(text: 'str', transliterator_id: 'str', reverse: 'bool' = False) -> 'str'`
 
 Transliterate text using the specified transliterator.
 
@@ -4089,7 +4101,7 @@ Example:
         >>> get_char_category('5')
         'Nd'  # Number, decimal digit
 
-### `get_block_characters(block_name: str) -> List[str]`
+### `get_block_characters(block_name: 'str') -> 'list[str]'`
 
 Get all characters in a specific Unicode block.
 
@@ -4102,7 +4114,7 @@ Returns:
 Raises:
     ValueError: If block name is invalid.
 
-### `get_category_characters(category_code: str) -> List[str]`
+### `get_category_characters(category_code: 'str') -> 'list[str]'`
 
 Get all characters in a specific Unicode general category.
 
@@ -4115,7 +4127,7 @@ Returns:
 Raises:
     ValueError: If category code is invalid.
 
-### `get_char_category(char: str) -> str`
+### `get_char_category(char: 'str') -> 'str'`
 
 Get the Unicode general category of a character.
 
@@ -4143,7 +4155,7 @@ Example:
     >>> get_char_category('!')
     'Po'
 
-### `get_char_info(char: str) -> Dict[str, Any]`
+### `get_char_info(char: 'str') -> 'dict[str, Any]'`
 
 Get comprehensive information about a character.
 
@@ -4165,7 +4177,7 @@ Example:
     >>> info['codepoint']
     'U+03B1'
 
-### `get_char_name(char: str) -> str`
+### `get_char_name(char: 'str') -> 'str'`
 
 Get the Unicode name of a character.
 
@@ -4188,7 +4200,7 @@ Example:
     >>> get_char_name('😀')
     'GRINNING FACE'
 
-### `is_normalized(text: str, form: str = 'NFC') -> bool`
+### `is_normalized(text: 'str', form: 'str' = 'NFC') -> 'bool'`
 
 Check if text is already in the specified normalization form.
 
@@ -4205,7 +4217,7 @@ Example:
     >>> is_normalized('café', 'NFD')
     False  # if 'é' is composed
 
-### `list_blocks() -> List[Dict[str, Any]]`
+### `list_blocks() -> 'list[dict[str, Any]]'`
 
 List all Unicode blocks.
 
@@ -4218,7 +4230,7 @@ Example:
     >>> basic_latin['range']
     'U+0000-U+007F'
 
-### `list_categories() -> List[Dict[str, str]]`
+### `list_categories() -> 'list[dict[str, str]]'`
 
 List all Unicode general categories.
 
@@ -4230,7 +4242,7 @@ Example:
     >>> next(c for c in cats if c['code'] == 'Lu')
     {'code': 'Lu', 'description': 'Letter, uppercase'}
 
-### `normalize(text: str, form: str = 'NFC') -> str`
+### `normalize(text: 'str', form: 'str' = 'NFC') -> 'str'`
 
 Normalize Unicode text to a standard form.
 

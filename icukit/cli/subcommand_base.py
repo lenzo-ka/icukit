@@ -1,21 +1,33 @@
 """Base class for CLI commands with subcommands."""
 
+from __future__ import annotations
+
 import sys
 from functools import wraps
-from typing import Dict
 
+from ..errors import ICUKitError
 from ..formatters import print_output
 from .command_trie import CommandTrie
+
+
+def _read_text_file(filepath: str) -> str:
+    """Read a file whole, raising ICUKitError on failure (no raw traceback)."""
+    try:
+        with open(filepath) as f:
+            return f.read()
+    except OSError as e:
+        raise ICUKitError(f"cannot read {filepath}: {e.strerror}") from e
 
 
 def handles_errors(*error_classes, code=1):
     """Decorator to handle errors in CLI command methods.
 
     Catches specified exception types, prints error message to stderr,
-    and returns the specified exit code.
+    and returns the specified exit code. With no arguments it catches the
+    ICUKitError base class, matching the top-level backstop in cli.main.
 
     Args:
-        *error_classes: Exception classes to catch.
+        *error_classes: Exception classes to catch. Defaults to (ICUKitError,).
         code: Exit code to return on error (default: 1).
 
     Usage:
@@ -37,12 +49,14 @@ def handles_errors(*error_classes, code=1):
             ...
     """
 
+    caught = error_classes or (ICUKitError,)
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
-            except error_classes as e:
+            except caught as e:
                 print(f"Error: {e}", file=sys.stderr)
                 return code
 
@@ -139,6 +153,22 @@ class SubcommandBase:
             )
 
     @classmethod
+    def _add_locale_option(cls, parser, default="en_US", help=None):
+        """Add the common -l/--locale option.
+
+        Args:
+            parser: The (sub)parser to add the option to.
+            default: Default locale (use "en" for display-name style flags).
+            help: Override help text; defaults to "Locale (default: <default>)".
+        """
+        parser.add_argument(
+            "-l",
+            "--locale",
+            default=default,
+            help=help or f"Locale (default: {default})",
+        )
+
+    @classmethod
     def _add_input_options(cls, parser):
         """Add common input options: -t, FILE..."""
         input_group = parser.add_argument_group(
@@ -159,8 +189,7 @@ class SubcommandBase:
         elif hasattr(args, "files") and args.files:
             lines = []
             for filepath in args.files:
-                with open(filepath, "r") as f:
-                    lines.extend(line.rstrip("\n") for line in f)
+                lines.extend(_read_text_file(filepath).splitlines())
             return lines
         else:
             return [line.rstrip("\n") for line in sys.stdin]
@@ -175,12 +204,12 @@ class SubcommandBase:
         if getattr(args, "text", None):
             return args.text
         elif getattr(args, "files", None):
-            return "".join(open(f).read() for f in args.files)
+            return "".join(_read_text_file(f) for f in args.files)
         else:
             return sys.stdin.read()
 
     @classmethod
-    def create_subcommand_parser(cls, parser, subcommands: Dict[str, Dict]):
+    def create_subcommand_parser(cls, parser, subcommands: dict[str, dict]):
         """Helper to create subcommand structure with prefix matching.
 
         Args:

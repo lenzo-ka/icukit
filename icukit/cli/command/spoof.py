@@ -1,5 +1,7 @@
 """CLI command for confusable/homoglyph detection."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...errors import SpoofError

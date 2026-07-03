@@ -46,12 +46,12 @@ Example:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import icu
 
 from .alpha_index import get_bucket_labels
-from .errors import LocaleError
+from .errors import ICUKitError, LocaleError
 
 # Measurement system mapping using ICU constants where available
 # PyICU's UMeasurementSystem is incomplete (missing UK=2), so we use getattr for forward-compat
@@ -67,7 +67,7 @@ def _get_measurement_system_name(value: int) -> str:
     return _MEASUREMENT_SYSTEMS.get(value, str(value))
 
 
-def list_locales() -> List[str]:
+def list_locales() -> list[str]:
     """List all available locale identifiers.
 
     Returns:
@@ -84,7 +84,7 @@ def list_locales() -> List[str]:
     return sorted(loc.getName() for loc in locs.values())
 
 
-def list_languages() -> List[str]:
+def list_languages() -> list[str]:
     """List all available language codes.
 
     Returns:
@@ -100,7 +100,7 @@ def list_languages() -> List[str]:
     return sorted(icu.Locale.getISOLanguages())
 
 
-def list_locales_info(display_locale: str = "en") -> List[Dict[str, Any]]:
+def list_locales_info(display_locale: str = "en") -> list[dict[str, Any]]:
     """List all locales with their info.
 
     Args:
@@ -118,7 +118,7 @@ def list_locales_info(display_locale: str = "en") -> List[Dict[str, Any]]:
     return [get_locale_info(loc_id, display_locale) for loc_id in list_locales()]
 
 
-def parse_locale(locale_str: str) -> Dict[str, Any]:
+def parse_locale(locale_str: str) -> dict[str, Any]:
     """Parse a locale string into components.
 
     Args:
@@ -152,7 +152,7 @@ def parse_locale(locale_str: str) -> Dict[str, Any]:
     }
 
 
-def get_locale_scripts(locale_str: str) -> List[str]:
+def get_locale_scripts(locale_str: str) -> list[str]:
     """Get the scripts used by a locale.
 
     Derives scripts from the locale's exemplar character set.
@@ -189,7 +189,7 @@ def get_locale_scripts(locale_str: str) -> List[str]:
 
 def get_locale_info(
     locale_str: str, display_locale: str = "en", extended: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get detailed information about a locale.
 
     Args:
@@ -232,7 +232,7 @@ def get_locale_info(
     return info
 
 
-def get_locale_extended(locale_str: str) -> Dict[str, Any]:
+def get_locale_extended(locale_str: str) -> dict[str, Any]:
     """Get extended locale attributes.
 
     Args:
@@ -307,13 +307,13 @@ def get_locale_extended(locale_str: str) -> Dict[str, Any]:
     # Alphabetic index labels (A-Z sidebar labels)
     try:
         ext["index_labels"] = get_bucket_labels(locale_str)
-    except Exception:
+    except (icu.ICUError, ICUKitError):
         ext["index_labels"] = None
 
     return ext
 
 
-def _is_locale_rtl(scripts: List[str]) -> bool:
+def _is_locale_rtl(scripts: list[str]) -> bool:
     """Check if locale uses RTL scripts."""
     for script_name in scripts:
         try:
@@ -483,7 +483,7 @@ def get_default_locale() -> str:
 # =============================================================================
 
 
-def get_locale_attributes(locale_str: str, display_locale: str = "en") -> Dict[str, Any]:
+def get_locale_attributes(locale_str: str, display_locale: str = "en") -> dict[str, Any]:
     """Get comprehensive locale attributes.
 
     Returns detailed information including currency, measurement system,
@@ -790,7 +790,7 @@ def get_exemplar_characters(
     """
     if exemplar_type not in _EXEMPLAR_TYPE_MAP:
         raise LocaleError(
-            f"Invalid exemplar type: {exemplar_type}. " f"Valid: {list(_EXEMPLAR_TYPE_MAP.keys())}"
+            f"Invalid exemplar type: {exemplar_type}. Valid: {list(_EXEMPLAR_TYPE_MAP.keys())}"
         )
 
     try:
@@ -801,7 +801,7 @@ def get_exemplar_characters(
         raise LocaleError(f"Failed to get exemplar characters for '{locale_str}': {e}") from e
 
 
-def list_exemplar_types() -> List[str]:
+def list_exemplar_types() -> list[str]:
     """List available exemplar character set types.
 
     Returns:
@@ -814,7 +814,7 @@ def list_exemplar_types() -> List[str]:
     return list(_EXEMPLAR_TYPE_MAP.keys())
 
 
-def get_exemplar_info(locale_str: str = "en_US") -> Dict[str, str]:
+def get_exemplar_info(locale_str: str = "en_US") -> dict[str, str]:
     """Get all exemplar character sets for a locale.
 
     Args:
@@ -848,7 +848,7 @@ def get_exemplar_info(locale_str: str = "en_US") -> Dict[str, str]:
 # =============================================================================
 
 
-def get_number_symbols(locale_str: str = "en_US") -> Dict[str, str]:
+def get_number_symbols(locale_str: str = "en_US") -> dict[str, str]:
     """Get number formatting symbols for a locale.
 
     Returns the symbols used for formatting numbers, including decimal

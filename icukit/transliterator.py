@@ -19,7 +19,9 @@ Common Transliterators:
     * Specialized: Any-Publishing (ASCII-safe), Any-Accents (remove accents)
 """
 
-from typing import List, Set
+from __future__ import annotations
+
+from typing import Any
 
 import icu
 
@@ -54,7 +56,7 @@ class Transliterator:
             else:
                 self._trans = icu.Transliterator.createInstance(transliterator_id)
                 self.id = transliterator_id
-        except Exception as e:
+        except icu.ICUError as e:
             raise TransliteratorError(
                 f"Invalid transliterator ID '{transliterator_id}'. "
                 f"Error: {e}. Use list_transliterators() to see available IDs."
@@ -63,7 +65,7 @@ class Transliterator:
         self.display_name = self.id
 
     @classmethod
-    def from_rules(cls, name: str, rules: str, direction: str = "FORWARD") -> "Transliterator":
+    def from_rules(cls, name: str, rules: str, direction: str = "FORWARD") -> Transliterator:
         """Create a custom transliterator from rules.
 
         Args:
@@ -93,7 +95,7 @@ class Transliterator:
 
             return instance
 
-        except Exception as e:
+        except icu.ICUError as e:
             raise TransliteratorError(f"Invalid transliterator rules: {e}") from e
 
     def transliterate(self, text: str) -> str:
@@ -104,20 +106,40 @@ class Transliterator:
 
         Returns:
             The transformed text.
+
+        Raises:
+            TransliteratorError: If the transformation fails.
         """
-        return self._trans.transliterate(text)
+        try:
+            return self._trans.transliterate(text)
+        except icu.ICUError as e:
+            raise TransliteratorError(f"Transliteration failed for '{self.id}': {e}") from e
 
-    def get_source_set(self) -> Set[str]:
-        """Get the set of characters this transliterator can convert."""
-        uset = self._trans.getSourceSet()
-        return set(icu.UnicodeSet(uset))
+    def get_source_set(self) -> set[str]:
+        """Get the set of characters this transliterator can convert.
 
-    def get_target_set(self) -> Set[str]:
-        """Get the set of characters this transliterator can produce."""
-        uset = self._trans.getTargetSet()
-        return set(icu.UnicodeSet(uset))
+        Raises:
+            TransliteratorError: If the source set cannot be computed.
+        """
+        try:
+            uset = self._trans.getSourceSet()
+            return set(icu.UnicodeSet(uset))
+        except icu.ICUError as e:
+            raise TransliteratorError(f"Cannot get source set for '{self.id}': {e}") from e
 
-    def create_inverse(self) -> "Transliterator":
+    def get_target_set(self) -> set[str]:
+        """Get the set of characters this transliterator can produce.
+
+        Raises:
+            TransliteratorError: If the target set cannot be computed.
+        """
+        try:
+            uset = self._trans.getTargetSet()
+            return set(icu.UnicodeSet(uset))
+        except icu.ICUError as e:
+            raise TransliteratorError(f"Cannot get target set for '{self.id}': {e}") from e
+
+    def create_inverse(self) -> Transliterator:
         """Create the inverse of this transliterator.
 
         Returns:
@@ -137,7 +159,7 @@ class Transliterator:
 
             return instance
 
-        except Exception as e:
+        except icu.ICUError as e:
             raise TransliteratorError(
                 f"Cannot create inverse of transliterator '{self.id}': {e}"
             ) from e
@@ -211,7 +233,7 @@ def transliterate(text: str, transliterator_id: str, reverse: bool = False) -> s
     return trans.transliterate(text)
 
 
-def list_transliterators() -> List[str]:
+def list_transliterators() -> list[str]:
     """Get list of all available transliterator IDs.
 
     Returns:
@@ -220,14 +242,14 @@ def list_transliterators() -> List[str]:
     return sorted(trans_id for trans_id in icu.Transliterator.getAvailableIDs())
 
 
-def get_transliterator_info(transliterator_id: str) -> dict:
+def get_transliterator_info(transliterator_id: str) -> dict[str, Any] | None:
     """Get detailed information about a transliterator.
 
     Args:
         transliterator_id: ICU transliterator ID.
 
     Returns:
-        Dictionary with transliterator info:
+        Dictionary with transliterator info, or None if the ID is invalid:
             - id: The transliterator ID
             - source: Source script (parsed from ID)
             - target: Target script (parsed from ID)
@@ -236,7 +258,7 @@ def get_transliterator_info(transliterator_id: str) -> dict:
             - elements: Number of sub-transliterators
             - max_context: Maximum context length needed
     """
-    info = {"id": transliterator_id}
+    info: dict[str, Any] = {"id": transliterator_id}
 
     # Parse ID for source/target/variant
     parts = transliterator_id.split("-")
@@ -260,18 +282,18 @@ def get_transliterator_info(transliterator_id: str) -> dict:
         try:
             t.createInverse()
             info["reversible"] = True
-        except Exception:
+        except icu.ICUError:
             info["reversible"] = False
 
-    except Exception:
-        info["elements"] = None
-        info["max_context"] = None
-        info["reversible"] = None
+    except icu.ICUError:
+        # Invalid transliterator ID: signal not-found with None, matching the
+        # get_calendar_info / get_region_info / get_timezone_info contract.
+        return None
 
     return info
 
 
-def list_transliterators_info() -> List[dict]:
+def list_transliterators_info() -> list[dict[str, Any]]:
     """Get detailed info for all available transliterators.
 
     Returns:

@@ -1,5 +1,7 @@
 """CLI command for plural rules."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 
@@ -103,33 +105,18 @@ Examples:
     def _configure_select(cls, parser):
         """Configure the select subcommand."""
         parser.add_argument("number", type=float, help="Number to categorize")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
 
     @classmethod
     def _configure_ordinal(cls, parser):
         """Configure the ordinal subcommand."""
         parser.add_argument("number", type=float, help="Number to categorize")
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
 
     @classmethod
     def _configure_categories(cls, parser):
         """Configure the categories subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         parser.add_argument(
             "-t",
             "--type",
@@ -142,12 +129,7 @@ Examples:
     @classmethod
     def _configure_info(cls, parser):
         """Configure the info subcommand."""
-        parser.add_argument(
-            "-l",
-            "--locale",
-            default="en_US",
-            help="Locale (default: en_US)",
-        )
+        cls._add_locale_option(parser)
         cls._add_output_options(parser, include_header=False)
 
     @classmethod

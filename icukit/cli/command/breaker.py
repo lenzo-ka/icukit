@@ -1,5 +1,7 @@
 """CLI command for text breaking/segmentation."""
 
+from __future__ import annotations
+
 import argparse
 
 from ...breaker import Breaker
@@ -84,16 +86,6 @@ Examples:
 
         parser.set_defaults(func=cls.run, _subparser=parser)
         return parser
-
-    @classmethod
-    def _add_locale_option(cls, parser):
-        """Add locale option."""
-        parser.add_argument(
-            "--locale",
-            "-l",
-            default="en_US",
-            help="Locale for breaking rules (default: en_US)",
-        )
 
     @classmethod
     def _configure_sentences(cls, parser):

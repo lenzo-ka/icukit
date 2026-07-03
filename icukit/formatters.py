@@ -16,9 +16,12 @@ Usage:
     print(format_output(data, json=args.json))
 """
 
+from __future__ import annotations
+
 import json
 import sys
-from typing import Any, Dict, List, Optional, Sequence, TextIO
+from collections.abc import Sequence
+from typing import Any, TextIO
 
 
 def format_json(data: Any, indent: int = 2) -> str:
@@ -35,8 +38,8 @@ def format_json(data: Any, indent: int = 2) -> str:
 
 
 def format_tsv(
-    data: Sequence[Dict[str, Any]],
-    columns: Optional[List[str]] = None,
+    data: Sequence[dict[str, Any]],
+    columns: list[str] | None = None,
     headers: bool = True,
 ) -> str:
     """Format list of dicts as TSV.
@@ -111,7 +114,7 @@ def format_simple_list(data: Sequence[str]) -> str:
 def format_output(
     data: Any,
     as_json: bool = False,
-    columns: Optional[List[str]] = None,
+    columns: list[str] | None = None,
     headers: bool = True,
 ) -> str:
     """Format data for output based on format preference.
@@ -152,10 +155,10 @@ def format_output(
 def print_output(
     data: Any,
     as_json: bool = False,
-    columns: Optional[List[str]] = None,
+    columns: list[str] | None = None,
     headers: bool = True,
     file: TextIO = None,
-    extended_columns: Optional[List[str]] = None,
+    extended_columns: list[str] | None = None,
 ) -> None:
     """Format and print data.
 
@@ -178,9 +181,9 @@ def print_output(
 
 
 def flatten_extended(
-    data: Sequence[Dict[str, Any]],
-    extended_columns: List[str],
-) -> List[Dict[str, Any]]:
+    data: Sequence[dict[str, Any]],
+    extended_columns: list[str],
+) -> list[dict[str, Any]]:
     """Flatten 'extended' dict fields into top-level for TSV output.
 
     Args:

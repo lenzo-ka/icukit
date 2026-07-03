@@ -1,5 +1,7 @@
 """CLI command for display names."""
 
+from __future__ import annotations
+
 import argparse
 import sys
 

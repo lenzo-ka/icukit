@@ -11,6 +11,8 @@ Example:
     {'A': ['Alice'], 'B': ['Bob'], 'C': ['Carol'], 'Z': ['Zebra']}
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 import icu
@@ -161,7 +163,7 @@ class AlphabeticIndex:
         except icu.ICUError as e:
             raise AlphaIndexError(f"Failed to create index: {e}") from e
 
-    def add(self, name: str, data: Any = None) -> "AlphabeticIndex":
+    def add(self, name: str, data: Any = None) -> AlphabeticIndex:
         """
         Add an item to the index.
 
@@ -178,7 +180,7 @@ class AlphabeticIndex:
         except icu.ICUError as e:
             raise AlphaIndexError(f"Failed to add record: {e}") from e
 
-    def add_many(self, names: list[str]) -> "AlphabeticIndex":
+    def add_many(self, names: list[str]) -> AlphabeticIndex:
         """
         Add multiple items to the index.
 
@@ -262,7 +264,7 @@ class AlphabeticIndex:
         """Total number of records added."""
         return self._index.recordCount
 
-    def clear(self) -> "AlphabeticIndex":
+    def clear(self) -> AlphabeticIndex:
         """
         Clear all records from the index.
 
