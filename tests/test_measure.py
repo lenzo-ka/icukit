@@ -245,6 +245,27 @@ class TestMeasureCLI:
         assert code == 0
         assert "meter" in out
 
+    def test_info_json(self):
+        """Regression: 'measure info -j' must emit JSON, not crash."""
+        code, out, err = run_cli("measure", "info", "kilometer", "-j")
+        assert code == 0, err
+        assert "Traceback" not in err
+        assert '"identifier"' in out or '"type"' in out
+
+    def test_types_json(self):
+        """Regression: 'measure types -j' must emit JSON, not crash."""
+        code, out, err = run_cli("measure", "types", "-j")
+        assert code == 0, err
+        assert "Traceback" not in err
+        assert "[" in out
+
+    def test_units_json(self):
+        """Regression: 'measure units -j' must emit JSON, not crash."""
+        code, out, err = run_cli("measure", "units", "-j")
+        assert code == 0, err
+        assert "Traceback" not in err
+        assert "[" in out
+
     def test_units_by_type(self):
         """Test units with type filter."""
         code, out, err = run_cli("measure", "units", "--type", "temperature")

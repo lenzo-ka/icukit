@@ -249,7 +249,7 @@ Examples:
             print_output(
                 [{"type": t, "unit_count": len(units_by_type[t])} for t in types],
                 columns=["type", "unit_count"],
-                json_output=True,
+                as_json=True,
             )
         else:
             for t in types:
@@ -275,7 +275,7 @@ Examples:
                         data.append({"unit": u, "type": t})
 
             if args.json:
-                print_output(data, columns=["unit", "type"], json_output=True)
+                print_output(data, columns=["unit", "type"], as_json=True)
             else:
                 if unit_type:
                     for item in data:
@@ -386,7 +386,7 @@ Examples:
         try:
             info = get_unit_info(args.unit)
             if args.json:
-                print_output([info], columns=list(info.keys()), json_output=True)
+                print_output([info], columns=list(info.keys()), as_json=True)
             else:
                 for key, value in info.items():
                     print(f"{key}: {value}")

@@ -9,6 +9,8 @@
   transliterator IDs, and other ICU errors.
 - `ik discover all` and `python -m icukit.discover` no longer crash with an
   `AttributeError`.
+- `ik measure info/types/units --json` no longer crash (they passed an
+  unknown `json_output=` argument to the formatter).
 - `bidi check` now exits `1` (was `2`) on error, matching every other command.
 
 ### Changed
