@@ -34,7 +34,7 @@ classifiers = [
 # backend on every supported platform. Both it and system PyICU provide the
 # same importable `icu` module.
 dependencies = [
-    "icukit-pyicu>=78.3.1",
+    "icukit-pyicu>=78.3.0",
 ]
 
 [project.urls]

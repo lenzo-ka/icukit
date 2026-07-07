@@ -15,7 +15,7 @@
 
 ### Changed
 
-- Depend on `icukit-pyicu>=78.3.1` on every platform. icukit-pyicu now ships
+- Depend on `icukit-pyicu>=78.3.0` on every platform. icukit-pyicu now ships
   manylinux wheels in addition to macOS wheels, so the bundled ICU/PyICU is the
   single default backend on both macOS and Linux (previously Linux pulled in
   system `PyICU`, which required ICU dev packages). The now-redundant `bundled`
