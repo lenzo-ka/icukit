@@ -10,21 +10,11 @@ icukit provides a Pythonic interface to ICU's powerful text processing, localiza
 pip install icukit
 ```
 
-On **macOS**, this automatically includes bundled ICU libraries (via `icukit-pyicu`).
+This pulls in [`icukit-pyicu`](https://github.com/lenzo-ka/icukit-pyicu), which
+bundles pre-built ICU libraries and PyICU. There are no system dependencies to
+install on either **macOS** or **Linux** — the wheels are self-contained.
 
-On **Linux**, this installs PyICU, which requires system ICU libraries:
-
-```bash
-# Ubuntu/Debian
-sudo apt install libicu-dev
-
-# Fedora/RHEL
-sudo dnf install libicu-devel
-```
-
-Alternatively, use bundled ICU on any platform: `pip install icukit[bundled]`
-
-See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/install.md) for details.
+See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/install.md) for details, including how to use a system PyICU instead.
 
 ## Features
 
