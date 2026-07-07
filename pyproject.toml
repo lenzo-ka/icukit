@@ -29,9 +29,12 @@ classifiers = [
     "Topic :: Software Development :: Localization",
     "Topic :: Text Processing",
 ]
+# icukit-pyicu bundles pre-built ICU libraries and PyICU, and now ships
+# manylinux wheels as well as macOS wheels, so it is the single default
+# backend on every supported platform. Both it and system PyICU provide the
+# same importable `icu` module.
 dependencies = [
-    "icukit-pyicu>=78.2.1; sys_platform == 'darwin'",
-    "PyICU>=2.0; sys_platform == 'linux'",
+    "icukit-pyicu>=78.3.1",
 ]
 
 [project.urls]
@@ -40,9 +43,6 @@ Repository = "https://github.com/lenzo-ka/icukit"
 Issues = "https://github.com/lenzo-ka/icukit/issues"
 
 [project.optional-dependencies]
-bundled = [
-    "icukit-pyicu>=78.2.1",
-]
 dev = [
     "pytest>=9.0",
     "ruff>=0.6",

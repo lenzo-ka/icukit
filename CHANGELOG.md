@@ -15,6 +15,12 @@
 
 ### Changed
 
+- Depend on `icukit-pyicu>=78.3.1` on every platform. icukit-pyicu now ships
+  manylinux wheels in addition to macOS wheels, so the bundled ICU/PyICU is the
+  single default backend on both macOS and Linux (previously Linux pulled in
+  system `PyICU`, which required ICU dev packages). The now-redundant `bundled`
+  extra is removed; advanced users can still install a system PyICU and then
+  `pip install --no-deps icukit`.
 - `get_transliterator_info()` returns `None` for an invalid transliterator ID
   instead of a dictionary of `None` values, matching `get_calendar_info`,
   `get_region_info`, and `get_timezone_info`.

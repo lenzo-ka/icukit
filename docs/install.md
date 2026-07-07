@@ -1,53 +1,23 @@
 # Installation
 
-icukit requires [PyICU](https://gitlab.pyicu.org/main/pyicu), a Python binding to the [ICU](https://icu.unicode.org/) library.
+icukit is built on [PyICU](https://gitlab.pyicu.org/main/pyicu), a Python
+binding to the [ICU](https://icu.unicode.org/) library. By default it installs
+[`icukit-pyicu`](https://github.com/lenzo-ka/icukit-pyicu), which bundles
+pre-built ICU libraries together with PyICU, so there is nothing else to set up.
 
-## macOS
-
-```bash
-pip install icukit
-```
-
-On macOS, icukit automatically installs `icukit-pyicu`, which bundles pre-built ICU libraries. No additional setup needed.
-
-macOS does not expose system ICU headers, so the bundled approach is the only practical option.
-
-## Linux
-
-On Linux, icukit automatically installs PyICU, which builds against your system's ICU libraries.
-
-First, install the ICU development packages for your distribution:
-
-**Ubuntu/Debian:**
-```bash
-sudo apt install libicu-dev pkg-config
-```
-
-**Fedora/RHEL:**
-```bash
-sudo dnf install libicu-devel pkg-config
-```
-
-**Arch Linux:**
-```bash
-sudo pacman -S icu
-```
-
-Then install icukit:
+## macOS and Linux
 
 ```bash
 pip install icukit
 ```
 
-### Alternative: Bundled ICU
+`icukit-pyicu` ships self-contained wheels for both platforms:
 
-If you prefer a self-contained installation without system ICU dependencies:
+- **macOS** — Apple Silicon (`arm64`, macOS 11+)
+- **Linux** — `x86_64` (manylinux, glibc 2.35+) and `aarch64` (glibc 2.38+)
 
-```bash
-pip install icukit[bundled]
-```
-
-This installs `icukit-pyicu` instead of PyICU, with pre-built ICU libraries included.
+for CPython 3.9 through 3.14. No system ICU packages, compilers, or headers are
+required.
 
 ## Verifying Installation
 
@@ -55,6 +25,7 @@ After installation, verify everything works:
 
 ```bash
 python -c "import icukit; print('icukit version:', icukit.__version__)"
+python -c "import icu; print('ICU', icu.ICU_VERSION, '| PyICU', icu.VERSION)"
 ```
 
 Or test from the CLI:
@@ -64,27 +35,33 @@ ik --version
 ik locale info en_US
 ```
 
+## Advanced: using a system PyICU
+
+`icukit-pyicu` and system [PyICU](https://gitlab.pyicu.org/main/pyicu) both
+provide the same importable `icu` module, so either satisfies icukit at runtime.
+If you would rather build PyICU against your own system ICU (for example on a
+platform without a bundled wheel, such as an older glibc or a distro not covered
+above), install PyICU first and then install icukit without its dependencies:
+
+```bash
+# Install system ICU development packages, e.g.:
+sudo apt install libicu-dev pkg-config     # Ubuntu/Debian
+sudo dnf install libicu-devel pkg-config   # Fedora/RHEL
+sudo pacman -S icu                         # Arch Linux
+
+pip install PyICU
+pip install --no-deps icukit
+```
+
 ## Troubleshooting
 
-### PyICU build fails on Linux
+### Both `icukit-pyicu` and `PyICU` installed
 
-Make sure you have the ICU development headers installed:
-
-```bash
-# Check if icu-config is available
-icu-config --version
-
-# If not, install the dev package for your distro (see above)
-```
-
-### Version conflicts
-
-If you have both `icukit-pyicu` and `PyICU` installed and encounter issues, you can remove one:
+Both packages provide the same `icu` module, so only one should be installed. If
+you end up with both and hit import issues, remove one:
 
 ```bash
-pip uninstall icukit-pyicu  # keep system PyICU
+pip uninstall icukit-pyicu   # keep system PyICU
 # or
-pip uninstall PyICU  # keep bundled
+pip uninstall PyICU          # keep the bundled ICU
 ```
-
-Both packages provide the same `icu` module, so only one should be installed.
