@@ -136,4 +136,4 @@ Run `ik help` or `ik <command> --help` for detailed usage information.
 
 ## License
 
-MIT License
+BSD 2-Clause License
