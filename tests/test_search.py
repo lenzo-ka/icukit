@@ -360,3 +360,19 @@ class TestSearchCLI:
         )
         assert result.returncode == 0
         assert "find" in result.stdout.lower() or "search" in result.stdout.lower()
+
+
+class TestUtf16Offsets:
+    """The F1 offset class recurs in search: StringSearch match positions are
+    UTF-16 code units, used as Python code-point indices — which corrupts both
+    the reported offsets and search_replace output.
+    """
+
+    def test_all_offsets_are_code_points(self):
+        text = "\U0001f44d cat"  # 👍 cat; 'cat' starts at code-point index 2
+        m = search_all("cat", text)
+        assert m[0]["start"] == 2
+        assert text[m[0]["start"] : m[0]["end"]] == "cat"
+
+    def test_replace_not_corrupted_by_astral(self):
+        assert search_replace("cat", "\U0001f44d cat", "dog") == "\U0001f44d dog"

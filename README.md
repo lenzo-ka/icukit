@@ -79,6 +79,7 @@ format_number(1234567.89, "hi_IN")  # "12,34,567.89"
 
 # Format dates
 from datetime import datetime
+
 now = datetime.now()
 format_datetime(now, "en_US", style="LONG")  # "January 19, 2026 at 4:00:00 PM PST"
 format_datetime(now, "ja_JP", style="LONG")  # "2026年1月19日 16:00:00 PST"
