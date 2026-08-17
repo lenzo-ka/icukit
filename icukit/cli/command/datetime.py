@@ -586,7 +586,8 @@ Examples:
 
                 # Months
                 for i, (wide, abbrev) in enumerate(
-                    zip(symbols["months"]["wide"], symbols["months"]["abbreviated"]), 1
+                    zip(symbols["months"]["wide"], symbols["months"]["abbreviated"], strict=False),
+                    1,
                 ):
                     rows.append(
                         {
@@ -599,7 +600,9 @@ Examples:
 
                 # Weekdays
                 wd = symbols["weekdays"]
-                for i, (wide, abbrev) in enumerate(zip(wd["wide"], wd["abbreviated"])):
+                for i, (wide, abbrev) in enumerate(
+                    zip(wd["wide"], wd["abbreviated"], strict=False)
+                ):
                     rows.append(
                         {
                             "category": "weekday",
@@ -612,7 +615,7 @@ Examples:
 
                 # Eras
                 for i, (wide, abbrev) in enumerate(
-                    zip(symbols["eras"]["wide"], symbols["eras"]["abbreviated"])
+                    zip(symbols["eras"]["wide"], symbols["eras"]["abbreviated"], strict=False)
                 ):
                     rows.append(
                         {

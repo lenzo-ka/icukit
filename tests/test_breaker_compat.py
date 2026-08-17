@@ -59,4 +59,3 @@ def test_lines_golden(text, expected):
     breaker = Breaker("en_US")
     assert breaker.break_lines(text) == expected
     assert list(breaker.iter_lines(text)) == expected
-

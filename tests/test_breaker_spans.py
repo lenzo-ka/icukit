@@ -42,8 +42,7 @@ def test_spans_tile_source_and_empty_input(method_name):
     spans = method(text)
     assert "".join(span["text"] for span in spans) == text
     assert [(span["start"], span["end"]) for span in spans] == [
-        (spans[i - 1]["end"] if i else 0, span["end"])
-        for i, span in enumerate(spans)
+        (spans[i - 1]["end"] if i else 0, span["end"]) for i, span in enumerate(spans)
     ]
     assert spans[-1]["end"] == len(text)
     assert method("") == []
@@ -115,4 +114,3 @@ def test_sentence_and_grapheme_metadata_is_empty():
 def test_spans_are_json_round_trip_safe():
     spans = break_word_spans("5 世界 a\xa0b.", "en")
     assert json.loads(json.dumps(spans)) == spans
-
