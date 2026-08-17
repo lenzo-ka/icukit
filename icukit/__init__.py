@@ -73,6 +73,7 @@ from .breaker import (
     BREAK_WORD,
     Breaker,
     BreakSpan,
+    RuleBreaker,
     break_grapheme_spans,
     break_graphemes,
     break_line_spans,
@@ -81,6 +82,7 @@ from .breaker import (
     break_sentences,
     break_word_spans,
     break_words,
+    default_rules,
 )
 from .calendar import get_calendar_info, is_valid_calendar, list_calendars, list_calendars_info
 from .collator import (
@@ -384,6 +386,8 @@ __all__ = [
     # Breaker
     "Breaker",
     "BreakSpan",
+    "RuleBreaker",
+    "default_rules",
     "break_sentences",
     "break_words",
     "break_lines",

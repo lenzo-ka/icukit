@@ -458,6 +458,33 @@ Example:
     >>> breaker.tokenize_sentences('Hello world. How are you?')
     [['Hello', 'world', '.'], ['How', 'are', 'you', '?']]
 
+### class `RuleBreaker`
+
+Text segmentation using a custom ICU RBBI rule set.
+
+#### `RuleBreaker(rules: 'str', status_types: 'dict[int, str] | None' = None)`
+
+Compile a custom rule set once for subsequent segmentation.
+
+Args:
+    rules: ICU RuleBasedBreakIterator rule source.
+    status_types: Optional mapping from numeric rule statuses to type names.
+
+Raises:
+    BreakerError: If ICU cannot compile the rules.
+
+#### `iter_spans(text: 'str') -> 'Iterator[BreakSpan]'`
+
+Yield every custom-rule segment with offsets and raw statuses.
+
+#### `spans(text: 'str') -> 'list[BreakSpan]'`
+
+Return every custom-rule segment as a structured span.
+
+#### `tokens(text: 'str') -> 'list[str]'`
+
+Return every custom-rule segment as text.
+
 ### `break_grapheme_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
 
 Return every grapheme cluster with code-point offsets.
@@ -536,6 +563,22 @@ Returns:
 Example:
     >>> break_words('Hello, world!', 'en', skip_punctuation=True)
     ['Hello', 'world']
+
+### `default_rules(kind: 'str' = 'word', locale: 'str' = 'en_US') -> 'str'`
+
+Return the standard ICU rules to use as a tailoring base.
+
+This is the base rule set to extend with custom exception rules.
+
+Args:
+    kind: Iterator kind: ``word``, ``sentence``, ``line``, or ``grapheme``.
+    locale: Locale code for the standard rule set.
+
+Returns:
+    The ICU rule source for the requested standard iterator.
+
+Raises:
+    BreakerError: If the kind is unsupported or ICU cannot load the rules.
 
 ## icukit.calendar
 
