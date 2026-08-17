@@ -44,6 +44,32 @@ BREAK_LINE = "line"
 BREAK_CHARACTER = "character"
 
 
+def _offset_map(text: str) -> list[int] | None:
+    """Map ICU UTF-16 offsets to Python string code-point indices.
+
+    ICU reports break positions as UTF-16 code-unit offsets, while Python
+    strings are indexed by Unicode code points. For text containing astral
+    characters, each surrogate pair therefore needs an extra map slot.
+
+    Args:
+        text: The text whose offsets should be mapped.
+
+    Returns:
+        A UTF-16-offset-to-code-point-index map, or None when the offsets are
+        already identical.
+    """
+    if all(ord(ch) <= 0xFFFF for ch in text):
+        return None
+
+    m = []
+    for cp_index, ch in enumerate(text):
+        m.append(cp_index)
+        if ord(ch) > 0xFFFF:
+            m.append(cp_index)
+    m.append(len(text))
+    return m
+
+
 class Breaker:
     """Text segmentation using ICU BreakIterator.
 
@@ -72,6 +98,19 @@ class Breaker:
             self._locale_obj = icu.Locale(locale)
         except icu.ICUError as e:
             raise BreakerError(f"Invalid locale '{locale}': {e}") from e
+
+    def _iter_spans(self, bi, text: str) -> Iterator[tuple[int, int]]:
+        us = icu.UnicodeString(text)
+        bi.setText(us)
+        offmap = _offset_map(text)
+
+        def _cp(offset: int) -> int:
+            return offset if offmap is None else offmap[offset]
+
+        start = bi.first()
+        for end in bi:
+            yield _cp(start), _cp(end)
+            start = end
 
     def break_sentences(self, text: str, skip_empty: bool = True) -> list[str]:
         """Break text into sentences.
@@ -104,16 +143,11 @@ class Breaker:
         """
         try:
             bi = icu.BreakIterator.createSentenceInstance(self._locale_obj)
-            bi.setText(text)
-
-            start = bi.first()
-            for end in bi:
+            for start, end in self._iter_spans(bi, text):
                 sentence = text[start:end]
                 if skip_empty and not sentence.strip():
-                    start = end
                     continue
                 yield sentence
-                start = end
         except icu.ICUError as e:
             raise BreakerError(f"Failed to break sentences: {e}") from e
 
@@ -160,12 +194,8 @@ class Breaker:
         """
         try:
             bi = icu.BreakIterator.createWordInstance(self._locale_obj)
-            bi.setText(text)
-
-            start = bi.first()
-            for end in bi:
+            for start, end in self._iter_spans(bi, text):
                 word = text[start:end]
-                start = end
 
                 if skip_whitespace and word.isspace():
                     continue
@@ -200,14 +230,10 @@ class Breaker:
         """
         try:
             bi = icu.BreakIterator.createLineInstance(self._locale_obj)
-            bi.setText(text)
-
-            start = bi.first()
-            for end in bi:
+            for start, end in self._iter_spans(bi, text):
                 segment = text[start:end]
                 if segment:
                     yield segment
-                start = end
         except icu.ICUError as e:
             raise BreakerError(f"Failed to find line breaks: {e}") from e
 
@@ -240,14 +266,10 @@ class Breaker:
         """
         try:
             bi = icu.BreakIterator.createCharacterInstance(self._locale_obj)
-            bi.setText(text)
-
-            start = bi.first()
-            for end in bi:
+            for start, end in self._iter_spans(bi, text):
                 grapheme = text[start:end]
                 if grapheme:
                     yield grapheme
-                start = end
         except icu.ICUError as e:
             raise BreakerError(f"Failed to break graphemes: {e}") from e
 

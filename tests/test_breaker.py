@@ -217,3 +217,37 @@ class TestBreakerCLI:
         assert code == 0
         assert "[" in out
         assert "Hello" in out
+
+
+class TestAstralOffsets:
+    """F1: ICU BreakIterator reports UTF-16 code-unit offsets, but Python str
+    slices by code point. An astral character (above U+FFFF, stored as a
+    surrogate pair) shifts every subsequent boundary, corrupting all four
+    iterators. Each test pins the corrected boundary and names the buggy output.
+    """
+
+    def test_word_tokens_not_shifted_by_astral(self):
+        # buggy output: ['👍 ', 'F', 'ig.', '5', 'h', 'olds']
+        words = break_words("\U0001F44D Fig. 5 holds", "en")
+        assert "\U0001F44D" in words
+        assert "Fig" in words
+        assert "holds" in words
+        assert "F" not in words
+        assert "ig." not in words
+        assert "h" not in words
+
+    def test_graphemes_not_merged_across_astral(self):
+        # buggy output merged the following char: ['a', '👍b']
+        assert break_graphemes("a\U0001F44Db") == ["a", "\U0001F44D", "b"]
+
+    def test_sentence_boundary_not_shifted_by_astral(self):
+        # buggy output: ['👍 One. T', 'wo.']
+        sentences = break_sentences("\U0001F44D One. Two.", "en")
+        assert len(sentences) == 2
+        assert sentences[1] == "Two."
+
+    def test_line_segments_not_shifted_by_astral(self):
+        # buggy first segment ran into the next word: '👍 F'
+        segments = break_lines("\U0001F44D Fig 5 holds", "en")
+        assert "".join(segments) == "\U0001F44D Fig 5 holds"
+        assert segments[0] == "\U0001F44D "
