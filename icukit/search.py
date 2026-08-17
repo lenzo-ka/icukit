@@ -19,6 +19,7 @@ from typing import Any
 
 import icu
 
+from ._offsets import codepoint_map, to_codepoint
 from .errors import SearchError
 
 __all__ = [
@@ -73,14 +74,21 @@ def _create_searcher(
         raise SearchError(f"Failed to create searcher: {e}") from e
 
 
-def _collect_matches(searcher: icu.StringSearch) -> list[dict[str, Any]]:
+def _collect_matches(searcher: icu.StringSearch, text: str) -> list[dict[str, Any]]:
     """Collect all matches from a StringSearch."""
     matches = []
+    offmap = codepoint_map(text)
     pos = searcher.first()
     while pos != icu.StringSearch.DONE:
         length = searcher.getMatchedLength()
         matched = searcher.getMatchedText()
-        matches.append({"start": pos, "end": pos + length, "text": matched})
+        matches.append(
+            {
+                "start": to_codepoint(offmap, pos),
+                "end": to_codepoint(offmap, pos + length),
+                "text": matched,
+            }
+        )
         pos = searcher.nextMatch()
     return matches
 
@@ -120,7 +128,7 @@ def search_all(
 
     try:
         searcher = _create_searcher(pattern, text, locale, strength)
-        return _collect_matches(searcher)
+        return _collect_matches(searcher, text)
     except icu.ICUError as e:
         raise SearchError(f"Search failed: {e}") from e
 
@@ -156,9 +164,10 @@ def search_first(
         pos = searcher.first()
         if pos == icu.StringSearch.DONE:
             return None
+        offmap = codepoint_map(text)
         return {
-            "start": pos,
-            "end": pos + searcher.getMatchedLength(),
+            "start": to_codepoint(offmap, pos),
+            "end": to_codepoint(offmap, pos + searcher.getMatchedLength()),
             "text": searcher.getMatchedText(),
         }
     except icu.ICUError as e:
@@ -302,7 +311,7 @@ class StringSearcher:
             return []
         try:
             searcher = icu.StringSearch(self.pattern, text, self._collator)
-            return _collect_matches(searcher)
+            return _collect_matches(searcher, text)
         except icu.ICUError as e:
             raise SearchError(f"Search failed: {e}") from e
 
@@ -315,9 +324,10 @@ class StringSearcher:
             pos = searcher.first()
             if pos == icu.StringSearch.DONE:
                 return None
+            offmap = codepoint_map(text)
             return {
-                "start": pos,
-                "end": pos + searcher.getMatchedLength(),
+                "start": to_codepoint(offmap, pos),
+                "end": to_codepoint(offmap, pos + searcher.getMatchedLength()),
                 "text": searcher.getMatchedText(),
             }
         except icu.ICUError as e:
