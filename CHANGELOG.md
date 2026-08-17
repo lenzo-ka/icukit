@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (unreleased)
 
 - Fix text segmentation boundary offsets: ICU BreakIterator reports UTF-16
   code-unit indices, which were sliced as Python code points and corrupted every
