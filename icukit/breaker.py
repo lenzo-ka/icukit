@@ -23,6 +23,7 @@ from collections.abc import Iterator
 
 import icu
 
+from ._offsets import codepoint_map, to_codepoint
 from .errors import BreakerError
 
 __all__ = [
@@ -42,32 +43,6 @@ BREAK_SENTENCE = "sentence"
 BREAK_WORD = "word"
 BREAK_LINE = "line"
 BREAK_CHARACTER = "character"
-
-
-def _offset_map(text: str) -> list[int] | None:
-    """Map ICU UTF-16 offsets to Python string code-point indices.
-
-    ICU reports break positions as UTF-16 code-unit offsets, while Python
-    strings are indexed by Unicode code points. For text containing astral
-    characters, each surrogate pair therefore needs an extra map slot.
-
-    Args:
-        text: The text whose offsets should be mapped.
-
-    Returns:
-        A UTF-16-offset-to-code-point-index map, or None when the offsets are
-        already identical.
-    """
-    if all(ord(ch) <= 0xFFFF for ch in text):
-        return None
-
-    m = []
-    for cp_index, ch in enumerate(text):
-        m.append(cp_index)
-        if ord(ch) > 0xFFFF:
-            m.append(cp_index)
-    m.append(len(text))
-    return m
 
 
 class Breaker:
@@ -102,14 +77,11 @@ class Breaker:
     def _iter_spans(self, bi, text: str) -> Iterator[tuple[int, int]]:
         us = icu.UnicodeString(text)
         bi.setText(us)
-        offmap = _offset_map(text)
-
-        def _cp(offset: int) -> int:
-            return offset if offmap is None else offmap[offset]
+        offmap = codepoint_map(text)
 
         start = bi.first()
         for end in bi:
-            yield _cp(start), _cp(end)
+            yield to_codepoint(offmap, start), to_codepoint(offmap, end)
             start = end
 
     def break_sentences(self, text: str, skip_empty: bool = True) -> list[str]:
