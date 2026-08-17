@@ -458,6 +458,36 @@ Example:
     >>> breaker.tokenize_sentences('Hello world. How are you?')
     [['Hello', 'world', '.'], ['How', 'are', 'you', '?']]
 
+### class `RuleBreaker`
+
+Text segmentation using a custom ICU RBBI rule set.
+
+Span types are fully caller-defined through ``status_types``. RuleBreaker
+makes no assumptions about ICU's standard word-status meanings.
+
+#### `RuleBreaker(rules: 'str', status_types: 'dict[int, str] | None' = None)`
+
+Validate a custom rule set for subsequent segmentation.
+
+Args:
+    rules: ICU RuleBasedBreakIterator rule source.
+    status_types: Optional mapping from numeric rule statuses to type names.
+
+Raises:
+    BreakerError: If ICU cannot compile the rules.
+
+#### `iter_spans(text: 'str') -> 'Iterator[BreakSpan]'`
+
+Yield every custom-rule segment with offsets and raw statuses.
+
+#### `spans(text: 'str') -> 'list[BreakSpan]'`
+
+Return every custom-rule segment as a structured span.
+
+#### `tokens(text: 'str') -> 'list[str]'`
+
+Return every custom-rule segment as text.
+
 ### `break_grapheme_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
 
 Return every grapheme cluster with code-point offsets.
@@ -536,6 +566,27 @@ Returns:
 Example:
     >>> break_words('Hello, world!', 'en', skip_punctuation=True)
     ['Hello', 'world']
+
+### `default_rules(kind: 'str' = 'word', locale: 'str' = 'en_US') -> 'str'`
+
+Return the standard ICU rules to use as a tailoring base.
+
+This is a starting point for extending a rule set with custom exceptions.
+Locale dictionary and keyword behavior (for example, CJK dictionary
+breaking or ``lw=`` line-breaking options) is not represented in the rule
+text, so a :class:`RuleBreaker` compiled from the result is not necessarily
+a behavior-faithful clone of the locale iterator.
+
+Args:
+    kind: Iterator kind: ``word``, ``sentence``, ``line``, or ``grapheme``.
+    locale: Locale code for the standard rule set.
+
+Returns:
+    The ICU rule source for the requested standard iterator.
+
+Raises:
+    BreakerError: If the kind is unsupported, ICU cannot load the rules, or
+        the locale factory returns an iterator without extractable rules.
 
 ## icukit.calendar
 

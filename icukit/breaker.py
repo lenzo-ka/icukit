@@ -33,6 +33,8 @@ from .errors import BreakerError
 __all__ = [
     "Breaker",
     "BreakSpan",
+    "RuleBreaker",
+    "default_rules",
     "break_sentences",
     "break_words",
     "break_lines",
@@ -88,6 +90,23 @@ def _make_span(
     if break_type is not None:
         span["break_type"] = break_type
     return span
+
+
+def _iter_spans(bi, text: str) -> Iterator[tuple[int, int, list[int]]]:
+    """Yield code-point boundaries and statuses from an ICU iterator."""
+    us = icu.UnicodeString(text)
+    bi.setText(us)
+    offmap = codepoint_map(text)
+
+    start = bi.first()
+    for end in bi:
+        statuses = list(bi.getRuleStatusVec())
+        yield (
+            to_codepoint(offmap, start),
+            to_codepoint(offmap, end),
+            statuses,
+        )
+        start = end
 
 
 def _word_types(segment: str, statuses: list[int]) -> list[str]:
@@ -150,26 +169,11 @@ class Breaker:
         except icu.ICUError as e:
             raise BreakerError(f"Invalid locale '{locale}': {e}") from e
 
-    def _iter_spans(self, bi, text: str) -> Iterator[tuple[int, int, list[int]]]:
-        us = icu.UnicodeString(text)
-        bi.setText(us)
-        offmap = codepoint_map(text)
-
-        start = bi.first()
-        for end in bi:
-            statuses = list(bi.getRuleStatusVec())
-            yield (
-                to_codepoint(offmap, start),
-                to_codepoint(offmap, end),
-                statuses,
-            )
-            start = end
-
     def iter_word_spans(self, text: str) -> Iterator[BreakSpan]:
         """Yield every word segment with code-point offsets and ICU status."""
         try:
             bi = icu.BreakIterator.createWordInstance(self._locale_obj)
-            for start, end, statuses in self._iter_spans(bi, text):
+            for start, end, statuses in _iter_spans(bi, text):
                 if start != end:
                     yield _make_span(
                         text, start, end, _word_types(text[start:end], statuses), statuses
@@ -185,7 +189,7 @@ class Breaker:
         """Yield every sentence segment with code-point offsets."""
         try:
             bi = icu.BreakIterator.createSentenceInstance(self._locale_obj)
-            for start, end, _statuses in self._iter_spans(bi, text):
+            for start, end, _statuses in _iter_spans(bi, text):
                 if start != end:
                     yield _make_span(text, start, end, [], [])
         except icu.ICUError as e:
@@ -199,7 +203,7 @@ class Breaker:
         """Yield line segments; break type describes each end boundary."""
         try:
             bi = icu.BreakIterator.createLineInstance(self._locale_obj)
-            for start, end, statuses in self._iter_spans(bi, text):
+            for start, end, statuses in _iter_spans(bi, text):
                 if start != end:
                     break_type = (
                         "mandatory"
@@ -218,7 +222,7 @@ class Breaker:
         """Yield every grapheme cluster with code-point offsets."""
         try:
             bi = icu.BreakIterator.createCharacterInstance(self._locale_obj)
-            for start, end, _statuses in self._iter_spans(bi, text):
+            for start, end, _statuses in _iter_spans(bi, text):
                 if start != end:
                     yield _make_span(text, start, end, [], [])
         except icu.ICUError as e:
@@ -402,6 +406,97 @@ class Breaker:
 
     def __repr__(self) -> str:
         return f"Breaker(locale='{self.locale}')"
+
+
+def default_rules(kind: str = "word", locale: str = "en_US") -> str:
+    """Return the standard ICU rules to use as a tailoring base.
+
+    This is a starting point for extending a rule set with custom exceptions.
+    Locale dictionary and keyword behavior (for example, CJK dictionary
+    breaking or ``lw=`` line-breaking options) is not represented in the rule
+    text, so a :class:`RuleBreaker` compiled from the result is not necessarily
+    a behavior-faithful clone of the locale iterator.
+
+    Args:
+        kind: Iterator kind: ``word``, ``sentence``, ``line``, or ``grapheme``.
+        locale: Locale code for the standard rule set.
+
+    Returns:
+        The ICU rule source for the requested standard iterator.
+
+    Raises:
+        BreakerError: If the kind is unsupported, ICU cannot load the rules, or
+            the locale factory returns an iterator without extractable rules.
+    """
+    factories = {
+        "word": icu.BreakIterator.createWordInstance,
+        "sentence": icu.BreakIterator.createSentenceInstance,
+        "line": icu.BreakIterator.createLineInstance,
+        "grapheme": icu.BreakIterator.createCharacterInstance,
+    }
+    try:
+        factory = factories[kind]
+    except KeyError as e:
+        raise BreakerError(f"Invalid break kind '{kind}'") from e
+
+    try:
+        iterator = factory(icu.Locale(locale))
+        if not isinstance(iterator, icu.RuleBasedBreakIterator):
+            raise BreakerError(
+                f"No extractable rules for kind={kind} locale={locale} "
+                "(filtered/dictionary iterator)"
+            )
+        return iterator.getRules()
+    except (icu.ICUError, AttributeError) as e:
+        raise BreakerError(f"Failed to load {kind} rules: {e}") from e
+
+
+class RuleBreaker:
+    """Text segmentation using a custom ICU RBBI rule set.
+
+    Span types are fully caller-defined through ``status_types``. RuleBreaker
+    makes no assumptions about ICU's standard word-status meanings.
+    """
+
+    def __init__(self, rules: str, status_types: dict[int, str] | None = None):
+        """Validate a custom rule set for subsequent segmentation.
+
+        Args:
+            rules: ICU RuleBasedBreakIterator rule source.
+            status_types: Optional mapping from numeric rule statuses to type names.
+
+        Raises:
+            BreakerError: If ICU cannot compile the rules.
+        """
+        self.rules = rules
+        self.status_types = dict(status_types or {})
+        try:
+            icu.RuleBasedBreakIterator(rules)
+        except icu.ICUError as e:
+            raise BreakerError(f"Invalid break rules: {e}") from e
+
+    def _types(self, statuses: list[int]) -> list[str]:
+        types = []
+        for status in statuses:
+            span_type = self.status_types.get(status)
+            if span_type is not None and span_type not in types:
+                types.append(span_type)
+        return types
+
+    def iter_spans(self, text: str) -> Iterator[BreakSpan]:
+        """Yield every custom-rule segment with offsets and raw statuses."""
+        bi = icu.RuleBasedBreakIterator(self.rules)
+        for start, end, statuses in _iter_spans(bi, text):
+            if start != end:
+                yield _make_span(text, start, end, self._types(statuses), statuses)
+
+    def spans(self, text: str) -> list[BreakSpan]:
+        """Return every custom-rule segment as a structured span."""
+        return list(self.iter_spans(text))
+
+    def tokens(self, text: str) -> list[str]:
+        """Return every custom-rule segment as text."""
+        return [span["text"] for span in self.spans(text)]
 
 
 def _is_punctuation(token: str) -> bool:
