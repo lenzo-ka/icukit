@@ -207,3 +207,6 @@ marimo/_lsp/
 __marimo__/
 TODO.md
 PATTERNS.md
+
+# Program working docs (durable, machine-local; never part of the package)
+untracked/
