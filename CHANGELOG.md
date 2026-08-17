@@ -2,6 +2,8 @@
 
 ## 0.2.0 (unreleased)
 
+- Require Python 3.11 or newer (drop 3.9 and 3.10); modernize the codebase to
+  idiomatic 3.11+ type hints.
 - Fix text segmentation boundary offsets: ICU BreakIterator reports UTF-16
   code-unit indices, which were sliced as Python code points and corrupted every
   token after an astral character (all four iterators). Boundaries are now mapped
