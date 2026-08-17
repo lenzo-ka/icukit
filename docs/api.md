@@ -282,7 +282,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: str = 'en_US')`
+#### `Breaker(locale: 'str' = 'en_US')`
 
 Initialize a Breaker instance.
 
@@ -292,7 +292,7 @@ Args:
 Raises:
     BreakerError: If the locale is invalid.
 
-#### `break_graphemes(text: str) -> list[str]`
+#### `break_graphemes(text: 'str') -> 'list[str]'`
 
 Break text into grapheme clusters (user-perceived characters).
 
@@ -309,7 +309,7 @@ Example:
     >>> breaker.break_graphemes('e\u0301')  # e + combining accent
     ['é']
 
-#### `break_lines(text: str) -> list[str]`
+#### `break_lines(text: 'str') -> 'list[str]'`
 
 Find line break opportunities in text.
 
@@ -321,7 +321,7 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-#### `break_sentences(text: str, skip_empty: bool = True) -> list[str]`
+#### `break_sentences(text: 'str', skip_empty: 'bool' = True) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -337,7 +337,7 @@ Example:
     >>> breaker.break_sentences('Hello world. How are you?')
     ['Hello world. ', 'How are you?']
 
-#### `break_words(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> list[str]`
+#### `break_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 
 Break text into words.
 
@@ -356,7 +356,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `iter_graphemes(text: str) -> Iterator[str]`
+#### `iter_graphemes(text: 'str') -> 'Iterator[str]'`
 
 Iterate over grapheme clusters.
 
@@ -366,7 +366,7 @@ Args:
 Yields:
     Individual grapheme clusters.
 
-#### `iter_lines(text: str) -> Iterator[str]`
+#### `iter_lines(text: 'str') -> 'Iterator[str]'`
 
 Iterate over line break segments.
 
@@ -376,7 +376,7 @@ Args:
 Yields:
     Segments at line break boundaries.
 
-#### `iter_sentences(text: str, skip_empty: bool = True) -> Iterator[str]`
+#### `iter_sentences(text: 'str', skip_empty: 'bool' = True) -> 'Iterator[str]'`
 
 Iterate over sentences in text.
 
@@ -389,7 +389,7 @@ Args:
 Yields:
     Individual sentence strings.
 
-#### `iter_words(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> Iterator[str]`
+#### `iter_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'Iterator[str]'`
 
 Iterate over words in text.
 
@@ -401,7 +401,7 @@ Args:
 Yields:
     Individual word/token strings.
 
-#### `tokenize_sentences(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> list[list[str]]`
+#### `tokenize_sentences(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[list[str]]'`
 
 Break text into sentences, then tokenize each sentence.
 
@@ -418,7 +418,7 @@ Example:
     >>> breaker.tokenize_sentences('Hello world. How are you?')
     [['Hello', 'world', '.'], ['How', 'are', 'you', '?']]
 
-### `break_graphemes(text: str, locale: str = 'en_US') -> list[str]`
+### `break_graphemes(text: 'str', locale: 'str' = 'en_US') -> 'list[str]'`
 
 Break text into grapheme clusters.
 
@@ -433,7 +433,7 @@ Example:
     >>> break_graphemes('👨‍👩‍👧‍👦')  # Family emoji
     ['👨‍👩‍👧‍👦']
 
-### `break_lines(text: str, locale: str = 'en_US') -> list[str]`
+### `break_lines(text: 'str', locale: 'str' = 'en_US') -> 'list[str]'`
 
 Find line break opportunities in text.
 
@@ -444,7 +444,7 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentences(text: str, locale: str = 'en_US', skip_empty: bool = True) -> list[str]`
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -462,7 +462,7 @@ Example:
     >>> break_sentences('Hello. World.', 'en')
     ['Hello. ', 'World.']
 
-### `break_words(text: str, locale: str = 'en_US', skip_whitespace: bool = True, skip_punctuation: bool = False) -> list[str]`
+### `break_words(text: 'str', locale: 'str' = 'en_US', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 
 Break text into words.
 
