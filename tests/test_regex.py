@@ -211,3 +211,24 @@ class TestUnicodeListFunctions:
         scripts = list_unicode_scripts()
         latin = next(s for s in scripts if s["name"] == "Latin")
         assert latin["pattern"] == r"\p{Script=Latin}"
+
+
+class TestUtf16Offsets:
+    """The F1 offset class recurs in regex: ICU reports UTF-16 code-unit offsets,
+    which are then used to slice Python (code-point-indexed) strings. A single
+    astral character shifts them, giving wrong offsets and corrupted output.
+    """
+
+    def test_find_offsets_are_code_points(self):
+        text = "\U0001F44D cat"  # 👍 cat; 'cat' starts at code-point index 2
+        m = regex_find("cat", text)
+        assert m[0]["start"] == 2
+        assert m[0]["end"] == 5
+        assert text[m[0]["start"] : m[0]["end"]] == "cat"
+
+    def test_split_not_corrupted_by_astral(self):
+        assert regex_split(" ", "\U0001F44D a b") == ["\U0001F44D", "a", "b"]
+
+    def test_limited_replace_not_corrupted_by_astral(self):
+        # limit>1 uses the manual slicing path; limit=-1/1 use ICU-native replaceAll/First.
+        assert regex_replace("x", "\U0001F44Dxyx", "Z", limit=2) == "\U0001F44DZyZ"

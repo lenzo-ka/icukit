@@ -86,6 +86,7 @@ from typing import Any
 
 import icu
 
+from ._offsets import codepoint_map, to_codepoint
 from .errors import PatternError
 from .script import list_scripts as _list_scripts
 
@@ -282,11 +283,12 @@ class UnicodeRegex:
             Match dict with text, start, end, and groups, or None if no match.
         """
         matcher = self._regex.matcher(text)
+        offmap = codepoint_map(text)
         if matcher.find(start):
             result = {
                 "text": matcher.group(),
-                "start": matcher.start(),
-                "end": matcher.end(),
+                "start": to_codepoint(offmap, matcher.start()),
+                "end": to_codepoint(offmap, matcher.end()),
                 "groups": {},
             }
 
@@ -309,12 +311,13 @@ class UnicodeRegex:
         """
         matches = []
         matcher = self._regex.matcher(text)
+        offmap = codepoint_map(text)
 
         while matcher.find():
             match = {
                 "text": matcher.group(),
-                "start": matcher.start(),
-                "end": matcher.end(),
+                "start": to_codepoint(offmap, matcher.start()),
+                "end": to_codepoint(offmap, matcher.end()),
                 "groups": {},
             }
 
@@ -372,9 +375,12 @@ class UnicodeRegex:
             result = []
             last_end = 0
             count = 0
+            offmap = codepoint_map(text)
 
             while matcher.find() and count < limit:
-                result.append(text[last_end : matcher.start()])
+                start = to_codepoint(offmap, matcher.start())
+                end = to_codepoint(offmap, matcher.end())
+                result.append(text[last_end:start])
 
                 # Process replacement with group substitutions
                 replaced = replacement
@@ -383,7 +389,7 @@ class UnicodeRegex:
                     replaced = replaced.replace(f"${i}", group_text)
 
                 result.append(replaced)
-                last_end = matcher.end()
+                last_end = end
                 count += 1
 
             result.append(text[last_end:])
@@ -449,12 +455,13 @@ class UnicodeRegex:
             Match dictionaries.
         """
         matcher = self._regex.matcher(text)
+        offmap = codepoint_map(text)
 
         while matcher.find():
             match = {
                 "text": matcher.group(),
-                "start": matcher.start(),
-                "end": matcher.end(),
+                "start": to_codepoint(offmap, matcher.start()),
+                "end": to_codepoint(offmap, matcher.end()),
                 "groups": {},
             }
 
