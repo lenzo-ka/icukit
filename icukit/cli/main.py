@@ -3,7 +3,6 @@
 
 import argparse
 import sys
-from typing import List
 
 from .. import __version__
 from .command import (
@@ -94,7 +93,7 @@ class PrefixArgumentParser(argparse.ArgumentParser):
 
         return super().parse_args(args, namespace)
 
-    def _show_ambiguous_error(self, prefix: str, suggestions: List[str]):
+    def _show_ambiguous_error(self, prefix: str, suggestions: list[str]):
         error_lines = [f"ambiguous command: '{prefix}'", "\nDid you mean one of these?"]
         for cmd in sorted(suggestions):
             error_lines.append(f"  {cmd}")

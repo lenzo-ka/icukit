@@ -36,8 +36,6 @@ Example:
     '5,5 Kilometer'
 """
 
-from __future__ import annotations
-
 import re
 
 import icu

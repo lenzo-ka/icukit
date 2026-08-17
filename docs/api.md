@@ -356,7 +356,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `iter_graphemes(text: str) -> Iterator[str]`
+#### `iter_graphemes(text: str) -> collections.abc.Iterator[str]`
 
 Iterate over grapheme clusters.
 
@@ -366,7 +366,7 @@ Args:
 Yields:
     Individual grapheme clusters.
 
-#### `iter_lines(text: str) -> Iterator[str]`
+#### `iter_lines(text: str) -> collections.abc.Iterator[str]`
 
 Iterate over line break segments.
 
@@ -376,7 +376,7 @@ Args:
 Yields:
     Segments at line break boundaries.
 
-#### `iter_sentences(text: str, skip_empty: bool = True) -> Iterator[str]`
+#### `iter_sentences(text: str, skip_empty: bool = True) -> collections.abc.Iterator[str]`
 
 Iterate over sentences in text.
 
@@ -389,7 +389,7 @@ Args:
 Yields:
     Individual sentence strings.
 
-#### `iter_words(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> Iterator[str]`
+#### `iter_words(text: str, skip_whitespace: bool = True, skip_punctuation: bool = False) -> collections.abc.Iterator[str]`
 
 Iterate over words in text.
 
@@ -521,7 +521,7 @@ Example:
         >>> info['type']
         'islamic'
 
-### `get_calendar_info(cal_type: str) -> Optional[Dict[str, Any]]`
+### `get_calendar_info(cal_type: str) -> dict[str, typing.Any] | None`
 
 Get information about a calendar type.
 
@@ -552,7 +552,7 @@ Example:
     >>> is_valid_calendar('invalid')
     False
 
-### `list_calendars() -> List[str]`
+### `list_calendars() -> list[str]`
 
 List all available calendar types.
 
@@ -566,7 +566,7 @@ Example:
     >>> 'hebrew' in cals
     True
 
-### `list_calendars_info() -> List[Dict[str, Any]]`
+### `list_calendars_info() -> list[dict[str, typing.Any]]`
 
 List all calendars with their info.
 
@@ -593,7 +593,7 @@ Example:
     >>> sort_strings(["Öl", "Ol", "öl"], "de_DE")
     ['Ol', 'Öl', 'öl']
 
-### `compare_strings(a: 'str', b: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None) -> 'int'`
+### `compare_strings(a: str, b: str, locale: str = 'en_US', *, strength: str | None = None) -> int`
 
 Compare two strings using locale-aware collation.
 
@@ -612,7 +612,7 @@ Example:
     >>> compare_strings("cafe", "café", "en_US", strength="primary")
     0
 
-### `get_collator_info(locale: 'str', *, include_extended: 'bool' = False) -> 'dict'`
+### `get_collator_info(locale: str, *, include_extended: bool = False) -> dict`
 
 Get information about a collator for a locale.
 
@@ -628,7 +628,7 @@ Example:
     >>> info["locale"]
     'de_DE'
 
-### `get_sort_key(text: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None) -> 'bytes'`
+### `get_sort_key(text: str, locale: str = 'en_US', *, strength: str | None = None) -> bytes`
 
 Get a binary sort key for external sorting.
 
@@ -649,7 +649,7 @@ Example:
     >>> key_a < key_b
     True
 
-### `list_collation_types() -> 'list[str]'`
+### `list_collation_types() -> list[str]`
 
 List available collation types.
 
@@ -661,7 +661,7 @@ Example:
     >>> "phonebook" in types
     True
 
-### `sort_strings(items: 'list[str]', locale: 'str' = 'en_US', *, reverse: 'bool' = False, strength: 'str | None' = None, case_first: 'str | None' = None) -> 'list[str]'`
+### `sort_strings(items: list[str], locale: str = 'en_US', *, reverse: bool = False, strength: str | None = None, case_first: str | None = None) -> list[str]`
 
 Sort strings using locale-aware collation.
 
@@ -725,7 +725,7 @@ Example:
     >>> fmt.format(1234567, style="LONG")
     '1.2 million'
 
-#### `CompactFormatter(locale: 'str' = 'en_US', style: 'str' = 'SHORT')`
+#### `CompactFormatter(locale: str = 'en_US', style: str = 'SHORT')`
 
 Create a CompactFormatter.
 
@@ -733,7 +733,7 @@ Args:
     locale: Locale code (e.g., "en_US", "de_DE", "ja_JP")
     style: Default style (SHORT or LONG)
 
-#### `format(number: 'int | float', style: 'str | None' = None) -> 'str'`
+#### `format(number: int | float, style: str | None = None) -> str`
 
 Format a number in compact form.
 
@@ -810,7 +810,7 @@ Example:
     >>> fmt.format(datetime(2024, 1, 15), pattern="yyyy-MM-dd")
     '5784-04-05'
 
-#### `DateTimeFormatter(locale: 'str' = 'en_US', calendar: 'str | None' = None)`
+#### `DateTimeFormatter(locale: str = 'en_US', calendar: str | None = None)`
 
 Create a DateTimeFormatter for the given locale.
 
@@ -819,7 +819,7 @@ Args:
     calendar: Calendar system (e.g., "gregorian", "buddhist", "hebrew",
              "islamic", "japanese", "chinese", "persian")
 
-#### `format(dt: 'datetime | date | time', style: 'str | None' = None, date_style: 'str | None' = None, time_style: 'str | None' = None, pattern: 'str | None' = None) -> 'str'`
+#### `format(dt: datetime.datetime | datetime.date | datetime.time, style: str | None = None, date_style: str | None = None, time_style: str | None = None, pattern: str | None = None) -> str`
 
 Format a date/time value.
 
@@ -841,7 +841,7 @@ Example:
     >>> fmt.format(now, pattern="yyyy-MM-dd")
     '2024-01-15'
 
-#### `format_interval(start: 'datetime | date', end: 'datetime | date', skeleton: 'str' = 'yMMMd') -> 'str'`
+#### `format_interval(start: datetime.datetime | datetime.date, end: datetime.datetime | datetime.date, skeleton: str = 'yMMMd') -> str`
 
 Format a date/time interval.
 
@@ -859,7 +859,7 @@ Example:
     >>> fmt.format_interval(start, end)
     'Jan 15 – 20, 2024'
 
-#### `format_relative(delta: 'int | timedelta | None' = None, days: 'int' = 0, hours: 'int' = 0, minutes: 'int' = 0, seconds: 'int' = 0) -> 'str'`
+#### `format_relative(delta: int | datetime.timedelta | None = None, days: int = 0, hours: int = 0, minutes: int = 0, seconds: int = 0) -> str`
 
 Format relative time.
 
@@ -881,7 +881,7 @@ Example:
     >>> fmt.format_relative(timedelta(days=-7))
     '1 week ago'
 
-#### `parse(text: 'str', pattern: 'str | None' = None) -> 'datetime'`
+#### `parse(text: str, pattern: str | None = None) -> datetime.datetime`
 
 Parse a date/time string.
 
@@ -895,7 +895,7 @@ Returns:
 Raises:
     DateTimeError: If parsing fails
 
-### `format_datetime(dt: 'datetime | date | time', locale: 'str' = 'en_US', calendar: 'str | None' = None, **kwargs) -> 'str'`
+### `format_datetime(dt: datetime.datetime | datetime.date | datetime.time, locale: str = 'en_US', calendar: str | None = None, **kwargs) -> str`
 
 Format a date/time value (convenience function).
 
@@ -908,7 +908,7 @@ Args:
 Returns:
     Formatted string
 
-### `format_relative(delta: 'int | timedelta | None' = None, locale: 'str' = 'en_US', calendar: 'str | None' = None, **kwargs) -> 'str'`
+### `format_relative(delta: int | datetime.timedelta | None = None, locale: str = 'en_US', calendar: str | None = None, **kwargs) -> str`
 
 Format relative time (convenience function).
 
@@ -921,7 +921,7 @@ Args:
 Returns:
     Relative time string
 
-### `get_am_pm_strings(locale: 'str' = 'en_US', calendar: 'str | None' = None) -> 'list[str]'`
+### `get_am_pm_strings(locale: str = 'en_US', calendar: str | None = None) -> list[str]`
 
 Get localized AM/PM strings.
 
@@ -940,7 +940,7 @@ Example:
     >>> get_am_pm_strings("zh_CN")
     ['上午', '下午']
 
-### `get_date_symbols(locale: 'str' = 'en_US', calendar: 'str | None' = None) -> 'dict'`
+### `get_date_symbols(locale: str = 'en_US', calendar: str | None = None) -> dict`
 
 Get all date/time symbols for a locale.
 
@@ -963,7 +963,7 @@ Example:
     >>> symbols["am_pm"]
     ['AM', 'PM']
 
-### `get_era_names(locale: 'str' = 'en_US', width: 'str' = 'WIDE', calendar: 'str | None' = None) -> 'list[str]'`
+### `get_era_names(locale: str = 'en_US', width: str = 'WIDE', calendar: str | None = None) -> list[str]`
 
 Get localized era names.
 
@@ -983,7 +983,7 @@ Example:
     >>> get_era_names("ja_JP")
     ['紀元前', '西暦']
 
-### `get_month_names(locale: 'str' = 'en_US', width: 'str' = 'WIDE', calendar: 'str | None' = None) -> 'list[str]'`
+### `get_month_names(locale: str = 'en_US', width: str = 'WIDE', calendar: str | None = None) -> list[str]`
 
 Get localized month names.
 
@@ -1003,7 +1003,7 @@ Example:
     >>> get_month_names("ja_JP")
     ['1月', '2月', '3月', ..., '12月']
 
-### `get_weekday_names(locale: 'str' = 'en_US', width: 'str' = 'WIDE', calendar: 'str | None' = None) -> 'dict'`
+### `get_weekday_names(locale: str = 'en_US', width: str = 'WIDE', calendar: str | None = None) -> dict`
 
 Get localized weekday names.
 
@@ -1029,7 +1029,7 @@ Example:
     >>> get_weekday_names("ja_JP", WIDTH_ABBREVIATED)
     {'names': ['日', '月', '火', ...], 'first_day_index': 0, 'first_day': '日'}
 
-### `parse_datetime(text: 'str', locale: 'str' = 'en_US', calendar: 'str | None' = None, pattern: 'str | None' = None) -> 'datetime'`
+### `parse_datetime(text: str, locale: str = 'en_US', calendar: str | None = None, pattern: str | None = None) -> datetime.datetime`
 
 Parse a date/time string (convenience function).
 
@@ -1053,21 +1053,21 @@ exports and commands rather than hardcoding them.
 Note: Import this module directly (from icukit.discover import ...) rather
 than from icukit to avoid circular imports.
 
-### `discover_features() -> Dict[str, Any]`
+### `discover_features() -> dict[str, typing.Any]`
 
 Discover all available features in icukit.
 
 Returns:
     Dictionary with API exports and CLI commands
 
-### `get_api_exports() -> List[str]`
+### `get_api_exports() -> list[str]`
 
 Get all exported API functions and classes.
 
 Returns:
     List of exported names from icukit.__all__
 
-### `get_api_info(name: str) -> Optional[Dict[str, Any]]`
+### `get_api_info(name: str) -> dict[str, typing.Any] | None`
 
 Get information about an API export.
 
@@ -1077,7 +1077,7 @@ Args:
 Returns:
     Dictionary with name, type, signature, and docstring, or None if not found
 
-### `get_cli_commands() -> Dict[str, Dict[str, Any]]`
+### `get_cli_commands() -> dict[str, dict[str, typing.Any]]`
 
 Get available CLI commands with their details.
 
@@ -1088,7 +1088,7 @@ Returns:
 
 Print a formatted discovery report to stdout.
 
-### `search_features(query: str) -> Dict[str, List[str]]`
+### `search_features(query: str) -> dict[str, list[str]]`
 
 Search for features matching a query.
 
@@ -1380,7 +1380,7 @@ Example:
     >>> fmt.format(seconds=3661)
     '1 hour, 1 minute, 1 second'
 
-#### `DurationFormatter(locale: 'str' = 'en_US', width: 'str' = 'WIDE')`
+#### `DurationFormatter(locale: str = 'en_US', width: str = 'WIDE')`
 
 Create a DurationFormatter.
 
@@ -1388,7 +1388,7 @@ Args:
     locale: Locale code (e.g., "en_US", "de_DE")
     width: Width style (WIDE, SHORT, NARROW)
 
-#### `format(seconds: 'float | None' = None, minutes: 'float' = 0, hours: 'float' = 0, days: 'float' = 0, weeks: 'float' = 0, months: 'float' = 0, years: 'float' = 0) -> 'str'`
+#### `format(seconds: float | None = None, minutes: float = 0, hours: float = 0, days: float = 0, weeks: float = 0, months: float = 0, years: float = 0) -> str`
 
 Format a duration.
 
@@ -1411,7 +1411,7 @@ Example:
     >>> fmt.format(hours=2, minutes=30)
     '2 hours, 30 minutes'
 
-#### `format_iso(iso_string: 'str') -> 'str'`
+#### `format_iso(iso_string: str) -> str`
 
 Format an ISO 8601 duration string.
 
@@ -1425,7 +1425,7 @@ Example:
     >>> fmt.format_iso("P2DT3H30M")
     '2 days, 3 hours, 30 minutes'
 
-### `format_duration(seconds: 'float | None' = None, locale: 'str' = 'en_US', width: 'str' = 'WIDE', **kwargs) -> 'str'`
+### `format_duration(seconds: float | None = None, locale: str = 'en_US', width: str = 'WIDE', **kwargs) -> str`
 
 Format a duration (convenience function).
 
@@ -1446,7 +1446,7 @@ Example:
     >>> format_duration(hours=2, minutes=30)
     '2 hours, 30 minutes'
 
-### `parse_iso_duration(iso_string: 'str') -> 'dict'`
+### `parse_iso_duration(iso_string: str) -> dict`
 
 Parse an ISO 8601 duration string.
 
@@ -1725,7 +1725,7 @@ Example:
         >>> add_likely_subtags('zh')
         'zh_Hans_CN'
 
-### `add_likely_subtags(locale_str: 'str') -> 'str'`
+### `add_likely_subtags(locale_str: str) -> str`
 
 Add likely subtags to a locale identifier.
 
@@ -1743,7 +1743,7 @@ Example:
     >>> add_likely_subtags('sr')
     'sr_Cyrl_RS'
 
-### `canonicalize_locale(locale_str: 'str') -> 'str'`
+### `canonicalize_locale(locale_str: str) -> str`
 
 Canonicalize a locale identifier.
 
@@ -1759,7 +1759,7 @@ Example:
     >>> canonicalize_locale('iw')  # deprecated Hebrew code
     'he'
 
-### `format_compact(value: 'int | float', locale_str: 'str' = 'en_US', style: 'str' = 'SHORT') -> 'str'`
+### `format_compact(value: int | float, locale_str: str = 'en_US', style: str = 'SHORT') -> str`
 
 Format a number in compact form with locale-appropriate abbreviations.
 
@@ -1779,7 +1779,7 @@ Example:
     >>> format_compact(1234567, 'en_US', COMPACT_LONG)
     '1.2 million'
 
-### `format_currency(value: 'float', locale_str: 'str' = 'en_US', currency: 'str' = None) -> 'str'`
+### `format_currency(value: float, locale_str: str = 'en_US', currency: str = None) -> str`
 
 Format a value as currency.
 
@@ -1799,7 +1799,7 @@ Example:
     >>> format_currency(1234.56, 'en_US', 'EUR')
     '€1,234.56'
 
-### `format_number(value: 'float', locale_str: 'str' = 'en_US') -> 'str'`
+### `format_number(value: float, locale_str: str = 'en_US') -> str`
 
 Format a number according to locale conventions.
 
@@ -1816,7 +1816,7 @@ Example:
     >>> format_number(1234567.89, 'de_DE')
     '1.234.567,89'
 
-### `format_ordinal(value: 'int', locale_str: 'str' = 'en_US') -> 'str'`
+### `format_ordinal(value: int, locale_str: str = 'en_US') -> str`
 
 Format a number as an ordinal.
 
@@ -1835,7 +1835,7 @@ Example:
     >>> format_ordinal(1, 'de_DE')
     '1.'
 
-### `format_percent(value: 'float', locale_str: 'str' = 'en_US') -> 'str'`
+### `format_percent(value: float, locale_str: str = 'en_US') -> str`
 
 Format a value as a percentage.
 
@@ -1852,7 +1852,7 @@ Example:
     >>> format_percent(0.15, 'de_DE')
     '15 %'
 
-### `format_scientific(value: 'float', locale_str: 'str' = 'en_US') -> 'str'`
+### `format_scientific(value: float, locale_str: str = 'en_US') -> str`
 
 Format a value in scientific notation.
 
@@ -1867,7 +1867,7 @@ Example:
     >>> format_scientific(1234567.89, 'en_US')
     '1.234568E6'
 
-### `format_spellout(value: 'int', locale_str: 'str' = 'en_US') -> 'str'`
+### `format_spellout(value: int, locale_str: str = 'en_US') -> str`
 
 Spell out a number in words.
 
@@ -1884,7 +1884,7 @@ Example:
     >>> format_spellout(42, 'de_DE')
     'zwei­und­vierzig'
 
-### `get_default_locale() -> 'str'`
+### `get_default_locale() -> str`
 
 Get the system default locale.
 
@@ -1895,7 +1895,7 @@ Example:
     >>> get_default_locale()
     'en_US'  # or whatever the system default is
 
-### `get_display_name(locale_str: 'str', display_locale: 'str' = 'en') -> 'str'`
+### `get_display_name(locale_str: str, display_locale: str = 'en') -> str`
 
 Get the display name for a locale.
 
@@ -1912,7 +1912,7 @@ Example:
     >>> get_display_name('el_GR', 'el')
     'Ελληνικά (Ελλάδα)'
 
-### `get_exemplar_characters(locale_str: 'str' = 'en_US', exemplar_type: 'str' = 'standard') -> 'str'`
+### `get_exemplar_characters(locale_str: str = 'en_US', exemplar_type: str = 'standard') -> str`
 
 Get exemplar characters for a locale.
 
@@ -1938,7 +1938,7 @@ Example:
     >>> get_exemplar_characters("ja_JP", "index")
     '[あかさたなはまやらわ]'
 
-### `get_exemplar_info(locale_str: 'str' = 'en_US') -> 'Dict[str, str]'`
+### `get_exemplar_info(locale_str: str = 'en_US') -> dict[str, str]`
 
 Get all exemplar character sets for a locale.
 
@@ -1955,7 +1955,7 @@ Example:
     >>> info["index"]
     '[A-Z]'
 
-### `get_language_display_name(language: 'str', display_locale: 'str' = 'en') -> 'str'`
+### `get_language_display_name(language: str, display_locale: str = 'en') -> str`
 
 Get the display name for a language code.
 
@@ -1972,7 +1972,7 @@ Example:
     >>> get_language_display_name('ja')
     'Japanese'
 
-### `get_locale_attributes(locale_str: 'str', display_locale: 'str' = 'en') -> 'Dict[str, Any]'`
+### `get_locale_attributes(locale_str: str, display_locale: str = 'en') -> dict[str, typing.Any]`
 
 Get comprehensive locale attributes.
 
@@ -1995,7 +1995,7 @@ Example:
     >>> attrs['quote_start']
     '"'
 
-### `get_locale_extended(locale_str: 'str') -> 'Dict[str, Any]'`
+### `get_locale_extended(locale_str: str) -> dict[str, typing.Any]`
 
 Get extended locale attributes.
 
@@ -2014,7 +2014,7 @@ Example:
     >>> ext['index_labels'][:3]
     ['あ', 'か', 'さ']
 
-### `get_locale_info(locale_str: 'str', display_locale: 'str' = 'en', extended: 'bool' = False) -> 'Dict[str, Any]'`
+### `get_locale_info(locale_str: str, display_locale: str = 'en', extended: bool = False) -> dict[str, typing.Any]`
 
 Get detailed information about a locale.
 
@@ -2036,7 +2036,7 @@ Example:
     >>> info['extended']['currency']
     'JPY'
 
-### `get_locale_scripts(locale_str: 'str') -> 'List[str]'`
+### `get_locale_scripts(locale_str: str) -> list[str]`
 
 Get the scripts used by a locale.
 
@@ -2054,7 +2054,7 @@ Example:
     >>> get_locale_scripts('en_US')
     ['Latin']
 
-### `get_number_symbols(locale_str: 'str' = 'en_US') -> 'Dict[str, str]'`
+### `get_number_symbols(locale_str: str = 'en_US') -> dict[str, str]`
 
 Get number formatting symbols for a locale.
 
@@ -2085,7 +2085,7 @@ Example:
     >>> get_number_symbols("fr_FR")
     {'decimal': ',', 'grouping': ' ', 'percent': '%', ...}
 
-### `is_valid_locale(locale_str: 'str') -> 'bool'`
+### `is_valid_locale(locale_str: str) -> bool`
 
 Check if a locale string is valid.
 
@@ -2101,7 +2101,7 @@ Example:
     >>> is_valid_locale('xx_YY')
     False
 
-### `list_exemplar_types() -> 'List[str]'`
+### `list_exemplar_types() -> list[str]`
 
 List available exemplar character set types.
 
@@ -2112,7 +2112,7 @@ Example:
     >>> list_exemplar_types()
     ['standard', 'auxiliary', 'index', 'punctuation']
 
-### `list_languages() -> 'List[str]'`
+### `list_languages() -> list[str]`
 
 List all available language codes.
 
@@ -2126,7 +2126,7 @@ Example:
     >>> 'el' in langs
     True
 
-### `list_locales() -> 'List[str]'`
+### `list_locales() -> list[str]`
 
 List all available locale identifiers.
 
@@ -2140,7 +2140,7 @@ Example:
     >>> len(locales)
     851
 
-### `list_locales_info(display_locale: 'str' = 'en') -> 'List[Dict[str, Any]]'`
+### `list_locales_info(display_locale: str = 'en') -> list[dict[str, typing.Any]]`
 
 List all locales with their info.
 
@@ -2156,7 +2156,7 @@ Example:
     >>> el['display_name']
     'Greek (Greece)'
 
-### `minimize_subtags(locale_str: 'str') -> 'str'`
+### `minimize_subtags(locale_str: str) -> str`
 
 Remove likely subtags from a locale identifier.
 
@@ -2174,7 +2174,7 @@ Example:
     >>> minimize_subtags('en_Latn_US')
     'en'
 
-### `parse_locale(locale_str: 'str') -> 'Dict[str, Any]'`
+### `parse_locale(locale_str: str) -> dict[str, typing.Any]`
 
 Parse a locale string into components.
 
@@ -2242,7 +2242,7 @@ Example:
     >>> fmt.format(100, "fahrenheit", width="SHORT")
     '100°F'
 
-#### `MeasureFormatter(locale: 'str' = 'en_US', width: 'str' = 'WIDE')`
+#### `MeasureFormatter(locale: str = 'en_US', width: str = 'WIDE')`
 
 Create a MeasureFormatter.
 
@@ -2250,7 +2250,7 @@ Args:
     locale: Locale code (e.g., "en_US", "de_DE")
     width: Default width style (WIDE, SHORT, NARROW)
 
-#### `convert(value: 'float | int', from_unit: 'str', to_unit: 'str') -> 'float'`
+#### `convert(value: float | int, from_unit: str, to_unit: str) -> float`
 
 Convert a value between units.
 
@@ -2270,7 +2270,7 @@ Example:
     >>> fmt.convert(100, "celsius", "fahrenheit")
     212.0
 
-#### `convert_and_format(value: 'float | int', from_unit: 'str', to_unit: 'str', width: 'str | None' = None) -> 'str'`
+#### `convert_and_format(value: float | int, from_unit: str, to_unit: str, width: str | None = None) -> str`
 
 Convert a value and format the result.
 
@@ -2287,7 +2287,7 @@ Example:
     >>> fmt.convert_and_format(10, "kilometer", "mile")
     '6.21371 miles'
 
-#### `format(value: 'float | int', unit: 'str', width: 'str | None' = None) -> 'str'`
+#### `format(value: float | int, unit: str, width: str | None = None) -> str`
 
 Format a measurement.
 
@@ -2307,7 +2307,7 @@ Example:
     >>> fmt.format(100, "fahrenheit", width="SHORT")
     '100°F'
 
-#### `format_for_usage(value: 'float | int', unit: 'str', usage: 'str' = 'default', width: 'str | None' = None) -> 'str'`
+#### `format_for_usage(value: float | int, unit: str, usage: str = 'default', width: str | None = None) -> str`
 
 Format a measurement using locale-preferred units.
 
@@ -2334,7 +2334,7 @@ Example:
     >>> fmt_de.format_for_usage(100, "kilometer", usage="road")
     '100 Kilometer'
 
-#### `format_range(low: 'float | int', high: 'float | int', unit: 'str', width: 'str | None' = None) -> 'str'`
+#### `format_range(low: float | int, high: float | int, unit: str, width: str | None = None) -> str`
 
 Format a measurement range.
 
@@ -2347,7 +2347,7 @@ Args:
 Returns:
     Formatted range (e.g., "5-10 kilometers")
 
-#### `format_sequence(measures: 'list[tuple[float | int, str]]', width: 'str | None' = None) -> 'str'`
+#### `format_sequence(measures: list[tuple[float | int, str]], width: str | None = None) -> str`
 
 Format a sequence of measurements (compound units).
 
@@ -2364,7 +2364,7 @@ Example:
     >>> fmt.format_sequence([(1, "hour"), (30, "minute")])
     '1 hour, 30 minutes'
 
-### `can_convert(from_unit: 'str', to_unit: 'str') -> 'bool'`
+### `can_convert(from_unit: str, to_unit: str) -> bool`
 
 Check if two units can be converted to each other.
 
@@ -2381,7 +2381,7 @@ Example:
     >>> can_convert("kilometer", "celsius")
     False
 
-### `convert_units(value: 'float | int', from_unit: 'str', to_unit: 'str') -> 'float'`
+### `convert_units(value: float | int, from_unit: str, to_unit: str) -> float`
 
 Convert a value between units (convenience function).
 
@@ -2399,7 +2399,7 @@ Example:
     >>> convert_units(100, "celsius", "fahrenheit")
     212.0
 
-### `format_measure(value: 'float | int', unit: 'str', locale: 'str' = 'en_US', width: 'str' = 'WIDE') -> 'str'`
+### `format_measure(value: float | int, unit: str, locale: str = 'en_US', width: str = 'WIDE') -> str`
 
 Format a measurement (convenience function).
 
@@ -2412,7 +2412,7 @@ Args:
 Returns:
     Formatted measurement string
 
-### `get_unit_abbreviation(unit: 'str', locale: 'str' = 'en_US') -> 'str'`
+### `get_unit_abbreviation(unit: str, locale: str = 'en_US') -> str`
 
 Get the abbreviation for a unit.
 
@@ -2423,7 +2423,7 @@ Args:
 Returns:
     Abbreviated form (e.g., "km")
 
-### `get_unit_info(unit: 'str') -> 'dict'`
+### `get_unit_info(unit: str) -> dict`
 
 Get information about a unit.
 
@@ -2437,7 +2437,7 @@ Example:
     >>> get_unit_info("mile")
     {'identifier': 'mile', 'type': 'length', 'complexity': 'single'}
 
-### `get_units_by_type() -> 'dict[str, list[str]]'`
+### `get_units_by_type() -> dict[str, list[str]]`
 
 Get all units organized by type.
 
@@ -2449,14 +2449,14 @@ Example:
     >>> "meter" in units["length"]
     True
 
-### `list_unit_types() -> 'list[str]'`
+### `list_unit_types() -> list[str]`
 
 List available unit types.
 
 Returns:
     List of unit type names (length, mass, temperature, etc.)
 
-### `list_units(unit_type: 'str | None' = None) -> 'list[str]'`
+### `list_units(unit_type: str | None = None) -> list[str]`
 
 List available units.
 
@@ -2466,7 +2466,7 @@ Args:
 Returns:
     List of unit names
 
-### `resolve_unit(unit: 'str') -> 'str'`
+### `resolve_unit(unit: str) -> str`
 
 Resolve a unit name or abbreviation to the canonical ICU unit name.
 
@@ -2775,7 +2775,7 @@ Example:
     >>> list_plural_categories("ar")
     ['zero', 'one', 'two', 'few', 'many', 'other']
 
-### `get_ordinal_category(number: 'int | float', locale: 'str' = 'en_US') -> 'str'`
+### `get_ordinal_category(number: int | float, locale: str = 'en_US') -> str`
 
 Get the ordinal category for a number.
 
@@ -2798,7 +2798,7 @@ Example:
     >>> get_ordinal_category(4, "en")
     'other'
 
-### `get_plural_category(number: 'int | float', locale: 'str' = 'en_US') -> 'str'`
+### `get_plural_category(number: int | float, locale: str = 'en_US') -> str`
 
 Get the plural category for a number.
 
@@ -2819,7 +2819,7 @@ Example:
     >>> get_plural_category(5, "ru")
     'many'
 
-### `get_plural_rules_info(locale: 'str' = 'en_US') -> 'dict'`
+### `get_plural_rules_info(locale: str = 'en_US') -> dict`
 
 Get detailed plural rules information for a locale.
 
@@ -2838,7 +2838,7 @@ Example:
     >>> info["cardinal_categories"]
     ['one', 'few', 'many', 'other']
 
-### `list_ordinal_categories(locale: 'str' = 'en_US') -> 'list[str]'`
+### `list_ordinal_categories(locale: str = 'en_US') -> list[str]`
 
 List the ordinal categories used by a locale.
 
@@ -2852,7 +2852,7 @@ Example:
     >>> list_ordinal_categories("en")
     ['one', 'two', 'few', 'other']
 
-### `list_plural_categories(locale: 'str' = 'en_US') -> 'list[str]'`
+### `list_plural_categories(locale: str = 'en_US') -> list[str]`
 
 List the plural categories used by a locale.
 
@@ -3014,7 +3014,7 @@ Args:
 Raises:
     PatternError: If the pattern is invalid.
 
-#### `find(text: str, start: int = 0) -> Optional[Dict[str, Any]]`
+#### `find(text: str, start: int = 0) -> dict[str, typing.Any] | None`
 
 Find first match in text.
 
@@ -3025,7 +3025,7 @@ Args:
 Returns:
     Match dict with text, start, end, and groups, or None if no match.
 
-#### `find_all(text: str) -> List[Dict[str, Any]]`
+#### `find_all(text: str) -> list[dict[str, typing.Any]]`
 
 Find all matches in text.
 
@@ -3035,7 +3035,7 @@ Args:
 Returns:
     List of match dictionaries.
 
-#### `iter_matches(text: str) -> Iterator[Dict[str, Any]]`
+#### `iter_matches(text: str) -> collections.abc.Iterator[dict[str, typing.Any]]`
 
 Iterate over matches.
 
@@ -3088,7 +3088,7 @@ Args:
 Returns:
     True if pattern found.
 
-#### `split(text: str, limit: int = -1) -> List[str]`
+#### `split(text: str, limit: int = -1) -> list[str]`
 
 Split text by pattern.
 
@@ -3106,28 +3106,28 @@ Check if the pattern is valid.
 Returns:
     True if pattern is valid.
 
-### `list_unicode_categories() -> List[Dict[str, str]]`
+### `list_unicode_categories() -> list[dict[str, str]]`
 
 List Unicode general categories with structured info.
 
 Returns:
     List of dicts with 'code' and 'description' keys.
 
-### `list_unicode_properties() -> List[Dict[str, Any]]`
+### `list_unicode_properties() -> list[dict[str, typing.Any]]`
 
 List Unicode properties with structured info for TSV/JSON output.
 
 Returns:
     List of dicts with 'category', 'pattern', and 'description' keys.
 
-### `list_unicode_scripts() -> List[Dict[str, str]]`
+### `list_unicode_scripts() -> list[dict[str, str]]`
 
 List Unicode scripts with structured info.
 
 Returns:
     List of dicts with 'name' and 'pattern' keys.
 
-### `regex_find(pattern: str, text: str, flags: int = 0) -> List[Dict[str, Any]]`
+### `regex_find(pattern: str, text: str, flags: int = 0) -> list[dict[str, typing.Any]]`
 
 Find all matches of pattern in text.
 
@@ -3153,7 +3153,7 @@ Args:
 Returns:
     Text with replacements.
 
-### `regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> List[str]`
+### `regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> list[str]`
 
 Split text by pattern.
 
@@ -3204,7 +3204,7 @@ Example:
         >>> info['containing_region']
         '021'  # Northern America
 
-### `get_contained_regions(code: str) -> List[str]`
+### `get_contained_regions(code: str) -> list[str]`
 
 Get regions directly contained by a region.
 
@@ -3219,7 +3219,7 @@ Example:
     >>> get_contained_regions('019')
     ['005', '013', '021', '029']  # South/Central/North America, Caribbean
 
-### `get_region_info(code: str, extended: bool = False) -> Optional[Dict[str, Any]]`
+### `get_region_info(code: str, extended: bool = False) -> dict[str, typing.Any] | None`
 
 Get information about a region.
 
@@ -3242,7 +3242,7 @@ Example:
     >>> 'contained_regions' in info['extended']
     True
 
-### `list_region_types() -> List[Dict[str, str]]`
+### `list_region_types() -> list[dict[str, str]]`
 
 List available region types.
 
@@ -3254,7 +3254,7 @@ Example:
     >>> types[0]
     {'type': 'continent', 'description': 'Continents (Africa, Americas, ...)'}
 
-### `list_regions(region_type: str = 'territory') -> List[str]`
+### `list_regions(region_type: str = 'territory') -> list[str]`
 
 List all regions of a given type.
 
@@ -3277,7 +3277,7 @@ Example:
     >>> len(continents)
     5
 
-### `list_regions_info(region_type: str = 'territory') -> List[Dict[str, Any]]`
+### `list_regions_info(region_type: str = 'territory') -> list[dict[str, typing.Any]]`
 
 List all regions with their info.
 
@@ -3360,7 +3360,7 @@ Example:
     >>> detect_script('مرحبا')
     'Arabic'
 
-### `detect_scripts(text: str) -> List[str]`
+### `detect_scripts(text: str) -> list[str]`
 
 Detect all scripts present in text.
 
@@ -3397,7 +3397,7 @@ Example:
     >>> get_char_script('你')
     'Han'
 
-### `get_script_info(script: str, extended: bool = False) -> Optional[Dict[str, Any]]`
+### `get_script_info(script: str, extended: bool = False) -> dict[str, typing.Any] | None`
 
 Get information about a script.
 
@@ -3467,7 +3467,7 @@ Example:
     >>> is_rtl('שלום')
     True
 
-### `list_scripts() -> List[str]`
+### `list_scripts() -> list[str]`
 
 List all available Unicode scripts.
 
@@ -3481,7 +3481,7 @@ Example:
     >>> 'Greek' in scripts
     True
 
-### `list_scripts_info() -> List[Dict[str, Any]]`
+### `list_scripts_info() -> list[dict[str, typing.Any]]`
 
 List all scripts with their properties.
 
@@ -3523,7 +3523,7 @@ Example:
     >>> searcher.contains("No coffee here")
     False
 
-#### `StringSearcher(pattern: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None)`
+#### `StringSearcher(pattern: str, locale: str = 'en_US', *, strength: str | None = None)`
 
 Create a reusable searcher for the given pattern.
 
@@ -3532,27 +3532,27 @@ Args:
     locale: Locale for collation rules.
     strength: Collation strength.
 
-#### `contains(text: 'str') -> 'bool'`
+#### `contains(text: str) -> bool`
 
 Check if the pattern exists in text.
 
-#### `count(text: 'str') -> 'int'`
+#### `count(text: str) -> int`
 
 Count matches of the pattern in text.
 
-#### `find_all(text: 'str') -> 'list[dict[str, Any]]'`
+#### `find_all(text: str) -> list[dict[str, typing.Any]]`
 
 Find all matches of the pattern in text.
 
-#### `find_first(text: 'str') -> 'dict[str, Any] | None'`
+#### `find_first(text: str) -> dict[str, typing.Any] | None`
 
 Find the first match of the pattern in text.
 
-#### `replace(text: 'str', replacement: 'str', count: 'int' = 0) -> 'str'`
+#### `replace(text: str, replacement: str, count: int = 0) -> str`
 
 Replace matches with replacement string.
 
-### `search_all(pattern: 'str', text: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None) -> 'list[dict[str, Any]]'`
+### `search_all(pattern: str, text: str, locale: str = 'en_US', *, strength: str | None = None) -> list[dict[str, typing.Any]]`
 
 Find all occurrences of pattern in text using locale-aware matching.
 
@@ -3574,7 +3574,7 @@ Example:
     >>> search_all("cafe", "The café and CAFE", "en_US", strength="primary")
     [{'start': 4, 'end': 8, 'text': 'café'}, {'start': 13, 'end': 17, 'text': 'CAFE'}]
 
-### `search_count(pattern: 'str', text: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None) -> 'int'`
+### `search_count(pattern: str, text: str, locale: str = 'en_US', *, strength: str | None = None) -> int`
 
 Count occurrences of pattern in text.
 
@@ -3591,7 +3591,7 @@ Example:
     >>> search_count("cafe", "café, Cafe, CAFE", strength="primary")
     3
 
-### `search_first(pattern: 'str', text: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None) -> 'dict[str, Any] | None'`
+### `search_first(pattern: str, text: str, locale: str = 'en_US', *, strength: str | None = None) -> dict[str, typing.Any] | None`
 
 Find the first occurrence of pattern in text.
 
@@ -3608,7 +3608,7 @@ Example:
     >>> search_first("café", "Visit the cafe today", strength="primary")
     {'start': 10, 'end': 14, 'text': 'cafe'}
 
-### `search_replace(pattern: 'str', text: 'str', replacement: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None, count: 'int' = 0) -> 'str'`
+### `search_replace(pattern: str, text: str, replacement: str, locale: str = 'en_US', *, strength: str | None = None, count: int = 0) -> str`
 
 Replace occurrences of pattern in text using locale-aware matching.
 
@@ -3810,7 +3810,7 @@ Example:
         >>> info['uses_dst']
         True
 
-### `get_equivalent_timezones(tz_id: str) -> List[str]`
+### `get_equivalent_timezones(tz_id: str) -> list[str]`
 
 Get equivalent timezone IDs for a timezone.
 
@@ -3825,7 +3825,7 @@ Example:
     >>> 'US/Eastern' in equivs
     True
 
-### `get_timezone_info(tz_id: str, extended: bool = False) -> Optional[Dict[str, Any]]`
+### `get_timezone_info(tz_id: str, extended: bool = False) -> dict[str, typing.Any] | None`
 
 Get information about a timezone.
 
@@ -3863,7 +3863,7 @@ Example:
     >>> get_timezone_offset('America/New_York')
     -5.0  # or -4.0 during DST
 
-### `list_timezones(country: Optional[str] = None) -> List[str]`
+### `list_timezones(country: str | None = None) -> list[str]`
 
 List all available timezone IDs.
 
@@ -3881,7 +3881,7 @@ Example:
     >>> 'America/New_York' in us_tzs
     True
 
-### `list_timezones_info(country: Optional[str] = None) -> List[Dict[str, Any]]`
+### `list_timezones_info(country: str | None = None) -> list[dict[str, typing.Any]]`
 
 List all timezones with their info.
 
@@ -3979,11 +3979,11 @@ Returns:
 Raises:
     TransliteratorError: If this transliterator has no inverse.
 
-#### `get_source_set() -> Set[str]`
+#### `get_source_set() -> set[str]`
 
 Get the set of characters this transliterator can convert.
 
-#### `get_target_set() -> Set[str]`
+#### `get_target_set() -> set[str]`
 
 Get the set of characters this transliterator can produce.
 
@@ -4014,14 +4014,14 @@ Returns:
         - elements: Number of sub-transliterators
         - max_context: Maximum context length needed
 
-### `list_transliterators() -> List[str]`
+### `list_transliterators() -> list[str]`
 
 Get list of all available transliterator IDs.
 
 Returns:
     Sorted list of transliterator ID strings.
 
-### `list_transliterators_info() -> List[dict]`
+### `list_transliterators_info() -> list[dict]`
 
 Get detailed info for all available transliterators.
 
@@ -4089,7 +4089,7 @@ Example:
         >>> get_char_category('5')
         'Nd'  # Number, decimal digit
 
-### `get_block_characters(block_name: str) -> List[str]`
+### `get_block_characters(block_name: str) -> list[str]`
 
 Get all characters in a specific Unicode block.
 
@@ -4102,7 +4102,7 @@ Returns:
 Raises:
     ValueError: If block name is invalid.
 
-### `get_category_characters(category_code: str) -> List[str]`
+### `get_category_characters(category_code: str) -> list[str]`
 
 Get all characters in a specific Unicode general category.
 
@@ -4143,7 +4143,7 @@ Example:
     >>> get_char_category('!')
     'Po'
 
-### `get_char_info(char: str) -> Dict[str, Any]`
+### `get_char_info(char: str) -> dict[str, typing.Any]`
 
 Get comprehensive information about a character.
 
@@ -4205,7 +4205,7 @@ Example:
     >>> is_normalized('café', 'NFD')
     False  # if 'é' is composed
 
-### `list_blocks() -> List[Dict[str, Any]]`
+### `list_blocks() -> list[dict[str, typing.Any]]`
 
 List all Unicode blocks.
 
@@ -4218,7 +4218,7 @@ Example:
     >>> basic_latin['range']
     'U+0000-U+007F'
 
-### `list_categories() -> List[Dict[str, str]]`
+### `list_categories() -> list[dict[str, str]]`
 
 List all Unicode general categories.
 

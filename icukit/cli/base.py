@@ -3,11 +3,12 @@
 import json
 import sys
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator, Optional, TextIO
+from collections.abc import Callable, Iterator
+from typing import Any, TextIO
 
 
 @contextmanager
-def open_output(output_path: Optional[str]) -> Iterator[TextIO]:
+def open_output(output_path: str | None) -> Iterator[TextIO]:
     """Open output file or return stdout."""
     if output_path:
         with open(output_path, "w") as f:

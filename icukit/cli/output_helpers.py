@@ -2,12 +2,12 @@
 
 import json
 import sys
-from typing import Any, Dict, List, Optional, TextIO
+from typing import Any, TextIO
 
 
 def print_simple_list(
-    items: List[str],
-    header: Optional[str] = None,
+    items: list[str],
+    header: str | None = None,
     output: TextIO = None,
     show_header: bool = True,
 ) -> None:
@@ -21,8 +21,8 @@ def print_simple_list(
 
 
 def print_tabular(
-    data: List[Dict[str, Any]],
-    columns: List[str],
+    data: list[dict[str, Any]],
+    columns: list[str],
     output: TextIO = None,
     show_header: bool = True,
 ) -> None:
@@ -36,7 +36,7 @@ def print_tabular(
         print("\t".join(values), file=output)
 
 
-def handle_list_output(items: List[Any], columns: List[str], output: TextIO, args: Any) -> None:
+def handle_list_output(items: list[Any], columns: list[str], output: TextIO, args: Any) -> None:
     """Standard list output handler."""
     if args.json:
         print(json.dumps(items, indent=2, ensure_ascii=False), file=output)

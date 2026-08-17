@@ -9,12 +9,12 @@ than from icukit to avoid circular imports.
 """
 
 import inspect
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import icukit
 
 
-def get_api_exports() -> List[str]:
+def get_api_exports() -> list[str]:
     """Get all exported API functions and classes.
 
     Returns:
@@ -23,7 +23,7 @@ def get_api_exports() -> List[str]:
     return list(getattr(icukit, "__all__", []))
 
 
-def get_api_info(name: str) -> Optional[Dict[str, Any]]:
+def get_api_info(name: str) -> dict[str, Any] | None:
     """Get information about an API export.
 
     Args:
@@ -48,7 +48,7 @@ def get_api_info(name: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_cli_commands() -> Dict[str, Dict[str, Any]]:
+def get_cli_commands() -> dict[str, dict[str, Any]]:
     """Get available CLI commands with their details.
 
     Returns:
@@ -67,7 +67,7 @@ def get_cli_commands() -> Dict[str, Dict[str, Any]]:
     }
 
 
-def discover_features() -> Dict[str, Any]:
+def discover_features() -> dict[str, Any]:
     """Discover all available features in icukit.
 
     Returns:
@@ -90,7 +90,7 @@ def discover_features() -> Dict[str, Any]:
     }
 
 
-def search_features(query: str) -> Dict[str, List[str]]:
+def search_features(query: str) -> dict[str, list[str]]:
     """Search for features matching a query.
 
     Args:

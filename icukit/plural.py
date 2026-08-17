@@ -30,8 +30,6 @@ Example:
     ['zero', 'one', 'two', 'few', 'many', 'other']
 """
 
-from __future__ import annotations
-
 import icu
 
 from .errors import PluralError

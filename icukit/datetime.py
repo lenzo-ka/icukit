@@ -39,8 +39,6 @@ Example:
     15. Januar 2024 um 15:45:30 MEZ
 """
 
-from __future__ import annotations
-
 from datetime import date, datetime, time, timedelta
 
 import icu

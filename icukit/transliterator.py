@@ -19,7 +19,6 @@ Common Transliterators:
     * Specialized: Any-Publishing (ASCII-safe), Any-Accents (remove accents)
 """
 
-from typing import List, Set
 
 import icu
 
@@ -107,12 +106,12 @@ class Transliterator:
         """
         return self._trans.transliterate(text)
 
-    def get_source_set(self) -> Set[str]:
+    def get_source_set(self) -> set[str]:
         """Get the set of characters this transliterator can convert."""
         uset = self._trans.getSourceSet()
         return set(icu.UnicodeSet(uset))
 
-    def get_target_set(self) -> Set[str]:
+    def get_target_set(self) -> set[str]:
         """Get the set of characters this transliterator can produce."""
         uset = self._trans.getTargetSet()
         return set(icu.UnicodeSet(uset))
@@ -211,7 +210,7 @@ def transliterate(text: str, transliterator_id: str, reverse: bool = False) -> s
     return trans.transliterate(text)
 
 
-def list_transliterators() -> List[str]:
+def list_transliterators() -> list[str]:
     """Get list of all available transliterator IDs.
 
     Returns:
@@ -271,7 +270,7 @@ def get_transliterator_info(transliterator_id: str) -> dict:
     return info
 
 
-def list_transliterators_info() -> List[dict]:
+def list_transliterators_info() -> list[dict]:
     """Get detailed info for all available transliterators.
 
     Returns:

@@ -1,14 +1,13 @@
 """Utilities for handling locale and multi-value parsing."""
 
 import re
-from typing import List, Optional
 
 import icu
 
 from ..script import _MAX_SCRIPT_CODE
 
 
-def _get_major_scripts() -> List[str]:
+def _get_major_scripts() -> list[str]:
     """Get major scripts from ICU based on RECOMMENDED usage."""
     major = []
     for i in range(_MAX_SCRIPT_CODE):
@@ -31,8 +30,8 @@ MAJOR_SCRIPTS = _get_major_scripts()
 def parse_multi_value(
     value: str,
     value_type: str = "locale",
-    available_values: Optional[List[str]] = None,
-) -> List[str]:
+    available_values: list[str] | None = None,
+) -> list[str]:
     """Parse a multi-value argument supporting comma-separated values and regex patterns.
 
     Args:

@@ -35,7 +35,7 @@ Example:
         '021'  # Northern America
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import icu
 from icu import URegionType
@@ -51,7 +51,7 @@ _REGION_TYPES = {
 }
 
 
-def list_regions(region_type: str = "territory") -> List[str]:
+def list_regions(region_type: str = "territory") -> list[str]:
     """List all regions of a given type.
 
     Args:
@@ -82,7 +82,7 @@ def list_regions(region_type: str = "territory") -> List[str]:
     return sorted(list(regions))
 
 
-def list_regions_info(region_type: str = "territory") -> List[Dict[str, Any]]:
+def list_regions_info(region_type: str = "territory") -> list[dict[str, Any]]:
     """List all regions with their info.
 
     Args:
@@ -101,7 +101,7 @@ def list_regions_info(region_type: str = "territory") -> List[Dict[str, Any]]:
     return [get_region_info(code) for code in codes]
 
 
-def get_region_info(code: str, extended: bool = False) -> Optional[Dict[str, Any]]:
+def get_region_info(code: str, extended: bool = False) -> dict[str, Any] | None:
     """Get information about a region.
 
     Args:
@@ -160,7 +160,7 @@ def get_region_info(code: str, extended: bool = False) -> Optional[Dict[str, Any
         return None
 
 
-def get_contained_regions(code: str) -> List[str]:
+def get_contained_regions(code: str) -> list[str]:
     """Get regions directly contained by a region.
 
     Args:
@@ -202,7 +202,7 @@ def _get_region_display_name(code: str, display_locale: str = "en") -> str:
         return code
 
 
-def list_region_types() -> List[Dict[str, str]]:
+def list_region_types() -> list[dict[str, str]]:
     """List available region types.
 
     Returns:

@@ -27,8 +27,6 @@ Example:
     '3500'  # Japanese uses 万 (10000) not K (1000)
 """
 
-from __future__ import annotations
-
 # Import from locale.py where the core function lives
 from .locale import COMPACT_LONG, COMPACT_SHORT, format_compact
 

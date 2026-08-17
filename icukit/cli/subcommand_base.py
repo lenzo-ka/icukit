@@ -2,7 +2,6 @@
 
 import sys
 from functools import wraps
-from typing import Dict
 
 from ..formatters import print_output
 from .command_trie import CommandTrie
@@ -180,7 +179,7 @@ class SubcommandBase:
             return sys.stdin.read()
 
     @classmethod
-    def create_subcommand_parser(cls, parser, subcommands: Dict[str, Dict]):
+    def create_subcommand_parser(cls, parser, subcommands: dict[str, dict]):
         """Helper to create subcommand structure with prefix matching.
 
         Args:
