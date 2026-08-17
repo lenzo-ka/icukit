@@ -462,9 +462,12 @@ Example:
 
 Text segmentation using a custom ICU RBBI rule set.
 
+Span types are fully caller-defined through ``status_types``. RuleBreaker
+makes no assumptions about ICU's standard word-status meanings.
+
 #### `RuleBreaker(rules: 'str', status_types: 'dict[int, str] | None' = None)`
 
-Compile a custom rule set once for subsequent segmentation.
+Validate a custom rule set for subsequent segmentation.
 
 Args:
     rules: ICU RuleBasedBreakIterator rule source.
@@ -568,7 +571,11 @@ Example:
 
 Return the standard ICU rules to use as a tailoring base.
 
-This is the base rule set to extend with custom exception rules.
+This is a starting point for extending a rule set with custom exceptions.
+Locale dictionary and keyword behavior (for example, CJK dictionary
+breaking or ``lw=`` line-breaking options) is not represented in the rule
+text, so a :class:`RuleBreaker` compiled from the result is not necessarily
+a behavior-faithful clone of the locale iterator.
 
 Args:
     kind: Iterator kind: ``word``, ``sentence``, ``line``, or ``grapheme``.
@@ -578,7 +585,8 @@ Returns:
     The ICU rule source for the requested standard iterator.
 
 Raises:
-    BreakerError: If the kind is unsupported or ICU cannot load the rules.
+    BreakerError: If the kind is unsupported, ICU cannot load the rules, or
+        the locale factory returns an iterator without extractable rules.
 
 ## icukit.calendar
 
