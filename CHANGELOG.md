@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- Typed segmentation spans: `break_word_spans`, `break_sentence_spans`,
+  `break_line_spans`, `break_grapheme_spans` (and `Breaker.iter_*_spans`) return
+  `BreakSpan` dicts with code-point `start`/`end`, ICU rule-status-derived `types`,
+  the raw `statuses` vector, and, on the line tier, `break_type`
+  (`"mandatory"`/`"optional"`).
+- `RuleBreaker` and `default_rules`: segment text with a custom ICU
+  `RuleBasedBreakIterator` rule set, mapping in-rule status tags to type names;
+  `default_rules(kind, locale)` returns the standard rules as a base to extend.
+
+### Fixed
+
+- Text segmentation returned UTF-16 code-unit offsets sliced as Python code points,
+  corrupting every token after an astral character (all four `break_*` iterators).
+  Boundaries are now code-point indices, and the iterators hold the `UnicodeString`
+  passed to ICU. **Output for text containing astral characters changes and is not
+  backward compatible.**
+- `tokenize_sentences` segments over the whole text instead of re-segmenting each
+  sentence substring, so a word is no longer split across a sentence boundary.
+- `regex` and `search` reported UTF-16 match offsets that were used as Python
+  string indices, corrupting `search_replace`/`regex_split` output on text with
+  astral characters; offsets are now code points.
+
+### Changed
+
+- Require Python 3.11 or newer.
+
 ## 0.2.0
 
 ### Fixed
