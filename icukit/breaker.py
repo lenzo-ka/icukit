@@ -294,9 +294,31 @@ class Breaker:
             >>> breaker.tokenize_sentences('Hello world. How are you?')
             [['Hello', 'world', '.'], ['How', 'are', 'you', '?']]
         """
+        try:
+            sent_bi = icu.BreakIterator.createSentenceInstance(self._locale_obj)
+            sentences = list(self._iter_spans(sent_bi, text))
+        except icu.ICUError as e:
+            raise BreakerError(f"Failed to break sentences: {e}") from e
+
+        try:
+            word_bi = icu.BreakIterator.createWordInstance(self._locale_obj)
+            words = list(self._iter_spans(word_bi, text))
+        except icu.ICUError as e:
+            raise BreakerError(f"Failed to break words: {e}") from e
+
         result = []
-        for sentence in self.iter_sentences(text):
-            tokens = self.break_words(sentence, skip_whitespace, skip_punctuation)
+        wi = 0
+        for _sentence_start, sentence_end in sentences:
+            tokens = []
+            while wi < len(words) and words[wi][0] < sentence_end:
+                word_start, word_end = words[wi]
+                wi += 1
+                word = text[word_start:word_end]
+                if skip_whitespace and word.isspace():
+                    continue
+                if skip_punctuation and _is_punctuation(word):
+                    continue
+                tokens.append(word)
             if tokens:
                 result.append(tokens)
         return result

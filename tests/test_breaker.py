@@ -251,3 +251,28 @@ class TestAstralOffsets:
         segments = break_lines("\U0001F44D Fig 5 holds", "en")
         assert "".join(segments) == "\U0001F44D Fig 5 holds"
         assert segments[0] == "\U0001F44D "
+
+
+class TestTokenizeWholeText:
+    """F3: tokenize_sentences must segment words over the whole text, not
+    re-segment each sentence substring. Re-segmenting loses left context and,
+    once F1's shift mis-cuts a sentence substring, splits a word across the
+    sentence edge. Non-astral text has no visible symptom (the offsets that go
+    wrong are not exposed until extents land, F4); the astral case witnesses it.
+    """
+
+    def test_word_not_split_across_sentence_boundary(self):
+        # buggy output split "It" into "I" (sentence 1) and "t" (sentence 2)
+        b = Breaker("en")
+        toks = b.tokenize_sentences("\U0001F44D Fig. 5 holds. It works.")
+        assert len(toks) == 2
+        flat = [t for sentence in toks for t in sentence]
+        assert "It" in flat
+        assert all(t for t in flat), "no empty tokens"
+        assert "It" in toks[1]
+
+    def test_tokenize_matches_whole_text_segmentation(self):
+        b = Breaker("en")
+        text = "\U0001F44D Fig. 5 holds. It works."
+        flat = [t for sentence in b.tokenize_sentences(text) for t in sentence]
+        assert flat == b.break_words(text)
