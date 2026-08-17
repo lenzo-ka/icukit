@@ -71,10 +71,15 @@ from .breaker import (
     BREAK_LINE,
     BREAK_SENTENCE,
     BREAK_WORD,
+    BreakSpan,
     Breaker,
+    break_grapheme_spans,
     break_graphemes,
+    break_line_spans,
     break_lines,
+    break_sentence_spans,
     break_sentences,
+    break_word_spans,
     break_words,
 )
 from .calendar import get_calendar_info, is_valid_calendar, list_calendars, list_calendars_info

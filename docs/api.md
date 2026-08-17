@@ -253,6 +253,7 @@ Text segmentation using ICU BreakIterator.
 
 This module provides text segmentation capabilities for breaking text into
 sentences, words, lines, or grapheme clusters using ICU's BreakIterator.
+Structured span offsets are Python code-point indices into the source text.
 
 Key Features:
     * Locale-aware sentence segmentation
@@ -267,6 +268,13 @@ Example:
     ['Hello world. ', 'How are you?']
     >>> break_words('Hello, world!', 'en', skip_punctuation=True)
     ['Hello', 'world']
+
+### class `BreakSpan`
+
+A segment with code-point offsets into its source text.
+
+``break_type``, present only for line spans, describes the break at the
+span's end boundary.
 
 ### class `Breaker`
 
@@ -292,6 +300,10 @@ Args:
 Raises:
     BreakerError: If the locale is invalid.
 
+#### `break_grapheme_spans(text: 'str') -> 'list[BreakSpan]'`
+
+Return every grapheme cluster as a structured span.
+
 #### `break_graphemes(text: 'str') -> 'list[str]'`
 
 Break text into grapheme clusters (user-perceived characters).
@@ -307,7 +319,11 @@ Returns:
 Example:
     >>> breaker = Breaker('en')
     >>> breaker.break_graphemes('e\u0301')  # e + combining accent
-    ['é']
+    ['é']
+
+#### `break_line_spans(text: 'str') -> 'list[BreakSpan]'`
+
+Return every line-break segment as a structured span.
 
 #### `break_lines(text: 'str') -> 'list[str]'`
 
@@ -320,6 +336,10 @@ Args:
 
 Returns:
     List of segments at line break boundaries.
+
+#### `break_sentence_spans(text: 'str') -> 'list[BreakSpan]'`
+
+Return every sentence segment as a structured span.
 
 #### `break_sentences(text: 'str', skip_empty: 'bool' = True) -> 'list[str]'`
 
@@ -336,6 +356,10 @@ Example:
     >>> breaker = Breaker('en')
     >>> breaker.break_sentences('Hello world. How are you?')
     ['Hello world. ', 'How are you?']
+
+#### `break_word_spans(text: 'str') -> 'list[BreakSpan]'`
+
+Return every word segment as a structured span.
 
 #### `break_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 
@@ -356,6 +380,10 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
+#### `iter_grapheme_spans(text: 'str') -> 'Iterator[BreakSpan]'`
+
+Yield every grapheme cluster with code-point offsets.
+
 #### `iter_graphemes(text: 'str') -> 'Iterator[str]'`
 
 Iterate over grapheme clusters.
@@ -366,6 +394,10 @@ Args:
 Yields:
     Individual grapheme clusters.
 
+#### `iter_line_spans(text: 'str') -> 'Iterator[BreakSpan]'`
+
+Yield line segments; break type describes each end boundary.
+
 #### `iter_lines(text: 'str') -> 'Iterator[str]'`
 
 Iterate over line break segments.
@@ -375,6 +407,10 @@ Args:
 
 Yields:
     Segments at line break boundaries.
+
+#### `iter_sentence_spans(text: 'str') -> 'Iterator[BreakSpan]'`
+
+Yield every sentence segment with code-point offsets.
 
 #### `iter_sentences(text: 'str', skip_empty: 'bool' = True) -> 'Iterator[str]'`
 
@@ -388,6 +424,10 @@ Args:
 
 Yields:
     Individual sentence strings.
+
+#### `iter_word_spans(text: 'str') -> 'Iterator[BreakSpan]'`
+
+Yield every word segment with code-point offsets and ICU status.
 
 #### `iter_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'Iterator[str]'`
 
@@ -418,6 +458,10 @@ Example:
     >>> breaker.tokenize_sentences('Hello world. How are you?')
     [['Hello', 'world', '.'], ['How', 'are', 'you', '?']]
 
+### `break_grapheme_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+
+Return every grapheme cluster with code-point offsets.
+
 ### `break_graphemes(text: 'str', locale: 'str' = 'en_US') -> 'list[str]'`
 
 Break text into grapheme clusters.
@@ -433,6 +477,10 @@ Example:
     >>> break_graphemes('👨‍👩‍👧‍👦')  # Family emoji
     ['👨‍👩‍👧‍👦']
 
+### `break_line_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+
+Return line segments whose break type describes their end boundary.
+
 ### `break_lines(text: 'str', locale: 'str' = 'en_US') -> 'list[str]'`
 
 Find line break opportunities in text.
@@ -443,6 +491,10 @@ Args:
 
 Returns:
     List of segments at line break boundaries.
+
+### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+
+Return every sentence segment with code-point offsets.
 
 ### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True) -> 'list[str]'`
 
@@ -461,6 +513,10 @@ Returns:
 Example:
     >>> break_sentences('Hello. World.', 'en')
     ['Hello. ', 'World.']
+
+### `break_word_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+
+Return every word segment with code-point offsets and ICU status.
 
 ### `break_words(text: 'str', locale: 'str' = 'en_US', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 
