@@ -1648,6 +1648,122 @@ Example:
     >>> parse_iso_duration("PT1H30M15S")
     {'years': 0, 'months': 0, 'weeks': 0, 'days': 0, 'hours': 1, 'minutes': 30, 'seconds': 15}
 
+## icukit.exceptions
+
+Corpus exception rules for ICU text segmentation.
+
+The persisted objects in this module are deliberately JSON-shaped ``TypedDict``
+records.  Loading validates and compiles all records transactionally; applications
+only ever see the immutable compiled inventory.
+
+### class `ExceptionInventory`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `ExceptionRule`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `LoadedExceptionInventory`
+
+An immutable, validated exception inventory.
+
+#### `LoadedExceptionInventory(corpus: 'str', named_lists: 'dict[str, tuple[str, ...]]', _rules: 'tuple[_CompiledRule, ...]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `apply(text: 'str', level: 'Level', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+
+Alias for :meth:`break_spans`.
+
+#### `break_spans(text: 'str', level: 'Level', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+
+Segment ``text`` and apply all matching suppression/retype rules.
+
+### class `NamedListCondition`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `Provenance`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `SkipSpec`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `UnicodeSetCondition`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `Witnesses`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### `load_exception_inventory(inventory: 'ExceptionInventory') -> 'LoadedExceptionInventory'`
+
+Validate, compile, witness-test, and atomically publish an inventory.
+
+### `merge_retypes(text: 'str', base_spans: 'list[BreakSpan]', detections: 'list[Detection]') -> 'list[BreakSpan]'`
+
+Retype owning spans by containment; never split, replace, or coalesce them.
+
 ## icukit.idna
 
 Internationalized Domain Name (IDNA) encoding and decoding.
@@ -4490,6 +4606,18 @@ Error related to display name operations.
 
 Error related to duration formatting operations.
 
+### class `ExceptionConflictError`
+
+Incompatible exception effects target the same runtime span.
+
+### class `ExceptionLoadError`
+
+Transactional exception-inventory load failure.
+
+#### `ExceptionLoadError(refusals: 'list[RuleRefusal]')`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `FormatError`
 
 Error related to formatting operations.
@@ -4537,6 +4665,18 @@ Error related to plural rules operations.
 ### class `RegionError`
 
 Error related to region operations.
+
+### class `RuleLoadError`
+
+Base class for exception-rule load failures.
+
+### class `RuleRefusal`
+
+One stable, machine-readable exception-rule refusal.
+
+#### `RuleRefusal(rule_id: 'str', reason: 'str', detail: 'str' = '') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `ScriptError`
 
