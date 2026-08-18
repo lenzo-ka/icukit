@@ -118,6 +118,7 @@ from .datetime import (
     get_weekday_names,
     parse_datetime,
 )
+from .detect import Detection, collation_detect, regex_detect
 from .displayname import (
     DisplayNames,
     get_currency_name,
@@ -475,6 +476,10 @@ __all__ = [
     "search_count",
     "search_replace",
     "StringSearcher",
+    # Detectors (typed-span seam)
+    "Detection",
+    "regex_detect",
+    "collation_detect",
     # Spoof/Confusables
     "are_confusable",
     "get_confusable_type",
