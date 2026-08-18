@@ -1,0 +1,1268 @@
+{
+  "format_version": "5",
+  "graph": {
+    "attribute_declarations": [
+      {
+        "domain": "item",
+        "name": {
+          "local_name": "surface",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "value_type": "string"
+      }
+    ],
+    "attributes": [],
+    "namespaces": [
+      {
+        "namespace": "urn:tiergraph:profile:text:icu:v1",
+        "prefix": "text"
+      }
+    ],
+    "position_values": [],
+    "relation_declarations": [
+      {
+        "acyclic": true,
+        "attributes": [],
+        "kind": "bipartite",
+        "left_endpoint": "item",
+        "left_type": {
+          "local_name": "atom",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "name": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "right_endpoint": "item",
+        "right_type": {
+          "local_name": "formatted-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "single_parent": false
+      },
+      {
+        "acyclic": true,
+        "attributes": [],
+        "kind": "bipartite",
+        "left_endpoint": "item",
+        "left_type": {
+          "local_name": "atom",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "name": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "right_endpoint": "item",
+        "right_type": {
+          "local_name": "sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "single_parent": false
+      },
+      {
+        "acyclic": true,
+        "attributes": [],
+        "kind": "bipartite",
+        "left_endpoint": "item",
+        "left_type": {
+          "local_name": "atom",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "name": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "right_endpoint": "item",
+        "right_type": {
+          "local_name": "word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "single_parent": false
+      },
+      {
+        "attributes": [],
+        "item_type": {
+          "local_name": "atom",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "kind": "simple",
+        "name": {
+          "local_name": "type-atom",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "tier": {
+          "local_name": "atom",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        }
+      },
+      {
+        "attributes": [],
+        "item_type": {
+          "local_name": "formatted-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "kind": "simple",
+        "name": {
+          "local_name": "type-formatted-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "tier": {
+          "local_name": "formatted-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        }
+      },
+      {
+        "attributes": [],
+        "item_type": {
+          "local_name": "sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "kind": "simple",
+        "name": {
+          "local_name": "type-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "tier": {
+          "local_name": "sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        }
+      },
+      {
+        "attributes": [],
+        "item_type": {
+          "local_name": "word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "kind": "simple",
+        "name": {
+          "local_name": "type-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "tier": {
+          "local_name": "word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        }
+      }
+    ],
+    "relations": [
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 0,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 1,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 2,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 3,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 4,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 5,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 6,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 7,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 8,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 9,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 10,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 11,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 12,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 13,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-sentence",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 14,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 0,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 1,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 2,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 3,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 4,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 1,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 5,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 2,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 6,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 3,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 7,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 4,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 8,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 5,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 9,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 6,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 10,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 6,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 11,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 6,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 12,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 6,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 13,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 6,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-word-break",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 14,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 6,
+          "tier": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 5,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 6,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 7,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 8,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 9,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 10,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 11,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "local_name": "atom-in-date",
+          "namespace": "urn:tiergraph:profile:text:icu:v1"
+        },
+        "durable_id": null,
+        "left": {
+          "index": 12,
+          "tier": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "right": {
+          "index": 0,
+          "tier": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        }
+      }
+    ],
+    "tiers": [
+      {
+        "attributes": [],
+        "declaration": {
+          "long_name": "Grapheme-cluster atoms",
+          "name": {
+            "local_name": "atom",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "items": [
+          {
+            "attributes": [
+              {
+                "lexical": "M",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "e",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "e",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "t",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": " ",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "1",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "/",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "3",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "/",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "2",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "0",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "2",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "6",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "p",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          },
+          {
+            "attributes": [
+              {
+                "lexical": "m",
+                "name": {
+                  "local_name": "surface",
+                  "namespace": "urn:tiergraph:profile:text:icu:v1"
+                },
+                "value_type": "string"
+              }
+            ],
+            "durable_id": null
+          }
+        ]
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "long_name": "ICU sentence spans",
+          "name": {
+            "local_name": "sentence",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "items": [
+          {
+            "attributes": [],
+            "durable_id": null
+          }
+        ]
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "long_name": "ICU word-break spans",
+          "name": {
+            "local_name": "word-break",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "items": [
+          {
+            "attributes": [],
+            "durable_id": null
+          },
+          {
+            "attributes": [],
+            "durable_id": null
+          },
+          {
+            "attributes": [],
+            "durable_id": null
+          },
+          {
+            "attributes": [],
+            "durable_id": null
+          },
+          {
+            "attributes": [],
+            "durable_id": null
+          },
+          {
+            "attributes": [],
+            "durable_id": null
+          },
+          {
+            "attributes": [],
+            "durable_id": null
+          }
+        ]
+      },
+      {
+        "attributes": [],
+        "declaration": {
+          "long_name": "Detected formatted dates",
+          "name": {
+            "local_name": "formatted-date",
+            "namespace": "urn:tiergraph:profile:text:icu:v1"
+          }
+        },
+        "items": [
+          {
+            "attributes": [],
+            "durable_id": null
+          }
+        ]
+      }
+    ]
+  }
+}
