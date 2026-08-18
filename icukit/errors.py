@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 
 class ICUKitError(Exception):
     """Base exception for all icukit errors."""
@@ -149,5 +151,46 @@ class IDNAError(ICUKitError):
 
 class AlphaIndexError(ICUKitError):
     """Error related to alphabetic index operations."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class RuleRefusal:
+    """One stable, machine-readable exception-rule refusal."""
+
+    rule_id: str
+    reason: str
+    detail: str = ""
+
+    @property
+    def code(self) -> str:
+        """Alias emphasizing that ``reason`` is a stable machine code."""
+        return self.reason
+
+
+class RuleLoadError(ICUKitError):
+    """Base class for exception-rule load failures."""
+
+    pass
+
+
+class ExceptionLoadError(RuleLoadError):
+    """Transactional exception-inventory load failure."""
+
+    def __init__(self, refusals: list[RuleRefusal]):
+        self.refusals = tuple(refusals)
+        self.errors = self.refusals
+        summary = "; ".join(f"{item.rule_id}: {item.reason}" for item in refusals)
+        super().__init__(summary)
+
+    @property
+    def reason_codes(self) -> tuple[str, ...]:
+        """All refusal reason codes, in validation order."""
+        return tuple(item.reason for item in self.refusals)
+
+
+class ExceptionConflictError(ICUKitError):
+    """Incompatible exception effects target the same runtime span."""
 
     pass
