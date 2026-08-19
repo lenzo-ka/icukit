@@ -8,6 +8,8 @@ those candidates unchanged.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import icu
 
 from .breaker import break_grapheme_spans
@@ -20,7 +22,12 @@ from .detectors import (
     ValueDetection,
 )
 
-__all__ = ["FlexibleDateDetector", "FlexibleNumberDetector"]
+__all__ = [
+    "FlexibleCurrencyDetector",
+    "FlexibleDateDetector",
+    "FlexibleNumberDetector",
+    "FlexiblePercentDetector",
+]
 
 
 class FlexibleDateDetector:
@@ -284,3 +291,111 @@ class FlexibleNumberDetector:
             )
             cursor = end
         return detections
+
+
+class FlexiblePercentDetector:
+    """Recognize flexible numbers followed by the locale's percent symbol."""
+
+    group = "number"
+    type = "number:percent"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._number = FlexibleNumberDetector(locale)
+        number_format = icu.NumberFormat.createPercentInstance(icu.Locale(locale))
+        symbols = number_format.getDecimalFormatSymbols()
+        self._percent = symbols.getSymbol(icu.DecimalFormatSymbols.kPercentSymbol)
+        self._spec = NumberFormatSpec(locale, "percent")
+
+    def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        match = self._number._match(text, start)
+        if match is None:
+            return None
+        cursor, captures, value = match
+        if cursor < len(text) and text[cursor] in {" ", "\N{NO-BREAK SPACE}"}:
+            cursor += 1
+        if not text.startswith(self._percent, cursor):
+            return None
+        end = cursor + len(self._percent)
+        percent = Capture("percent", cursor, end, self._percent, None, "symbol")
+        ratio = str(Decimal(value.decimal) / 100)
+        all_captures = tuple(sorted((*captures, percent), key=lambda capture: capture.start))
+        return end, all_captures, NumberValue(ratio)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping flexible percent candidates in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+class FlexibleCurrencyDetector:
+    """Recognize a locale currency symbol before or after a flexible number."""
+
+    group = "number"
+
+    def __init__(self, locale: str, currency: str) -> None:
+        self.locale = locale
+        self.currency = currency
+        self.type = f"number:currency:{currency}"
+        self._number = FlexibleNumberDetector(locale)
+        number_format = icu.NumberFormat.createCurrencyInstance(icu.Locale(locale))
+        number_format.setCurrency(currency)
+        symbols = number_format.getDecimalFormatSymbols()
+        self._currency = symbols.getSymbol(icu.DecimalFormatSymbols.kCurrencySymbol)
+        self._spec = NumberFormatSpec(locale, "currency", currency=currency)
+
+    @staticmethod
+    def _space(text: str, cursor: int) -> int:
+        if cursor < len(text) and text[cursor] in {" ", "\N{NO-BREAK SPACE}"}:
+            return cursor + 1
+        return cursor
+
+    def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        if text.startswith(self._currency, start):
+            symbol_end = start + len(self._currency)
+            number_start = self._space(text, symbol_end)
+            match = self._number._match(text, number_start)
+            if match is not None:
+                end, captures, value = match
+                currency = Capture("currency", start, symbol_end, self._currency, None, "symbol")
+                return end, (currency, *captures), NumberValue(value.decimal, self.currency)
+
+        match = self._number._match(text, start)
+        if match is None:
+            return None
+        number_end, captures, value = match
+        symbol_start = self._space(text, number_end)
+        if not text.startswith(self._currency, symbol_start):
+            return None
+        end = symbol_start + len(self._currency)
+        currency = Capture("currency", symbol_start, end, self._currency, None, "symbol")
+        return end, (*captures, currency), NumberValue(value.decimal, self.currency)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping flexible currency candidates in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+def _detect_flexible(text, locale, type_label, spec, match):
+    starts = sorted({span["start"] for span in break_grapheme_spans(text, locale)})
+    detections: list[ValueDetection] = []
+    cursor = 0
+    for start in starts:
+        if start < cursor:
+            continue
+        result = match(text, start)
+        if result is None:
+            continue
+        end, captures, value = result
+        detections.append(
+            ValueDetection(
+                text=text[start:end],
+                start=start,
+                end=end,
+                type=type_label,
+                value=value,
+                captures=captures,
+                spec=spec,
+            )
+        )
+        cursor = end
+    return detections

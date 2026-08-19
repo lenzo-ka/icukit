@@ -2,8 +2,20 @@
 
 import pytest
 
-from icukit.detectors import DateDetector, Detector, NumberDetector, detect
-from icukit.recognize import FlexibleDateDetector, FlexibleNumberDetector
+from icukit.detectors import (
+    DateDetector,
+    Detector,
+    NumberDetector,
+    NumberFormatSpec,
+    NumberValue,
+    detect,
+)
+from icukit.recognize import (
+    FlexibleCurrencyDetector,
+    FlexibleDateDetector,
+    FlexibleNumberDetector,
+    FlexiblePercentDetector,
+)
 from icukit.resolve import resolve
 
 
@@ -72,6 +84,95 @@ def test_real_text_composes_with_detect_and_resolve():
 
     assert [detection["text"] for detection in detections] == ["2026", "1,234"]
     assert [detection["text"] for detection in resolution.best] == ["2026", "1,234"]
+
+
+@pytest.mark.parametrize("surface, decimal", [("7%", "0.07"), ("7 %", "0.07"), ("7.5%", "0.075")])
+def test_flexible_percent_gains_recall(surface, decimal):
+    if surface == "7 %":
+        assert NumberDetector("en_US", "percent").detect(surface) == []
+
+    detector = FlexiblePercentDetector("en_US")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert detection["value"].decimal == decimal
+    assert detection["value"].currency is None
+    assert detection["spec"] == NumberFormatSpec("en_US", "percent")
+    assert [capture.name for capture in detection["captures"]][-1] == "percent"
+
+
+@pytest.mark.parametrize(
+    "surface, decimal", [("$5", "5"), ("$1234", "1234"), ("$1,234.50", "1234.50")]
+)
+def test_flexible_currency_gains_recall(surface, decimal):
+    strict = NumberDetector("en_US", "currency", "USD").detect(surface)
+    if surface in {"$5", "$1234"}:
+        assert all(detection["text"] != surface for detection in strict)
+
+    detector = FlexibleCurrencyDetector("en_US", "USD")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert detection["value"] == NumberValue(decimal, "USD")
+    assert detection["spec"] == NumberFormatSpec("en_US", "currency", currency="USD")
+    assert detection["captures"][0].name == "currency"
+
+
+@pytest.mark.parametrize("surface", ["$5", "$ 5", "$\N{NO-BREAK SPACE}5"])
+def test_flexible_currency_accepts_optional_space_before_number(surface):
+    detection = FlexibleCurrencyDetector("en_US", "USD").detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue("5", "USD")
+
+
+@pytest.mark.parametrize("surface", ["5€", "5 €", "5\N{NO-BREAK SPACE}€"])
+def test_flexible_currency_accepts_symbol_after_number(surface):
+    detection = FlexibleCurrencyDetector("de_DE", "EUR").detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue("5", "EUR")
+    assert detection["captures"][-1].name == "currency"
+
+
+@pytest.mark.parametrize(
+    "detector, surface",
+    [
+        (FlexiblePercentDetector("en_US"), "%"),
+        (FlexiblePercentDetector("en_US"), "7"),
+        (FlexibleCurrencyDetector("en_US", "USD"), "$"),
+        (FlexibleCurrencyDetector("en_US", "USD"), "5"),
+    ],
+)
+def test_flexible_money_requires_both_number_and_symbol(detector, surface):
+    assert detector.detect(surface) == []
+
+
+def test_flexible_money_uses_code_point_offsets_with_astral_prefix():
+    text = "📌 7 % and $1,234.50"
+    percent = FlexiblePercentDetector("en_US").detect(text)[0]
+    currency = FlexibleCurrencyDetector("en_US", "USD").detect(text)[0]
+
+    assert (percent["start"], percent["end"], percent["text"]) == (2, 5, "7 %")
+    assert (currency["start"], currency["end"], currency["text"]) == (
+        10,
+        19,
+        "$1,234.50",
+    )
+    for detection in (percent, currency):
+        for capture in detection["captures"]:
+            assert text[capture.start : capture.end] == capture.text
+
+
+def test_flexible_money_composes_with_detect_and_resolve():
+    text = "about 7% of $1,234 spent"
+    detectors = [FlexiblePercentDetector("en_US"), FlexibleCurrencyDetector("en_US", "USD")]
+
+    detections = detect(text, detectors)
+    resolution = resolve(detections)
+
+    assert [detection["text"] for detection in detections] == ["7%", "$1,234"]
+    assert [detection["text"] for detection in resolution.best] == ["7%", "$1,234"]
 
 
 @pytest.mark.parametrize("surface", ["1/3/26", "01/03/26"])
