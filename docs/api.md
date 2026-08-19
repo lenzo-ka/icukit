@@ -857,6 +857,54 @@ Example:
     >>> fmt.format(1234567, style="LONG")
     '1.2 million'
 
+## icukit.conformance
+
+Round-trip conformance inventory for ICU-backed value detectors.
+
+### class `Cell`
+
+Cell(locale: 'str', category: 'str', params: 'str', value: 'str', envelope: 'str', currency: 'str | None' = None)
+
+#### `Cell(locale: 'str', category: 'str', params: 'str', value: 'str', envelope: 'str', currency: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `Outcome`
+
+Outcome(reason: 'str', detail: 'str' = '', surface: 'str' = '')
+
+#### `Outcome(reason: 'str', detail: 'str' = '', surface: 'str' = '') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `build_inventory(profile: 'Profile' = 'ci') -> 'dict'`
+
+Build the stable, JSON-compatible defect inventory for ``profile``.
+
+### `canonical_json(value: 'dict') -> 'str'`
+
+Serialize an inventory in its committed canonical representation.
+
+### `classify(cell: 'Cell') -> 'Outcome'`
+
+Format, detect, and classify one matrix cell.
+
+### `compare_expected(detection, text: 'str', expected_value: 'DateTimeValue | NumberValue', expected_captures: 'tuple[Capture, ...]', expected_spec: 'DateFormatSpec | NumberFormatSpec', surface: 'str') -> 'Outcome'`
+
+Compare a detection with a complete independently constructed oracle record.
+
+### `iter_cells(profile: 'Profile' = 'ci') -> 'list[Cell]'`
+
+
+
+### `matrix(profile: 'Profile' = 'ci') -> 'dict'`
+
+Return the data definition for a conformance profile.
+
+### `matrix_digest(profile: 'Profile' = 'ci') -> 'str'`
+
+
+
 ## icukit.datetime
 
 Locale-aware date and time formatting.
