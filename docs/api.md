@@ -3456,6 +3456,18 @@ Recognizers are the recall-oriented counterpart to the strict detectors in
 surface to equal ICU's canonical formatting; the existing resolver can then select among
 those candidates unchanged.
 
+### class `FlexibleCurrencyDetector`
+
+Recognize a locale currency symbol before or after a flexible number.
+
+#### `FlexibleCurrencyDetector(locale: 'str', currency: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible currency candidates in source order.
+
 ### class `FlexibleDateDetector`
 
 Recognize flexible numeric dates using a locale's CLDR short-date structure.
@@ -3483,6 +3495,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible decimal candidates in source order.
+
+### class `FlexiblePercentDetector`
+
+Recognize flexible numbers followed by the locale's percent symbol.
+
+#### `FlexiblePercentDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible percent candidates in source order.
 
 ## icukit.regex
 
