@@ -3869,6 +3869,54 @@ Example:
     >>> us['numeric_code']
     840
 
+## icukit.resolve
+
+Resolve a universe of overlapping detections into a best non-overlapping sequence.
+
+See ``design/H4-resolution/design.md``. The detectors DEPOSIT every candidate they find --
+running them on ``1/3/2026`` yields a ``date:yMd`` over the whole span alongside the digit
+fragments ``1``, ``3``, ``26``. This module weighs that universe into the maximum-weight
+non-overlapping cover (1-best), or an ordering of covers that collapses to 1-best.
+
+The weight is span length times specificity: a longer coherent match is far less likely to
+be coincidental, and a match that commits to more structure (more captures) and still fits is
+stronger evidence. The two axes usually agree; where they diverge the scalar weight forces the
+call. Preference is soft -- when the top two covers are within a margin the resolver reports
+the contest as ambiguous rather than guessing.
+
+This is additive: :func:`~icukit.detectors.detect` is unchanged; resolution is an opt-in layer.
+
+### class `Resolution`
+
+The weighed reading of a universe of detections.
+
+``best`` is the maximum-weight non-overlapping sequence in source order. ``covers`` is the
+n-best ordering of covers by descending score, with ``covers[0] == best``. ``margin`` is the
+score gap between the top two covers; ``ambiguous`` is true when that gap is below the
+refusal threshold, meaning the resolver declines to commit between them.
+
+#### `Resolution(best: 'tuple[ValueDetection, ...]', covers: 'tuple[tuple[ValueDetection, ...], ...]', margin: 'int', ambiguous: 'bool') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `resolve(detections: 'list[ValueDetection] | tuple[ValueDetection, ...]', *, n: 'int' = 8, epsilon: 'int' = 1.0) -> 'Resolution'`
+
+Weigh a universe of (possibly overlapping) detections into a :class:`Resolution`.
+
+Returns the maximum-weight non-overlapping ``best`` sequence, the ``n``-best ordering of
+covers, and an ``ambiguous`` flag when the top two covers are within ``epsilon``.
+
+### `resolve_text(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]', *, n: 'int' = 8, epsilon: 'int' = 1.0) -> 'Resolution'`
+
+Run every detector over ``text`` and resolve the deposited universe in one call.
+
+### `weight(detection: 'ValueDetection') -> 'int'`
+
+A candidate's score: span length (code points) times specificity.
+
+Specificity is one plus the capture count -- the structure the reading commits to -- so a
+richer match wins an equal-length contest while length carries the unequal ones.
+
 ## icukit.script
 
 Unicode script detection and properties.
