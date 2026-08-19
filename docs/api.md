@@ -3484,6 +3484,25 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible numeric dates in source order.
 
+### class `FlexibleFractionDetector`
+
+Recognize ``N/D`` fractions, optionally with a leading whole part ``W N/D``.
+
+The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
+the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
+The value is a :class:`NumberValue` whose ``decimal`` is computed with ``Decimal``:
+a terminating fraction is exact (``1/2`` -> ``"0.5"``, ``3 1/2`` -> ``"3.5"``); a
+non-terminating one is quantized to twelve fractional digits (``1/3`` ->
+``"0.333333333333"``). A zero denominator is rejected.
+
+#### `FlexibleFractionDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible fractions in source order.
+
 ### class `FlexibleNumberDetector`
 
 Recognize flexible decimal-number spellings using locale symbols from CLDR.
@@ -3496,9 +3515,28 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible decimal candidates in source order.
 
+### class `FlexibleOrdinalDetector`
+
+Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
+
+The ``ordinal:flexible`` type marks recall candidates. The ordinal affix is obtained
+reflectively by *forward* formatting: a candidate integer is rendered with
+``icu.RuleBasedNumberFormat`` on the ``ORDINAL`` rule set, and the prefix and suffix
+are the non-digit parts around that rendering. No affix is hard-coded, and no fragile
+ordinal *parse* is attempted. A surface is accepted only when its affixes match those
+ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+
+#### `FlexibleOrdinalDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible ordinals in source order.
+
 ### class `FlexiblePercentDetector`
 
-Recognize flexible numbers followed by the locale's percent symbol.
+Recognize flexible numbers adjacent to the locale's percent symbol.
 
 #### `FlexiblePercentDetector(locale: 'str') -> 'None'`
 
@@ -3507,6 +3545,29 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible percent candidates in source order.
+
+### class `FlexibleTimeDetector`
+
+Recognize clock times using a locale's CLDR short-time structure.
+
+The ``time:flexible`` type marks recall candidates for hours:minutes, an optional
+``:seconds``, and an optional day period (am/pm). Both are reflective: the time
+separator and 12- vs 24-hour convention come from the locale's short-time pattern
+(``icu.DateFormat.createTimeInstance(kShort)``), and the day-period strings come from
+``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale.
+
+A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
+12-hour locale); a day period is only consumed when the hour reads 1-12, and the
+reading is then converted to 24-hour ``H`` (12 AM -> 0, 12 PM -> 12). Minutes and
+seconds are exactly two digits in 0-59.
+
+#### `FlexibleTimeDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible clock times in source order.
 
 ## icukit.regex
 
