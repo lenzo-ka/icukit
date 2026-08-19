@@ -13,6 +13,7 @@ from icukit.detectors import (
 from icukit.recognize import (
     FlexibleCurrencyDetector,
     FlexibleDateDetector,
+    FlexibleFractionDetector,
     FlexibleNumberDetector,
     FlexiblePercentDetector,
     FlexibleTimeDetector,
@@ -309,3 +310,54 @@ def test_flexible_time_composes_with_detect_and_resolve():
 
     assert [detection["text"] for detection in detections] == ["6:30am", "15:45"]
     assert [detection["text"] for detection in resolution.best] == ["6:30am", "15:45"]
+
+
+@pytest.mark.parametrize(
+    "surface, decimal, names",
+    [
+        ("1/2", "0.5", ["numerator", "denominator"]),
+        ("3/2", "1.5", ["numerator", "denominator"]),
+        ("3 1/2", "3.5", ["whole", "numerator", "denominator"]),
+        ("1/3", "0.333333333333", ["numerator", "denominator"]),
+    ],
+)
+def test_flexible_fraction_gains_recall(surface, decimal, names):
+    detector = FlexibleFractionDetector("en_US")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == NumberValue(decimal, None)
+    assert detection["type"] == "fraction:flexible"
+    assert [capture.name for capture in detection["captures"]] == names
+
+
+def test_flexible_fraction_rejects_zero_denominator():
+    assert FlexibleFractionDetector("en_US").detect("5/0") == []
+
+
+@pytest.mark.parametrize("surface", ["/", "5", "1 2", "abc"])
+def test_flexible_fraction_rejects_non_fractions(surface):
+    assert FlexibleFractionDetector("en_US").detect(surface) == []
+
+
+def test_flexible_fraction_captures_use_code_point_offsets_with_astral_prefix():
+    text = "📌 ate 3 1/2 pies"
+    detection = FlexibleFractionDetector("en_US").detect(text)[0]
+    captures = {capture.name: capture for capture in detection["captures"]}
+
+    assert (detection["start"], detection["end"], detection["text"]) == (6, 11, "3 1/2")
+    assert captures["whole"].value == "3"
+    assert captures["numerator"].value == "1"
+    assert captures["denominator"].value == "2"
+    for capture in captures.values():
+        assert text[capture.start : capture.end] == capture.text
+
+
+def test_flexible_fraction_composes_with_detect_and_resolve():
+    text = "add 1/2 cup then 3 1/4 more"
+    detections = detect(text, [FlexibleFractionDetector("en_US")])
+    resolution = resolve(detections)
+
+    assert [detection["text"] for detection in detections] == ["1/2", "3 1/4"]
+    assert [detection["text"] for detection in resolution.best] == ["1/2", "3 1/4"]

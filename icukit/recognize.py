@@ -8,7 +8,8 @@ those candidates unchanged.
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, localcontext
+from math import gcd
 
 import icu
 
@@ -25,12 +26,14 @@ from .detectors import (
 __all__ = [
     "FlexibleCurrencyDetector",
     "FlexibleDateDetector",
+    "FlexibleFractionDetector",
     "FlexibleNumberDetector",
     "FlexiblePercentDetector",
     "FlexibleTimeDetector",
 ]
 
 _SPACES = {" ", "\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}"}
+_SLASHES = {"/", "\N{FRACTION SLASH}"}
 
 
 class FlexibleDateDetector:
@@ -545,6 +548,130 @@ class FlexibleTimeDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible clock times in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+class FlexibleFractionDetector:
+    """Recognize ``N/D`` fractions, optionally with a leading whole part ``W N/D``.
+
+    The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
+    the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
+    The value is a :class:`NumberValue` whose ``decimal`` is computed with ``Decimal``:
+    a terminating fraction is exact (``1/2`` -> ``"0.5"``, ``3 1/2`` -> ``"3.5"``); a
+    non-terminating one is quantized to twelve fractional digits (``1/3`` ->
+    ``"0.333333333333"``). A zero denominator is rejected.
+    """
+
+    group = "fraction"
+    type = "fraction:flexible"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        number_format = icu.NumberFormat.createInstance(icu.Locale(locale))
+        symbols = number_format.getDecimalFormatSymbols()
+        zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
+        self._zero = ord(zero)
+        self._digits = {chr(self._zero + offset): offset for offset in range(10)}
+        self._spec = NumberFormatSpec(locale, "decimal")
+
+    def _digit_run(self, text: str, start: int) -> int:
+        cursor = start
+        while cursor < len(text) and text[cursor] in self._digits:
+            cursor += 1
+        return cursor
+
+    def _ascii(self, surface: str) -> str:
+        return "".join(str(self._digits[character]) for character in surface)
+
+    @staticmethod
+    def _canonical(whole: int, numerator: int, denominator: int) -> str:
+        top = whole * denominator + numerator
+        divisor = gcd(top, denominator)
+        top //= divisor
+        bottom = denominator // divisor
+        residue = bottom
+        for prime in (2, 5):
+            while residue % prime == 0:
+                residue //= prime
+        if residue == 1:
+            result = Decimal(top) / Decimal(bottom)
+        else:
+            with localcontext() as context:
+                context.prec = 40
+                result = (Decimal(top) / Decimal(bottom)).quantize(Decimal("1.000000000000"))
+        rendered = format(result, "f")
+        if "." in rendered:
+            rendered = rendered.rstrip("0").rstrip(".")
+        return rendered
+
+    def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        first_end = self._digit_run(text, start)
+        if first_end == start:
+            return None
+
+        whole_capture: Capture | None = None
+        whole_value = 0
+        numerator_start, numerator_end = start, first_end
+        cursor = first_end
+        if cursor < len(text) and text[cursor] in _SPACES:
+            after_space = cursor + 1
+            candidate_end = self._digit_run(text, after_space)
+            if (
+                candidate_end > after_space
+                and text[candidate_end : candidate_end + 1]
+                and (text[candidate_end] in _SLASHES)
+            ):
+                whole_surface = text[start:first_end]
+                whole_value = int(self._ascii(whole_surface))
+                whole_capture = Capture(
+                    "whole", start, first_end, whole_surface, self._ascii(whole_surface), "numeric"
+                )
+                numerator_start, numerator_end = after_space, candidate_end
+                cursor = candidate_end
+
+        if cursor >= len(text) or text[cursor] not in _SLASHES:
+            return None
+        cursor += 1
+        denominator_start = cursor
+        denominator_end = self._digit_run(text, cursor)
+        if denominator_end == denominator_start:
+            return None
+
+        numerator_surface = text[numerator_start:numerator_end]
+        denominator_surface = text[denominator_start:denominator_end]
+        numerator = int(self._ascii(numerator_surface))
+        denominator = int(self._ascii(denominator_surface))
+        if denominator == 0:
+            return None
+
+        captures: list[Capture] = []
+        if whole_capture is not None:
+            captures.append(whole_capture)
+        captures.append(
+            Capture(
+                "numerator",
+                numerator_start,
+                numerator_end,
+                numerator_surface,
+                self._ascii(numerator_surface),
+                "numeric",
+            )
+        )
+        captures.append(
+            Capture(
+                "denominator",
+                denominator_start,
+                denominator_end,
+                denominator_surface,
+                self._ascii(denominator_surface),
+                "numeric",
+            )
+        )
+        decimal = self._canonical(whole_value, numerator, denominator)
+        return denominator_end, tuple(captures), NumberValue(decimal=decimal, currency=None)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping flexible fractions in source order."""
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 

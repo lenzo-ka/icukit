@@ -3484,6 +3484,25 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible numeric dates in source order.
 
+### class `FlexibleFractionDetector`
+
+Recognize ``N/D`` fractions, optionally with a leading whole part ``W N/D``.
+
+The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
+the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
+The value is a :class:`NumberValue` whose ``decimal`` is computed with ``Decimal``:
+a terminating fraction is exact (``1/2`` -> ``"0.5"``, ``3 1/2`` -> ``"3.5"``); a
+non-terminating one is quantized to twelve fractional digits (``1/3`` ->
+``"0.333333333333"``). A zero denominator is rejected.
+
+#### `FlexibleFractionDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible fractions in source order.
+
 ### class `FlexibleNumberDetector`
 
 Recognize flexible decimal-number spellings using locale symbols from CLDR.
