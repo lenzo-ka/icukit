@@ -15,6 +15,7 @@ from icukit.recognize import (
     FlexibleDateDetector,
     FlexibleNumberDetector,
     FlexiblePercentDetector,
+    FlexibleTimeDetector,
 )
 from icukit.resolve import resolve
 
@@ -231,3 +232,80 @@ def test_flexible_dates_compose_with_detect_and_resolve():
         "1/3/26",
         "12/25/2026",
     ]
+
+
+@pytest.mark.parametrize(
+    "surface, fields",
+    [
+        ("3:45", (("H", 3), ("m", 45))),
+        ("15:45", (("H", 15), ("m", 45))),
+        ("3:45 PM", (("H", 15), ("m", 45))),
+        ("9:30am", (("H", 9), ("m", 30))),
+        ("3:45:30", (("H", 3), ("m", 45), ("s", 30))),
+        ("12:00 AM", (("H", 0), ("m", 0))),
+        ("12:00 PM", (("H", 12), ("m", 0))),
+    ],
+)
+def test_flexible_time_gains_recall(surface, fields):
+    detector = FlexibleTimeDetector("en_US")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"].fields == fields
+    assert detection["value"].calendar == "gregorian"
+    assert detection["type"] == "time:flexible"
+
+
+def test_flexible_time_day_period_capture_and_conversion():
+    detection = FlexibleTimeDetector("en_US").detect("3:45 PM")[0]
+    captures = {capture.name: capture for capture in detection["captures"]}
+
+    assert captures["H"].value == 3
+    assert captures["m"].value == 45
+    assert captures["day-period"].text == " PM"
+    assert captures["day-period"].form == "symbol"
+    assert detection["value"].fields == (("H", 15), ("m", 45))
+
+
+def test_flexible_time_uses_locale_separator_and_24_hour_convention():
+    detector = FlexibleTimeDetector("de_DE")
+
+    assert detector.hour12 is False
+    assert detector._separator == ":"
+    detection = detector.detect("15:45")[0]
+    assert detection["value"].fields == (("H", 15), ("m", 45))
+    assert detection["spec"].pattern == "HH:mm"
+
+
+def test_flexible_time_keeps_bare_time_when_day_period_hour_out_of_range():
+    detection = FlexibleTimeDetector("en_US").detect("15:45 PM")[0]
+
+    assert detection["text"] == "15:45"
+    assert not any(c.name == "day-period" for c in detection["captures"])
+
+
+@pytest.mark.parametrize("surface", [":", "3", "3:4", "3:99", "abc"])
+def test_flexible_time_rejects_non_times(surface):
+    assert FlexibleTimeDetector("en_US").detect(surface) == []
+
+
+def test_flexible_time_captures_use_code_point_offsets_with_astral_prefix():
+    text = "📌 at 9:30am!"
+    detection = FlexibleTimeDetector("en_US").detect(text)[0]
+    captures = {capture.name: capture for capture in detection["captures"]}
+
+    assert (detection["start"], detection["end"], detection["text"]) == (5, 11, "9:30am")
+    assert captures["H"].value == 9
+    assert captures["m"].value == 30
+    for capture in captures.values():
+        assert text[capture.start : capture.end] == capture.text
+
+
+def test_flexible_time_composes_with_detect_and_resolve():
+    text = "wake at 6:30am, land 15:45"
+    detections = detect(text, [FlexibleTimeDetector("en_US")])
+    resolution = resolve(detections)
+
+    assert [detection["text"] for detection in detections] == ["6:30am", "15:45"]
+    assert [detection["text"] for detection in resolution.best] == ["6:30am", "15:45"]

@@ -3508,6 +3508,29 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible percent candidates in source order.
 
+### class `FlexibleTimeDetector`
+
+Recognize clock times using a locale's CLDR short-time structure.
+
+The ``time:flexible`` type marks recall candidates for hours:minutes, an optional
+``:seconds``, and an optional day period (am/pm). Both are reflective: the time
+separator and 12- vs 24-hour convention come from the locale's short-time pattern
+(``icu.DateFormat.createTimeInstance(kShort)``), and the day-period strings come from
+``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale.
+
+A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
+12-hour locale); a day period is only consumed when the hour reads 1-12, and the
+reading is then converted to 24-hour ``H`` (12 AM -> 0, 12 PM -> 12). Minutes and
+seconds are exactly two digits in 0-59.
+
+#### `FlexibleTimeDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible clock times in source order.
+
 ## icukit.regex
 
 Unicode regular expression utilities using ICU.
