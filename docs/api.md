@@ -3515,6 +3515,26 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible decimal candidates in source order.
 
+### class `FlexibleOrdinalDetector`
+
+Recognize ordinal numerals (``1st``, ``21st``) using reflective CLDR affixes.
+
+The ``ordinal:flexible`` type marks recall candidates. The ordinal affix is obtained
+reflectively by *forward* formatting: a candidate integer is rendered with
+``icu.RuleBasedNumberFormat`` on the ``ORDINAL`` rule set, and the affix is the
+non-digit remainder of that rendering (English ``st``/``nd``/``rd``/``th`` and their
+equivalents in other locales). No suffix is hard-coded, and no fragile ordinal
+*parse* is attempted. A surface is accepted only when its trailing affix matches the
+one ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+
+#### `FlexibleOrdinalDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible ordinals in source order.
+
 ### class `FlexiblePercentDetector`
 
 Recognize flexible numbers followed by the locale's percent symbol.

@@ -15,6 +15,7 @@ from icukit.recognize import (
     FlexibleDateDetector,
     FlexibleFractionDetector,
     FlexibleNumberDetector,
+    FlexibleOrdinalDetector,
     FlexiblePercentDetector,
     FlexibleTimeDetector,
 )
@@ -361,3 +362,49 @@ def test_flexible_fraction_composes_with_detect_and_resolve():
 
     assert [detection["text"] for detection in detections] == ["1/2", "3 1/4"]
     assert [detection["text"] for detection in resolution.best] == ["1/2", "3 1/4"]
+
+
+@pytest.mark.parametrize(
+    "surface, decimal",
+    [("1st", "1"), ("2nd", "2"), ("3rd", "3"), ("4th", "4"), ("21st", "21"), ("101st", "101")],
+)
+def test_flexible_ordinal_gains_recall(surface, decimal):
+    detector = FlexibleOrdinalDetector("en_US")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == NumberValue(decimal, None)
+    assert detection["type"] == "ordinal:flexible"
+    assert [capture.name for capture in detection["captures"]] == ["integer", "ordinal-affix"]
+
+
+def test_flexible_ordinal_rejects_wrong_affix_reflectively():
+    assert FlexibleOrdinalDetector("en_US").detect("21th") == []
+    assert FlexibleOrdinalDetector("en_US").detect("2th") == []
+
+
+@pytest.mark.parametrize("surface", ["1", "st", "abc"])
+def test_flexible_ordinal_rejects_bare_number_or_affix(surface):
+    assert FlexibleOrdinalDetector("en_US").detect(surface) == []
+
+
+def test_flexible_ordinal_captures_use_code_point_offsets_with_astral_prefix():
+    text = "📌 the 21st day"
+    detection = FlexibleOrdinalDetector("en_US").detect(text)[0]
+    captures = {capture.name: capture for capture in detection["captures"]}
+
+    assert (detection["start"], detection["end"], detection["text"]) == (6, 10, "21st")
+    assert captures["integer"].value == "21"
+    assert captures["ordinal-affix"].form == "symbol"
+    for capture in captures.values():
+        assert text[capture.start : capture.end] == capture.text
+
+
+def test_flexible_ordinal_composes_with_detect_and_resolve():
+    text = "finished 1st and 22nd overall"
+    detections = detect(text, [FlexibleOrdinalDetector("en_US")])
+    resolution = resolve(detections)
+
+    assert [detection["text"] for detection in detections] == ["1st", "22nd"]
+    assert [detection["text"] for detection in resolution.best] == ["1st", "22nd"]

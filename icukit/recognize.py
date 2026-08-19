@@ -28,6 +28,7 @@ __all__ = [
     "FlexibleDateDetector",
     "FlexibleFractionDetector",
     "FlexibleNumberDetector",
+    "FlexibleOrdinalDetector",
     "FlexiblePercentDetector",
     "FlexibleTimeDetector",
 ]
@@ -672,6 +673,71 @@ class FlexibleFractionDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible fractions in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+class FlexibleOrdinalDetector:
+    """Recognize ordinal numerals (``1st``, ``21st``) using reflective CLDR affixes.
+
+    The ``ordinal:flexible`` type marks recall candidates. The ordinal affix is obtained
+    reflectively by *forward* formatting: a candidate integer is rendered with
+    ``icu.RuleBasedNumberFormat`` on the ``ORDINAL`` rule set, and the affix is the
+    non-digit remainder of that rendering (English ``st``/``nd``/``rd``/``th`` and their
+    equivalents in other locales). No suffix is hard-coded, and no fragile ordinal
+    *parse* is attempted. A surface is accepted only when its trailing affix matches the
+    one ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+    """
+
+    group = "ordinal"
+    type = "ordinal:flexible"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        icu_locale = icu.Locale(locale)
+        self._rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu_locale)
+        number_format = icu.NumberFormat.createInstance(icu_locale)
+        symbols = number_format.getDecimalFormatSymbols()
+        zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
+        self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
+        self._spec = NumberFormatSpec(locale, "decimal")
+
+    def _digit_run(self, text: str, start: int) -> tuple[int, int]:
+        cursor = start
+        value = 0
+        while cursor < len(text) and text[cursor] in self._digits:
+            value = value * 10 + self._digits[text[cursor]]
+            cursor += 1
+        return cursor, value
+
+    def _affix(self, value: int) -> str:
+        rendered = self._rbnf.format(value)
+        boundary = max(
+            (index for index, character in enumerate(rendered) if character.isdigit()),
+            default=-1,
+        )
+        return rendered[boundary + 1 :]
+
+    def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        digit_end, value = self._digit_run(text, start)
+        if digit_end == start or value < 1:
+            return None
+        affix = self._affix(value)
+        if not affix:
+            return None
+        affix_end = digit_end + len(affix)
+        if text[digit_end:affix_end].casefold() != affix.casefold():
+            return None
+        integer_surface = text[start:digit_end]
+        captures = (
+            Capture("integer", start, digit_end, integer_surface, str(value), "numeric"),
+            Capture(
+                "ordinal-affix", digit_end, affix_end, text[digit_end:affix_end], None, "symbol"
+            ),
+        )
+        return affix_end, captures, NumberValue(decimal=str(value), currency=None)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping flexible ordinals in source order."""
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
