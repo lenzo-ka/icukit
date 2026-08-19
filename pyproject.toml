@@ -54,6 +54,7 @@ version = {attr = "icukit.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["icukit*"]
+exclude = ["eval*"]
 
 [tool.setuptools.package-data]
 icukit = ["py.typed"]
