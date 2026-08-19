@@ -3447,6 +3447,43 @@ Example:
     >>> list_plural_categories("ar")
     ['zero', 'one', 'two', 'few', 'many', 'other']
 
+## icukit.recognize
+
+Flexible, CLDR-derived recognizers for non-canonical value surfaces.
+
+Recognizers are the recall-oriented counterpart to the strict detectors in
+:mod:`icukit.detectors`. They deposit structurally valid candidates without requiring the
+surface to equal ICU's canonical formatting; the existing resolver can then select among
+those candidates unchanged.
+
+### class `FlexibleDateDetector`
+
+Recognize flexible numeric dates using a locale's CLDR short-date structure.
+
+The stable ``date:flexible`` type distinguishes recall candidates from strict,
+skeleton-specific date detections. Two-digit years retain their observed value;
+this detector deposits one maximal candidate rather than expanding a century.
+
+#### `FlexibleDateDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible numeric dates in source order.
+
+### class `FlexibleNumberDetector`
+
+Recognize flexible decimal-number spellings using locale symbols from CLDR.
+
+#### `FlexibleNumberDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible decimal candidates in source order.
+
 ## icukit.regex
 
 Unicode regular expression utilities using ICU.
