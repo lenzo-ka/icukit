@@ -73,6 +73,28 @@ def test_greedy_match_does_not_overlap_and_stops_at_non_digit():
     assert detections[0]["text"] == "1234"
 
 
+@pytest.mark.parametrize(
+    "locale, surface, expected",
+    [
+        ("en_US", "1,2,3", "1"),
+        ("en_US", "1,234", "1,234"),
+        ("en_US", "1,234,567", "1,234,567"),
+        ("hi_IN", "1,23,456", "1,23,456"),
+    ],
+)
+def test_flexible_number_validates_locale_grouping(locale, surface, expected):
+    detection = FlexibleNumberDetector(locale).detect(surface)[0]
+
+    assert detection["text"] == expected
+
+
+def test_flexible_percent_does_not_absorb_malformed_grouping():
+    detections = FlexiblePercentDetector("en_US").detect("1,2,3%")
+
+    assert all(detection["text"] != "1,2,3%" for detection in detections)
+    assert all(detection["value"].decimal != "1.23" for detection in detections)
+
+
 @pytest.mark.parametrize("surface", ["-", ".", "abc"])
 def test_non_numbers_do_not_match(surface):
     assert FlexibleNumberDetector("en_US").detect(surface) == []
@@ -102,6 +124,14 @@ def test_flexible_percent_gains_recall(surface, decimal):
     assert detection["value"].currency is None
     assert detection["spec"] == NumberFormatSpec("en_US", "percent")
     assert [capture.name for capture in detection["captures"]][-1] == "percent"
+
+
+@pytest.mark.parametrize("surface", ["%5", "5%", "% 5", "5\N{NARROW NO-BREAK SPACE}%"])
+def test_flexible_percent_accepts_both_reflective_symbol_orientations(surface):
+    detection = FlexiblePercentDetector("tr_TR").detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue("0.05", None)
 
 
 @pytest.mark.parametrize(
@@ -136,6 +166,14 @@ def test_flexible_currency_accepts_symbol_after_number(surface):
     assert detection["text"] == surface
     assert detection["value"] == NumberValue("5", "EUR")
     assert detection["captures"][-1].name == "currency"
+
+
+def test_flexible_currency_accepts_narrow_no_break_space():
+    surface = "5,00\N{NARROW NO-BREAK SPACE}€"
+    detection = FlexibleCurrencyDetector("fr_FR", "EUR").detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue("5.00", "EUR")
 
 
 @pytest.mark.parametrize(
@@ -196,6 +234,19 @@ def test_flexible_date_accepts_four_digit_year():
     detection = FlexibleDateDetector("en_US").detect("1/3/2026")[0]
 
     assert detection["value"].fields == (("y", 2026), ("M", 1), ("d", 3))
+
+
+@pytest.mark.parametrize("surface", ["2/30/2026", "4/31/26", "2/29/2025"])
+def test_flexible_date_rejects_impossible_gregorian_dates(surface):
+    assert FlexibleDateDetector("en_US").detect(surface) == []
+
+
+def test_flexible_date_uses_locale_default_calendar():
+    detection = FlexibleDateDetector("th_TH").detect("19/8/69")[0]
+
+    assert detection["value"].fields == (("y", 69), ("M", 8), ("d", 19))
+    assert detection["value"].calendar == "buddhist"
+    assert detection["spec"].calendar == "buddhist"
 
 
 def test_flexible_date_uses_locale_order_and_separator():
@@ -280,11 +331,9 @@ def test_flexible_time_uses_locale_separator_and_24_hour_convention():
     assert detection["spec"].pattern == "HH:mm"
 
 
-def test_flexible_time_keeps_bare_time_when_day_period_hour_out_of_range():
-    detection = FlexibleTimeDetector("en_US").detect("15:45 PM")[0]
-
-    assert detection["text"] == "15:45"
-    assert not any(c.name == "day-period" for c in detection["captures"])
+@pytest.mark.parametrize("surface", ["12:30:99", "12:30:4", "15:45 PM"])
+def test_flexible_time_rejects_malformed_continuations(surface):
+    assert FlexibleTimeDetector("en_US").detect(surface) == []
 
 
 @pytest.mark.parametrize("surface", [":", "3", "3:4", "3:99", "abc"])
@@ -337,6 +386,10 @@ def test_flexible_fraction_rejects_zero_denominator():
     assert FlexibleFractionDetector("en_US").detect("5/0") == []
 
 
+def test_flexible_fraction_rejects_chained_fraction():
+    assert FlexibleFractionDetector("en_US").detect("1/2/3") == []
+
+
 @pytest.mark.parametrize("surface", ["/", "5", "1 2", "abc"])
 def test_flexible_fraction_rejects_non_fractions(surface):
     assert FlexibleFractionDetector("en_US").detect(surface) == []
@@ -382,6 +435,17 @@ def test_flexible_ordinal_gains_recall(surface, decimal):
 def test_flexible_ordinal_rejects_wrong_affix_reflectively():
     assert FlexibleOrdinalDetector("en_US").detect("21th") == []
     assert FlexibleOrdinalDetector("en_US").detect("2th") == []
+
+
+@pytest.mark.parametrize("locale, surface", [("ja_JP", "第1"), ("zh_CN", "第21")])
+def test_flexible_ordinal_accepts_reflective_prefix(locale, surface):
+    detection = FlexibleOrdinalDetector(locale).detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert [capture.name for capture in detection["captures"]] == [
+        "ordinal-affix",
+        "integer",
+    ]
 
 
 @pytest.mark.parametrize("surface", ["1", "st", "abc"])

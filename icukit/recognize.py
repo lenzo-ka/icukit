@@ -54,12 +54,13 @@ class FlexibleDateDetector:
         date_format = icu.DateFormat.createDateInstance(icu.DateFormat.kShort, icu_locale)
         self.pattern = date_format.toPattern()
         self._fields, self._separators = self._date_structure(self.pattern)
+        self._calendar = icu.Calendar.createInstance(icu_locale).getType()
 
         number_format = icu.NumberFormat.createInstance(icu_locale)
         symbols = number_format.getDecimalFormatSymbols()
         zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
         self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
-        self._spec = DateFormatSpec(locale, "yMd", self.pattern, "gregorian")
+        self._spec = DateFormatSpec(locale, "yMd", self.pattern, self._calendar)
 
     @staticmethod
     def _date_structure(pattern: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -128,8 +129,17 @@ class FlexibleDateDetector:
                     return None
                 cursor += len(separator)
 
+        calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+        calendar.setLenient(False)
+        calendar.clear()
+        try:
+            calendar.set(values["y"], values["M"] - 1, values["d"])
+            calendar.getTime()
+        except icu.ICUError:
+            return None
+
         ordered = tuple((field, values[field]) for field in ("y", "M", "d"))
-        return cursor, tuple(captures), DateTimeValue(ordered, "gregorian")
+        return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible numeric dates in source order."""
@@ -178,9 +188,13 @@ class FlexibleNumberDetector:
         self._digits = {chr(zero + offset): str(offset) for offset in range(10)}
 
         grouping_sizes = None
+        self._primary_grouping = 0
+        self._secondary_grouping = 0
         if self._nf.isGroupingUsed():
             primary = self._nf.getGroupingSize()
             secondary = self._nf.getSecondaryGroupingSize()
+            self._primary_grouping = primary
+            self._secondary_grouping = secondary or primary
             grouping_sizes = (secondary, primary) if secondary else (primary,)
         self._spec = NumberFormatSpec(locale, "decimal", grouping_sizes=grouping_sizes)
 
@@ -204,20 +218,29 @@ class FlexibleNumberDetector:
         integer_start = cursor
         if cursor >= len(text) or text[cursor] not in self._digits:
             return None
-        cursor += 1
-        while cursor < len(text):
-            if text[cursor] in self._digits:
+        while cursor < len(text) and text[cursor] in self._digits:
+            cursor += 1
+        ungrouped_end = cursor
+        groups = [cursor - integer_start]
+        separators: list[int] = []
+        while self._primary_grouping and text.startswith(self._grouping, cursor):
+            grouping_start = cursor
+            cursor += len(self._grouping)
+            group_start = cursor
+            while cursor < len(text) and text[cursor] in self._digits:
                 cursor += 1
-                continue
-            grouping_end = cursor + len(self._grouping)
-            if (
-                text.startswith(self._grouping, cursor)
-                and grouping_end < len(text)
-                and text[grouping_end] in self._digits
-            ):
-                cursor = grouping_end + 1
-                continue
-            break
+            if cursor == group_start:
+                cursor = grouping_start
+                break
+            separators.append(grouping_start)
+            groups.append(cursor - group_start)
+
+        if separators:
+            valid = groups[-1] == self._primary_grouping
+            valid = valid and all(size == self._secondary_grouping for size in groups[1:-1])
+            valid = valid and 1 <= groups[0] <= self._secondary_grouping
+            if not valid:
+                cursor = ungrouped_end
 
         integer_end = cursor
         integer_text = text[integer_start:integer_end]
@@ -301,7 +324,7 @@ class FlexibleNumberDetector:
 
 
 class FlexiblePercentDetector:
-    """Recognize flexible numbers followed by the locale's percent symbol."""
+    """Recognize flexible numbers adjacent to the locale's percent symbol."""
 
     group = "number"
     type = "number:percent"
@@ -312,15 +335,28 @@ class FlexiblePercentDetector:
         number_format = icu.NumberFormat.createPercentInstance(icu.Locale(locale))
         symbols = number_format.getDecimalFormatSymbols()
         self._percent = symbols.getSymbol(icu.DecimalFormatSymbols.kPercentSymbol)
+        pattern = number_format.toPattern()
+        number_index = min(
+            (pattern.index(character) for character in "#0@" if character in pattern),
+            default=0,
+        )
+        self._prefix_first = pattern.find("%") < number_index
         self._spec = NumberFormatSpec(locale, "percent")
 
-    def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+    @staticmethod
+    def _space(text: str, cursor: int) -> int:
+        if cursor < len(text) and text[cursor] in _SPACES:
+            return cursor + 1
+        return cursor
+
+    def _suffix_match(
+        self, text: str, start: int
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         match = self._number._match(text, start)
         if match is None:
             return None
         cursor, captures, value = match
-        if cursor < len(text) and text[cursor] in {" ", "\N{NO-BREAK SPACE}"}:
-            cursor += 1
+        cursor = self._space(text, cursor)
         if not text.startswith(self._percent, cursor):
             return None
         end = cursor + len(self._percent)
@@ -328,6 +364,32 @@ class FlexiblePercentDetector:
         ratio = str(Decimal(value.decimal) / 100)
         all_captures = tuple(sorted((*captures, percent), key=lambda capture: capture.start))
         return end, all_captures, NumberValue(ratio)
+
+    def _prefix_match(
+        self, text: str, start: int
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        if not text.startswith(self._percent, start):
+            return None
+        symbol_end = start + len(self._percent)
+        match = self._number._match(text, self._space(text, symbol_end))
+        if match is None:
+            return None
+        end, captures, value = match
+        percent = Capture("percent", start, symbol_end, self._percent, None, "symbol")
+        ratio = str(Decimal(value.decimal) / 100)
+        return end, (percent, *captures), NumberValue(ratio)
+
+    def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        matchers = (
+            (self._prefix_match, self._suffix_match)
+            if self._prefix_first
+            else (self._suffix_match, self._prefix_match)
+        )
+        for matcher in matchers:
+            match = matcher(text, start)
+            if match is not None:
+                return match
+        return None
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible percent candidates in source order."""
@@ -352,7 +414,7 @@ class FlexibleCurrencyDetector:
 
     @staticmethod
     def _space(text: str, cursor: int) -> int:
-        if cursor < len(text) and text[cursor] in {" ", "\N{NO-BREAK SPACE}"}:
+        if cursor < len(text) and text[cursor] in _SPACES:
             return cursor + 1
         return cursor
 
@@ -479,6 +541,8 @@ class FlexibleTimeDetector:
     def _match(
         self, text: str, start: int
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
+        if start > 0 and text[start - 1] in self._digits:
+            return None
         first = self._digit_run(text, start)
         hour_width = first[0] - start
         if hour_width not in {1, 2}:
@@ -499,6 +563,10 @@ class FlexibleTimeDetector:
             second = self._field(text, minute_end + len(self._separator), 2)
             if second is not None and 0 <= second[1] <= 59:
                 second_end, second_value = second
+            elif self._digit_run(text, minute_end + len(self._separator))[0] > (
+                minute_end + len(self._separator)
+            ):
+                return None
 
         cursor = second_end
         period_index: int | None = None
@@ -510,6 +578,14 @@ class FlexibleTimeDetector:
                     Capture("day-period", cursor, marker_end, marker_text, None, "symbol")
                 )
                 cursor = marker_end
+        elif self._day_period(text, cursor) is not None:
+            return None
+
+        continuation = cursor + len(self._separator)
+        if text.startswith(self._separator, cursor) and self._digit_run(text, continuation)[0] > (
+            continuation
+        ):
+            return None
 
         if period_index is None:
             if not 0 <= raw_hour <= 23:
@@ -606,6 +682,8 @@ class FlexibleFractionDetector:
         return rendered
 
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        if start > 0 and (text[start - 1] in self._digits or text[start - 1] in _SLASHES):
+            return None
         first_end = self._digit_run(text, start)
         if first_end == start:
             return None
@@ -636,6 +714,13 @@ class FlexibleFractionDetector:
         denominator_start = cursor
         denominator_end = self._digit_run(text, cursor)
         if denominator_end == denominator_start:
+            return None
+        chained_start = denominator_end + 1
+        if (
+            denominator_end < len(text)
+            and text[denominator_end] in _SLASHES
+            and self._digit_run(text, chained_start) > chained_start
+        ):
             return None
 
         numerator_surface = text[numerator_start:numerator_end]
@@ -677,15 +762,14 @@ class FlexibleFractionDetector:
 
 
 class FlexibleOrdinalDetector:
-    """Recognize ordinal numerals (``1st``, ``21st``) using reflective CLDR affixes.
+    """Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
 
     The ``ordinal:flexible`` type marks recall candidates. The ordinal affix is obtained
     reflectively by *forward* formatting: a candidate integer is rendered with
-    ``icu.RuleBasedNumberFormat`` on the ``ORDINAL`` rule set, and the affix is the
-    non-digit remainder of that rendering (English ``st``/``nd``/``rd``/``th`` and their
-    equivalents in other locales). No suffix is hard-coded, and no fragile ordinal
-    *parse* is attempted. A surface is accepted only when its trailing affix matches the
-    one ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+    ``icu.RuleBasedNumberFormat`` on the ``ORDINAL`` rule set, and the prefix and suffix
+    are the non-digit parts around that rendering. No affix is hard-coded, and no fragile
+    ordinal *parse* is attempted. A surface is accepted only when its affixes match those
+    ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
     """
 
     group = "ordinal"
@@ -709,32 +793,61 @@ class FlexibleOrdinalDetector:
             cursor += 1
         return cursor, value
 
-    def _affix(self, value: int) -> str:
+    def _affixes(self, value: int) -> tuple[str, str]:
         rendered = self._rbnf.format(value)
-        boundary = max(
-            (index for index, character in enumerate(rendered) if character.isdigit()),
-            default=-1,
-        )
-        return rendered[boundary + 1 :]
+        digit_indexes = [
+            index
+            for index, character in enumerate(rendered)
+            if character in self._digits or character.isdigit()
+        ]
+        if not digit_indexes:
+            return rendered, ""
+        return rendered[: digit_indexes[0]], rendered[digit_indexes[-1] + 1 :]
 
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
-        digit_end, value = self._digit_run(text, start)
-        if digit_end == start or value < 1:
-            return None
-        affix = self._affix(value)
-        if not affix:
-            return None
-        affix_end = digit_end + len(affix)
-        if text[digit_end:affix_end].casefold() != affix.casefold():
-            return None
-        integer_surface = text[start:digit_end]
-        captures = (
-            Capture("integer", start, digit_end, integer_surface, str(value), "numeric"),
-            Capture(
-                "ordinal-affix", digit_end, affix_end, text[digit_end:affix_end], None, "symbol"
-            ),
-        )
-        return affix_end, captures, NumberValue(decimal=str(value), currency=None)
+        for digit_start in range(start, len(text)):
+            if text[digit_start] not in self._digits:
+                continue
+            digit_end, value = self._digit_run(text, digit_start)
+            if value < 1:
+                continue
+            prefix, suffix = self._affixes(value)
+            if not prefix and not suffix:
+                continue
+            if text[start:digit_start].casefold() != prefix.casefold():
+                continue
+            affix_end = digit_end + len(suffix)
+            if text[digit_end:affix_end].casefold() != suffix.casefold():
+                continue
+            integer_surface = text[digit_start:digit_end]
+            captures: list[Capture] = []
+            if prefix:
+                captures.append(
+                    Capture(
+                        "ordinal-affix",
+                        start,
+                        digit_start,
+                        text[start:digit_start],
+                        None,
+                        "symbol",
+                    )
+                )
+            captures.append(
+                Capture("integer", digit_start, digit_end, integer_surface, str(value), "numeric")
+            )
+            if suffix:
+                captures.append(
+                    Capture(
+                        "ordinal-affix",
+                        digit_end,
+                        affix_end,
+                        text[digit_end:affix_end],
+                        None,
+                        "symbol",
+                    )
+                )
+            return affix_end, tuple(captures), NumberValue(decimal=str(value), currency=None)
+        return None
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible ordinals in source order."""
