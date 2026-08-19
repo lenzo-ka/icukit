@@ -29,7 +29,7 @@ Everything here is pure icukit over code-point offsets -- no tiergraph.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
 from typing import Literal, Protocol, runtime_checkable
@@ -52,7 +52,10 @@ __all__ = [
     "NumberDetector",
     "NumberValue",
     "ValueDetection",
+    "all_detectors",
+    "date_detectors",
     "detect",
+    "number_detectors",
 ]
 
 # Closed vocabulary of refusal reasons (an ostensibly-successful parse with an
@@ -857,3 +860,53 @@ class DetectorSet:
         """Return a new gang with the named detector types removed."""
         drop = set(types)
         return DetectorSet(tuple(d for d in self.detectors if d.type not in drop))
+
+
+# --------------------------------------------------------------------------- groups
+
+# Pure constructors that assemble a common family of detectors into a gang. A group is
+# just a DetectorSet -- compose or trim it with .with_/.without like any other.
+
+
+def date_detectors(locale: str, skeletons: Iterable[str]) -> DetectorSet:
+    """A gang of date detectors for ``locale``, one per skeleton.
+
+    ``skeletons`` are ICU date-time skeletons (``"yMd"``, ``"yMMMd"``); each becomes a
+    :class:`DateDetector`. Members are deduplicated by type, so a repeated skeleton is
+    harmless. A skeleton whose pattern carries an uninvertible field raises (see
+    :class:`DateDetector`).
+    """
+    return DetectorSet(()).with_(*(DateDetector(locale, skeleton) for skeleton in skeletons))
+
+
+def number_detectors(
+    locale: str,
+    *,
+    decimal: bool = True,
+    percent: bool = True,
+    currencies: Iterable[str] = (),
+) -> DetectorSet:
+    """A gang of number detectors for ``locale``.
+
+    ``decimal`` and ``percent`` add the plain decimal and percent detectors; each ISO code
+    in ``currencies`` adds a currency detector (type ``number:currency:<ISO>``).
+    """
+    members: list[Detector] = []
+    if decimal:
+        members.append(NumberDetector(locale, "decimal"))
+    if percent:
+        members.append(NumberDetector(locale, "percent"))
+    members.extend(NumberDetector(locale, "currency", code) for code in currencies)
+    return DetectorSet(()).with_(*members)
+
+
+def all_detectors(
+    locale: str, skeletons: Iterable[str], *, currencies: Iterable[str] = ()
+) -> DetectorSet:
+    """Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
+
+    A convenience composition of :func:`date_detectors` and :func:`number_detectors` for
+    ``locale`` into one gang.
+    """
+    numbers = number_detectors(locale, currencies=currencies)
+    return date_detectors(locale, skeletons).with_(*numbers.detectors)

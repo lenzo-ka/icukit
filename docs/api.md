@@ -1413,6 +1413,22 @@ Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``val
 ``captures``, and ``spec`` (see the module docstring). The invariant
 ``reformat(spec, value) == surface`` holds for every accepted detection.
 
+### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = ()) -> 'DetectorSet'`
+
+Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
+
+A convenience composition of :func:`date_detectors` and :func:`number_detectors` for
+``locale`` into one gang.
+
+### `date_detectors(locale: 'str', skeletons: 'Iterable[str]') -> 'DetectorSet'`
+
+A gang of date detectors for ``locale``, one per skeleton.
+
+``skeletons`` are ICU date-time skeletons (``"yMd"``, ``"yMMMd"``); each becomes a
+:class:`DateDetector`. Members are deduplicated by type, so a repeated skeleton is
+harmless. A skeleton whose pattern carries an uninvertible field raises (see
+:class:`DateDetector`).
+
 ### `detect(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]') -> 'list[ValueDetection]'`
 
 Run every detector over ``text`` and return the merged detections.
@@ -1427,6 +1443,13 @@ merge of its members. The single-pass variant §12.5 describes -- one shared sca
 with per-member resume cursors and a freshly cleared calendar per (member, start)
 attempt -- is a deferred efficiency optimization, not yet built; its equivalence
 to this merge is the invariant that variant must preserve.
+
+### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = ()) -> 'DetectorSet'`
+
+A gang of number detectors for ``locale``.
+
+``decimal`` and ``percent`` add the plain decimal and percent detectors; each ISO code
+in ``currencies`` adds a currency detector (type ``number:currency:<ISO>``).
 
 ## icukit.discover
 
