@@ -42,6 +42,7 @@ from .detect import Detection
 __all__ = [
     "Capture",
     "DateFormatSpec",
+    "DateDetector",
     "DateTimeValue",
     "Detector",
     "DetectorRefusal",
@@ -216,6 +217,215 @@ class Detector(Protocol):
     group: str
 
     def detect(self, text: str) -> list[ValueDetection]: ...
+
+
+# --------------------------------------------------------------------------- dates
+
+
+@dataclass(frozen=True)
+class _DateField:
+    letter: str
+    width: int
+    name: str
+    calendar_field: int
+    format_field: int
+    form: str
+    value_field: bool = True
+
+
+def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
+    """Return unquoted CLDR pattern-letter runs."""
+    runs: list[tuple[str, int]] = []
+    quoted = False
+    index = 0
+    while index < len(pattern):
+        if pattern[index] == "'":
+            if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                index += 2
+                continue
+            quoted = not quoted
+            index += 1
+            continue
+        if quoted or not pattern[index].isalpha():
+            index += 1
+            continue
+        letter = pattern[index]
+        end = index + 1
+        while end < len(pattern) and pattern[end] == letter:
+            end += 1
+        runs.append((letter, end - index))
+        index = end
+    return runs
+
+
+def _date_form(letter: str, width: int) -> str:
+    if letter in {"M", "L", "E", "e", "c"} and width >= 3:
+        return {3: "short", 4: "wide"}.get(width, "narrow")
+    return "numeric"
+
+
+def _date_fields(pattern: str) -> tuple[_DateField, ...]:
+    # This is CLDR pattern grammar, not locale data. Calendar values and displayed names
+    # are obtained from the formatter/calendar at runtime.
+    mapping = {
+        "y": ("y", icu.Calendar.YEAR, icu.DateFormat.kYearField, True),
+        "M": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
+        "L": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
+        "d": ("d", icu.Calendar.DATE, icu.DateFormat.kDateField, True),
+        "H": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay0Field, True),
+        "h": ("h", icu.Calendar.HOUR, icu.DateFormat.kHour1Field, True),
+        "K": ("h", icu.Calendar.HOUR, icu.DateFormat.kHour0Field, True),
+        "k": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay1Field, True),
+        "m": ("m", icu.Calendar.MINUTE, icu.DateFormat.kMinuteField, True),
+        "s": ("s", icu.Calendar.SECOND, icu.DateFormat.kSecondField, True),
+        "E": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
+        "e": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
+        "c": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
+    }
+    found: list[_DateField] = []
+    for letter, width in _pattern_runs(pattern):
+        if letter not in mapping:
+            continue
+        name, calendar_field, format_field, value_field = mapping[letter]
+        found.append(
+            _DateField(
+                letter,
+                width,
+                name,
+                calendar_field,
+                format_field,
+                _date_form(letter, width),
+                value_field,
+            )
+        )
+    order = {"y": 0, "M": 1, "d": 2, "weekday": 3, "H": 4, "h": 4, "m": 5, "s": 6}
+    return tuple(sorted(found, key=lambda field: order[field.name]))
+
+
+class DateDetector:
+    """Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
+
+    The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
+    date specification fixes GMT so date-only parsing cannot acquire host-zone behavior.
+    """
+
+    group = "date"
+
+    def __init__(self, locale: str, skeleton: str, tz: str = "GMT") -> None:
+        if tz != "GMT":
+            raise ValueError("DateDetector currently requires tz='GMT'")
+        self.locale = locale
+        self.skeleton = skeleton
+        self.tz = tz
+        self.type = f"date:{skeleton}"
+        generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
+        self.pattern = generator.getBestPattern(skeleton)
+        self._df = icu.SimpleDateFormat(self.pattern, icu.Locale(locale))
+        self._df.setTimeZone(icu.TimeZone.getGMT())
+        self._fields = _date_fields(self.pattern)
+        # Refuse a skeleton whose best pattern carries a field this detector cannot make
+        # invertible, rather than emit a value that cannot reproduce the surface. The
+        # 24-hour clock (H/k) and dates are fully modeled; the 12-hour clock needs a
+        # day-period field whose value modeling is deferred, and era/quarter/week/
+        # time-zone fields are out of scope. A day-period letter (a/b/B) is exactly what
+        # makes "3:45 PM" non-invertible from bare (h, m).
+        _modeled = {"y", "M", "L", "d", "H", "k", "m", "s", "E", "e", "c"}
+        _letters = {letter for letter, _ in _pattern_runs(self.pattern)}
+        _unmodeled = sorted(_letters - _modeled)
+        if _unmodeled:
+            raise ValueError(
+                f"DateDetector cannot invert pattern field(s) {_unmodeled} in {self.pattern!r} "
+                f"(skeleton {skeleton!r}); 12-hour/day-period, era, quarter, week, and time-zone "
+                f"fields are not supported"
+            )
+        self._inv = _Inverter(self._parse, self._reformat, self._build)
+
+    def _parse(self, text: icu.UnicodeString, start_u16: int) -> tuple[int, object] | None:
+        calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(self.locale))
+        calendar.clear()
+        position = icu.ParsePosition(start_u16)
+        self._df.parse(text, calendar, position)
+        if position.getErrorIndex() != -1 or position.getIndex() <= start_u16:
+            return None
+        return position.getIndex(), calendar
+
+    def _reformat(self, parsed: object) -> str:
+        calendar = parsed
+        return self._df.format(calendar.getTime())
+
+    def _field_value(self, calendar: object, field: _DateField) -> object:
+        value = calendar.get(field.calendar_field)
+        if field.name == "M":
+            return value + 1
+        if field.name == "weekday":
+            symbols = icu.DateFormatSymbols(icu.Locale("en"))
+            return symbols.getWeekdays()[value].lower()
+        if field.letter == "h" and value == 0:
+            return 12
+        if field.letter == "k" and value == 0:
+            return 24
+        return value
+
+    def _build(
+        self,
+        parsed: object,
+        surface: str,
+        start_cp: int,
+        cp_to_u16: list[int],
+        u16_to_cp: dict[int, int],
+    ) -> tuple[object, tuple[Capture, ...], object]:
+        calendar = parsed
+        values: list[tuple[str, int]] = []
+        captures: list[Capture] = []
+        forms: list[tuple[str, str]] = []
+        start_u16 = cp_to_u16[start_cp]
+        for field in self._fields:
+            value = self._field_value(calendar, field)
+            if field.value_field:
+                values.append((field.name, value))
+            forms.append((field.name, field.form))
+            position = icu.FieldPosition(field.format_field)
+            self._df.format(calendar.getTime(), position)
+            if position.getBeginIndex() == position.getEndIndex():
+                # ICU cannot locate this present field's span on this build -- e.g. a
+                # standalone weekday ('ccc'), for which no FieldPosition constant reports
+                # a span. A value field must be locatable (its value is already recorded);
+                # a display-only field (weekday) is derivable from the date via the
+                # pattern, so omit its capture rather than emit a zero-length one.
+                if field.value_field:
+                    raise ValueError(
+                        f"{self.type}: value field {field.name!r} present in pattern "
+                        f"{self.pattern!r} but ICU could not locate its span"
+                    )
+                continue
+            begin_u16 = start_u16 + position.getBeginIndex()
+            end_u16 = start_u16 + position.getEndIndex()
+            begin_cp = u16_to_cp[begin_u16]
+            end_cp = u16_to_cp[end_u16]
+            captures.append(
+                Capture(
+                    field.name,
+                    begin_cp,
+                    end_cp,
+                    surface[begin_cp - start_cp : end_cp - start_cp],
+                    value,
+                    field.form,
+                )
+            )
+        calendar_type = calendar.getType()
+        value = DateTimeValue(tuple(values), calendar_type)
+        spec = DateFormatSpec(
+            self.locale,
+            self.skeleton,
+            self.pattern,
+            calendar_type,
+            self.tz,
+            tuple(forms),
+        )
+        return value, tuple(captures), spec
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        return _scan(text, self.locale, self.type, self._inv)
 
 
 # --------------------------------------------------------------------------- scanner

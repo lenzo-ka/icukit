@@ -1266,6 +1266,21 @@ numeric (``day`` -> ``3``) or an enumerated member (``weekday`` -> ``"wednesday"
 
 Initialize self.  See help(type(self)) for accurate signature.
 
+### class `DateDetector`
+
+Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
+
+The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
+date specification fixes GMT so date-only parsing cannot acquire host-zone behavior.
+
+#### `DateDetector(locale: 'str', skeleton: 'str', tz: 'str' = 'GMT') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+
+
 ### class `DateFormatSpec`
 
 The generative recipe for a temporal detection.
