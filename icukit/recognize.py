@@ -11,9 +11,137 @@ from __future__ import annotations
 import icu
 
 from .breaker import break_grapheme_spans
-from .detectors import Capture, NumberFormatSpec, NumberValue, ValueDetection
+from .detectors import (
+    Capture,
+    DateFormatSpec,
+    DateTimeValue,
+    NumberFormatSpec,
+    NumberValue,
+    ValueDetection,
+)
 
-__all__ = ["FlexibleNumberDetector"]
+__all__ = ["FlexibleDateDetector", "FlexibleNumberDetector"]
+
+
+class FlexibleDateDetector:
+    """Recognize flexible numeric dates using a locale's CLDR short-date structure.
+
+    The stable ``date:flexible`` type distinguishes recall candidates from strict,
+    skeleton-specific date detections. Two-digit years retain their observed value;
+    this detector deposits one maximal candidate rather than expanding a century.
+    """
+
+    group = "date"
+    type = "date:flexible"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        icu_locale = icu.Locale(locale)
+        date_format = icu.DateFormat.createDateInstance(icu.DateFormat.kShort, icu_locale)
+        self.pattern = date_format.toPattern()
+        self._fields, self._separators = self._date_structure(self.pattern)
+
+        number_format = icu.NumberFormat.createInstance(icu_locale)
+        symbols = number_format.getDecimalFormatSymbols()
+        zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
+        self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
+        self._spec = DateFormatSpec(locale, "yMd", self.pattern, "gregorian")
+
+    @staticmethod
+    def _date_structure(pattern: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        fields: list[str] = []
+        literals: list[str] = []
+        literal: list[str] = []
+        quoted = False
+        cursor = 0
+        while cursor < len(pattern):
+            character = pattern[cursor]
+            if character == "'":
+                if cursor + 1 < len(pattern) and pattern[cursor + 1] == "'":
+                    literal.append("'")
+                    cursor += 2
+                    continue
+                quoted = not quoted
+                cursor += 1
+                continue
+            if not quoted and character in {"y", "M", "L", "d"}:
+                if fields:
+                    literals.append("".join(literal))
+                literal.clear()
+                field = "M" if character == "L" else character
+                fields.append(field)
+                cursor += 1
+                while cursor < len(pattern) and pattern[cursor] == character:
+                    cursor += 1
+                continue
+            literal.append(character)
+            cursor += 1
+
+        if len(fields) != 3 or set(fields) != {"y", "M", "d"} or len(literals) != 2:
+            raise ValueError(f"unsupported short date pattern: {pattern!r}")
+        if not all(literals):
+            raise ValueError(f"short date pattern has an empty separator: {pattern!r}")
+        return tuple(fields), tuple(literals)
+
+    def _digit_run(self, text: str, start: int) -> tuple[int, str, int]:
+        cursor = start
+        value = 0
+        while cursor < len(text) and text[cursor] in self._digits:
+            value = value * 10 + self._digits[text[cursor]]
+            cursor += 1
+        return cursor, text[start:cursor], value
+
+    def _match(
+        self, text: str, start: int
+    ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
+        cursor = start
+        values: dict[str, int] = {}
+        captures: list[Capture] = []
+        for index, field in enumerate(self._fields):
+            field_start = cursor
+            cursor, surface, value = self._digit_run(text, cursor)
+            width = cursor - field_start
+            valid_width = width in ({2, 4} if field == "y" else {1, 2})
+            valid_range = field == "y" or field == "M" and 1 <= value <= 12
+            valid_range = valid_range or field == "d" and 1 <= value <= 31
+            if not valid_width or not valid_range:
+                return None
+            values[field] = value
+            captures.append(Capture(field, field_start, cursor, surface, value, "numeric"))
+            if index < len(self._separators):
+                separator = self._separators[index]
+                if not text.startswith(separator, cursor):
+                    return None
+                cursor += len(separator)
+
+        ordered = tuple((field, values[field]) for field in ("y", "M", "d"))
+        return cursor, tuple(captures), DateTimeValue(ordered, "gregorian")
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping flexible numeric dates in source order."""
+        starts = sorted({span["start"] for span in break_grapheme_spans(text, self.locale)})
+        detections: list[ValueDetection] = []
+        cursor = 0
+        for start in starts:
+            if start < cursor:
+                continue
+            match = self._match(text, start)
+            if match is None:
+                continue
+            end, captures, value = match
+            detections.append(
+                ValueDetection(
+                    text=text[start:end],
+                    start=start,
+                    end=end,
+                    type=self.type,
+                    value=value,
+                    captures=captures,
+                    spec=self._spec,
+                )
+            )
+            cursor = end
+        return detections
 
 
 class FlexibleNumberDetector:

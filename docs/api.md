@@ -3456,6 +3456,22 @@ Recognizers are the recall-oriented counterpart to the strict detectors in
 surface to equal ICU's canonical formatting; the existing resolver can then select among
 those candidates unchanged.
 
+### class `FlexibleDateDetector`
+
+Recognize flexible numeric dates using a locale's CLDR short-date structure.
+
+The stable ``date:flexible`` type distinguishes recall candidates from strict,
+skeleton-specific date detections. Two-digit years retain their observed value;
+this detector deposits one maximal candidate rather than expanding a century.
+
+#### `FlexibleDateDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible numeric dates in source order.
+
 ### class `FlexibleNumberDetector`
 
 Recognize flexible decimal-number spellings using locale symbols from CLDR.
