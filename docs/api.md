@@ -857,6 +857,54 @@ Example:
     >>> fmt.format(1234567, style="LONG")
     '1.2 million'
 
+## icukit.conformance
+
+Round-trip conformance inventory for ICU-backed value detectors.
+
+### class `Cell`
+
+Cell(locale: 'str', category: 'str', params: 'str', value: 'str', envelope: 'str', currency: 'str | None' = None)
+
+#### `Cell(locale: 'str', category: 'str', params: 'str', value: 'str', envelope: 'str', currency: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `Outcome`
+
+Outcome(reason: 'str', detail: 'str' = '', surface: 'str' = '')
+
+#### `Outcome(reason: 'str', detail: 'str' = '', surface: 'str' = '') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `build_inventory(profile: 'Profile' = 'ci') -> 'dict'`
+
+Build the stable, JSON-compatible defect inventory for ``profile``.
+
+### `canonical_json(value: 'dict') -> 'str'`
+
+Serialize an inventory in its committed canonical representation.
+
+### `classify(cell: 'Cell') -> 'Outcome'`
+
+Format, detect, and classify one matrix cell.
+
+### `compare_expected(detection, text: 'str', expected_value: 'DateTimeValue | NumberValue', expected_captures: 'tuple[Capture, ...]', expected_spec: 'DateFormatSpec | NumberFormatSpec', surface: 'str') -> 'Outcome'`
+
+Compare a detection with a complete independently constructed oracle record.
+
+### `iter_cells(profile: 'Profile' = 'ci') -> 'list[Cell]'`
+
+
+
+### `matrix(profile: 'Profile' = 'ci') -> 'dict'`
+
+Return the data definition for a conformance profile.
+
+### `matrix_digest(profile: 'Profile' = 'ci') -> 'str'`
+
+
+
 ## icukit.datetime
 
 Locale-aware date and time formatting.
@@ -1413,6 +1461,22 @@ Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``val
 ``captures``, and ``spec`` (see the module docstring). The invariant
 ``reformat(spec, value) == surface`` holds for every accepted detection.
 
+### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = ()) -> 'DetectorSet'`
+
+Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
+
+A convenience composition of :func:`date_detectors` and :func:`number_detectors` for
+``locale`` into one gang.
+
+### `date_detectors(locale: 'str', skeletons: 'Iterable[str]') -> 'DetectorSet'`
+
+A gang of date detectors for ``locale``, one per skeleton.
+
+``skeletons`` are ICU date-time skeletons (``"yMd"``, ``"yMMMd"``); each becomes a
+:class:`DateDetector`. Members are deduplicated by type, so a repeated skeleton is
+harmless. A skeleton whose pattern carries an uninvertible field raises (see
+:class:`DateDetector`).
+
 ### `detect(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]') -> 'list[ValueDetection]'`
 
 Run every detector over ``text`` and return the merged detections.
@@ -1427,6 +1491,13 @@ merge of its members. The single-pass variant §12.5 describes -- one shared sca
 with per-member resume cursors and a freshly cleared calendar per (member, start)
 attempt -- is a deferred efficiency optimization, not yet built; its equivalence
 to this merge is the invariant that variant must preserve.
+
+### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = ()) -> 'DetectorSet'`
+
+A gang of number detectors for ``locale``.
+
+``decimal`` and ``percent`` add the plain decimal and percent detectors; each ISO code
+in ``currencies`` adds a currency detector (type ``number:currency:<ISO>``).
 
 ## icukit.discover
 
@@ -3797,6 +3868,54 @@ Example:
     >>> us = next(r for r in regions if r['code'] == 'US')
     >>> us['numeric_code']
     840
+
+## icukit.resolve
+
+Resolve a universe of overlapping detections into a best non-overlapping sequence.
+
+See ``design/H4-resolution/design.md``. The detectors DEPOSIT every candidate they find --
+running them on ``1/3/2026`` yields a ``date:yMd`` over the whole span alongside the digit
+fragments ``1``, ``3``, ``26``. This module weighs that universe into the maximum-weight
+non-overlapping cover (1-best), or an ordering of covers that collapses to 1-best.
+
+The weight is span length times specificity: a longer coherent match is far less likely to
+be coincidental, and a match that commits to more structure (more captures) and still fits is
+stronger evidence. The two axes usually agree; where they diverge the scalar weight forces the
+call. Preference is soft -- when the top two covers are within a margin the resolver reports
+the contest as ambiguous rather than guessing.
+
+This is additive: :func:`~icukit.detectors.detect` is unchanged; resolution is an opt-in layer.
+
+### class `Resolution`
+
+The weighed reading of a universe of detections.
+
+``best`` is the maximum-weight non-overlapping sequence in source order. ``covers`` is the
+n-best ordering of covers by descending score, with ``covers[0] == best``. ``margin`` is the
+score gap between the top two covers; ``ambiguous`` is true when that gap is below the
+refusal threshold, meaning the resolver declines to commit between them.
+
+#### `Resolution(best: 'tuple[ValueDetection, ...]', covers: 'tuple[tuple[ValueDetection, ...], ...]', margin: 'int', ambiguous: 'bool') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `resolve(detections: 'list[ValueDetection] | tuple[ValueDetection, ...]', *, n: 'int' = 8, epsilon: 'int' = 1.0) -> 'Resolution'`
+
+Weigh a universe of (possibly overlapping) detections into a :class:`Resolution`.
+
+Returns the maximum-weight non-overlapping ``best`` sequence, the ``n``-best ordering of
+covers, and an ``ambiguous`` flag when the top two covers are within ``epsilon``.
+
+### `resolve_text(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]', *, n: 'int' = 8, epsilon: 'int' = 1.0) -> 'Resolution'`
+
+Run every detector over ``text`` and resolve the deposited universe in one call.
+
+### `weight(detection: 'ValueDetection') -> 'int'`
+
+A candidate's score: span length (code points) times specificity.
+
+Specificity is one plus the capture count -- the structure the reading commits to -- so a
+richer match wins an equal-length contest while length carries the unequal ones.
 
 ## icukit.script
 
