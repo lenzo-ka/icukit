@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, fields, is_dataclass
+from decimal import Decimal
 from typing import Literal, Protocol, runtime_checkable
 
 import icu
@@ -48,6 +49,7 @@ __all__ = [
     "DetectorRefusal",
     "DetectorSet",
     "NumberFormatSpec",
+    "NumberDetector",
     "NumberValue",
     "ValueDetection",
     "detect",
@@ -422,6 +424,240 @@ class DateDetector:
             self.tz,
             tuple(forms),
         )
+        return value, tuple(captures), spec
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        return _scan(text, self.locale, self.type, self._inv)
+
+
+# --------------------------------------------------------------------------- numbers
+
+
+class NumberDetector:
+    """Detect canonical ICU decimal, currency, or percent surfaces."""
+
+    group = "number"
+
+    def __init__(
+        self,
+        locale: str,
+        kind: Literal["decimal", "currency", "percent"],
+        currency: str | None = None,
+    ) -> None:
+        if kind not in {"decimal", "currency", "percent"}:
+            raise ValueError("kind must be 'decimal', 'currency', or 'percent'")
+        if currency is not None and kind != "currency":
+            raise ValueError("currency is only valid for kind='currency'")
+
+        self.locale = locale
+        self.kind = kind
+        icu_locale = icu.Locale(locale)
+        if kind == "currency":
+            self._nf = icu.NumberFormat.createCurrencyInstance(icu_locale)
+            if currency is not None:
+                self._nf.setCurrency(currency)
+            self.currency = self._nf.getCurrency()
+            self.type = f"number:currency:{self.currency}"
+        elif kind == "percent":
+            self._nf = icu.NumberFormat.createPercentInstance(icu_locale)
+            self.currency = None
+            self.type = "number:percent"
+        else:
+            self._nf = icu.NumberFormat.createInstance(icu_locale)
+            self.currency = None
+            self.type = "number:decimal"
+
+        symbols = self._nf.getDecimalFormatSymbols()
+        symbol = icu.DecimalFormatSymbols
+        self._decimal = symbols.getSymbol(symbol.kDecimalSeparatorSymbol)
+        self._grouping = symbols.getSymbol(symbol.kGroupingSeparatorSymbol)
+        self._zero = symbols.getSymbol(symbol.kZeroDigitSymbol)
+        self._minus = symbols.getSymbol(symbol.kMinusSignSymbol)
+        self._plus = symbols.getSymbol(symbol.kPlusSignSymbol)
+        self._currency_symbol = symbols.getSymbol(symbol.kCurrencySymbol)
+        self._percent = symbols.getSymbol(symbol.kPercentSymbol)
+        self._inv = _Inverter(self._parse, self._reformat, self._build)
+
+    def _parse(self, text: icu.UnicodeString, start_u16: int) -> tuple[int, object] | None:
+        position = icu.ParsePosition(start_u16)
+        parsed = self._nf.parse(text, position)
+        if position.getErrorIndex() != -1 or position.getIndex() <= start_u16:
+            return None
+        return position.getIndex(), parsed
+
+    def _reformat(self, parsed: object) -> str:
+        # Format the parsed Formattable directly, not its getDouble(): a double loses
+        # precision above 2^53, which would reject an exact large-integer surface and
+        # then mis-detect a suffix. The Formattable keeps the int64 the parse recovered.
+        return self._nf.format(parsed)
+
+    def _ascii_digits(self, text: str) -> str:
+        zero = ord(self._zero)
+        converted: list[str] = []
+        for character in text:
+            offset = ord(character) - zero
+            if 0 <= offset <= 9:
+                converted.append(str(offset))
+        return "".join(converted)
+
+    def _capture(
+        self,
+        name: str,
+        begin: int,
+        end: int,
+        surface: str,
+        start_cp: int,
+        start_u16: int,
+        u16_to_cp: dict[int, int],
+        value: object | None,
+        form: str,
+    ) -> Capture:
+        begin_cp = u16_to_cp[start_u16 + begin]
+        end_cp = u16_to_cp[start_u16 + end]
+        return Capture(
+            name,
+            begin_cp,
+            end_cp,
+            surface[begin_cp - start_cp : end_cp - start_cp],
+            value,
+            form,
+        )
+
+    def _symbol_capture(
+        self,
+        name: str,
+        symbol: str,
+        surface: str,
+        start_cp: int,
+        start_u16: int,
+        u16_to_cp: dict[int, int],
+    ) -> Capture | None:
+        begin_cp = surface.find(symbol)
+        if begin_cp < 0:
+            return None
+        local_cp_to_u16, _ = boundary_maps(surface)
+        return self._capture(
+            name,
+            local_cp_to_u16[begin_cp],
+            local_cp_to_u16[begin_cp + len(symbol)],
+            surface,
+            start_cp,
+            start_u16,
+            u16_to_cp,
+            None,
+            "symbol",
+        )
+
+    def _build(
+        self,
+        parsed: object,
+        surface: str,
+        start_cp: int,
+        cp_to_u16: list[int],
+        u16_to_cp: dict[int, int],
+    ) -> tuple[object, tuple[Capture, ...], object]:
+        start_u16 = cp_to_u16[start_cp]
+        integer_position = icu.FieldPosition(icu.NumberFormat.kIntegerField)
+        self._nf.format(parsed, integer_position)
+        fraction_position = icu.FieldPosition(icu.NumberFormat.kFractionField)
+        self._nf.format(parsed, fraction_position)
+
+        local_cp_to_u16, local_u16_to_cp = boundary_maps(surface)
+        integer_begin = local_u16_to_cp[integer_position.getBeginIndex()]
+        integer_end = local_u16_to_cp[integer_position.getEndIndex()]
+        integer_text = surface[integer_begin:integer_end]
+        integer_ascii = self._ascii_digits(integer_text)
+        captures = [
+            self._capture(
+                "integer",
+                integer_position.getBeginIndex(),
+                integer_position.getEndIndex(),
+                surface,
+                start_cp,
+                start_u16,
+                u16_to_cp,
+                integer_ascii,
+                "numeric",
+            )
+        ]
+
+        fraction_ascii = ""
+        if fraction_position.getEndIndex() > fraction_position.getBeginIndex():
+            fraction_begin = local_u16_to_cp[fraction_position.getBeginIndex()]
+            fraction_end = local_u16_to_cp[fraction_position.getEndIndex()]
+            fraction_ascii = self._ascii_digits(surface[fraction_begin:fraction_end])
+            captures.append(
+                self._capture(
+                    "fraction",
+                    fraction_position.getBeginIndex(),
+                    fraction_position.getEndIndex(),
+                    surface,
+                    start_cp,
+                    start_u16,
+                    u16_to_cp,
+                    fraction_ascii,
+                    "numeric",
+                )
+            )
+            separator_start = surface.find(self._decimal, integer_end, fraction_begin)
+            if separator_start >= 0:
+                separator_u16 = local_cp_to_u16[separator_start]
+                captures.append(
+                    self._capture(
+                        "decimal-separator",
+                        separator_u16,
+                        local_cp_to_u16[separator_start + len(self._decimal)],
+                        surface,
+                        start_cp,
+                        start_u16,
+                        u16_to_cp,
+                        None,
+                        "symbol",
+                    )
+                )
+
+        sign = (
+            self._minus if self._minus in surface else self._plus if self._plus in surface else None
+        )
+        if sign is not None:
+            capture = self._symbol_capture("sign", sign, surface, start_cp, start_u16, u16_to_cp)
+            if capture is not None:
+                captures.append(capture)
+        if self.kind == "currency":
+            capture = self._symbol_capture(
+                "currency", self._currency_symbol, surface, start_cp, start_u16, u16_to_cp
+            )
+            if capture is not None:
+                captures.append(capture)
+        if self.kind == "percent":
+            capture = self._symbol_capture(
+                "percent", self._percent, surface, start_cp, start_u16, u16_to_cp
+            )
+            if capture is not None:
+                captures.append(capture)
+
+        normalized = ("-" if sign == self._minus else "") + integer_ascii
+        if fraction_ascii:
+            normalized += "." + fraction_ascii
+        if self.kind == "percent":
+            normalized = str(Decimal(normalized) / 100)
+        value = NumberValue(normalized, self.currency)
+
+        grouping_sizes = None
+        if self._nf.isGroupingUsed():
+            primary = self._nf.getGroupingSize()
+            secondary = self._nf.getSecondaryGroupingSize()
+            # Left-to-right semantic order: secondary groups, then the rightmost primary.
+            grouping_sizes = (secondary, primary) if secondary else (primary,)
+        spec = NumberFormatSpec(
+            self.locale,
+            self.kind,
+            self.currency,
+            self._nf.getMinimumFractionDigits(),
+            self._nf.getMaximumFractionDigits(),
+            grouping_sizes,
+        )
+        captures.sort(key=lambda capture: (capture.start, capture.end))
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:

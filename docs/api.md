@@ -1368,6 +1368,18 @@ Return a new gang with ``more`` detectors added (deduplicated by type).
 
 Return a new gang with the named detector types removed.
 
+### class `NumberDetector`
+
+Detect canonical ICU decimal, currency, or percent surfaces.
+
+#### `NumberDetector(locale: 'str', kind: "Literal['decimal', 'currency', 'percent']", currency: 'str | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+
+
 ### class `NumberFormatSpec`
 
 The generative recipe for a numeric detection.
