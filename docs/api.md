@@ -1222,6 +1222,185 @@ Raises:
     Whatever :class:`icukit.regex.UnicodeRegex` raises for an invalid or unhostable
     pattern -- notably a compile error for unbounded lookbehind.
 
+## icukit.detectors
+
+D1 detectors: invert ICU formatters to find typed values in running text.
+
+A *detector* here wraps the invertible class -- the value kinds where an ICU parser
+inverts the formatter (dates, times, datetimes, decimal numbers, currency, percent).
+Each accepted match is a :class:`ValueDetection` that carries the full generative
+structure of the parse::
+
+    surface  <->  (spec, value, captures)
+
+governed by the invariant ``reformat(spec, value) == surface`` -- which is also the
+acceptance test, so a permissive ICU spelling that would not reproduce its own surface
+is rejected rather than accepted.
+
+* ``value`` -- an immutable semantic record (:class:`DateTimeValue` / :class:`NumberValue`).
+  Numeric values are canonical decimal *strings* derived from the accepted surface, never a
+  binary ``float`` (this PyICU's ``Formattable`` has no decimal accessor, so a float would
+  otherwise be smuggled in).
+* ``captures`` -- the named sub-parts of the match (:class:`Capture`): year/month/day of a
+  date, sign/integer/fraction of a number, each with its own source span, resolved value,
+  and form (short/wide/numeric/symbol). They reveal *how* the surface decomposes.
+* ``spec`` -- the generative recipe (:class:`DateFormatSpec` / :class:`NumberFormatSpec`):
+  the parameters sufficient to reproduce the surface. Calendars are *observed*, not assumed
+  Gregorian, so a Buddhist or Persian locale round-trips correctly.
+
+Detectors run individually (``detector.detect(text)``) or ganged in an immutable
+:class:`DetectorSet`; a gang's result equals the merge of running its members alone.
+Everything here is pure icukit over code-point offsets -- no tiergraph.
+
+### class `Capture`
+
+One named sub-part of a match, revealing the parse structure.
+
+``start``/``end`` are code-point offsets into the *source* text (half-open), so
+``text[start:end]`` is this part's surface. ``value`` is the resolved value --
+numeric (``day`` -> ``3``) or an enumerated member (``weekday`` -> ``"wednesday"``,
+``month`` -> ``1``). ``form`` is how the surface encodes it: ``"numeric"``,
+``"short"``, ``"wide"``, ``"narrow"``, or ``"symbol"``.
+
+#### `Capture(name: 'str', start: 'int', end: 'int', text: 'str', value: 'object | None' = None, form: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `DateFormatSpec`
+
+The generative recipe for a temporal detection.
+
+``skeleton`` is the caller's canonical skeleton; ``pattern`` is the locale best
+pattern actually used; ``calendar`` is observed from the constructed formatter, not
+assumed. ``field_forms`` records each present field's form (``("month", "short")``).
+
+#### `DateFormatSpec(locale: 'str', skeleton: 'str', pattern: 'str', calendar: 'str', tz: 'str' = 'GMT', field_forms: 'tuple[tuple[str, str], ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `DateTimeValue`
+
+Civil date/time fields recovered from a temporal parse.
+
+``fields`` holds only the fields the pattern actually pins, as ``(name, value)``
+pairs in canonical order (e.g. ``(("y", 2569), ("M", 1), ("d", 3))``). ``calendar``
+is the *observed* calendar of those fields -- ``"buddhist"`` for ``th_TH`` etc. -- so
+the year is the value displayed in that calendar, matching the surface. A moment is
+*derivable* from these fields plus the spec's calendar and time zone when a caller
+needs one; it is never stored, so the record never implies a time the surface did
+not show.
+
+#### `DateTimeValue(fields: 'tuple[tuple[str, int], ...]', calendar: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `Detector`
+
+A runnable D1 detector.
+
+``type`` is the stable label carried on its detections (``date:yMMMd``,
+``number:currency:USD``); ``group`` is its coarse family (``date``, ``number``) and
+equals the ``type`` prefix. ``detect`` scans the whole text and returns its
+detections in source order -- unanchored, partial, tolerant of finding nothing.
+
+#### `Detector(*args, **kwargs)`
+
+
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+
+
+### class `DetectorRefusal`
+
+An ostensibly-successful ICU parse produced an unrepresentable endpoint.
+
+This is *not* a parse miss (a miss is silent and returns no candidate). It signals a
+reversed, surrogate-interior, or mid-grapheme endpoint -- an invariant violation the
+detector refuses to represent rather than emit wrongly. It carries a stable
+``reason`` from :data:`RefusalReason` and the offsets involved.
+
+#### `DetectorRefusal(type: 'str', start: 'int', endpoint: 'int | None', reason: 'RefusalReason', message: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `DetectorSet`
+
+An immutable gang of detectors that runs its members together.
+
+``detect`` returns exactly the merge of running each member individually (the same
+result :func:`detect` would give). A gang is a value -- there is no mutable global
+registry; selection and grouping are expressed by composing gangs with
+:meth:`with_` / :meth:`without`.
+
+#### `DetectorSet(detectors: 'tuple[Detector, ...]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+
+
+#### `names() -> 'tuple[str, ...]'`
+
+
+
+#### `with_(*more: 'Detector') -> 'DetectorSet'`
+
+Return a new gang with ``more`` detectors added (deduplicated by type).
+
+#### `without(*types: 'str') -> 'DetectorSet'`
+
+Return a new gang with the named detector types removed.
+
+### class `NumberFormatSpec`
+
+The generative recipe for a numeric detection.
+
+``grouping_sizes`` are Known from the formatter (e.g. ``(3,)`` for en_US,
+``(2, 3)`` for hi_IN Indian grouping), not read off one value; ``None`` when the
+formatter groups by no fixed size. ``min_fraction``/``max_fraction`` are the
+formatter's configured fraction-digit bounds.
+
+#### `NumberFormatSpec(locale: 'str', kind: "Literal['decimal', 'currency', 'percent']", currency: 'str | None' = None, min_fraction: 'int | None' = None, max_fraction: 'int | None' = None, grouping_sizes: 'tuple[int, ...] | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `NumberValue`
+
+A numeric value recovered as a canonical decimal string.
+
+``decimal`` is derived from the accepted surface (locale digits and separators
+normalized to ASCII), never from a binary ``float``. For a percent it is the ratio
+(``"7%"`` -> ``"0.07"``); for a currency, ``currency`` carries the ISO 4217 code.
+
+#### `NumberValue(decimal: 'str', currency: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `ValueDetection`
+
+A D1 detection: a :class:`~icukit.detect.Detection` plus its generative structure.
+
+Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``value``,
+``captures``, and ``spec`` (see the module docstring). The invariant
+``reformat(spec, value) == surface`` holds for every accepted detection.
+
+### `detect(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]') -> 'list[ValueDetection]'`
+
+Run every detector over ``text`` and return the merged detections.
+
+Detections are returned in a fully deterministic order (start ascending, longer
+extent first, then type, then value key) independent of ``detectors`` order.
+Detections from different detectors may overlap -- H3 deposits them; resolving
+overlap is H4.
+
+Each detector runs its own scan here (multi-pass), so a gang trivially equals the
+merge of its members. The single-pass variant §12.5 describes -- one shared scan
+with per-member resume cursors and a freshly cleared calendar per (member, start)
+attempt -- is a deferred efficiency optimization, not yet built; its equivalence
+to this merge is the invariant that variant must preserve.
+
 ## icukit.discover
 
 Discovery utilities for icukit features and capabilities.
