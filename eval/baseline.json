@@ -1,0 +1,65 @@
+{
+  "criterion": {
+    "strict": "expected-type detection spans the full written input",
+    "lenient": "expected-type detection occurs anywhere in the written input"
+  },
+  "locale": "en_US",
+  "classes": {
+    "cardinal": {
+      "total": 18,
+      "recognized_strict": 17,
+      "recognized_lenient": 18,
+      "recall_strict": 0.9444444444444444,
+      "recall_lenient": 1.0
+    },
+    "decimal": {
+      "total": 12,
+      "recognized_strict": 5,
+      "recognized_lenient": 12,
+      "recall_strict": 0.4166666666666667,
+      "recall_lenient": 1.0
+    },
+    "date": {
+      "total": 54,
+      "recognized_strict": 3,
+      "recognized_lenient": 5,
+      "recall_strict": 0.05555555555555555,
+      "recall_lenient": 0.09259259259259259
+    },
+    "time": {
+      "total": 21,
+      "recognized_strict": 7,
+      "recognized_lenient": 17,
+      "recall_strict": 0.3333333333333333,
+      "recall_lenient": 0.8095238095238095
+    },
+    "money": {
+      "total": 71,
+      "recognized_strict": 45,
+      "recognized_lenient": 57,
+      "recall_strict": 0.6338028169014085,
+      "recall_lenient": 0.8028169014084507
+    },
+    "fraction": {
+      "total": 16,
+      "recognized_strict": 11,
+      "recognized_lenient": 15,
+      "recall_strict": 0.6875,
+      "recall_lenient": 0.9375
+    },
+    "ordinal": {
+      "total": 27,
+      "recognized_strict": 15,
+      "recognized_lenient": 19,
+      "recall_strict": 0.5555555555555556,
+      "recall_lenient": 0.7037037037037037
+    }
+  },
+  "overall": {
+    "total": 219,
+    "recognized_strict": 103,
+    "recognized_lenient": 143,
+    "recall_strict": 0.4703196347031963,
+    "recall_lenient": 0.6529680365296804
+  }
+}
