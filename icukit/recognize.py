@@ -18,6 +18,8 @@ from .detectors import (
     Capture,
     DateFormatSpec,
     DateTimeValue,
+    MeasureFormatSpec,
+    MeasureValue,
     NumberFormatSpec,
     NumberValue,
     ValueDetection,
@@ -27,6 +29,7 @@ __all__ = [
     "FlexibleCurrencyDetector",
     "FlexibleDateDetector",
     "FlexibleFractionDetector",
+    "FlexibleMeasureDetector",
     "FlexibleNumberDetector",
     "FlexibleOrdinalDetector",
     "FlexiblePercentDetector",
@@ -442,6 +445,111 @@ class FlexibleCurrencyDetector:
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible currency candidates in source order."""
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+class FlexibleMeasureDetector:
+    """Recognize a flexible number followed by a reflectively derived ICU unit surface."""
+
+    group = "measure"
+
+    def __init__(self, locale: str, unit: str) -> None:
+        self.locale = locale
+        self.unit = unit
+        self.type = f"measure:{unit}"
+        self._number = FlexibleNumberDetector(locale)
+
+        measure_unit = icu.MeasureUnit.forIdentifier(unit)
+        if measure_unit.getIdentifier() != unit:
+            raise ValueError(f"unit is not a canonical ICU identifier: {unit!r}")
+
+        icu_locale = icu.Locale(locale)
+        number_surface = icu.NumberFormat.createInstance(icu_locale).format(1)
+        surfaces: list[tuple[str, str, bool]] = []
+        for width, width_name in (
+            (icu.UMeasureFormatWidth.SHORT, "short"),
+            (icu.UMeasureFormatWidth.NARROW, "narrow"),
+        ):
+            formatter = icu.MeasureFormat(icu_locale, width)
+            formatted = formatter.formatMeasure(icu.Measure(1, measure_unit))
+            number_start = formatted.find(number_surface)
+            if number_start < 0:
+                continue
+            number_end = number_start + len(number_surface)
+            prefix = formatted[:number_start].strip()
+            raw_suffix = formatted[number_end:]
+            suffix = raw_suffix.strip()
+            if prefix or not suffix:
+                continue
+            candidate = (suffix, width_name, raw_suffix != raw_suffix.lstrip())
+            if candidate not in surfaces:
+                surfaces.append(candidate)
+        if not surfaces:
+            raise ValueError(f"ICU exposes no supported suffix surface for unit: {unit!r}")
+        self._units = tuple(surfaces)
+
+    @staticmethod
+    def _space(text: str, cursor: int) -> int:
+        if cursor < len(text) and text[cursor] in _SPACES:
+            return cursor + 1
+        return cursor
+
+    @staticmethod
+    def _continues_word(text: str, cursor: int) -> bool:
+        if cursor >= len(text):
+            return False
+        character = text[cursor]
+        category = icu.Char.charType(character)
+        return icu.Char.isalnum(character) or category in {
+            icu.UCharCategory.NON_SPACING_MARK,
+            icu.UCharCategory.COMBINING_SPACING_MARK,
+            icu.UCharCategory.ENCLOSING_MARK,
+            icu.UCharCategory.CONNECTOR_PUNCTUATION,
+        }
+
+    def _match(self, text: str, start: int):
+        match = self._number._match(text, start)
+        if match is None:
+            return None
+        number_end, captures, value = match
+        unit_start = self._space(text, number_end)
+        has_space = unit_start != number_end
+        ordered_units = sorted(self._units, key=lambda item: item[2] != has_space)
+        for surface, width, _expects_space in ordered_units:
+            if not text.startswith(surface, unit_start):
+                continue
+            end = unit_start + len(surface)
+            if self._continues_word(text, end):
+                continue
+            unit_capture = Capture("unit", unit_start, end, surface, self.unit, "symbol")
+            spec = MeasureFormatSpec(self.locale, self.unit, width)
+            return end, (*captures, unit_capture), MeasureValue(value.decimal, self.unit), spec
+        return None
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping flexible measure candidates in source order."""
+        starts = sorted({span["start"] for span in break_grapheme_spans(text, self.locale)})
+        detections: list[ValueDetection] = []
+        cursor = 0
+        for start in starts:
+            if start < cursor:
+                continue
+            result = self._match(text, start)
+            if result is None:
+                continue
+            end, captures, value, spec = result
+            detections.append(
+                ValueDetection(
+                    text=text[start:end],
+                    start=start,
+                    end=end,
+                    type=self.type,
+                    value=value,
+                    captures=captures,
+                    spec=spec,
+                )
+            )
+            cursor = end
+        return detections
 
 
 class FlexibleTimeDetector:
