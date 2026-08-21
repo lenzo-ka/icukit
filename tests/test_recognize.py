@@ -1,10 +1,13 @@
 """Tests for flexible, recall-oriented recognizers."""
 
+import icu
 import pytest
 
 from icukit.detectors import (
     DateDetector,
     Detector,
+    MeasureFormatSpec,
+    MeasureValue,
     NumberDetector,
     NumberFormatSpec,
     NumberValue,
@@ -14,6 +17,7 @@ from icukit.recognize import (
     FlexibleCurrencyDetector,
     FlexibleDateDetector,
     FlexibleFractionDetector,
+    FlexibleMeasureDetector,
     FlexibleNumberDetector,
     FlexibleOrdinalDetector,
     FlexiblePercentDetector,
@@ -214,6 +218,105 @@ def test_flexible_money_composes_with_detect_and_resolve():
 
     assert [detection["text"] for detection in detections] == ["7%", "$1,234"]
     assert [detection["text"] for detection in resolution.best] == ["7%", "$1,234"]
+
+
+@pytest.mark.parametrize(
+    "locale, unit, surface, decimal, width",
+    [
+        ("en_US", "kilometer", "5 km", "5", "short"),
+        ("en_US", "kilometer", "5km", "5", "narrow"),
+        ("en_US", "kilogram", "3.2 kg", "3.2", "short"),
+        ("en_US", "celsius", "20°C", "20", "short"),
+        ("en_US", "mile-per-hour", "10 mph", "10", "short"),
+        ("de_DE", "kilometer", "5 km", "5", "short"),
+    ],
+)
+def test_flexible_measure_gains_recall(locale, unit, surface, decimal, width):
+    assert all(
+        detection["text"] != surface
+        for detection in NumberDetector(locale, "decimal").detect(surface)
+    )
+
+    detector = FlexibleMeasureDetector(locale, unit)
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert detection["text"] == surface
+    assert detection["type"] == f"measure:{unit}"
+    assert detection["value"] == MeasureValue(decimal, unit)
+    assert detection["spec"] == MeasureFormatSpec(locale, unit, width)
+    assert detection["captures"][-1].name == "unit"
+    assert detection["captures"][-1].value == unit
+    assert detection["captures"][-1].form == "symbol"
+
+
+@pytest.mark.parametrize("surface", ["5", "5 parsecs"])
+def test_flexible_measure_requires_requested_unit(surface):
+    assert FlexibleMeasureDetector("en_US", "kilometer").detect(surface) == []
+
+
+@pytest.mark.parametrize(
+    "unit, surface",
+    [
+        ("meter", "5mph"),
+        ("meter", "5ms"),
+        ("kilogram", "5kgfoo"),
+        ("celsius", "20°Celsius"),
+    ],
+)
+def test_flexible_measure_rejects_unit_prefix_of_word(unit, surface):
+    assert FlexibleMeasureDetector("en_US", unit).detect(surface) == []
+
+
+@pytest.mark.parametrize("text", ["5m, then", "5 m traveled"])
+def test_flexible_measure_allows_boundary_after_unit(text):
+    detection = FlexibleMeasureDetector("en_US", "meter").detect(text)[0]
+
+    assert detection["text"] in {"5m", "5 m"}
+
+
+def test_flexible_measure_skips_undecomposable_width():
+    locale = icu.Locale("ar_EG")
+    unit = icu.MeasureUnit.forIdentifier("meter")
+    number_surface = icu.NumberFormat.createInstance(locale).format(1)
+    short_surface = icu.MeasureFormat(locale, icu.UMeasureFormatWidth.SHORT).formatMeasure(
+        icu.Measure(1, unit)
+    )
+    surface = icu.MeasureFormat(locale, icu.UMeasureFormatWidth.NARROW).formatMeasure(
+        icu.Measure(1, unit)
+    )
+    assert number_surface not in short_surface
+
+    detection = FlexibleMeasureDetector("ar_EG", "meter").detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["spec"] == MeasureFormatSpec("ar_EG", "meter", "narrow")
+
+
+def test_flexible_measure_refuses_icu_normalized_identifier():
+    canonical = next(
+        unit.getIdentifier()
+        for unit_type in icu.MeasureUnit.getAvailableTypes()
+        for unit in icu.MeasureUnit.getAvailable(unit_type)
+        if "-per-square-" in unit.getIdentifier()
+    )
+    numerator, denominator = canonical.split("-per-square-", 1)
+    noncanonical = f"{numerator}-per-{denominator}-per-{denominator}"
+    assert icu.MeasureUnit.forIdentifier(noncanonical).getIdentifier() == canonical
+
+    with pytest.raises(ValueError, match="not a canonical ICU identifier"):
+        FlexibleMeasureDetector("en_US", noncanonical)
+
+
+def test_flexible_measure_capture_offsets_with_astral_prefix():
+    source = "📌 20°C"
+    detection = FlexibleMeasureDetector("en_US", "celsius").detect(source)[0]
+    unit = detection["captures"][-1]
+
+    assert (unit.start, unit.end, unit.text) == (4, 6, "°C")
+    assert all(
+        source[capture.start : capture.end] == capture.text for capture in detection["captures"]
+    )
 
 
 @pytest.mark.parametrize("surface", ["1/3/26", "01/03/26"])

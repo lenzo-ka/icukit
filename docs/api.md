@@ -1416,6 +1416,22 @@ Return a new gang with ``more`` detectors added (deduplicated by type).
 
 Return a new gang with the named detector types removed.
 
+### class `MeasureFormatSpec`
+
+The locale, canonical ICU unit, and width used for a measure candidate.
+
+#### `MeasureFormatSpec(locale: 'str', unit: 'str', width: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `MeasureValue`
+
+A numeric value paired with its canonical ICU unit identifier.
+
+#### `MeasureValue(decimal: 'str', unit: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `NumberDetector`
 
 Detect canonical ICU decimal, currency, or percent surfaces.
@@ -3502,6 +3518,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible fractions in source order.
+
+### class `FlexibleMeasureDetector`
+
+Recognize a flexible number followed by a reflectively derived ICU unit surface.
+
+#### `FlexibleMeasureDetector(locale: 'str', unit: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible measure candidates in source order.
 
 ### class `FlexibleNumberDetector`
 

@@ -48,6 +48,8 @@ __all__ = [
     "Detector",
     "DetectorRefusal",
     "DetectorSet",
+    "MeasureFormatSpec",
+    "MeasureValue",
     "NumberFormatSpec",
     "NumberDetector",
     "NumberValue",
@@ -100,6 +102,14 @@ class NumberValue:
 
     decimal: str
     currency: str | None = None
+
+
+@dataclass(frozen=True)
+class MeasureValue:
+    """A numeric value paired with its canonical ICU unit identifier."""
+
+    decimal: str
+    unit: str
 
 
 # --------------------------------------------------------------------------- captures
@@ -160,6 +170,15 @@ class NumberFormatSpec:
     min_fraction: int | None = None
     max_fraction: int | None = None
     grouping_sizes: tuple[int, ...] | None = None
+
+
+@dataclass(frozen=True)
+class MeasureFormatSpec:
+    """The locale, canonical ICU unit, and width used for a measure candidate."""
+
+    locale: str
+    unit: str
+    width: str
 
 
 # --------------------------------------------------------------------------- detection
