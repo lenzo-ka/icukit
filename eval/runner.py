@@ -9,10 +9,12 @@ from typing import Any
 
 from icukit.recognize import (
     FlexibleCurrencyDetector,
+    FlexibleCurrencyNameDetector,
     FlexibleDateDetector,
     FlexibleFractionDetector,
     FlexibleNumberDetector,
     FlexibleOrdinalDetector,
+    FlexibleTextDateDetector,
     FlexibleTimeDetector,
 )
 
@@ -22,14 +24,24 @@ LOCALE = "en_US"
 DEFAULT_BASELINE = Path(__file__).parent / "baseline.json"
 
 DetectorFactory = Callable[[], Any]
-DETECTORS: dict[str, DetectorFactory] = {
-    "cardinal": lambda: FlexibleNumberDetector(LOCALE),
-    "decimal": lambda: FlexibleNumberDetector(LOCALE),
-    "date": lambda: FlexibleDateDetector(LOCALE),
-    "time": lambda: FlexibleTimeDetector(LOCALE),
-    "money": lambda: FlexibleCurrencyDetector(LOCALE, "USD"),
-    "fraction": lambda: FlexibleFractionDetector(LOCALE),
-    "ordinal": lambda: FlexibleOrdinalDetector(LOCALE),
+
+# A class may run several detectors; a written form is recognized when any of them
+# deposits a detection of one of the class's types. Date and money each gain a
+# reflective recall recognizer alongside their original numeric/symbol detector.
+DETECTORS: dict[str, tuple[DetectorFactory, ...]] = {
+    "cardinal": (lambda: FlexibleNumberDetector(LOCALE),),
+    "decimal": (lambda: FlexibleNumberDetector(LOCALE),),
+    "date": (
+        lambda: FlexibleDateDetector(LOCALE),
+        lambda: FlexibleTextDateDetector(LOCALE),
+    ),
+    "time": (lambda: FlexibleTimeDetector(LOCALE),),
+    "money": (
+        lambda: FlexibleCurrencyDetector(LOCALE, "USD"),
+        lambda: FlexibleCurrencyNameDetector(LOCALE, "USD"),
+    ),
+    "fraction": (lambda: FlexibleFractionDetector(LOCALE),),
+    "ordinal": (lambda: FlexibleOrdinalDetector(LOCALE),),
 }
 
 
@@ -38,10 +50,10 @@ def evaluate(
 ) -> dict[str, object]:
     """Evaluate strict full-input and lenient any-match recall for every class.
 
-    A strict recognition is a detection of the mapped detector's type whose half-open
-    source span is exactly ``[0, len(written))``. A lenient recognition is a detection
-    of that type anywhere in the written input. The spoken form is reserved for future
-    evaluations and is not used here.
+    A strict recognition is a detection of one of the class's detector types whose
+    half-open source span is exactly ``[0, len(written))``. A lenient recognition is a
+    detection of such a type anywhere in the written input. The spoken form is reserved
+    for future evaluations and is not used here.
     """
     class_reports: dict[str, dict[str, int | float]] = {}
     overall_total = 0
@@ -49,16 +61,17 @@ def evaluate(
     overall_lenient = 0
 
     for name in CLASSES:
-        detector = DETECTORS[name]()
-        expected_type = detector.type
+        detectors = [factory() for factory in DETECTORS[name]]
+        expected_types = {detector.type for detector in detectors}
         strict_count = 0
         lenient_count = 0
         pairs = oracle[name]
         for written, _spoken in pairs:
             detections = [
                 detection
+                for detector in detectors
                 for detection in detector.detect(written)
-                if detection["type"] == expected_type
+                if detection["type"] in expected_types
             ]
             if detections:
                 lenient_count += 1
