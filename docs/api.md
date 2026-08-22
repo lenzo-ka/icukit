@@ -3609,7 +3609,8 @@ before or after the time come from the locale's short-time pattern
 (``icu.DateFormat.createTimeInstance(kShort)``), and the day-period strings come from
 ``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale. A
 pattern whose am/pm field precedes the hour (``ko_KR`` ``"a h:mm"``) is read with the
-day period as a prefix; otherwise it is read as a suffix.
+day period as a prefix; a field after the hour is read as a suffix, and a pattern
+without an am/pm field does not license one.
 
 A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
 12-hour locale); a day period is only consumed when the hour reads 1-12, and the

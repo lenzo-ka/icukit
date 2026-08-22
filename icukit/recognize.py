@@ -77,14 +77,18 @@ class FlexibleDateDetector:
         icu_locale = icu.Locale(locale)
         date_format = icu.DateFormat.createDateInstance(icu.DateFormat.kShort, icu_locale)
         self.pattern = date_format.toPattern()
-        self._fields, self._separators = self._date_structure(self.pattern)
+        structure = self._date_structure(self.pattern)
+        self._inert = structure is None
+        self._fields, self._separators = structure or ((), ())
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "yMd", self.pattern, self._calendar)
 
     @staticmethod
-    def _date_structure(pattern: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    def _date_structure(
+        pattern: str,
+    ) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
         fields: list[str] = []
         literals: list[str] = []
         literal: list[str] = []
@@ -114,9 +118,9 @@ class FlexibleDateDetector:
             cursor += 1
 
         if len(fields) != 3 or set(fields) != {"y", "M", "d"} or len(literals) != 2:
-            raise ValueError(f"unsupported short date pattern: {pattern!r}")
+            return None
         if not all(literals):
-            raise ValueError(f"short date pattern has an empty separator: {pattern!r}")
+            return None
         return tuple(fields), tuple(literals)
 
     def _digit_run(self, text: str, start: int) -> tuple[int, str, int]:
@@ -164,6 +168,8 @@ class FlexibleDateDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible numeric dates in source order."""
+        if self._inert:
+            return []
         starts = sorted({span["start"] for span in break_grapheme_spans(text, self.locale)})
         detections: list[ValueDetection] = []
         cursor = 0
@@ -941,7 +947,8 @@ class FlexibleTimeDetector:
     (``icu.DateFormat.createTimeInstance(kShort)``), and the day-period strings come from
     ``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale. A
     pattern whose am/pm field precedes the hour (``ko_KR`` ``"a h:mm"``) is read with the
-    day period as a prefix; otherwise it is read as a suffix.
+    day period as a prefix; a field after the hour is read as a suffix, and a pattern
+    without an am/pm field does not license one.
 
     A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
     12-hour locale); a day period is only consumed when the hour reads 1-12, and the
@@ -957,20 +964,22 @@ class FlexibleTimeDetector:
         icu_locale = icu.Locale(locale)
         time_format = icu.DateFormat.createTimeInstance(icu.DateFormat.kShort, icu_locale)
         self.pattern = time_format.toPattern()
-        self._separator, self.hour12, self._period_prefix = self._time_structure(self.pattern)
+        structure = self._time_structure(self.pattern)
+        self._inert = structure is None
+        self._separator, self.hour12, self._period_side = structure or ("", False, None)
+        self._period_prefix = self._period_side == "prefix"
         self._periods = tuple(icu.DateFormatSymbols(icu_locale).getAmPmStrings())
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
 
     @staticmethod
-    def _time_structure(pattern: str) -> tuple[str, bool, bool]:
+    def _time_structure(pattern: str) -> tuple[str, bool, str | None] | None:
         hour_letters = {"h", "H", "k", "K"}
         separator: list[str] = []
         hour12 = False
         seen_hour = False
         found = False
-        period_prefix = False
         quoted = False
         cursor = 0
         while cursor < len(pattern):
@@ -995,17 +1004,32 @@ class FlexibleTimeDetector:
             if not quoted and character == "m" and seen_hour:
                 found = True
                 break
-            # An am/pm field before the hour means the locale writes the day period as a
-            # prefix (ko_KR "a h:mm"); it is read on that side rather than always as a suffix.
-            if not quoted and character == "a" and not seen_hour:
-                period_prefix = True
             if seen_hour:
                 separator.append(character)
             cursor += 1
         joined = "".join(separator)
         if not found or not joined:
-            raise ValueError(f"unsupported short time pattern: {pattern!r}")
-        return joined, hour12, period_prefix
+            return None
+        # The separator scan stops at minutes, so inspect the full pattern separately
+        # to distinguish an am/pm field after the time from no am/pm field at all.
+        quoted = False
+        seen_hour = False
+        cursor = 0
+        period_side = None
+        while cursor < len(pattern):
+            character = pattern[cursor]
+            if character == "'":
+                if cursor + 1 < len(pattern) and pattern[cursor + 1] == "'":
+                    cursor += 2
+                    continue
+                quoted = not quoted
+            elif not quoted and character in hour_letters:
+                seen_hour = True
+            elif not quoted and character == "a":
+                period_side = "suffix" if seen_hour else "prefix"
+                break
+            cursor += 1
+        return joined, hour12, period_side
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
         cursor = start
@@ -1098,7 +1122,7 @@ class FlexibleTimeDetector:
                 return None
 
         cursor = second_end
-        if not self._period_prefix:
+        if self._period_side == "suffix":
             if 1 <= raw_hour <= 12:
                 found = self._day_period(text, cursor)
                 if found is not None:
@@ -1109,6 +1133,10 @@ class FlexibleTimeDetector:
                     cursor = marker_end
             elif self._day_period(text, cursor) is not None:
                 return None
+        elif self._period_side is None and self._day_period(text, cursor) is not None:
+            # Do not truncate a marker-bearing surface to a bare-time candidate when
+            # the locale pattern does not license a day period.
+            return None
 
         continuation = cursor + len(self._separator)
         if text.startswith(self._separator, cursor) and self._digit_run(text, continuation)[0] > (
@@ -1160,6 +1188,8 @@ class FlexibleTimeDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible clock times in source order."""
+        if self._inert:
+            return []
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
