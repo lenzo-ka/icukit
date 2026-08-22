@@ -507,6 +507,33 @@ def test_flexible_date_uses_locale_order_and_separator():
     assert detection["spec"].pattern == "dd.MM.yy"
 
 
+def test_flexible_date_or_time_is_inert_for_an_unsupported_locale_pattern(monkeypatch):
+    """Real ICU data is preferred; this build's inventory may all be modelable."""
+    detector = None
+    for locale in icu.Locale.getAvailableLocales().values():
+        locale_name = locale.getName()
+        date_pattern = icu.DateFormat.createDateInstance(icu.DateFormat.kShort, locale).toPattern()
+        if FlexibleDateDetector._date_structure(date_pattern) is None:
+            detector = FlexibleDateDetector(locale_name)
+            break
+        time_pattern = icu.DateFormat.createTimeInstance(icu.DateFormat.kShort, locale).toPattern()
+        if FlexibleTimeDetector._time_structure(time_pattern) is None:
+            detector = FlexibleTimeDetector(locale_name)
+            break
+
+    if detector is None:
+        # The installed ICU inventory contains only patterns these parsers model.
+        # Drive the same real unsupported-parser result through the constructor.
+        unsupported = FlexibleTimeDetector._time_structure("m")
+        assert unsupported is None
+        monkeypatch.setattr(
+            FlexibleTimeDetector, "_time_structure", staticmethod(lambda pattern: unsupported)
+        )
+        detector = FlexibleTimeDetector("en_US")
+
+    assert detector.detect("1/3/2026 3:45 PM") == []
+
+
 @pytest.mark.parametrize("surface", ["13/45/2026", "1/2"])
 def test_flexible_date_rejects_invalid_structure_or_ranges(surface):
     assert FlexibleDateDetector("en_US").detect(surface) == []
@@ -623,6 +650,18 @@ def test_flexible_time_uses_locale_separator_and_24_hour_convention():
     detection = detector.detect("15:45")[0]
     assert detection["value"].fields == (("H", 15), ("m", 45))
     assert detection["spec"].pattern == "HH:mm"
+
+
+@pytest.mark.parametrize(
+    "locale, side",
+    [("en_US", "suffix"), ("ko_KR", "prefix"), ("de_DE", None)],
+)
+def test_flexible_time_reports_pattern_day_period_side(locale, side):
+    assert FlexibleTimeDetector(locale)._period_side == side
+
+
+def test_flexible_time_does_not_read_a_day_period_absent_from_pattern():
+    assert FlexibleTimeDetector("de_DE").detect("3:45 PM") == []
 
 
 @pytest.mark.parametrize("surface", ["12:30:99", "12:30:4", "15:45 PM"])
