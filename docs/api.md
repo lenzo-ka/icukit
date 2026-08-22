@@ -2056,6 +2056,47 @@ Example:
     >>> parse_iso_duration("PT1H30M15S")
     {'years': 0, 'months': 0, 'weeks': 0, 'days': 0, 'hours': 1, 'minutes': 30, 'seconds': 15}
 
+## icukit.engine
+
+Introspect ICU formatter surfaces and derive gangs of inverting detectors.
+
+Each :class:`Family` enumerates formatter specifications from ICU and attempts to
+construct one detector per specification.  Unsupported specifications are observable in
+the generation report, rather than making generation fail or silently narrowing the
+enumerated surface.
+
+### class `Family`
+
+An introspective formatter family that can derive detectors for its specs.
+
+#### `Family(name: 'str', enumerate: 'Callable[[str], Iterable[Spec]]', invert: 'Callable[[Spec, str], Detector | None]', skip_reason: 'Callable[[Spec, str], str] | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `GenerationReport`
+
+Generated detectors together with every specification that was skipped.
+
+#### `GenerationReport(detectors: 'DetectorSet', skipped: 'tuple[SkippedSpec, ...]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `SkippedSpec`
+
+A formatter specification that its family could not invert.
+
+#### `SkippedSpec(family: 'str', spec: 'Spec', reason: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'),)) -> 'DetectorSet'`
+
+Derive all invertible detectors introspectively registered for ``locale``.
+
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'),)) -> 'GenerationReport'`
+
+Derive detectors for ``locale`` and report specs that could not be inverted.
+
 ## icukit.exceptions
 
 Corpus exception rules for ICU text segmentation.

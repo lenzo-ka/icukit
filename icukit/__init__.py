@@ -142,6 +142,7 @@ from .duration import WIDTH_NARROW as DURATION_WIDTH_NARROW
 from .duration import WIDTH_SHORT as DURATION_WIDTH_SHORT
 from .duration import WIDTH_WIDE as DURATION_WIDTH_WIDE
 from .duration import DurationFormatter, format_duration, parse_iso_duration
+from .engine import generated_detectors, generated_detectors_report
 from .errors import (
     AbbreviationError,
     AlphaIndexError,
@@ -341,6 +342,8 @@ __all__ = [
     "__version__",
     "FlexibleCurrencyNameDetector",
     "FlexibleTextDateDetector",
+    "generated_detectors",
+    "generated_detectors_report",
     # Abbreviations
     "AbbreviationLexicon",
     "Entry",
