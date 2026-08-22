@@ -42,6 +42,16 @@ def test_all_detectors_composes_dates_and_numbers():
     }
 
 
+def test_detector_groups_can_add_flexible_text_dates_and_currency_names():
+    dates = date_detectors("en_US", ["yMd"], flexible=True)
+    numbers = number_detectors("en_US", currencies=["USD"], flexible=True)
+
+    assert "date:text-flexible" in dates.names()
+    assert "number:currency-name:USD" in numbers.names()
+    assert dates.detect("July 25th, 2012")
+    assert numbers.detect("5 US dollars")
+
+
 def test_group_gang_detects_a_date_and_a_number_together():
     calendar = icu.Calendar.createInstance(
         icu.TimeZone.getGMT(), icu.Locale("en_US@calendar=gregorian")

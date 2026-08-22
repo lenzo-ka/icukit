@@ -9,6 +9,7 @@ those candidates unchanged.
 from __future__ import annotations
 
 from decimal import Decimal, localcontext
+from functools import lru_cache
 from math import gcd
 
 import icu
@@ -27,6 +28,7 @@ from .detectors import (
 
 __all__ = [
     "FlexibleCurrencyDetector",
+    "FlexibleCurrencyNameDetector",
     "FlexibleDateDetector",
     "FlexibleFractionDetector",
     "FlexibleMeasureDetector",
@@ -34,10 +36,17 @@ __all__ = [
     "FlexibleOrdinalDetector",
     "FlexiblePercentDetector",
     "FlexibleTimeDetector",
+    "FlexibleTextDateDetector",
 ]
 
 _SPACES = {" ", "\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}"}
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
+
+
+@lru_cache(maxsize=1)
+def _iso_currency_codes() -> frozenset[str]:
+    """The set of currency codes ICU carries, read from its own inventory."""
+    return frozenset(unit.getSubtype() for unit in icu.CurrencyUnit.getAvailable("currency"))
 
 
 class FlexibleDateDetector:
@@ -169,6 +178,238 @@ class FlexibleDateDetector:
             )
             cursor = end
         return detections
+
+
+class FlexibleTextDateDetector:
+    """Recognize textual-month dates licensed by CLDR date patterns and symbols."""
+
+    group = "date"
+    type = "date:text-flexible"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        icu_locale = icu.Locale(locale)
+        self._calendar = icu.Calendar.createInstance(icu_locale).getType()
+        self._rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu_locale)
+        symbols = icu.DateFormatSymbols(icu_locale)
+        self._months = self._symbol_names(symbols, "month")
+        self._weekdays = self._symbol_names(symbols, "weekday")
+        number_symbols = icu.NumberFormat.createInstance(icu_locale).getDecimalFormatSymbols()
+        zero = number_symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
+        self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
+
+        structures: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
+        for kind in (icu.DateFormat.kMedium, icu.DateFormat.kLong, icu.DateFormat.kFull):
+            pattern = icu.DateFormat.createDateInstance(kind, icu_locale).toPattern()
+            parsed = self._date_structure(pattern)
+            if parsed is None:
+                continue
+            fields, literals = parsed
+            structures.append((fields, literals, pattern))
+            # A weekday can only be validated against a year, so a weekday-bearing
+            # pattern gets no year-optional subset: dropping the year would deposit an
+            # unchecked (and possibly contradictory) weekday reading.
+            if "y" in fields and "E" not in fields:
+                year = fields.index("y")
+                reduced_fields = fields[:year] + fields[year + 1 :]
+                # Removing the adjacent literal derives the year-optional subset from
+                # the locale pattern instead of inventing punctuation or field order.
+                if year == len(fields) - 1:
+                    reduced_literals = literals[:-1]
+                elif year == 0:
+                    reduced_literals = literals[1:]
+                else:
+                    continue
+                if {"M", "d"}.issubset(reduced_fields):
+                    structures.append((reduced_fields, reduced_literals, pattern))
+        self._structures = tuple(dict.fromkeys(structures))
+        pattern = self._structures[0][2] if self._structures else ""
+        self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
+        # note: Bare years and decades remain cardinal candidates for downstream reinterpretation.
+
+    def _symbol_names(self, symbols: icu.DateFormatSymbols, field: str):
+        found: dict[str, tuple[str, int, str]] = {}
+        widths = (
+            (icu.DateFormatSymbols.WIDE, "wide"),
+            (icu.DateFormatSymbols.ABBREVIATED, "short"),
+        )
+        for context in (icu.DateFormatSymbols.FORMAT, icu.DateFormatSymbols.STANDALONE):
+            for width, form in widths:
+                values = (
+                    symbols.getMonths(context, width)
+                    if field == "month"
+                    else symbols.getWeekdays(context, width)
+                )
+                for index, surface in enumerate(values):
+                    if not surface:
+                        continue
+                    value = index + 1 if field == "month" else index
+                    key = surface.casefold()
+                    current = found.get(key)
+                    if current is None or len(surface) > len(current[0]):
+                        found[key] = (surface, value, form)
+        return tuple(sorted(found.values(), key=lambda item: len(item[0]), reverse=True))
+
+    @staticmethod
+    def _date_structure(pattern: str):
+        fields: list[str] = []
+        literals: list[str] = []
+        literal: list[str] = []
+        quoted = False
+        cursor = 0
+        while cursor < len(pattern):
+            character = pattern[cursor]
+            if character == "'":
+                if cursor + 1 < len(pattern) and pattern[cursor + 1] == "'":
+                    literal.append("'")
+                    cursor += 2
+                    continue
+                quoted = not quoted
+                cursor += 1
+                continue
+            if not quoted and character in {"y", "M", "L", "d", "E"}:
+                run_end = cursor + 1
+                while run_end < len(pattern) and pattern[run_end] == character:
+                    run_end += 1
+                normalized = "M" if character == "L" else character
+                if normalized == "M" and run_end - cursor < 3:
+                    return None
+                if fields:
+                    literals.append("".join(literal))
+                literal.clear()
+                fields.append(normalized)
+                cursor = run_end
+                continue
+            if not quoted and character.isalpha():
+                return None
+            literal.append(character)
+            cursor += 1
+        if set(fields) - {"y", "M", "d", "E"} or not {"y", "M", "d"}.issubset(fields):
+            return None
+        if "E" in fields and fields[0] != "E":
+            return None
+        return tuple(fields), tuple(literals)
+
+    def _digit_run(self, text: str, start: int) -> tuple[int, int]:
+        cursor = start
+        value = 0
+        while cursor < len(text) and text[cursor] in self._digits:
+            value = value * 10 + self._digits[text[cursor]]
+            cursor += 1
+        return cursor, value
+
+    def _ordinal_end(self, text: str, start: int, digit_end: int, value: int) -> int:
+        rendered = self._rbnf.format(value)
+        indexes = [
+            index for index, char in enumerate(rendered) if char in self._digits or char.isdigit()
+        ]
+        if not indexes or rendered[: indexes[0]]:
+            return digit_end
+        suffix = rendered[indexes[-1] + 1 :]
+        end = digit_end + len(suffix)
+        return end if suffix and text[digit_end:end].casefold() == suffix.casefold() else digit_end
+
+    @staticmethod
+    def _name(text: str, start: int, names):
+        for surface, value, form in names:
+            end = start + len(surface)
+            if text[start:end].casefold() == surface.casefold():
+                if end == len(text) or not text[end].isalnum():
+                    return end, value, form
+        return None
+
+    @staticmethod
+    def _separator_end(text: str, cursor: int, literal: str) -> int | None:
+        """Consume a field separator, treating only its punctuation as optional.
+
+        The literal comes from the locale pattern, so the exact CLDR separator always
+        matches. A form with the punctuation dropped is also accepted so a surface that
+        omits it ("July 25 2012" for a ", " separator) still deposits a candidate. Only
+        punctuation is relaxed: letters and whitespace are kept, so grammar words a
+        pattern requires ("d 'de' MMMM 'de' y") stay mandatory and field order and
+        spacing remain reflective.
+        """
+        if text.startswith(literal, cursor):
+            return cursor + len(literal)
+        relaxed = "".join(
+            character for character in literal if character.isalnum() or character.isspace()
+        )
+        if relaxed != literal and text.startswith(relaxed, cursor):
+            return cursor + len(relaxed)
+        return None
+
+    def _match_structure(self, text: str, start: int, structure):
+        fields, literals, _pattern = structure
+        cursor = start
+        values: dict[str, int] = {}
+        captures: list[Capture] = []
+        for index, field in enumerate(fields):
+            field_start = cursor
+            if field in {"M", "E"}:
+                named = self._name(text, cursor, self._months if field == "M" else self._weekdays)
+                if named is None:
+                    return None
+                cursor, value, form = named
+                name = "month" if field == "M" else "weekday"
+                captures.append(
+                    Capture(name, field_start, cursor, text[field_start:cursor], value, form)
+                )
+                values[field] = value
+            else:
+                digit_end, value = self._digit_run(text, cursor)
+                width = digit_end - cursor
+                if field == "d" and width in {1, 2} and 1 <= value <= 31:
+                    following = literals[index] if index < len(literals) else ""
+                    cursor = digit_end
+                    if not following or not text.startswith(following, cursor):
+                        cursor = self._ordinal_end(text, cursor, digit_end, value)
+                elif field == "y" and width in {2, 4}:
+                    cursor = digit_end
+                else:
+                    return None
+                captures.append(
+                    Capture(field, field_start, cursor, text[field_start:cursor], value, "numeric")
+                )
+                values[field] = value
+            if index < len(literals):
+                literal = literals[index]
+                if not literal:
+                    return None
+                consumed = self._separator_end(text, cursor, literal)
+                if consumed is None:
+                    return None
+                cursor = consumed
+
+        if cursor < len(text) and text[cursor].isalnum():
+            return None
+        calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+        calendar.setLenient(False)
+        calendar.clear()
+        try:
+            validation_year = values.get("y", 2000)
+            calendar.set(validation_year, values["M"] - 1, values["d"])
+            calendar.getTime()
+            if "y" in values and "E" in values:
+                if calendar.get(icu.Calendar.DAY_OF_WEEK) != values["E"]:
+                    return None
+        except icu.ICUError:
+            return None
+        ordered = tuple((field, values[field]) for field in ("y", "M", "d") if field in values)
+        return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
+
+    def _match(self, text: str, start: int):
+        if start > 0 and text[start - 1].isalnum():
+            return None
+        matches = [
+            match
+            for structure in self._structures
+            if (match := self._match_structure(text, start, structure)) is not None
+        ]
+        return max(matches, key=lambda match: match[0], default=None)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping textual-date candidates in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
 class FlexibleNumberDetector:
@@ -550,6 +791,134 @@ class FlexibleMeasureDetector:
             )
             cursor = end
         return detections
+
+
+class FlexibleCurrencyNameDetector:
+    """Recognize flexible numbers adjacent to reflective spelled currency names."""
+
+    group = "number"
+
+    def __init__(self, locale: str, currency: str) -> None:
+        self.locale = locale
+        unit = icu.CurrencyUnit(currency)
+        canonical = unit.getISOCurrency()
+        if canonical != currency:
+            raise ValueError(f"currency is not canonical: {currency!r} (canonical {canonical!r})")
+        if canonical not in _iso_currency_codes():
+            raise ValueError(f"not an assigned ISO currency: {canonical!r}")
+        self.currency = canonical
+        self.type = f"number:currency-name:{canonical}"
+        self._number = FlexibleNumberDetector(locale)
+        icu_locale = icu.Locale(locale)
+        plural_info = icu.CurrencyPluralInfo(icu_locale)
+        plural_rules = icu.PluralRules.forLocale(icu_locale)
+        names: dict[str, tuple[str, bool]] = {}
+
+        # Plural categories turn on integer, large-magnitude, and fractional operands, so
+        # the search for a representative of each keyword samples all three kinds.
+        samples = [
+            *range(201),
+            1000,
+            100000,
+            1000000,
+            100000000,
+            0.1,
+            0.5,
+            1.1,
+            1.5,
+            2.5,
+            10.1,
+            100.1,
+            1000.1,
+        ]
+        keywords = list(plural_rules.getKeywords())
+        for keyword in keywords:
+            representative = next(
+                (value for value in samples if plural_rules.select(value) == keyword), None
+            )
+            if representative is None:
+                continue
+            pattern = plural_info.getCurrencyPluralPattern(keyword)
+            formatter = icu.DecimalFormat(pattern, icu.DecimalFormatSymbols(icu_locale))
+            formatter.setCurrency(canonical)
+            position = icu.FieldPosition(icu.UNumberFormatFields.CURRENCY_FIELD)
+            rendered = formatter.format(representative, position)
+            surface = rendered[position.getBeginIndex() : position.getEndIndex()]
+            if surface:
+                number_index = min(
+                    (pattern.index(character) for character in "#0@" if character in pattern),
+                    default=0,
+                )
+                names[surface.casefold()] = (surface, pattern.find("¤¤¤") < number_index)
+
+        long_name = unit.getName(icu_locale, icu.UCurrNameStyle.LONG_NAME)
+        orientations = {prefix for _surface, prefix in names.values()} or {False}
+        for prefix in orientations:
+            names.setdefault(long_name.casefold(), (long_name, prefix))
+            names.setdefault(canonical.casefold(), (canonical, prefix))
+        self._names = tuple(sorted(names.values(), key=lambda item: len(item[0]), reverse=True))
+        self._spec = NumberFormatSpec(locale, "currency", currency=canonical)
+        # note: CLDR does not reflectively expose region-stripped names or minor-unit names.
+
+    @staticmethod
+    def _space(text: str, cursor: int) -> int:
+        if cursor < len(text) and text[cursor] in _SPACES:
+            return cursor + 1
+        return cursor
+
+    def _currency_at(self, text: str, start: int, prefix: bool):
+        for surface, is_prefix in self._names:
+            if is_prefix != prefix:
+                continue
+            end = start + len(surface)
+            if text[start:end].casefold() == surface.casefold():
+                if end == len(text) or not text[end].isalnum():
+                    return end
+        return None
+
+    def _match(self, text: str, start: int):
+        if start > 0 and text[start - 1].isalnum():
+            return None
+        currency_end = self._currency_at(text, start, True)
+        if currency_end is not None:
+            number_start = self._space(text, currency_end)
+            number = self._number._match(text, number_start)
+            if number is not None:
+                end, captures, value = number
+                currency_capture = Capture(
+                    "currency", start, currency_end, text[start:currency_end], self.currency, "wide"
+                )
+                return end, (currency_capture, *captures), NumberValue(value.decimal, self.currency)
+
+        number = self._number._match(text, start)
+        if number is None:
+            return None
+        number_end, captures, value = number
+        currency_start = self._space(text, number_end)
+        if currency_start == number_end:
+            # A spelled name is a word; without whitespace after the number the name
+            # would run into the digits ("5USD", "5euros"), a mid-token match.
+            return None
+        currency_end = self._currency_at(text, currency_start, False)
+        if currency_end is None:
+            return None
+        currency_capture = Capture(
+            "currency",
+            currency_start,
+            currency_end,
+            text[currency_start:currency_end],
+            self.currency,
+            "wide",
+        )
+        return (
+            currency_end,
+            (*captures, currency_capture),
+            NumberValue(value.decimal, self.currency),
+        )
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping spelled-currency candidates in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
 class FlexibleTimeDetector:

@@ -21,10 +21,10 @@
     },
     "date": {
       "total": 54,
-      "recognized_strict": 3,
-      "recognized_lenient": 5,
-      "recall_strict": 0.05555555555555555,
-      "recall_lenient": 0.09259259259259259
+      "recognized_strict": 11,
+      "recognized_lenient": 14,
+      "recall_strict": 0.2037037037037037,
+      "recall_lenient": 0.25925925925925924
     },
     "time": {
       "total": 21,
@@ -57,9 +57,9 @@
   },
   "overall": {
     "total": 219,
-    "recognized_strict": 103,
-    "recognized_lenient": 143,
-    "recall_strict": 0.4703196347031963,
-    "recall_lenient": 0.6529680365296804
+    "recognized_strict": 111,
+    "recognized_lenient": 152,
+    "recall_strict": 0.5068493150684932,
+    "recall_lenient": 0.6940639269406392
   }
 }

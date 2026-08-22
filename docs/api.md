@@ -1477,14 +1477,14 @@ Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``val
 ``captures``, and ``spec`` (see the module docstring). The invariant
 ``reformat(spec, value) == surface`` holds for every accepted detection.
 
-### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = ()) -> 'DetectorSet'`
+### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = (), flexible: 'bool' = False) -> 'DetectorSet'`
 
 Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
 
 A convenience composition of :func:`date_detectors` and :func:`number_detectors` for
 ``locale`` into one gang.
 
-### `date_detectors(locale: 'str', skeletons: 'Iterable[str]') -> 'DetectorSet'`
+### `date_detectors(locale: 'str', skeletons: 'Iterable[str]', *, flexible: 'bool' = False) -> 'DetectorSet'`
 
 A gang of date detectors for ``locale``, one per skeleton.
 
@@ -1508,7 +1508,7 @@ with per-member resume cursors and a freshly cleared calendar per (member, start
 attempt -- is a deferred efficiency optimization, not yet built; its equivalence
 to this merge is the invariant that variant must preserve.
 
-### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = ()) -> 'DetectorSet'`
+### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = (), flexible: 'bool' = False) -> 'DetectorSet'`
 
 A gang of number detectors for ``locale``.
 
@@ -3484,6 +3484,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible currency candidates in source order.
 
+### class `FlexibleCurrencyNameDetector`
+
+Recognize flexible numbers adjacent to reflective spelled currency names.
+
+#### `FlexibleCurrencyNameDetector(locale: 'str', currency: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping spelled-currency candidates in source order.
+
 ### class `FlexibleDateDetector`
 
 Recognize flexible numeric dates using a locale's CLDR short-date structure.
@@ -3573,6 +3585,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible percent candidates in source order.
+
+### class `FlexibleTextDateDetector`
+
+Recognize textual-month dates licensed by CLDR date patterns and symbols.
+
+#### `FlexibleTextDateDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping textual-date candidates in source order.
 
 ### class `FlexibleTimeDetector`
 
