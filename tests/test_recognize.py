@@ -50,6 +50,33 @@ def test_canonical_number_surfaces_still_work(surface, decimal):
     assert any(c.name == "sign" for c in detection["captures"]) == surface.startswith("-")
 
 
+@pytest.mark.parametrize(
+    "locale",
+    ["en_US", "ar_EG", "zh_Hans@numbers=hanidec"],
+)
+def test_flexible_number_uses_each_reflectively_formatted_locale_digit(locale):
+    number_format = icu.NumberFormat.createInstance(icu.Locale(locale))
+    digits = tuple(number_format.format(value) for value in range(10))
+    detector = FlexibleNumberDetector(locale)
+
+    assert detector._digits == {digit: str(value) for value, digit in enumerate(digits)}
+    surface = "".join(digits[value] for value in (1, 2, 3))
+    detection = detector.detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue("123", None)
+
+
+def test_hanidec_digits_are_not_assumed_to_be_contiguous_code_points():
+    locale = icu.Locale("zh_Hans@numbers=hanidec")
+    digits = tuple(icu.NumberFormat.createInstance(locale).format(value) for value in range(10))
+
+    assert any(ord(digits[value]) != ord(digits[0]) + value for value in range(1, 10))
+    assert FlexibleNumberDetector(locale.getName())._digits == {
+        digit: str(value) for value, digit in enumerate(digits)
+    }
+
+
 @pytest.mark.parametrize("surface, decimal", [("1.234.567", "1234567"), ("1234,5", "1234.5")])
 def test_locale_separators(surface, decimal):
     detection = FlexibleNumberDetector("de_DE").detect(surface)[0]
