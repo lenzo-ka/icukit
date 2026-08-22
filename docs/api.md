@@ -3559,11 +3559,11 @@ Return greedy, non-overlapping flexible decimal candidates in source order.
 
 Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
 
-The ``ordinal:flexible`` type marks recall candidates. The ordinal affix is obtained
-reflectively by *forward* formatting: a candidate integer is rendered with
-``icu.RuleBasedNumberFormat`` on the ``ORDINAL`` rule set, and the prefix and suffix
-are the non-digit parts around that rendering. No affix is hard-coded, and no fragile
-ordinal *parse* is attempted. A surface is accepted only when its affixes match those
+The ``ordinal:flexible`` type marks recall candidates. Ordinal affixes are obtained
+reflectively by *forward* formatting: a candidate integer is rendered with every
+public ``icu.RuleBasedNumberFormat`` ``ORDINAL`` rule set, and the prefix and suffix
+are the non-digit parts around each rendering. No affix is hard-coded, and no fragile
+ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
 ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
 
 #### `FlexibleOrdinalDetector(locale: 'str') -> 'None'`

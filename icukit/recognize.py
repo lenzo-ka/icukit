@@ -1325,11 +1325,11 @@ class FlexibleFractionDetector:
 class FlexibleOrdinalDetector:
     """Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
 
-    The ``ordinal:flexible`` type marks recall candidates. The ordinal affix is obtained
-    reflectively by *forward* formatting: a candidate integer is rendered with
-    ``icu.RuleBasedNumberFormat`` on the ``ORDINAL`` rule set, and the prefix and suffix
-    are the non-digit parts around that rendering. No affix is hard-coded, and no fragile
-    ordinal *parse* is attempted. A surface is accepted only when its affixes match those
+    The ``ordinal:flexible`` type marks recall candidates. Ordinal affixes are obtained
+    reflectively by *forward* formatting: a candidate integer is rendered with every
+    public ``icu.RuleBasedNumberFormat`` ``ORDINAL`` rule set, and the prefix and suffix
+    are the non-digit parts around each rendering. No affix is hard-coded, and no fragile
+    ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
     ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
     """
 
@@ -1340,6 +1340,12 @@ class FlexibleOrdinalDetector:
         self.locale = locale
         icu_locale = icu.Locale(locale)
         self._rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu_locale)
+        self._rule_set_names = tuple(
+            name
+            for index in range(self._rbnf.getNumberOfRuleSetNames())
+            if (name := self._rbnf.getRuleSetName(index)).startswith("%")
+            and not name.startswith("%%")
+        )
         self._digits = _locale_digit_map(icu_locale)
         self._spec = NumberFormatSpec(locale, "decimal")
 
@@ -1351,16 +1357,22 @@ class FlexibleOrdinalDetector:
             cursor += 1
         return cursor, value
 
-    def _affixes(self, value: int) -> tuple[str, str]:
-        rendered = self._rbnf.format(value)
-        digit_indexes = [
-            index
-            for index, character in enumerate(rendered)
-            if character in self._digits or character.isdigit()
-        ]
-        if not digit_indexes:
-            return rendered, ""
-        return rendered[: digit_indexes[0]], rendered[digit_indexes[-1] + 1 :]
+    def _affixes(self, value: int) -> set[tuple[str, str]]:
+        rendered_values = (
+            (self._rbnf.format(value, name) for name in self._rule_set_names)
+            if self._rule_set_names
+            else (self._rbnf.format(value),)
+        )
+        affixes: set[tuple[str, str]] = set()
+        for rendered in rendered_values:
+            digit_indexes = [
+                index
+                for index, character in enumerate(rendered)
+                if character in self._digits or character.isdigit()
+            ]
+            if digit_indexes:
+                affixes.add((rendered[: digit_indexes[0]], rendered[digit_indexes[-1] + 1 :]))
+        return affixes
 
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         for digit_start in range(start, len(text)):
@@ -1369,14 +1381,21 @@ class FlexibleOrdinalDetector:
             digit_end, value = self._digit_run(text, digit_start)
             if value < 1:
                 continue
-            prefix, suffix = self._affixes(value)
-            if not prefix and not suffix:
+            matched = None
+            for prefix, suffix in sorted(
+                self._affixes(value), key=lambda pair: len(pair[0]) + len(pair[1]), reverse=True
+            ):
+                if not prefix and not suffix:
+                    continue
+                if text[start:digit_start].casefold() != prefix.casefold():
+                    continue
+                affix_end = digit_end + len(suffix)
+                if text[digit_end:affix_end].casefold() == suffix.casefold():
+                    matched = prefix, suffix, affix_end
+                    break
+            if matched is None:
                 continue
-            if text[start:digit_start].casefold() != prefix.casefold():
-                continue
-            affix_end = digit_end + len(suffix)
-            if text[digit_end:affix_end].casefold() != suffix.casefold():
-                continue
+            prefix, suffix, affix_end = matched
             integer_surface = text[digit_start:digit_end]
             captures: list[Capture] = []
             if prefix:

@@ -812,6 +812,20 @@ def test_flexible_ordinal_rejects_wrong_affix_reflectively():
     assert FlexibleOrdinalDetector("en_US").detect("2th") == []
 
 
+@pytest.mark.parametrize("surface", ["1er", "1re"])
+def test_flexible_ordinal_accepts_gender_variants_reflectively(surface):
+    detection = FlexibleOrdinalDetector("fr_FR").detect(surface)[0]
+
+    assert detection["value"] == NumberValue("1", None)
+
+
+def test_flexible_ordinal_affixes_include_gender_variants_reflectively():
+    affixes = FlexibleOrdinalDetector("fr_FR")._affixes(1)
+
+    assert ("", "er") in affixes
+    assert ("", "re") in affixes
+
+
 @pytest.mark.parametrize("locale, surface", [("ja_JP", "第1"), ("zh_CN", "第21")])
 def test_flexible_ordinal_accepts_reflective_prefix(locale, surface):
     detection = FlexibleOrdinalDetector(locale).detect(surface)[0]
