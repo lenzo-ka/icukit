@@ -447,6 +447,11 @@ class FlexibleNumberDetector:
             self._digits[character] for character in surface if character in self._digits
         )
 
+    def _grouping_length(self, text: str, cursor: int) -> int:
+        if self._grouping in _SPACES:
+            return int(cursor < len(text) and text[cursor] in _SPACES)
+        return len(self._grouping) if text.startswith(self._grouping, cursor) else 0
+
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         cursor = start
         captures: list[Capture] = []
@@ -467,9 +472,9 @@ class FlexibleNumberDetector:
         ungrouped_end = cursor
         groups = [cursor - integer_start]
         separators: list[int] = []
-        while self._primary_grouping and text.startswith(self._grouping, cursor):
+        while self._primary_grouping and (grouping_length := self._grouping_length(text, cursor)):
             grouping_start = cursor
-            cursor += len(self._grouping)
+            cursor += grouping_length
             group_start = cursor
             while cursor < len(text) and text[cursor] in self._digits:
                 cursor += 1

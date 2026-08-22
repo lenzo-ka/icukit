@@ -58,6 +58,21 @@ def test_locale_separators(surface, decimal):
     assert detection["value"].decimal == decimal
 
 
+@pytest.mark.parametrize("space", [" ", "\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}"])
+def test_space_grouping_separators_are_equivalent_when_licensed_by_locale(space):
+    detection = FlexibleNumberDetector("fr_FR").detect(f"1{space}234,56")[0]
+
+    assert detection["text"] == f"1{space}234,56"
+    assert detection["value"].decimal == "1234.56"
+
+
+def test_non_space_grouping_separator_remains_exact():
+    detection = FlexibleNumberDetector("en_US").detect("1 234")[0]
+
+    assert detection["text"] == "1"
+    assert detection["value"].decimal == "1"
+
+
 def test_captures_use_source_code_point_offsets_with_astral_prefix():
     text = "📌 1,234.5!"
     detection = FlexibleNumberDetector("en_US").detect(text)[0]
