@@ -572,6 +572,49 @@ def test_flexible_time_day_period_capture_and_conversion():
     assert detection["value"].fields == (("H", 15), ("m", 45))
 
 
+@pytest.mark.parametrize(
+    "surface, fields",
+    [
+        ("오후 9:30", (("H", 21), ("m", 30))),
+        ("오전 9:30", (("H", 9), ("m", 30))),
+        ("오후 12:00", (("H", 12), ("m", 0))),
+        ("오전 12:00", (("H", 0), ("m", 0))),
+        ("9:30", (("H", 9), ("m", 30))),
+    ],
+)
+def test_flexible_time_reads_a_prefix_day_period(surface, fields):
+    """A locale whose am/pm precedes the hour (ko_KR "a h:mm") reads it as a prefix."""
+    detector = FlexibleTimeDetector("ko_KR")
+
+    assert detector._period_prefix is True
+    detection = detector.detect(surface)[0]
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"].fields == fields
+
+
+def test_flexible_time_prefix_day_period_capture_precedes_the_hour():
+    """The prefix marker is captured, in source order, before the hour."""
+    detection = FlexibleTimeDetector("ko_KR").detect("오후 9:30")[0]
+    names = [capture.name for capture in detection["captures"]]
+
+    assert names == ["day-period", "H", "m"]
+    period = next(capture for capture in detection["captures"] if capture.name == "day-period")
+    assert period.text == "오후"
+    assert period.start == 0
+
+
+@pytest.mark.parametrize("surface", ["오후 0:30", "오후 13:30", "오전 0:30"])
+def test_flexible_time_rejects_a_prefix_marker_with_an_out_of_range_hour(surface):
+    """A prefix marker blocks a bare fallback, as a suffix marker rejects "15:45 PM"."""
+    assert FlexibleTimeDetector("ko_KR").detect(surface) == []
+
+
+@pytest.mark.parametrize("surface", ["x오후 9:30", "가오후 9:30"])
+def test_flexible_time_prefix_marker_does_not_start_mid_word(surface):
+    """A day-period marker inside an alphanumeric token is not a match."""
+    assert FlexibleTimeDetector("ko_KR").detect(surface) == []
+
+
 def test_flexible_time_uses_locale_separator_and_24_hour_convention():
     detector = FlexibleTimeDetector("de_DE")
 
