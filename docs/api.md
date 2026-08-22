@@ -3603,10 +3603,13 @@ Return greedy, non-overlapping textual-date candidates in source order.
 Recognize clock times using a locale's CLDR short-time structure.
 
 The ``time:flexible`` type marks recall candidates for hours:minutes, an optional
-``:seconds``, and an optional day period (am/pm). Both are reflective: the time
-separator and 12- vs 24-hour convention come from the locale's short-time pattern
+``:seconds``, and an optional day period (am/pm). All are reflective: the time
+separator, the 12- vs 24-hour convention, and whether the day period is written
+before or after the time come from the locale's short-time pattern
 (``icu.DateFormat.createTimeInstance(kShort)``), and the day-period strings come from
-``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale.
+``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale. A
+pattern whose am/pm field precedes the hour (``ko_KR`` ``"a h:mm"``) is read with the
+day period as a prefix; otherwise it is read as a suffix.
 
 A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
 12-hour locale); a day period is only consumed when the hour reads 1-12, and the

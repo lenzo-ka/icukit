@@ -925,10 +925,13 @@ class FlexibleTimeDetector:
     """Recognize clock times using a locale's CLDR short-time structure.
 
     The ``time:flexible`` type marks recall candidates for hours:minutes, an optional
-    ``:seconds``, and an optional day period (am/pm). Both are reflective: the time
-    separator and 12- vs 24-hour convention come from the locale's short-time pattern
+    ``:seconds``, and an optional day period (am/pm). All are reflective: the time
+    separator, the 12- vs 24-hour convention, and whether the day period is written
+    before or after the time come from the locale's short-time pattern
     (``icu.DateFormat.createTimeInstance(kShort)``), and the day-period strings come from
-    ``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale.
+    ``icu.DateFormatSymbols.getAmPmStrings`` -- nothing is hard-coded per locale. A
+    pattern whose am/pm field precedes the hour (``ko_KR`` ``"a h:mm"``) is read with the
+    day period as a prefix; otherwise it is read as a suffix.
 
     A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
     12-hour locale); a day period is only consumed when the hour reads 1-12, and the
@@ -944,7 +947,7 @@ class FlexibleTimeDetector:
         icu_locale = icu.Locale(locale)
         time_format = icu.DateFormat.createTimeInstance(icu.DateFormat.kShort, icu_locale)
         self.pattern = time_format.toPattern()
-        self._separator, self.hour12 = self._time_structure(self.pattern)
+        self._separator, self.hour12, self._period_prefix = self._time_structure(self.pattern)
         self._periods = tuple(icu.DateFormatSymbols(icu_locale).getAmPmStrings())
 
         number_format = icu.NumberFormat.createInstance(icu_locale)
@@ -954,12 +957,13 @@ class FlexibleTimeDetector:
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
 
     @staticmethod
-    def _time_structure(pattern: str) -> tuple[str, bool]:
+    def _time_structure(pattern: str) -> tuple[str, bool, bool]:
         hour_letters = {"h", "H", "k", "K"}
         separator: list[str] = []
         hour12 = False
         seen_hour = False
         found = False
+        period_prefix = False
         quoted = False
         cursor = 0
         while cursor < len(pattern):
@@ -984,13 +988,17 @@ class FlexibleTimeDetector:
             if not quoted and character == "m" and seen_hour:
                 found = True
                 break
+            # An am/pm field before the hour means the locale writes the day period as a
+            # prefix (ko_KR "a h:mm"); it is read on that side rather than always as a suffix.
+            if not quoted and character == "a" and not seen_hour:
+                period_prefix = True
             if seen_hour:
                 separator.append(character)
             cursor += 1
         joined = "".join(separator)
         if not found or not joined:
             raise ValueError(f"unsupported short time pattern: {pattern!r}")
-        return joined, hour12
+        return joined, hour12, period_prefix
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
         cursor = start
@@ -1015,17 +1023,54 @@ class FlexibleTimeDetector:
                 return cursor + len(period), text[marker_start : cursor + len(period)], index
         return None
 
+    def _period_precedes(self, text: str, start: int) -> bool:
+        """Whether a day-period marker (with an optional space) ends just before ``start``."""
+        cursor = start
+        if cursor > 0 and text[cursor - 1] in _SPACES:
+            cursor -= 1
+        for period in self._periods:
+            if period and cursor - len(period) >= 0:
+                if text[cursor - len(period) : cursor].casefold() == period.casefold():
+                    return True
+        return False
+
     def _match(
         self, text: str, start: int
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
         if start > 0 and text[start - 1] in self._digits:
             return None
-        first = self._digit_run(text, start)
-        hour_width = first[0] - start
+        cursor = start
+        captures: list[Capture] = []
+        period_index: int | None = None
+
+        # A prefix locale writes the day period before the hour, so consume it here and
+        # require a 12-hour reading; a bare time with no marker stays a 24-hour reading.
+        if self._period_prefix:
+            found = self._day_period(text, cursor)
+            if found is not None:
+                if start > 0 and text[start - 1].isalnum():
+                    return None
+                marker_end, marker_text, period_index = found
+                captures.append(
+                    Capture("day-period", start, marker_end, marker_text, None, "symbol")
+                )
+                cursor = marker_end
+                if cursor < len(text) and text[cursor] in _SPACES:
+                    cursor += 1
+            elif self._period_precedes(text, start):
+                # A bare time right after a marker is the tail of a prefixed time whose
+                # hour was out of the 1-12 range; reject it as the suffix side rejects
+                # "15:45 PM" rather than dropping the marker and keeping a bare reading.
+                return None
+
+        hour_start = cursor
+        first = self._digit_run(text, cursor)
+        hour_width = first[0] - hour_start
         if hour_width not in {1, 2}:
             return None
         cursor, raw_hour = first
-        captures: list[Capture] = []
+        if period_index is not None and not 1 <= raw_hour <= 12:
+            return None
 
         if not text.startswith(self._separator, cursor):
             return None
@@ -1046,17 +1091,17 @@ class FlexibleTimeDetector:
                 return None
 
         cursor = second_end
-        period_index: int | None = None
-        if 1 <= raw_hour <= 12:
-            found = self._day_period(text, cursor)
-            if found is not None:
-                marker_end, marker_text, period_index = found
-                captures.append(
-                    Capture("day-period", cursor, marker_end, marker_text, None, "symbol")
-                )
-                cursor = marker_end
-        elif self._day_period(text, cursor) is not None:
-            return None
+        if not self._period_prefix:
+            if 1 <= raw_hour <= 12:
+                found = self._day_period(text, cursor)
+                if found is not None:
+                    marker_end, marker_text, period_index = found
+                    captures.append(
+                        Capture("day-period", cursor, marker_end, marker_text, None, "symbol")
+                    )
+                    cursor = marker_end
+            elif self._day_period(text, cursor) is not None:
+                return None
 
         continuation = cursor + len(self._separator)
         if text.startswith(self._separator, cursor) and self._digit_run(text, continuation)[0] > (
@@ -1073,7 +1118,12 @@ class FlexibleTimeDetector:
 
         fields: list[tuple[str, int]] = [("H", hour24), ("m", minute_value)]
         hour_capture = Capture(
-            "H", start, start + hour_width, text[start : start + hour_width], raw_hour, "numeric"
+            "H",
+            hour_start,
+            hour_start + hour_width,
+            text[hour_start : hour_start + hour_width],
+            raw_hour,
+            "numeric",
         )
         minute_capture = Capture(
             "m",
@@ -1097,6 +1147,7 @@ class FlexibleTimeDetector:
                 )
             )
         ordered.extend(captures)
+        ordered.sort(key=lambda capture: capture.start)
         value = DateTimeValue(tuple(fields), "gregorian")
         return cursor, tuple(ordered), value
 
