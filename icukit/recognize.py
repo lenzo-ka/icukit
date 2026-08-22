@@ -43,6 +43,18 @@ _SPACES = {" ", "\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}"}
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 
 
+def _locale_digit_map(locale: str | icu.Locale) -> dict[str, int]:
+    """Map a locale's ten reflectively formatted digit glyphs to their values."""
+    number_format = icu.NumberFormat.createInstance(
+        locale if isinstance(locale, icu.Locale) else icu.Locale(locale)
+    )
+    # Format every value because a numbering system need not occupy a contiguous range.
+    digits = [number_format.format(value) for value in range(10)]
+    if any(len(digit) != 1 for digit in digits) or len(set(digits)) != 10:
+        raise ValueError(f"locale digits must be ten distinct single code points: {digits!r}")
+    return {digit: value for value, digit in enumerate(digits)}
+
+
 @lru_cache(maxsize=1)
 def _iso_currency_codes() -> frozenset[str]:
     """The set of currency codes ICU carries, read from its own inventory."""
@@ -68,10 +80,7 @@ class FlexibleDateDetector:
         self._fields, self._separators = self._date_structure(self.pattern)
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
 
-        number_format = icu.NumberFormat.createInstance(icu_locale)
-        symbols = number_format.getDecimalFormatSymbols()
-        zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
-        self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
+        self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "yMd", self.pattern, self._calendar)
 
     @staticmethod
@@ -194,9 +203,7 @@ class FlexibleTextDateDetector:
         symbols = icu.DateFormatSymbols(icu_locale)
         self._months = self._symbol_names(symbols, "month")
         self._weekdays = self._symbol_names(symbols, "weekday")
-        number_symbols = icu.NumberFormat.createInstance(icu_locale).getDecimalFormatSymbols()
-        zero = number_symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
-        self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
+        self._digits = _locale_digit_map(icu_locale)
 
         structures: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
         for kind in (icu.DateFormat.kMedium, icu.DateFormat.kLong, icu.DateFormat.kFull):
@@ -425,11 +432,9 @@ class FlexibleNumberDetector:
         symbol = icu.DecimalFormatSymbols
         self._decimal = symbols.getSymbol(symbol.kDecimalSeparatorSymbol)
         self._grouping = symbols.getSymbol(symbol.kGroupingSeparatorSymbol)
-        self._zero = symbols.getSymbol(symbol.kZeroDigitSymbol)
         self._minus = symbols.getSymbol(symbol.kMinusSignSymbol)
         self._plus = symbols.getSymbol(symbol.kPlusSignSymbol)
-        zero = ord(self._zero)
-        self._digits = {chr(zero + offset): str(offset) for offset in range(10)}
+        self._digits = {digit: str(value) for digit, value in _locale_digit_map(locale).items()}
 
         grouping_sizes = None
         self._primary_grouping = 0
@@ -950,10 +955,7 @@ class FlexibleTimeDetector:
         self._separator, self.hour12, self._period_prefix = self._time_structure(self.pattern)
         self._periods = tuple(icu.DateFormatSymbols(icu_locale).getAmPmStrings())
 
-        number_format = icu.NumberFormat.createInstance(icu_locale)
-        symbols = number_format.getDecimalFormatSymbols()
-        zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
-        self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
+        self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
 
     @staticmethod
@@ -1172,11 +1174,7 @@ class FlexibleFractionDetector:
 
     def __init__(self, locale: str) -> None:
         self.locale = locale
-        number_format = icu.NumberFormat.createInstance(icu.Locale(locale))
-        symbols = number_format.getDecimalFormatSymbols()
-        zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
-        self._zero = ord(zero)
-        self._digits = {chr(self._zero + offset): offset for offset in range(10)}
+        self._digits = _locale_digit_map(locale)
         self._spec = NumberFormatSpec(locale, "decimal")
 
     def _digit_run(self, text: str, start: int) -> int:
@@ -1307,10 +1305,7 @@ class FlexibleOrdinalDetector:
         self.locale = locale
         icu_locale = icu.Locale(locale)
         self._rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu_locale)
-        number_format = icu.NumberFormat.createInstance(icu_locale)
-        symbols = number_format.getDecimalFormatSymbols()
-        zero = symbols.getSymbol(icu.DecimalFormatSymbols.kZeroDigitSymbol)
-        self._digits = {chr(ord(zero) + offset): offset for offset in range(10)}
+        self._digits = _locale_digit_map(icu_locale)
         self._spec = NumberFormatSpec(locale, "decimal")
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
