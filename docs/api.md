@@ -2,6 +2,121 @@
 
 Version: 0.3.0
 
+## icukit.abbreviations
+
+Per-locale abbreviation lexicons.
+
+An abbreviation lexicon records, for one language, the abbreviations that
+should not falsely end a sentence and the (possibly ambiguous) expansions they
+stand for. Lexicons are authored as XML validated by a RELAX NG grammar of
+CLDR lineage (``abbreviations.rng``) and shipped alongside this module under
+``data/abbreviations/``.
+
+Two downstream consumers are served, though neither lives here:
+
+    * a sentence breaker, which turns ``break="suppress"`` surfaces into
+      break-exceptions and ``break="ambiguous"`` surfaces into deposited
+      alternatives; and
+    * an abbreviation recognizer, which deposits the ``<expansion>`` readings
+      as competing candidates without ever forcing one.
+
+This module only PARSES a lexicon into a typed, immutable model. Ambiguity is
+preserved: an entry keeps every expansion, and ``break`` distinguishes a
+surface that never ends a sentence from one that merely might.
+
+Parsing uses the Python standard library ``xml.etree`` at runtime (no lxml
+dependency). The parser forbids DTDs and entity declarations, so external
+entity (XXE) and entity-expansion attacks cannot reach the lexicon. RELAX NG
+validation is a development/test concern and lives in the test suite.
+
+Example:
+    >>> from icukit.abbreviations import load_lexicon
+    >>> lex = load_lexicon("en")
+    >>> entry = lex.get("St.")
+    >>> [e.value for e in entry.expansions]
+    ['Saint', 'Street']
+    >>> entry.is_ambiguous_expansion
+    True
+
+### class `AbbreviationLexicon`
+
+The parsed abbreviation lexicon of one language.
+
+Entries are keyed by surface for lookup while preserving document order.
+
+#### `AbbreviationLexicon(language: 'str', entries: 'tuple[Entry, ...]' = (), patterns: 'tuple[Pattern, ...]' = (), status: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `get(surface: 'str') -> 'Entry | None'`
+
+Return the entry for ``surface``, or ``None`` if there is none.
+
+#### `surfaces() -> 'tuple[str, ...]'`
+
+All entry surfaces, in document order.
+
+### class `Entry`
+
+A single abbreviation surface and its expansions.
+
+``break_behavior`` is ``"suppress"`` when the trailing period always
+belongs to the abbreviation (never a sentence end) or ``"ambiguous"`` when
+the surface may also legitimately end a sentence. ``also`` flags a
+competing non-abbreviation reading (``proper-name``, ``common-word``).
+
+#### `Entry(surface: 'str', break_behavior: 'str', expansions: 'tuple[Expansion, ...]' = (), also: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `Expansion`
+
+One expansion reading of an abbreviation surface.
+
+``sense`` names the semantic class of the expansion (``title``, ``saint``,
+``thoroughfare``, ...). ``cue`` is an optional positional hint that favors
+this reading (e.g. ``precedes-number``); it is advisory, never a rule.
+
+#### `Expansion(value: 'str', sense: 'str', cue: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `Pattern`
+
+A productive abbreviation family, named by a typed ``kind``.
+
+A pattern never carries a raw regular expression: the grammar admits only
+an enumerated ``kind`` (``single-initial``, ``multi-part-initials``,
+``uncased-latin``), and a later compiler owns the boundary semantics.
+
+#### `Pattern(kind: 'str', break_behavior: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `available_locales() -> 'tuple[str, ...]'`
+
+Return the language codes with a packaged abbreviation lexicon.
+
+### `load_lexicon(language: 'str' = 'en') -> 'AbbreviationLexicon'`
+
+Load the packaged abbreviation lexicon for ``language`` (e.g. ``"en"``).
+
+Raises :class:`~icukit.errors.AbbreviationError` if no lexicon is shipped
+for the requested language.
+
+### `load_lexicon_file(path: 'str | Path') -> 'AbbreviationLexicon'`
+
+Load and parse an abbreviation lexicon from an XML file path.
+
+### `parse_lexicon(xml_text: 'str') -> 'AbbreviationLexicon'`
+
+Parse abbreviation-lexicon XML text into an ``AbbreviationLexicon``.
+
+The input is parsed with DTDs and entities forbidden. Structural rules
+beyond the grammar (a present surface, a nonempty expansion value) are
+checked here so the model is always well formed; RELAX NG validation of
+the full controlled vocabularies is exercised by the test suite.
+
 ## icukit.alpha_index
 
 Alphabetic index buckets for sorted lists using ICU's AlphabeticIndex.
@@ -5076,6 +5191,10 @@ Example:
 ## icukit.errors
 
 Exception classes for icukit.
+
+### class `AbbreviationError`
+
+Error related to loading or parsing an abbreviation lexicon.
 
 ### class `AlphaIndexError`
 

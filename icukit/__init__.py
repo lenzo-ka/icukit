@@ -49,6 +49,16 @@ _check_icu_available()
 
 # ruff: noqa: E402
 # flake8: noqa: E402
+from .abbreviations import (
+    AbbreviationLexicon,
+    Entry,
+    Expansion,
+    Pattern,
+    available_locales,
+    load_lexicon,
+    load_lexicon_file,
+    parse_lexicon,
+)
 from .alpha_index import (
     AlphabeticIndex,
     create_index_buckets,
@@ -133,6 +143,7 @@ from .duration import WIDTH_SHORT as DURATION_WIDTH_SHORT
 from .duration import WIDTH_WIDE as DURATION_WIDTH_WIDE
 from .duration import DurationFormatter, format_duration, parse_iso_duration
 from .errors import (
+    AbbreviationError,
     AlphaIndexError,
     BidiError,
     BreakerError,
@@ -330,6 +341,15 @@ __all__ = [
     "__version__",
     "FlexibleCurrencyNameDetector",
     "FlexibleTextDateDetector",
+    # Abbreviations
+    "AbbreviationLexicon",
+    "Entry",
+    "Expansion",
+    "Pattern",
+    "available_locales",
+    "load_lexicon",
+    "load_lexicon_file",
+    "parse_lexicon",
     # Errors
     "ICUKitError",
     "LocaleError",
@@ -354,6 +374,7 @@ __all__ = [
     "SpoofError",
     "IDNAError",
     "AlphaIndexError",
+    "AbbreviationError",
     "PluralError",
     "DurationError",
     "DisplayNameError",

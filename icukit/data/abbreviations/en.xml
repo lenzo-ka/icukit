@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  English abbreviation lexicon for icukit.
+
+  Provenance: this inventory was drafted programmatically as a first useful
+  pass and is PENDING HUMAN REVIEW (see @status="draft"). Entries favor
+  well-known, defensible abbreviations; ambiguity is recorded honestly rather
+  than resolved. Expansions are given where a real written long form exists;
+  surfaces with no clean expansion (e.g. "Ms.") carry none and simply suppress
+  the sentence break.
+
+  Validated against abbreviations.rng.
+-->
+<abbreviations xml:lang="en" status="draft">
+
+  <!-- ============================ Titles / honorifics / ranks ========= -->
+  <entry break="suppress">
+    <surface>Mr.</surface>
+    <expansion sense="title" cue="precedes-name">Mister</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Mrs.</surface>
+    <expansion sense="title" cue="precedes-name">Missus</expansion>
+  </entry>
+  <entry break="suppress">
+    <!-- "Ms." is not a contraction of a longer written word. -->
+    <surface>Ms.</surface>
+  </entry>
+  <entry break="suppress">
+    <!-- Dr. is famously ambiguous: Doctor (title) vs Drive (street). -->
+    <surface>Dr.</surface>
+    <expansion sense="title" cue="precedes-name">Doctor</expansion>
+    <expansion sense="thoroughfare" cue="address">Drive</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Prof.</surface>
+    <expansion sense="title" cue="precedes-name">Professor</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Rev.</surface>
+    <expansion sense="title" cue="precedes-name">Reverend</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Hon.</surface>
+    <expansion sense="title" cue="precedes-name">Honorable</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Capt.</surface>
+    <expansion sense="title" cue="precedes-name">Captain</expansion>
+  </entry>
+  <entry break="suppress" also="common-word">
+    <surface>Gen.</surface>
+    <expansion sense="title" cue="precedes-name">General</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Col.</surface>
+    <expansion sense="title" cue="precedes-name">Colonel</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Maj.</surface>
+    <expansion sense="title" cue="precedes-name">Major</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Lt.</surface>
+    <expansion sense="title" cue="precedes-name">Lieutenant</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Sgt.</surface>
+    <expansion sense="title" cue="precedes-name">Sergeant</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Cpl.</surface>
+    <expansion sense="title" cue="precedes-name">Corporal</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Pvt.</surface>
+    <expansion sense="title" cue="precedes-name">Private</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Cmdr.</surface>
+    <expansion sense="title" cue="precedes-name">Commander</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Adm.</surface>
+    <expansion sense="title" cue="precedes-name">Admiral</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Gov.</surface>
+    <expansion sense="title" cue="precedes-name">Governor</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Sen.</surface>
+    <expansion sense="title" cue="precedes-name">Senator</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Rep.</surface>
+    <expansion sense="title" cue="precedes-name">Representative</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Pres.</surface>
+    <expansion sense="title" cue="precedes-name">President</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Msgr.</surface>
+    <expansion sense="title" cue="precedes-name">Monsignor</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Esq.</surface>
+    <expansion sense="title" cue="follows-name">Esquire</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Ph.D.</surface>
+    <expansion sense="title" cue="follows-name">Doctor of Philosophy</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Jr.</surface>
+    <expansion sense="title" cue="follows-name">Junior</expansion>
+  </entry>
+  <entry break="suppress">
+    <!-- Sr.: Senior (name suffix) or Sister (religious title). -->
+    <surface>Sr.</surface>
+    <expansion sense="title" cue="follows-name">Senior</expansion>
+    <expansion sense="title" cue="precedes-name">Sister</expansion>
+  </entry>
+
+  <!-- ============================ Given-name abbreviations =========== -->
+  <entry break="suppress" also="proper-name">
+    <surface>Wm.</surface>
+    <expansion sense="given-name">William</expansion>
+  </entry>
+  <entry break="suppress" also="proper-name">
+    <surface>Geo.</surface>
+    <expansion sense="given-name">George</expansion>
+  </entry>
+  <entry break="suppress" also="proper-name">
+    <surface>Chas.</surface>
+    <expansion sense="given-name">Charles</expansion>
+  </entry>
+  <entry break="suppress" also="proper-name">
+    <surface>Thos.</surface>
+    <expansion sense="given-name">Thomas</expansion>
+  </entry>
+
+  <!-- ============================ Saint ============================== -->
+  <entry break="suppress">
+    <!-- St.: Saint (before a name) or Street (in an address). -->
+    <surface>St.</surface>
+    <expansion sense="saint" cue="precedes-name">Saint</expansion>
+    <expansion sense="thoroughfare" cue="address">Street</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Ste.</surface>
+    <expansion sense="saint" cue="precedes-name">Sainte</expansion>
+    <expansion sense="place" cue="address">Suite</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Sta.</surface>
+    <expansion sense="saint" cue="precedes-name">Santa</expansion>
+    <expansion sense="place">Station</expansion>
+  </entry>
+
+  <!-- ============================ Thoroughfare / place types ========= -->
+  <entry break="suppress">
+    <surface>Rd.</surface>
+    <expansion sense="thoroughfare" cue="address">Road</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Ave.</surface>
+    <expansion sense="thoroughfare" cue="address">Avenue</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Blvd.</surface>
+    <expansion sense="thoroughfare" cue="address">Boulevard</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Ln.</surface>
+    <expansion sense="thoroughfare" cue="address">Lane</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Ct.</surface>
+    <expansion sense="thoroughfare" cue="address">Court</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Pl.</surface>
+    <expansion sense="thoroughfare" cue="address">Place</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Sq.</surface>
+    <expansion sense="place" cue="address">Square</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Ter.</surface>
+    <expansion sense="thoroughfare" cue="address">Terrace</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Pkwy.</surface>
+    <expansion sense="thoroughfare" cue="address">Parkway</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Hwy.</surface>
+    <expansion sense="thoroughfare" cue="address">Highway</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Cir.</surface>
+    <expansion sense="thoroughfare" cue="address">Circle</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Rte.</surface>
+    <expansion sense="thoroughfare" cue="address">Route</expansion>
+  </entry>
+  <entry break="suppress">
+    <!-- Rt.: Route (address) or Right (as in "Rt. Hon."). -->
+    <surface>Rt.</surface>
+    <expansion sense="thoroughfare" cue="address">Route</expansion>
+    <expansion sense="other" cue="precedes-name">Right</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Apt.</surface>
+    <expansion sense="place" cue="address">Apartment</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Bldg.</surface>
+    <expansion sense="place" cue="address">Building</expansion>
+  </entry>
+  <entry break="suppress">
+    <!-- Mt.: Mount (before a name) or Mountain. -->
+    <surface>Mt.</surface>
+    <expansion sense="place" cue="precedes-name">Mount</expansion>
+    <expansion sense="place">Mountain</expansion>
+  </entry>
+  <entry break="suppress">
+    <!-- Ft.: Fort (place) or foot/feet (measurement). -->
+    <surface>Ft.</surface>
+    <expansion sense="place" cue="precedes-name">Fort</expansion>
+    <expansion sense="other" cue="measurement">Feet</expansion>
+  </entry>
+  <entry break="suppress">
+    <!-- Pt.: Point (place) or Part. -->
+    <surface>Pt.</surface>
+    <expansion sense="place">Point</expansion>
+    <expansion sense="other">Part</expansion>
+  </entry>
+  <entry break="suppress">
+    <surface>Nr.</surface>
+    <expansion sense="other">Near</expansion>
+  </entry>
+
+  <!-- ============================ Compass directions ================= -->
+  <entry break="ambiguous" also="proper-name">
+    <surface>N.</surface>
+    <expansion sense="compass" cue="address">North</expansion>
+  </entry>
+  <entry break="ambiguous" also="proper-name">
+    <surface>S.</surface>
+    <expansion sense="compass" cue="address">South</expansion>
+  </entry>
+  <entry break="ambiguous" also="proper-name">
+    <surface>E.</surface>
+    <expansion sense="compass" cue="address">East</expansion>
+  </entry>
+  <entry break="ambiguous" also="proper-name">
+    <surface>W.</surface>
+    <expansion sense="compass" cue="address">West</expansion>
+  </entry>
+
+  <!-- ============================ Weekdays =========================== -->
+  <entry break="suppress"><surface>Mon.</surface><expansion sense="weekday" cue="date">Monday</expansion></entry>
+  <entry break="suppress"><surface>Tue.</surface><expansion sense="weekday" cue="date">Tuesday</expansion></entry>
+  <entry break="suppress"><surface>Tues.</surface><expansion sense="weekday" cue="date">Tuesday</expansion></entry>
+  <entry break="suppress"><surface>Wed.</surface><expansion sense="weekday" cue="date">Wednesday</expansion></entry>
+  <entry break="suppress"><surface>Weds.</surface><expansion sense="weekday" cue="date">Wednesday</expansion></entry>
+  <entry break="suppress"><surface>Thu.</surface><expansion sense="weekday" cue="date">Thursday</expansion></entry>
+  <entry break="suppress"><surface>Thurs.</surface><expansion sense="weekday" cue="date">Thursday</expansion></entry>
+  <entry break="suppress"><surface>Fri.</surface><expansion sense="weekday" cue="date">Friday</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>Sat.</surface><expansion sense="weekday" cue="date">Saturday</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>Sun.</surface><expansion sense="weekday" cue="date">Sunday</expansion></entry>
+
+  <!-- ============================ Months ============================= -->
+  <entry break="suppress" also="proper-name"><surface>Jan.</surface><expansion sense="month" cue="date">January</expansion></entry>
+  <entry break="suppress"><surface>Feb.</surface><expansion sense="month" cue="date">February</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>Mar.</surface><expansion sense="month" cue="date">March</expansion></entry>
+  <entry break="suppress" also="proper-name"><surface>Apr.</surface><expansion sense="month" cue="date">April</expansion></entry>
+  <entry break="suppress" also="proper-name"><surface>Jun.</surface><expansion sense="month" cue="date">June</expansion></entry>
+  <entry break="suppress"><surface>Jul.</surface><expansion sense="month" cue="date">July</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>Aug.</surface><expansion sense="month" cue="date">August</expansion></entry>
+  <entry break="suppress"><surface>Sep.</surface><expansion sense="month" cue="date">September</expansion></entry>
+  <entry break="suppress"><surface>Sept.</surface><expansion sense="month" cue="date">September</expansion></entry>
+  <entry break="suppress"><surface>Oct.</surface><expansion sense="month" cue="date">October</expansion></entry>
+  <entry break="suppress"><surface>Nov.</surface><expansion sense="month" cue="date">November</expansion></entry>
+  <entry break="suppress"><surface>Dec.</surface><expansion sense="month" cue="date">December</expansion></entry>
+
+  <!-- ============================ US states (traditional forms) ====== -->
+  <entry break="suppress"><surface>Ala.</surface><expansion sense="region">Alabama</expansion></entry>
+  <entry break="suppress"><surface>Ariz.</surface><expansion sense="region">Arizona</expansion></entry>
+  <entry break="suppress"><surface>Ark.</surface><expansion sense="region">Arkansas</expansion></entry>
+  <entry break="suppress"><surface>Calif.</surface><expansion sense="region">California</expansion></entry>
+  <entry break="suppress"><surface>Colo.</surface><expansion sense="region">Colorado</expansion></entry>
+  <entry break="suppress"><surface>Conn.</surface><expansion sense="region">Connecticut</expansion></entry>
+  <entry break="suppress"><surface>Del.</surface><expansion sense="region">Delaware</expansion></entry>
+  <entry break="suppress"><surface>Fla.</surface><expansion sense="region">Florida</expansion></entry>
+  <entry break="suppress"><surface>Ga.</surface><expansion sense="region">Georgia</expansion></entry>
+  <entry break="suppress"><surface>Ill.</surface><expansion sense="region">Illinois</expansion></entry>
+  <entry break="suppress"><surface>Ind.</surface><expansion sense="region">Indiana</expansion></entry>
+  <entry break="suppress"><surface>Kan.</surface><expansion sense="region">Kansas</expansion></entry>
+  <entry break="suppress"><surface>Ky.</surface><expansion sense="region">Kentucky</expansion></entry>
+  <entry break="suppress"><surface>La.</surface><expansion sense="region">Louisiana</expansion></entry>
+  <entry break="suppress"><surface>Mass.</surface><expansion sense="region">Massachusetts</expansion></entry>
+  <entry break="suppress"><surface>Md.</surface><expansion sense="region">Maryland</expansion></entry>
+  <entry break="suppress"><surface>Mich.</surface><expansion sense="region">Michigan</expansion></entry>
+  <entry break="suppress"><surface>Minn.</surface><expansion sense="region">Minnesota</expansion></entry>
+  <entry break="suppress"><surface>Miss.</surface><expansion sense="region">Mississippi</expansion></entry>
+  <entry break="suppress"><surface>Mo.</surface><expansion sense="region">Missouri</expansion></entry>
+  <entry break="suppress"><surface>Mont.</surface><expansion sense="region">Montana</expansion></entry>
+  <entry break="suppress"><surface>Neb.</surface><expansion sense="region">Nebraska</expansion></entry>
+  <entry break="suppress"><surface>Nev.</surface><expansion sense="region">Nevada</expansion></entry>
+  <entry break="suppress"><surface>Okla.</surface><expansion sense="region">Oklahoma</expansion></entry>
+  <entry break="suppress"><surface>Ore.</surface><expansion sense="region">Oregon</expansion></entry>
+  <entry break="suppress"><surface>Pa.</surface><expansion sense="region">Pennsylvania</expansion></entry>
+  <entry break="suppress"><surface>Tenn.</surface><expansion sense="region">Tennessee</expansion></entry>
+  <entry break="suppress"><surface>Tex.</surface><expansion sense="region">Texas</expansion></entry>
+  <entry break="suppress"><surface>Va.</surface><expansion sense="region">Virginia</expansion></entry>
+  <entry break="suppress"><surface>Vt.</surface><expansion sense="region">Vermont</expansion></entry>
+  <entry break="suppress"><surface>Wash.</surface><expansion sense="region">Washington</expansion></entry>
+  <entry break="suppress"><surface>Wis.</surface><expansion sense="region">Wisconsin</expansion></entry>
+  <entry break="suppress"><surface>Wyo.</surface><expansion sense="region">Wyoming</expansion></entry>
+  <entry break="suppress"><surface>N.Y.</surface><expansion sense="region">New York</expansion></entry>
+  <entry break="suppress"><surface>N.J.</surface><expansion sense="region">New Jersey</expansion></entry>
+  <entry break="suppress"><surface>N.C.</surface><expansion sense="region">North Carolina</expansion></entry>
+  <entry break="suppress"><surface>S.C.</surface><expansion sense="region">South Carolina</expansion></entry>
+  <entry break="suppress"><surface>N.H.</surface><expansion sense="region">New Hampshire</expansion></entry>
+  <entry break="suppress"><surface>N.M.</surface><expansion sense="region">New Mexico</expansion></entry>
+  <entry break="suppress"><surface>R.I.</surface><expansion sense="region">Rhode Island</expansion></entry>
+  <entry break="suppress"><surface>W.Va.</surface><expansion sense="region">West Virginia</expansion></entry>
+
+  <!-- ============================ Countries / bodies ================= -->
+  <entry break="suppress"><surface>U.S.</surface><expansion sense="region">United States</expansion></entry>
+  <entry break="suppress"><surface>U.S.A.</surface><expansion sense="region">United States of America</expansion></entry>
+  <entry break="suppress"><surface>U.K.</surface><expansion sense="region">United Kingdom</expansion></entry>
+  <entry break="suppress"><surface>U.N.</surface><expansion sense="organization">United Nations</expansion></entry>
+  <entry break="suppress"><surface>E.U.</surface><expansion sense="region">European Union</expansion></entry>
+
+  <!-- ============================ Organizations ====================== -->
+  <entry break="suppress"><surface>Inc.</surface><expansion sense="organization" cue="follows-name">Incorporated</expansion></entry>
+  <entry break="suppress"><surface>Corp.</surface><expansion sense="organization" cue="follows-name">Corporation</expansion></entry>
+  <entry break="suppress"><surface>Ltd.</surface><expansion sense="organization" cue="follows-name">Limited</expansion></entry>
+  <entry break="suppress">
+    <!-- Co.: Company (organization) or County (place). -->
+    <surface>Co.</surface>
+    <expansion sense="organization" cue="follows-name">Company</expansion>
+    <expansion sense="place">County</expansion>
+  </entry>
+  <entry break="suppress"><surface>Dept.</surface><expansion sense="organization">Department</expansion></entry>
+  <entry break="suppress"><surface>Univ.</surface><expansion sense="organization">University</expansion></entry>
+  <entry break="suppress"><surface>Assn.</surface><expansion sense="organization">Association</expansion></entry>
+  <entry break="suppress"><surface>Bros.</surface><expansion sense="organization" cue="follows-name">Brothers</expansion></entry>
+  <entry break="suppress"><surface>Mfg.</surface><expansion sense="organization">Manufacturing</expansion></entry>
+  <entry break="suppress"><surface>Mgr.</surface><expansion sense="title">Manager</expansion></entry>
+
+  <!-- ============================ Latin / editorial phrases ========== -->
+  <entry break="suppress"><surface>A.D.</surface><expansion sense="era" cue="date">Anno Domini</expansion></entry>
+  <entry break="suppress"><surface>B.C.</surface><expansion sense="era" cue="date">Before Christ</expansion></entry>
+  <entry break="suppress"><surface>A.M.</surface><expansion sense="time">ante meridiem</expansion></entry>
+  <entry break="suppress">
+    <!-- P.M.: post meridiem (time) or Prime Minister (title). -->
+    <surface>P.M.</surface>
+    <expansion sense="time">post meridiem</expansion>
+    <expansion sense="title" cue="precedes-name">Prime Minister</expansion>
+  </entry>
+  <entry break="suppress"><surface>e.g.</surface><expansion sense="phrase">for example</expansion></entry>
+  <entry break="suppress"><surface>i.e.</surface><expansion sense="phrase">that is</expansion></entry>
+  <entry break="suppress"><surface>etc.</surface><expansion sense="phrase">et cetera</expansion></entry>
+  <entry break="suppress"><surface>vs.</surface><expansion sense="phrase">versus</expansion></entry>
+  <entry break="suppress">
+    <!-- v.: versus (citations/sports) or verse (references). -->
+    <surface>v.</surface>
+    <expansion sense="phrase">versus</expansion>
+    <expansion sense="other">verse</expansion>
+  </entry>
+  <entry break="suppress"><surface>cf.</surface><expansion sense="phrase">compare</expansion></entry>
+  <entry break="suppress"><surface>viz.</surface><expansion sense="phrase">namely</expansion></entry>
+  <entry break="suppress"><surface>al.</surface><expansion sense="phrase">and others</expansion></entry>
+  <entry break="suppress">
+    <!-- c.: circa (dates) or century. -->
+    <surface>c.</surface>
+    <expansion sense="phrase" cue="date">circa</expansion>
+    <expansion sense="other">century</expansion>
+  </entry>
+  <entry break="suppress"><surface>ca.</surface><expansion sense="phrase" cue="date">circa</expansion></entry>
+
+  <!-- ============================ Reference / numbering ============== -->
+  <entry break="ambiguous" also="common-word">
+    <!-- No.: Number (before a numeral) or the word "No." ending a sentence. -->
+    <surface>No.</surface>
+    <expansion sense="number" cue="precedes-number">Number</expansion>
+  </entry>
+  <entry break="suppress"><surface>Nos.</surface><expansion sense="number" cue="precedes-number">Numbers</expansion></entry>
+  <entry break="suppress"><surface>Num.</surface><expansion sense="number" cue="precedes-number">Number</expansion></entry>
+  <entry break="suppress"><surface>p.</surface><expansion sense="number" cue="precedes-number">page</expansion></entry>
+  <entry break="suppress"><surface>pp.</surface><expansion sense="number" cue="precedes-number">pages</expansion></entry>
+  <entry break="suppress"><surface>vol.</surface><expansion sense="number" cue="precedes-number">volume</expansion></entry>
+  <entry break="suppress"><surface>Ch.</surface><expansion sense="number" cue="precedes-number">Chapter</expansion></entry>
+  <entry break="suppress"><surface>fig.</surface><expansion sense="number" cue="precedes-number">figure</expansion></entry>
+  <entry break="suppress">
+    <!-- ed.: editor or edition. -->
+    <surface>ed.</surface>
+    <expansion sense="other">editor</expansion>
+    <expansion sense="other">edition</expansion>
+  </entry>
+  <entry break="suppress"><surface>eds.</surface><expansion sense="other">editors</expansion></entry>
+  <entry break="suppress"><surface>approx.</surface><expansion sense="other" cue="precedes-number">approximately</expansion></entry>
+  <entry break="suppress"><surface>misc.</surface><expansion sense="other">miscellaneous</expansion></entry>
+  <entry break="suppress">
+    <!-- min.: minute or minimum. -->
+    <surface>min.</surface>
+    <expansion sense="other" cue="measurement">minute</expansion>
+    <expansion sense="other">minimum</expansion>
+  </entry>
+  <entry break="suppress"><surface>max.</surface><expansion sense="other">maximum</expansion></entry>
+
+  <!-- ============================ Productive patterns ================ -->
+  <!-- A single capital initial (J. Smith) can also end a sentence. -->
+  <pattern kind="single-initial" break="ambiguous"/>
+  <!-- A run of dotted initials (U.S.A., e.g.) does not end a sentence. -->
+  <pattern kind="multi-part-initials" break="suppress"/>
+  <!-- Case-insensitive Latin abbreviations (a.m., no.). -->
+  <pattern kind="uncased-latin" break="suppress"/>
+
+</abbreviations>
