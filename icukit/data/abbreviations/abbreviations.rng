@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  RELAX NG grammar for icukit per-locale abbreviation lexicons (CLDR lineage).
+
+  A lexicon lists the abbreviations of one language, so that downstream
+  consumers can (a) suppress false sentence breaks after them and (b) recover
+  their ambiguous expansions without ever forcing a single reading.
+
+  Design intent enforced by this grammar:
+
+    * Productive ("regular") abbreviation shapes are expressed ONLY as a
+      <pattern> with an ENUMERATED @kind. A kind names a typed family whose
+      correct boundary semantics are owned by the compiler, never by the
+      author. A raw regular expression is therefore unwritable: @kind admits
+      only the listed tokens, and <pattern> permits no text content.
+
+    * Ambiguity is preserved, not resolved. An <entry> may carry several
+      <expansion> children (e.g. "St." -> Saint, Street) and @break may mark
+      a surface that can also legitimately end a sentence.
+
+  Controlled vocabularies (documented here, enforced below):
+
+    @break   (entry, pattern; required)
+        suppress   - the surface never ends a sentence here; the trailing
+                     period belongs to the abbreviation.
+        ambiguous  - the surface may also be a sentence end; a downstream
+                     breaker should deposit both the "no break" and the
+                     "break" reading rather than choose.
+
+    @also    (entry; optional) - flags a competing NON-abbreviation reading.
+        proper-name  - the surface is also a person/place name (e.g. "Jun.").
+        common-word  - the surface is also an ordinary word (e.g. "No.").
+
+    @sense   (expansion; required) - the semantic class of the expansion.
+        title         - honorific or rank (Dr. -> Doctor).
+        saint         - Saint / Sainte / Santa (St. -> Saint).
+        thoroughfare  - street type (St. -> Street, Rd. -> Road).
+        place         - other place / structure type (Sq. -> Square, Mt.).
+        compass       - cardinal direction (N. -> North).
+        month         - calendar month (Jan. -> January).
+        weekday       - day of week (Mon. -> Monday).
+        region        - country / state / territory (U.S., Calif.).
+        organization  - corporate / institutional word (Inc., Dept.).
+        number        - number word (No. -> Number).
+        given-name    - abbreviated personal name (Wm. -> William).
+        time          - time-of-day marker (A.M. -> ante meridiem).
+        era           - calendar era (A.D. -> Anno Domini).
+        phrase        - fixed Latin / editorial phrase (e.g. -> for example).
+        other         - a defensible expansion outside the classes above.
+
+    @cue     (expansion; optional) - a positional hint that favors this
+             reading, for a later disambiguator (never a hard rule here).
+        precedes-name    - typically stands before a proper noun.
+        follows-name     - typically stands after a proper noun.
+        precedes-number  - typically stands before a number.
+        address          - typically appears in a postal address.
+        date             - typically appears in a date.
+        measurement      - typically appears in a measurement.
+
+    @kind    (pattern; required) - a typed productive family.
+        single-initial       - one letter then a period (J. Smith). Marked
+                               ambiguous: it can coincide with a sentence end.
+        multi-part-initials  - a run of dotted initials (U.S.A., e.g.).
+        uncased-latin        - a Latin abbreviation matched case-insensitively
+                               (a.m., e.g., no.).
+
+    @status  (root; optional) - review state of the lexicon as authored.
+        draft     - drafted, pending human review.
+        reviewed  - reviewed and accepted.
+-->
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes"
+         ns="">
+
+  <start>
+    <ref name="abbreviations"/>
+  </start>
+
+  <define name="abbreviations">
+    <element name="abbreviations">
+      <attribute name="xml:lang">
+        <data type="language"/>
+      </attribute>
+      <optional>
+        <attribute name="status">
+          <choice>
+            <value>draft</value>
+            <value>reviewed</value>
+          </choice>
+        </attribute>
+      </optional>
+      <zeroOrMore>
+        <choice>
+          <ref name="entry"/>
+          <ref name="pattern"/>
+        </choice>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="entry">
+    <element name="entry">
+      <ref name="break-attr"/>
+      <optional>
+        <attribute name="also">
+          <choice>
+            <value>proper-name</value>
+            <value>common-word</value>
+          </choice>
+        </attribute>
+      </optional>
+      <element name="surface">
+        <data type="token">
+          <param name="minLength">1</param>
+        </data>
+      </element>
+      <zeroOrMore>
+        <ref name="expansion"/>
+      </zeroOrMore>
+    </element>
+  </define>
+
+  <define name="expansion">
+    <element name="expansion">
+      <attribute name="sense">
+        <ref name="sense-values"/>
+      </attribute>
+      <optional>
+        <attribute name="cue">
+          <ref name="cue-values"/>
+        </attribute>
+      </optional>
+      <data type="token">
+        <param name="minLength">1</param>
+      </data>
+    </element>
+  </define>
+
+  <define name="pattern">
+    <element name="pattern">
+      <attribute name="kind">
+        <choice>
+          <value>single-initial</value>
+          <value>multi-part-initials</value>
+          <value>uncased-latin</value>
+        </choice>
+      </attribute>
+      <ref name="break-attr"/>
+    </element>
+  </define>
+
+  <define name="break-attr">
+    <attribute name="break">
+      <choice>
+        <value>suppress</value>
+        <value>ambiguous</value>
+      </choice>
+    </attribute>
+  </define>
+
+  <define name="sense-values">
+    <choice>
+      <value>title</value>
+      <value>saint</value>
+      <value>thoroughfare</value>
+      <value>place</value>
+      <value>compass</value>
+      <value>month</value>
+      <value>weekday</value>
+      <value>region</value>
+      <value>organization</value>
+      <value>number</value>
+      <value>given-name</value>
+      <value>time</value>
+      <value>era</value>
+      <value>phrase</value>
+      <value>other</value>
+    </choice>
+  </define>
+
+  <define name="cue-values">
+    <choice>
+      <value>precedes-name</value>
+      <value>follows-name</value>
+      <value>precedes-number</value>
+      <value>address</value>
+      <value>date</value>
+      <value>measurement</value>
+    </choice>
+  </define>
+
+</grammar>

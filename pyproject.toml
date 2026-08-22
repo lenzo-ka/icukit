@@ -43,6 +43,9 @@ Issues = "https://github.com/lenzo-ka/icukit/issues"
 dev = [
     "pytest>=9.0",
     "ruff>=0.6",
+    # Used only by the test suite to validate authored abbreviation lexicons
+    # against their RELAX NG grammar. The runtime loader stays lxml-free.
+    "lxml>=5.0",
 ]
 
 [project.scripts]
@@ -57,7 +60,7 @@ include = ["icukit*"]
 exclude = ["eval*"]
 
 [tool.setuptools.package-data]
-icukit = ["py.typed"]
+icukit = ["py.typed", "data/abbreviations/*.xml", "data/abbreviations/*.rng"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

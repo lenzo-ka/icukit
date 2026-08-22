@@ -155,6 +155,12 @@ class AlphaIndexError(ICUKitError):
     pass
 
 
+class AbbreviationError(ICUKitError):
+    """Error related to loading or parsing an abbreviation lexicon."""
+
+    pass
+
+
 @dataclass(frozen=True)
 class RuleRefusal:
     """One stable, machine-readable exception-rule refusal."""

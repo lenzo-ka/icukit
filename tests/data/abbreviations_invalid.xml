@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Deliberately INVALID abbreviation lexicon, used to prove the RELAX NG grammar
+  constrains authoring. It smuggles a raw regular expression into @kind, which
+  the enumerated vocabulary must reject (the seed format's broken ":re" forms
+  must be unwritable). It also uses an out-of-vocabulary @sense.
+-->
+<abbreviations xml:lang="en">
+  <pattern kind="[A-Z]\." break="suppress"/>
+  <entry break="suppress">
+    <surface>Dr.</surface>
+    <expansion sense="streetish">Drive</expansion>
+  </entry>
+</abbreviations>
