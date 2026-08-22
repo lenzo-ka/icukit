@@ -251,6 +251,7 @@ from .plural import (
     list_ordinal_categories,
     list_plural_categories,
 )
+from .recognize import FlexibleCurrencyNameDetector, FlexibleTextDateDetector
 from .regex import (
     CASE_INSENSITIVE,
     COMMENTS,
@@ -327,6 +328,8 @@ from .unicode import (
 
 __all__ = [
     "__version__",
+    "FlexibleCurrencyNameDetector",
+    "FlexibleTextDateDetector",
     # Errors
     "ICUKitError",
     "LocaleError",

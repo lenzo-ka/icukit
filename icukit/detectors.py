@@ -887,7 +887,7 @@ class DetectorSet:
 # just a DetectorSet -- compose or trim it with .with_/.without like any other.
 
 
-def date_detectors(locale: str, skeletons: Iterable[str]) -> DetectorSet:
+def date_detectors(locale: str, skeletons: Iterable[str], *, flexible: bool = False) -> DetectorSet:
     """A gang of date detectors for ``locale``, one per skeleton.
 
     ``skeletons`` are ICU date-time skeletons (``"yMd"``, ``"yMMMd"``); each becomes a
@@ -895,7 +895,12 @@ def date_detectors(locale: str, skeletons: Iterable[str]) -> DetectorSet:
     harmless. A skeleton whose pattern carries an uninvertible field raises (see
     :class:`DateDetector`).
     """
-    return DetectorSet(()).with_(*(DateDetector(locale, skeleton) for skeleton in skeletons))
+    members: list[Detector] = [DateDetector(locale, skeleton) for skeleton in skeletons]
+    if flexible:
+        from .recognize import FlexibleTextDateDetector
+
+        members.append(FlexibleTextDateDetector(locale))
+    return DetectorSet(()).with_(*members)
 
 
 def number_detectors(
@@ -904,6 +909,7 @@ def number_detectors(
     decimal: bool = True,
     percent: bool = True,
     currencies: Iterable[str] = (),
+    flexible: bool = False,
 ) -> DetectorSet:
     """A gang of number detectors for ``locale``.
 
@@ -916,16 +922,24 @@ def number_detectors(
     if percent:
         members.append(NumberDetector(locale, "percent"))
     members.extend(NumberDetector(locale, "currency", code) for code in currencies)
+    if flexible:
+        from .recognize import FlexibleCurrencyNameDetector
+
+        members.extend(FlexibleCurrencyNameDetector(locale, code) for code in currencies)
     return DetectorSet(()).with_(*members)
 
 
 def all_detectors(
-    locale: str, skeletons: Iterable[str], *, currencies: Iterable[str] = ()
+    locale: str,
+    skeletons: Iterable[str],
+    *,
+    currencies: Iterable[str] = (),
+    flexible: bool = False,
 ) -> DetectorSet:
     """Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
 
     A convenience composition of :func:`date_detectors` and :func:`number_detectors` for
     ``locale`` into one gang.
     """
-    numbers = number_detectors(locale, currencies=currencies)
-    return date_detectors(locale, skeletons).with_(*numbers.detectors)
+    numbers = number_detectors(locale, currencies=currencies, flexible=flexible)
+    return date_detectors(locale, skeletons, flexible=flexible).with_(*numbers.detectors)

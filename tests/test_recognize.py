@@ -15,12 +15,14 @@ from icukit.detectors import (
 )
 from icukit.recognize import (
     FlexibleCurrencyDetector,
+    FlexibleCurrencyNameDetector,
     FlexibleDateDetector,
     FlexibleFractionDetector,
     FlexibleMeasureDetector,
     FlexibleNumberDetector,
     FlexibleOrdinalDetector,
     FlexiblePercentDetector,
+    FlexibleTextDateDetector,
     FlexibleTimeDetector,
 )
 from icukit.resolve import resolve
@@ -153,6 +155,36 @@ def test_flexible_currency_gains_recall(surface, decimal):
     assert detection["value"] == NumberValue(decimal, "USD")
     assert detection["spec"] == NumberFormatSpec("en_US", "currency", currency="USD")
     assert detection["captures"][0].name == "currency"
+
+
+@pytest.mark.parametrize("surface, decimal", [("5 US dollars", "5"), ("1 US Dollar", "1")])
+def test_flexible_currency_name_gains_recall_over_strict(surface, decimal):
+    assert NumberDetector("en_US", "currency", "USD").detect(surface) == []
+
+    detector = FlexibleCurrencyNameDetector("en_US", "USD")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue(decimal, "USD")
+    currency = next(capture for capture in detection["captures"] if capture.name == "currency")
+    assert (currency.text, currency.value, currency.form) == (
+        surface[len(decimal) + 1 :],
+        "USD",
+        "wide",
+    )
+
+
+def test_flexible_currency_name_is_case_insensitive_and_reflective_non_english():
+    detection = FlexibleCurrencyNameDetector("de_DE", "EUR").detect("5 euro")[0]
+
+    assert detection["text"] == "5 euro"
+    assert detection["value"] == NumberValue("5", "EUR")
+
+
+def test_flexible_currency_name_canonical_verifies_code():
+    with pytest.raises(ValueError, match="canonical"):
+        FlexibleCurrencyNameDetector("en_US", "usd")
 
 
 @pytest.mark.parametrize("surface", ["$5", "$ 5", "$\N{NO-BREAK SPACE}5"])
@@ -331,6 +363,122 @@ def test_flexible_date_gains_recall_over_strict(surface):
     assert detection["value"].fields == (("y", 26), ("M", 1), ("d", 3))
     assert detection["value"].calendar == "gregorian"
     assert detection["type"] == "date:flexible"
+
+
+@pytest.mark.parametrize(
+    "surface, fields",
+    [
+        ("July 25th, 2012", (("y", 2012), ("M", 7), ("d", 25))),
+        ("Wednesday, July 25, 2012", (("y", 2012), ("M", 7), ("d", 25))),
+        ("January 15", (("M", 1), ("d", 15))),
+    ],
+)
+def test_flexible_text_date_gains_recall_over_numeric(surface, fields):
+    assert FlexibleDateDetector("en_US").detect(surface) == []
+
+    detector = FlexibleTextDateDetector("en_US")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert detection["text"] == surface
+    assert detection["value"].fields == fields
+    assert detection["value"].calendar == "gregorian"
+    month = next(capture for capture in detection["captures"] if capture.name == "month")
+    assert (month.value, month.form) == (fields[-2][1], "wide")
+
+
+def test_flexible_text_date_captures_short_names_and_is_case_insensitive():
+    detection = FlexibleTextDateDetector("en_US").detect("wednesday, jul 25, 2012")[0]
+    captures = {capture.name: capture for capture in detection["captures"]}
+
+    assert captures["weekday"].form == "wide"
+    assert captures["month"].form == "short"
+    assert captures["month"].value == 7
+    assert captures["d"].form == captures["y"].form == "numeric"
+
+
+def test_flexible_text_date_is_reflective_for_non_english_locale():
+    detection = FlexibleTextDateDetector("de_DE").detect("15. Januar 2012")[0]
+
+    assert detection["value"].fields == (("y", 2012), ("M", 1), ("d", 15))
+    assert next(c for c in detection["captures"] if c.name == "month").form == "wide"
+
+
+@pytest.mark.parametrize("surface", ["February 30, 2012", "April 31, 2012"])
+def test_flexible_text_date_rejects_impossible_dates(surface):
+    assert FlexibleTextDateDetector("en_US").detect(surface) == []
+
+
+@pytest.mark.parametrize(
+    "surface, fields",
+    [
+        ("July 25 2012", (("y", 2012), ("M", 7), ("d", 25))),
+        ("july 25th 2012", (("y", 2012), ("M", 7), ("d", 25))),
+        ("Jan 15 2020", (("y", 2020), ("M", 1), ("d", 15))),
+    ],
+)
+def test_flexible_text_date_treats_separator_punctuation_as_optional(surface, fields):
+    """A surface that drops the CLDR comma still deposits the full-span candidate."""
+    detection = FlexibleTextDateDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"].fields == fields
+
+
+@pytest.mark.parametrize("surface", ["hello july world", "march on washington 2020", "May I go"])
+def test_flexible_text_date_requires_a_real_day_and_boundary(surface):
+    """Relaxed separators do not turn a bare month name into a false date."""
+    assert FlexibleTextDateDetector("en_US").detect(surface) == []
+
+
+def test_flexible_currency_name_reads_a_non_home_currency_reflectively():
+    """setCurrency drives the spelled name for a currency other than the locale's own."""
+    detection = FlexibleCurrencyNameDetector("en_US", "EUR").detect("5 euros")[0]
+
+    assert detection["text"] == "5 euros"
+    assert detection["value"] == NumberValue("5", "EUR")
+    assert FlexibleCurrencyNameDetector("en_US", "EUR").detect("5 EUR")[0]["value"] == NumberValue(
+        "5", "EUR"
+    )
+
+
+def test_flexible_text_date_keeps_pattern_grammar_words_mandatory():
+    """Relaxing punctuation must not drop a locale's required grammar word."""
+    detector = FlexibleTextDateDetector("pt_BR")
+
+    assert detector.detect("25 julho 2012") == []
+    assert detector.detect("25 de julho de 2012")[0]["text"] == "25 de julho de 2012"
+
+
+@pytest.mark.parametrize("surface", ["5USD", "5euros", "5US dollars"])
+def test_flexible_currency_name_requires_a_boundary_before_the_name(surface):
+    """A spelled name glued to the digits is a mid-token match and is refused."""
+    assert FlexibleCurrencyNameDetector("en_US", "USD").detect(surface) == []
+    assert FlexibleCurrencyNameDetector("fr_FR", "EUR").detect(surface) == []
+
+
+def test_flexible_text_date_does_not_truncate_a_contradictory_weekday():
+    """A wrong weekday yields no weekday-date candidate, not a truncated one."""
+    detections = FlexibleTextDateDetector("en_US").detect("Tuesday July 25 2012")
+
+    assert [detection["text"] for detection in detections] == ["July 25 2012"]
+    assert all(
+        capture.name != "weekday" for detection in detections for capture in detection["captures"]
+    )
+
+
+def test_flexible_currency_name_rejects_an_unassigned_code():
+    """A three-letter string outside ICU's currency inventory is refused."""
+    with pytest.raises(ValueError, match="not an assigned ISO currency"):
+        FlexibleCurrencyNameDetector("en_US", "ZZZ")
+
+
+def test_flexible_currency_name_accepts_an_assigned_code_without_a_display_name():
+    """Inventory membership, not a localized name, decides a code is a currency."""
+    # ARY is an assigned ISO 4217 code whose English long name falls back to the code.
+    detector = FlexibleCurrencyNameDetector("en_US", "ARY")
+
+    assert detector.currency == "ARY"
 
 
 def test_flexible_date_accepts_four_digit_year():
