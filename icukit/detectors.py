@@ -257,6 +257,17 @@ class _DateField:
     value_field: bool = True
 
 
+def _is_pattern_letter(char: str) -> bool:
+    """A CLDR date pattern letter is an ASCII letter; everything else is literal text.
+
+    Localized patterns interleave field letters with locale literal text (e.g. Japanese
+    ``y年M月d日``); that literal text is often alphabetic under Unicode, so classifying it
+    by ``str.isalpha`` would mistake it for unmodeled fields and reject an otherwise
+    invertible skeleton. CLDR pattern letters are drawn only from ``A-Za-z``.
+    """
+    return char.isascii() and char.isalpha()
+
+
 def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
     """Return unquoted CLDR pattern-letter runs."""
     runs: list[tuple[str, int]] = []
@@ -270,7 +281,7 @@ def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
             quoted = not quoted
             index += 1
             continue
-        if quoted or not pattern[index].isalpha():
+        if quoted or not _is_pattern_letter(pattern[index]):
             index += 1
             continue
         letter = pattern[index]
