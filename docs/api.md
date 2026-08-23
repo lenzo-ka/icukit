@@ -1576,7 +1576,7 @@ The generative recipe for a numeric detection.
 formatter groups by no fixed size. ``min_fraction``/``max_fraction`` are the
 formatter's configured fraction-digit bounds.
 
-#### `NumberFormatSpec(locale: 'str', kind: "Literal['decimal', 'currency', 'percent']", currency: 'str | None' = None, min_fraction: 'int | None' = None, max_fraction: 'int | None' = None, grouping_sizes: 'tuple[int, ...] | None' = None) -> None`
+#### `NumberFormatSpec(locale: 'str', kind: "Literal['decimal', 'currency', 'percent', 'scientific']", currency: 'str | None' = None, min_fraction: 'int | None' = None, max_fraction: 'int | None' = None, grouping_sizes: 'tuple[int, ...] | None' = None) -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -2097,11 +2097,11 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -3761,6 +3761,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible percent candidates in source order.
+
+### class `FlexibleScientificDetector`
+
+Recognize scientific notation using locale symbols reflected from ICU.
+
+#### `FlexibleScientificDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping scientific numbers in source order.
 
 ### class `FlexibleTextDateDetector`
 

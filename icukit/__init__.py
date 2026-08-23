@@ -266,6 +266,7 @@ from .plural import (
 from .recognize import (
     FlexibleCompactDetector,
     FlexibleCurrencyNameDetector,
+    FlexibleScientificDetector,
     FlexibleTextDateDetector,
 )
 from .regex import (
@@ -346,6 +347,7 @@ __all__ = [
     "__version__",
     "FlexibleCompactDetector",
     "FlexibleCurrencyNameDetector",
+    "FlexibleScientificDetector",
     "FlexibleTextDateDetector",
     "generated_detectors",
     "generated_detectors_report",

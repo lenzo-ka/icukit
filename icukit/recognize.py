@@ -37,12 +37,15 @@ __all__ = [
     "FlexibleNumberDetector",
     "FlexibleOrdinalDetector",
     "FlexiblePercentDetector",
+    "FlexibleScientificDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
 ]
 
 _SPACES = {" ", "\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}"}
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
+# Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
+_MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
 
 
 def _locale_digit_map(locale: str | icu.Locale) -> dict[str, int]:
@@ -973,6 +976,131 @@ class FlexibleCompactDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible compact numbers in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+class FlexibleScientificDetector:
+    """Recognize scientific notation using locale symbols reflected from ICU."""
+
+    group = "number"
+    type = "number:scientific"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._number = FlexibleNumberDetector(locale)
+        symbols = icu.NumberFormat.createInstance(icu.Locale(locale)).getDecimalFormatSymbols()
+        self._exponential = symbols.getSymbol(icu.DecimalFormatSymbols.kExponentialSymbol)
+        self._minus = self._number._minus
+        self._plus = self._number._plus
+        self._digits = self._number._digits
+        self._spec = NumberFormatSpec(locale, "scientific")
+
+    @staticmethod
+    def _continues_word(text: str, cursor: int) -> bool:
+        if cursor >= len(text):
+            return False
+        character = text[cursor]
+        category = icu.Char.charType(character)
+        return icu.Char.isalnum(character) or category in {
+            icu.UCharCategory.NON_SPACING_MARK,
+            icu.UCharCategory.COMBINING_SPACING_MARK,
+            icu.UCharCategory.ENCLOSING_MARK,
+            icu.UCharCategory.CONNECTOR_PUNCTUATION,
+        }
+
+    def _left_boundary(self, text: str, start: int) -> bool:
+        if start <= 0:
+            return True
+        if self._continues_word(text, start - 1):
+            return False
+        previous = text[start - 1]
+        if previous == self._number._decimal:
+            return False
+        grouping = self._number._grouping
+        if grouping and grouping in _SPACES:
+            return not (previous in _SPACES and start >= 2 and text[start - 2] in self._digits)
+        return previous != grouping
+
+    def _match(self, text: str, start: int):
+        if not self._left_boundary(text, start):
+            return None
+        match = self._number._match(text, start)
+        if match is None:
+            return None
+        cursor, mantissa_captures, mantissa = match
+        if not text.startswith(self._exponential, cursor):
+            return None
+        separator_start = cursor
+        cursor += len(self._exponential)
+        captures = list(mantissa_captures)
+        captures.append(
+            Capture(
+                "exponent-separator",
+                separator_start,
+                cursor,
+                self._exponential,
+                None,
+                "symbol",
+            )
+        )
+        negative = False
+        for sign, is_negative in ((self._minus, True), (self._plus, False)):
+            if sign and text.startswith(sign, cursor):
+                sign_end = cursor + len(sign)
+                captures.append(Capture("sign", cursor, sign_end, sign, None, "symbol"))
+                negative = is_negative
+                cursor = sign_end
+                break
+        exponent_start = cursor
+        ascii_digits: list[str] = []
+        while cursor < len(text) and text[cursor] in self._digits:
+            ascii_digits.append(self._digits[text[cursor]])
+            cursor += 1
+        if not ascii_digits or self._continues_word(text, cursor):
+            return None
+        decimal_end = cursor + len(self._number._decimal)
+        if text.startswith(self._number._decimal, cursor) and (
+            decimal_end < len(text) and text[decimal_end] in self._digits
+        ):
+            return None
+        grouping = self._number._grouping
+        grouping_end = cursor + len(grouping)
+        if (
+            grouping
+            and grouping not in _SPACES
+            and text.startswith(grouping, cursor)
+            and (grouping_end < len(text) and text[grouping_end] in self._digits)
+        ):
+            return None
+        exponent_ascii = "".join(ascii_digits)
+        captures.append(
+            Capture(
+                "exponent",
+                exponent_start,
+                cursor,
+                text[exponent_start:cursor],
+                exponent_ascii,
+                "numeric",
+            )
+        )
+        try:
+            exponent = int(exponent_ascii) * (-1 if negative else 1)
+            sign, digits, decimal_exponent = Decimal(mantissa.decimal).as_tuple()
+            # Shift the exponent exactly so no significant digit is rounded away.
+            adjusted_exponent = decimal_exponent + exponent
+            projected = len(digits) + abs(adjusted_exponent)
+            if projected > _MAX_SCIENTIFIC_CANONICAL_DIGITS:
+                return None
+            value = Decimal((sign, digits, adjusted_exponent))
+            decimal = format(value, "f")
+        except (ValueError, OverflowError):
+            # An exponent too large to represent is a silent non-recognition, not a crash.
+            return None
+        captures.sort(key=lambda capture: (capture.start, capture.end))
+        return cursor, tuple(captures), NumberValue(decimal, None)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping scientific numbers in source order."""
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 

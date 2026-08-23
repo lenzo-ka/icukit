@@ -166,7 +166,7 @@ class NumberFormatSpec:
     """
 
     locale: str
-    kind: Literal["decimal", "currency", "percent"]
+    kind: Literal["decimal", "currency", "percent", "scientific"]
     currency: str | None = None
     min_fraction: int | None = None
     max_fraction: int | None = None
