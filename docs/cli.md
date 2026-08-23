@@ -1053,7 +1053,7 @@ Examples:
   icukit measure format 5.5 km
   icukit measure format 100 fahrenheit --width SHORT
 
-  # Convert between units
+  # Convert with the limited built-in explicit factors
   icukit measure convert 10 km mi
   icukit measure convert 100 C F
   icukit measure convert 1 lb kg

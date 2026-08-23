@@ -44,7 +44,7 @@ Examples:
   icukit measure format 5.5 km
   icukit measure format 100 fahrenheit --width SHORT
 
-  # Convert between units
+  # Convert with the limited built-in explicit factors
   icukit measure convert 10 km mi
   icukit measure convert 100 C F
   icukit measure convert 1 lb kg
@@ -81,7 +81,7 @@ Examples:
                 },
                 "convert": {
                     "aliases": ["c", "conv"],
-                    "help": "Convert between units",
+                    "help": "Convert using limited explicit factors",
                     "configure": cls._configure_convert,
                     "func": cls.cmd_convert,
                 },
@@ -123,7 +123,7 @@ Examples:
                 },
                 "check": {
                     "aliases": ["compat"],
-                    "help": "Check if units can convert",
+                    "help": "Check whether units have the same ICU type",
                     "configure": cls._configure_check,
                     "func": cls.cmd_check,
                 },
@@ -149,7 +149,7 @@ Examples:
 
     @classmethod
     def _configure_convert(cls, parser):
-        """Configure the convert subcommand."""
+        """Configure the limited explicit-factor convert subcommand."""
         parser.add_argument("value", type=float, help="Value to convert")
         parser.add_argument("from_unit", help="Source unit (e.g., kilometer)")
         parser.add_argument("to_unit", help="Target unit (e.g., mile)")
@@ -212,7 +212,7 @@ Examples:
 
     @classmethod
     def cmd_convert(cls, args):
-        """Convert between units."""
+        """Convert using the limited explicit factors."""
         try:
             fmt = MeasureFormatter(args.locale, args.width)
             converted = fmt.convert(args.value, args.from_unit, args.to_unit)
@@ -338,7 +338,7 @@ Examples:
 
     @classmethod
     def _configure_check(cls, parser):
-        """Configure the check subcommand."""
+        """Configure the unit compatibility subcommand."""
         parser.add_argument("from_unit", help="Source unit")
         parser.add_argument("to_unit", help="Target unit")
 
@@ -397,13 +397,13 @@ Examples:
 
     @classmethod
     def cmd_check(cls, args):
-        """Check if units can convert."""
+        """Check whether units have the same ICU unit type."""
         try:
             result = can_convert(args.from_unit, args.to_unit)
             if result:
-                print(f"Yes, {args.from_unit} can convert to {args.to_unit}")
+                print(f"Yes, {args.from_unit} and {args.to_unit} have the same unit type")
             else:
-                print(f"No, {args.from_unit} cannot convert to {args.to_unit}")
+                print(f"No, {args.from_unit} and {args.to_unit} have different unit types")
             return 0 if result else 1
         except MeasureError as e:
             print(f"Error: {e}", file=sys.stderr)

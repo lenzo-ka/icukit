@@ -3176,7 +3176,12 @@ Args:
 
 #### `convert(value: 'float | int', from_unit: 'str', to_unit: 'str') -> 'float'`
 
-Convert a value between units.
+Convert a value using a limited set of explicit conversion factors.
+
+This helper is not reflective or ICU-driven. PyICU does not expose ICU's
+general unit converter, so only the pairs listed by this implementation are
+supported. Unit compatibility reported by :func:`can_convert` does not imply
+that this helper can convert a particular pair.
 
 Args:
     value: Numeric value to convert
@@ -3196,7 +3201,7 @@ Example:
 
 #### `convert_and_format(value: 'float | int', from_unit: 'str', to_unit: 'str', width: 'str | None' = None) -> 'str'`
 
-Convert a value and format the result.
+Convert with the limited explicit factors and format the result.
 
 Args:
     value: Numeric value to convert
@@ -3233,10 +3238,10 @@ Example:
 
 #### `format_for_usage(value: 'float | int', unit: 'str', usage: 'str' = 'default', width: 'str | None' = None) -> 'str'`
 
-Format a measurement without usage-based conversion.
+Format a measurement in the locale's preferred unit for a usage.
 
-PyICU does not currently expose ICU's usage-based unit preferences, so ``usage``
-is accepted for API compatibility and the measurement is formatted unchanged.
+ICU and CLDR choose the output unit from ``locale`` and ``usage``. This returns
+formatted text, not a numeric conversion to a caller-specified target unit.
 
 Args:
     value: Numeric value
@@ -3245,12 +3250,12 @@ Args:
     width: Width style
 
 Returns:
-    Formatted measurement in the source unit
+    Locale- and usage-preferred formatted measurement
 
 Example:
     >>> fmt_us = MeasureFormatter("en_US")
     >>> fmt_us.format_for_usage(100, "kilometer", usage="road")
-    '100 km'
+    '62 miles'
     >>> fmt_de = MeasureFormatter("de_DE")
     >>> fmt_de.format_for_usage(100, "kilometer", usage="road")
     '100 Kilometer'
@@ -3287,14 +3292,17 @@ Example:
 
 ### `can_convert(from_unit: 'str', to_unit: 'str') -> 'bool'`
 
-Check if two units can be converted to each other.
+Check whether ICU classifies two units as the same unit type.
+
+This checks compatibility only; it does not guarantee that the limited
+:meth:`MeasureFormatter.convert` helper supports the pair.
 
 Args:
     from_unit: Source unit name or abbreviation
     to_unit: Target unit name or abbreviation
 
 Returns:
-    True if conversion is possible, False otherwise
+    True if the units have the same ICU unit type, False otherwise
 
 Example:
     >>> can_convert("kilometer", "mile")
@@ -3304,7 +3312,10 @@ Example:
 
 ### `convert_units(value: 'float | int', from_unit: 'str', to_unit: 'str') -> 'float'`
 
-Convert a value between units (convenience function).
+Convert a value using the limited explicit factors.
+
+This convenience function is not reflective or ICU-driven. See
+:meth:`MeasureFormatter.convert` for the supported-pair behavior.
 
 Args:
     value: Numeric value to convert
@@ -3332,6 +3343,26 @@ Args:
 
 Returns:
     Formatted measurement string
+
+### `format_preferred(value: 'float | int', unit: 'str', locale: 'str', usage: 'str') -> 'str'`
+
+Format a measurement in ICU's locale- and usage-preferred unit.
+
+ICU and CLDR choose the output unit. The result is formatted text, not a numeric
+conversion to a caller-specified target unit.
+
+Args:
+    value: Numeric value
+    unit: Source unit name or abbreviation
+    locale: Locale code
+    usage: Usage context (for example, "road" or "person-height")
+
+Returns:
+    Locale- and usage-preferred formatted measurement
+
+Example:
+    >>> format_preferred(100, "kilometer", "en_US", "road")
+    '62 mi'
 
 ### `get_unit_abbreviation(unit: 'str', locale: 'str' = 'en_US') -> 'str'`
 

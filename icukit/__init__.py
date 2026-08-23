@@ -284,6 +284,7 @@ from .measure import (
     can_convert,
     convert_units,
     format_measure,
+    format_preferred,
     get_unit_abbreviation,
     get_unit_info,
     get_units_by_type,
@@ -488,6 +489,7 @@ __all__ = [
     # Measure
     "MeasureFormatter",
     "format_measure",
+    "format_preferred",
     "convert_units",
     "can_convert",
     "get_unit_info",

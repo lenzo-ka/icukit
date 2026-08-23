@@ -49,6 +49,7 @@ from .errors import MeasureError
 __all__ = [
     "MeasureFormatter",
     "format_measure",
+    "format_preferred",
     "convert_units",
     "can_convert",
     "get_unit_info",
@@ -71,6 +72,12 @@ _WIDTH_MAP = {
     WIDTH_WIDE: icu.UMeasureFormatWidth.WIDE,
     WIDTH_SHORT: icu.UMeasureFormatWidth.SHORT,
     WIDTH_NARROW: icu.UMeasureFormatWidth.NARROW,
+}
+
+_NUMBER_UNIT_WIDTH_MAP = {
+    WIDTH_WIDE: icu.UNumberUnitWidth.FULL_NAME,
+    WIDTH_SHORT: icu.UNumberUnitWidth.SHORT,
+    WIDTH_NARROW: icu.UNumberUnitWidth.NARROW,
 }
 
 # Cache for unit data from ICU
@@ -235,14 +242,17 @@ def get_unit_info(unit: str) -> dict:
 
 
 def can_convert(from_unit: str, to_unit: str) -> bool:
-    """Check if two units can be converted to each other.
+    """Check whether ICU classifies two units as the same unit type.
+
+    This checks compatibility only; it does not guarantee that the limited
+    :meth:`MeasureFormatter.convert` helper supports the pair.
 
     Args:
         from_unit: Source unit name or abbreviation
         to_unit: Target unit name or abbreviation
 
     Returns:
-        True if conversion is possible, False otherwise
+        True if the units have the same ICU unit type, False otherwise
 
     Example:
         >>> can_convert("kilometer", "mile")
@@ -415,7 +425,12 @@ class MeasureFormatter:
         from_unit: str,
         to_unit: str,
     ) -> float:
-        """Convert a value between units.
+        """Convert a value using a limited set of explicit conversion factors.
+
+        This helper is not reflective or ICU-driven. PyICU does not expose ICU's
+        general unit converter, so only the pairs listed by this implementation are
+        supported. Unit compatibility reported by :func:`can_convert` does not imply
+        that this helper can convert a particular pair.
 
         Args:
             value: Numeric value to convert
@@ -436,9 +451,12 @@ class MeasureFormatter:
         from_unit = resolve_unit(from_unit)
         to_unit = resolve_unit(to_unit)
 
-        # Manual conversion factors (since UnitsConverter may not be available)
+        # Explicit conversion factors; these are not supplied by ICU. The SI
+        # meter/kilometer relationship is defined by the BIPM SI Brochure.
         conversions = {
             # Length
+            ("meter", "kilometer"): lambda v: v / 1000,
+            ("kilometer", "meter"): lambda v: v * 1000,
             ("kilometer", "mile"): lambda v: v * 0.621371,
             ("mile", "kilometer"): lambda v: v * 1.60934,
             ("meter", "foot"): lambda v: v * 3.28084,
@@ -481,7 +499,7 @@ class MeasureFormatter:
         to_unit: str,
         width: str | None = None,
     ) -> str:
-        """Convert a value and format the result.
+        """Convert with the limited explicit factors and format the result.
 
         Args:
             value: Numeric value to convert
@@ -541,10 +559,10 @@ class MeasureFormatter:
         usage: str = "default",
         width: str | None = None,
     ) -> str:
-        """Format a measurement without usage-based conversion.
+        """Format a measurement in the locale's preferred unit for a usage.
 
-        PyICU does not currently expose ICU's usage-based unit preferences, so ``usage``
-        is accepted for API compatibility and the measurement is formatted unchanged.
+        ICU and CLDR choose the output unit from ``locale`` and ``usage``. This returns
+        formatted text, not a numeric conversion to a caller-specified target unit.
 
         Args:
             value: Numeric value
@@ -553,19 +571,31 @@ class MeasureFormatter:
             width: Width style
 
         Returns:
-            Formatted measurement in the source unit
+            Locale- and usage-preferred formatted measurement
 
         Example:
             >>> fmt_us = MeasureFormatter("en_US")
             >>> fmt_us.format_for_usage(100, "kilometer", usage="road")
-            '100 km'
+            '62 miles'
             >>> fmt_de = MeasureFormatter("de_DE")
             >>> fmt_de.format_for_usage(100, "kilometer", usage="road")
             '100 Kilometer'
         """
-        # Usage-based formatting not available in all PyICU versions
-        # Fall back to standard formatting
-        return self.format(value, unit, width)
+        width = width or self.width
+        if width not in _NUMBER_UNIT_WIDTH_MAP:
+            raise MeasureError(f"Invalid width: {width}. Valid: {list(_WIDTH_MAP.keys())}")
+
+        unit = resolve_unit(unit)
+        try:
+            formatter = (
+                icu.NumberFormatter.withLocale(self._icu_locale)
+                .unit(icu.MeasureUnit.forIdentifier(unit))
+                .usage(usage)
+                .unitWidth(_NUMBER_UNIT_WIDTH_MAP[width])
+            )
+            return formatter.formatDouble(float(value))
+        except icu.ICUError as e:
+            raise MeasureError(f"Failed to format {value} {unit} for usage {usage}: {e}") from e
 
     def __repr__(self) -> str:
         return f"MeasureFormatter(locale={self.locale!r}, width={self.width!r})"
@@ -576,7 +606,10 @@ def convert_units(
     from_unit: str,
     to_unit: str,
 ) -> float:
-    """Convert a value between units (convenience function).
+    """Convert a value using the limited explicit factors.
+
+    This convenience function is not reflective or ICU-driven. See
+    :meth:`MeasureFormatter.convert` for the supported-pair behavior.
 
     Args:
         value: Numeric value to convert
@@ -593,6 +626,33 @@ def convert_units(
         212.0
     """
     return MeasureFormatter().convert(value, from_unit, to_unit)
+
+
+def format_preferred(
+    value: float | int,
+    unit: str,
+    locale: str,
+    usage: str,
+) -> str:
+    """Format a measurement in ICU's locale- and usage-preferred unit.
+
+    ICU and CLDR choose the output unit. The result is formatted text, not a numeric
+    conversion to a caller-specified target unit.
+
+    Args:
+        value: Numeric value
+        unit: Source unit name or abbreviation
+        locale: Locale code
+        usage: Usage context (for example, "road" or "person-height")
+
+    Returns:
+        Locale- and usage-preferred formatted measurement
+
+    Example:
+        >>> format_preferred(100, "kilometer", "en_US", "road")
+        '62 mi'
+    """
+    return MeasureFormatter(locale, WIDTH_SHORT).format_for_usage(value, unit, usage)
 
 
 def format_measure(
