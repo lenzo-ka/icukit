@@ -1,9 +1,10 @@
-"""Introspect ICU formatter surfaces and derive gangs of inverting detectors.
+"""Introspect ICU surfaces and inventories to derive gangs of detectors.
 
-Each :class:`Family` enumerates formatter specifications from ICU and attempts to
-construct one detector per specification.  Unsupported specifications are observable in
-the generation report, rather than making generation fail or silently narrowing the
-enumerated surface.
+Each :class:`Family` enumerates specifications from ICU or a packaged typed inventory and
+attempts to construct one detector per specification. Unsupported specifications are
+observable in the generation report, rather than making generation fail or silently
+narrowing the enumerated surface. The abbreviation family is inventory-driven because
+expansion is intentionally not an invertible formatter operation.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from .detectors import DateDetector, Detector, DetectorSet
 from .recognize import FlexibleCompactDetector, FlexibleScientificDetector
 
 __all__ = [
+    "ABBREVIATION_FAMILY",
     "COMPACT_NUMBER_FAMILY",
     "DATE_TIME_SKELETON_FAMILY",
     "DEFAULT_FAMILIES",
@@ -59,6 +61,31 @@ class GenerationReport:
 
     detectors: DetectorSet
     skipped: tuple[SkippedSpec, ...]
+
+
+def _abbreviation_specs(locale: str) -> Iterable[Spec]:
+    from .abbreviation_compile import compile_lexicon
+
+    compiled = compile_lexicon(locale)
+    return () if compiled is None else (compiled.lexicon.language,)
+
+
+def _abbreviation_invert(spec: Spec, locale: str) -> Detector | None:
+    del spec
+    from .abbreviation_recognize import AbbreviationDetector
+
+    detector = AbbreviationDetector(locale)
+    return detector if detector.compiled is not None else None
+
+
+def _abbreviation_skip_reason(spec: Spec, locale: str) -> str:
+    del spec
+    return f"no abbreviation lexicon ships for locale {locale!r}"
+
+
+ABBREVIATION_FAMILY = Family(
+    "abbreviation", _abbreviation_specs, _abbreviation_invert, _abbreviation_skip_reason
+)
 
 
 def _date_time_skeletons(locale: str) -> Iterable[Spec]:
@@ -158,9 +185,10 @@ SCIENTIFIC_NUMBER_FAMILY = Family(
     _scientific_skip_reason,
 )
 
-# note: Number-style, RBNF, measure, relative, and interval
-# families belong here once their ICU surfaces have introspective inverters.
+# note: Number-style, RBNF, measure, relative, and interval families belong here once
+# their ICU surfaces have introspective inverters. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
+    ABBREVIATION_FAMILY,
     DATE_TIME_SKELETON_FAMILY,
     COMPACT_NUMBER_FAMILY,
     SCIENTIFIC_NUMBER_FAMILY,

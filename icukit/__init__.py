@@ -49,6 +49,19 @@ _check_icu_available()
 
 # ruff: noqa: E402
 # flake8: noqa: E402
+from .abbreviation_breaker import (
+    AbbreviationBoundary,
+    AbbreviationProvenance,
+    AbbreviationSegmentation,
+    AbbreviationSentenceBreaker,
+)
+from .abbreviation_compile import CompiledLexicon, PatternMatch, compile_lexicon
+from .abbreviation_recognize import (
+    AbbreviationDetector,
+    AbbreviationSpec,
+    AbbreviationValue,
+    abbreviation_detectors,
+)
 from .abbreviations import (
     AbbreviationLexicon,
     Entry,
@@ -142,7 +155,7 @@ from .duration import WIDTH_NARROW as DURATION_WIDTH_NARROW
 from .duration import WIDTH_SHORT as DURATION_WIDTH_SHORT
 from .duration import WIDTH_WIDE as DURATION_WIDTH_WIDE
 from .duration import DurationFormatter, format_duration, parse_iso_duration
-from .engine import generated_detectors, generated_detectors_report
+from .engine import ABBREVIATION_FAMILY, generated_detectors, generated_detectors_report
 from .errors import (
     AbbreviationError,
     AlphaIndexError,
@@ -352,11 +365,23 @@ __all__ = [
     "generated_detectors",
     "generated_detectors_report",
     # Abbreviations
+    "ABBREVIATION_FAMILY",
+    "AbbreviationBoundary",
+    "AbbreviationDetector",
     "AbbreviationLexicon",
+    "AbbreviationProvenance",
+    "AbbreviationSegmentation",
+    "AbbreviationSentenceBreaker",
+    "AbbreviationSpec",
+    "AbbreviationValue",
+    "CompiledLexicon",
     "Entry",
     "Expansion",
     "Pattern",
+    "PatternMatch",
+    "abbreviation_detectors",
     "available_locales",
+    "compile_lexicon",
     "load_lexicon",
     "load_lexicon_file",
     "parse_lexicon",
