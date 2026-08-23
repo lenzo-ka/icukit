@@ -62,8 +62,6 @@ _SPACES = {
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 # Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
-# PyICU passes Python integers to RBNF through a double-precision value.
-_MAX_EXACT_RBNF_INTEGER = 2**53
 
 
 def _is_word_character(character: str) -> bool:
@@ -2362,17 +2360,13 @@ class FlexibleOrdinalDetector:
         return cursor, value
 
     def _affixes(self, value: int) -> set[tuple[str, str]]:
-        if value > _MAX_EXACT_RBNF_INTEGER:
-            return set()
+        rendered_values = (
+            (self._rbnf.format(value, name) for name in self._rule_set_names)
+            if self._rule_set_names
+            else (self._rbnf.format(value),)
+        )
         affixes: set[tuple[str, str]] = set()
-        rule_sets = self._rule_set_names or (None,)
-        for name in rule_sets:
-            try:
-                rendered = (
-                    self._rbnf.format(value, name) if name is not None else self._rbnf.format(value)
-                )
-            except icu.ICUError:
-                continue
+        for rendered in rendered_values:
             digit_indexes = [
                 index
                 for index, character in enumerate(rendered)

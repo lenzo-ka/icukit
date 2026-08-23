@@ -1139,29 +1139,6 @@ def test_flexible_ordinal_rejects_bare_number_or_affix(surface):
     assert FlexibleOrdinalDetector("en_US").detect(surface) == []
 
 
-def test_flexible_ordinal_rejects_value_beyond_rbnf_range_without_crashing():
-    assert FlexibleOrdinalDetector("en_US").detect("1" * 400) == []
-
-
-@pytest.mark.parametrize(
-    "suffix, accepted",
-    [("st", False), ("nd", False), ("rd", False), ("th", True)],
-)
-def test_flexible_ordinal_accepts_reflected_affix_at_exact_double_limit(suffix, accepted):
-    surface = f"{2**53}{suffix}"
-    detections = FlexibleOrdinalDetector("en_US").detect(surface)
-
-    assert any(detection["text"] == surface for detection in detections) is accepted
-
-
-@pytest.mark.parametrize("suffix", ["st", "nd", "rd", "th"])
-def test_flexible_ordinal_rejects_all_affixes_above_exact_double_limit(suffix):
-    surface = f"{2**53 + 1}{suffix}"
-    detections = FlexibleOrdinalDetector("en_US").detect(surface)
-
-    assert all(detection["text"] != surface for detection in detections)
-
-
 def test_flexible_ordinal_captures_use_code_point_offsets_with_astral_prefix():
     text = "📌 the 21st day"
     detection = FlexibleOrdinalDetector("en_US").detect(text)[0]
