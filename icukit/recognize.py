@@ -62,8 +62,8 @@ _SPACES = {
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 # Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
-# ICU RBNF ordinal suffixes are not reliable above this approximate range.
-_MAX_RBNF_ORDINAL_VALUE = 10_000_000_000
+# Defensive cross-locale bound: ICU RBNF ordinal suffixes are reliable through signed 32-bit.
+_MAX_RBNF_ORDINAL_VALUE = 2_147_483_647
 
 
 def _is_word_character(character: str) -> bool:
@@ -2336,12 +2336,13 @@ class FlexibleOrdinalDetector:
     ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
     ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
 
-    Known limitation: RBNF ordinal formatting is reliable only over a bounded range
-    (approximately ``10^10`` for English). Above that range it can return an incorrect
-    suffix, and for very large integers it can raise an ICU or ``SystemError`` exception.
-    Such inputs are not deposited. Future large-ordinal correctness awaits PyICU exposing
-    ordinal plural rules (absent in 78.3), or embedding CLDR ordinal-plural data; the affix
-    can then be derived reflectively from the ordinal plural category.
+    Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
+    treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
+    boundary it can return an incorrect suffix, and for very large integers it can raise
+    an ICU or ``SystemError`` exception. Such inputs are not deposited. Future
+    large-ordinal correctness awaits PyICU exposing ordinal plural rules (absent in 78.3),
+    or embedding CLDR ordinal-plural data; the affix can then be derived reflectively from
+    the ordinal plural category.
     """
 
     group = "ordinal"

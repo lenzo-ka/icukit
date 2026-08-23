@@ -3919,12 +3919,13 @@ are the non-digit parts around each rendering. No affix is hard-coded, and no fr
 ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
 ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
 
-Known limitation: RBNF ordinal formatting is reliable only over a bounded range
-(approximately ``10^10`` for English). Above that range it can return an incorrect
-suffix, and for very large integers it can raise an ICU or ``SystemError`` exception.
-Such inputs are not deposited. Future large-ordinal correctness awaits PyICU exposing
-ordinal plural rules (absent in 78.3), or embedding CLDR ordinal-plural data; the affix
-can then be derived reflectively from the ordinal plural category.
+Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
+treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
+boundary it can return an incorrect suffix, and for very large integers it can raise
+an ICU or ``SystemError`` exception. Such inputs are not deposited. Future
+large-ordinal correctness awaits PyICU exposing ordinal plural rules (absent in 78.3),
+or embedding CLDR ordinal-plural data; the affix can then be derived reflectively from
+the ordinal plural category.
 
 #### `FlexibleOrdinalDetector(locale: 'str') -> 'None'`
 

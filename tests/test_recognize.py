@@ -1121,9 +1121,26 @@ def test_flexible_ordinal_rejects_wrong_affix_reflectively():
     assert FlexibleOrdinalDetector("en_US").detect("2th") == []
 
 
-@pytest.mark.parametrize("surface", ["10000000001st", ("1" * 400) + "th"])
+@pytest.mark.parametrize(
+    "surface",
+    [
+        "2147483651st",
+        "2147483651th",
+        "5540584433st",
+        "5540584433th",
+        "10000000001st",
+        ("1" * 400) + "th",
+    ],
+)
 def test_flexible_ordinal_rejects_values_beyond_rbnf_reliable_range(surface):
     assert FlexibleOrdinalDetector("en_US").detect(surface) == []
+
+
+def test_flexible_ordinal_accepts_signed_32_bit_boundary():
+    detection = FlexibleOrdinalDetector("en_US").detect("2147483647th")[0]
+
+    assert detection["text"] == "2147483647th"
+    assert detection["value"] == NumberValue("2147483647", None)
 
 
 @pytest.mark.parametrize("error", [icu.ICUError(), SystemError()])
