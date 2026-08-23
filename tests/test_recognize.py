@@ -13,7 +13,10 @@ from icukit.detectors import (
     NumberValue,
     detect,
 )
+from icukit.locale import COMPACT_LONG, COMPACT_SHORT, format_compact
+from icukit.recognize import _SPACES as _RECOGNIZE_SPACES
 from icukit.recognize import (
+    FlexibleCompactDetector,
     FlexibleCurrencyDetector,
     FlexibleCurrencyNameDetector,
     FlexibleDateDetector,
@@ -861,3 +864,133 @@ def test_flexible_ordinal_composes_with_detect_and_resolve():
 
     assert [detection["text"] for detection in detections] == ["1st", "22nd"]
     assert [detection["text"] for detection in resolution.best] == ["1st", "22nd"]
+
+
+@pytest.mark.parametrize(
+    "surface,width,decimal,style",
+    [
+        ("1.2M", "short", "1200000", COMPACT_SHORT),
+        ("3K", "short", "3000", COMPACT_SHORT),
+        ("1.2 million", "long", "1200000", COMPACT_LONG),
+    ],
+)
+def test_flexible_compact_gains_recall(surface, width, decimal, style):
+    plain = [
+        *NumberDetector("en_US", "decimal").detect(surface),
+        *FlexibleNumberDetector("en_US").detect(surface),
+    ]
+    assert not any(
+        detection["text"] == surface and detection["value"].decimal == decimal
+        for detection in plain
+    )
+
+    detector = FlexibleCompactDetector("en_US", width)
+    detections = detector.detect(surface)
+
+    assert isinstance(detector, Detector)
+    assert len(detections) == 1
+    assert detections[0]["text"] == surface
+    assert detections[0]["value"] == NumberValue(decimal, None)
+    assert format_compact(int(decimal), "en_US", style) == surface
+
+
+def test_flexible_compact_long_is_reflective_in_a_non_english_locale():
+    locale = "de_DE"
+    value = 1_200_000
+    formatter = icu.CompactDecimalFormat.createInstance(
+        icu.Locale(locale), icu.UNumberCompactStyle.LONG
+    )
+    surface = formatter.format(value)
+    digits = set(
+        icu.NumberFormat.createInstance(icu.Locale(locale)).format(number) for number in range(10)
+    )
+    word = "".join(character for character in surface if character not in digits).strip()
+
+    assert word
+    detection = FlexibleCompactDetector(locale, "long").detect(surface)[0]
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue(str(value), None)
+
+
+@pytest.mark.parametrize("surface", ["1.2Million", "3Km"])
+def test_flexible_compact_rejects_a_suffix_inside_a_word(surface):
+    detections = FlexibleCompactDetector("en_US", "short").detect(surface)
+
+    assert not any(detection["value"].decimal in {"1200000", "3000"} for detection in detections)
+
+
+def test_flexible_compact_derivation_and_detection_are_deterministic():
+    first = FlexibleCompactDetector("en_US", "short")
+    second = FlexibleCompactDetector("en_US", "short")
+
+    assert first._affixes == second._affixes
+    assert first.detect("1.2M then 3K") == first.detect("1.2M then 3K")
+
+
+def test_flexible_compact_holds_the_bare_number_candidate_separately():
+    compact = FlexibleCompactDetector("en_US", "short").detect("1.2M")
+    decimal = FlexibleNumberDetector("en_US").detect("1.2M")
+
+    assert compact[0]["value"] == NumberValue("1200000", None)
+    assert decimal[0]["text"] == "1.2"
+    assert decimal[0]["value"] == NumberValue("1.2", None)
+
+
+def test_flexible_compact_requires_a_left_token_boundary():
+    # A suffix affix must not begin inside a preceding word or in a larger number's tail.
+    en = FlexibleCompactDetector("en_US", "short")
+    assert en.detect("x1.2M") == []
+    assert en.detect("a3K") == []
+
+    # A prefix affix ("B" in Swahili "B12") must not begin inside a word either.
+    sw = FlexibleCompactDetector("sw_KE", "short")
+    assert sw.detect("AB12") == []
+    assert sw.detect("xM1.2") == []
+
+
+def test_flexible_compact_recovers_a_signed_prefix_affix():
+    # Confirm the prefix form and its sign placement reflectively from ICU, then invert.
+    formatter = icu.CompactDecimalFormat.createInstance(
+        icu.Locale("sw_KE"), icu.UNumberCompactStyle.SHORT
+    )
+    positive_surface = formatter.format(1_200_000)
+    negative_surface = formatter.format(-1_200_000)
+    if positive_surface[0].isdigit():
+        pytest.skip("locale no longer uses a prefix compact affix")
+
+    sw = FlexibleCompactDetector("sw_KE", "short")
+
+    positive = sw.detect(positive_surface)[0]
+    assert positive["text"] == positive_surface
+    assert positive["value"] == NumberValue("1200000", None)
+
+    negative = sw.detect(negative_surface)[0]
+    assert negative["text"] == negative_surface
+    assert negative["value"] == NumberValue("-1200000", None)
+
+
+def test_flexible_compact_boundary_respects_space_grouping():
+    # In a space-grouping locale the parser treats any space as a group separator, so a
+    # match must not begin at an interior digit group ("2 M" out of "1 2 M"), while a
+    # number after a word (a real boundary) still matches.
+    detector = FlexibleCompactDetector("fr_FR", "short")
+    grouping = detector._number._grouping
+    if grouping not in _RECOGNIZE_SPACES:
+        pytest.skip("fr_FR no longer uses a space grouping separator")
+    million = icu.CompactDecimalFormat.createInstance(
+        icu.Locale("fr_FR"), icu.UNumberCompactStyle.SHORT
+    ).format(1_200_000)
+
+    for space in _RECOGNIZE_SPACES:
+        interior = f"1{space}2{space}M"
+        assert all(d["value"].decimal != "2000000" for d in detector.detect(interior))
+    assert detector.detect(f"budget {million}")[0]["value"] == NumberValue("1200000", None)
+
+
+@pytest.mark.parametrize("surface", ["-M+1.2", "+M-1.2", "+M+1.2", "-M-1.2", "M-1.2", "M+1.2"])
+def test_flexible_compact_rejects_contradictory_double_signs(surface):
+    detector = FlexibleCompactDetector("sw_KE", "short")
+    if detector.detect("M1.2")[0]["text"] != "M1.2":
+        pytest.skip("locale no longer uses a prefix compact affix")
+
+    assert detector.detect(surface) == []

@@ -1429,6 +1429,14 @@ numeric (``day`` -> ``3``) or an enumerated member (``weekday`` -> ``"wednesday"
 
 Initialize self.  See help(type(self)) for accurate signature.
 
+### class `CompactFormatSpec`
+
+The locale and width used for a compact-number candidate.
+
+#### `CompactFormatSpec(locale: 'str', width: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `DateDetector`
 
 Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
@@ -2089,11 +2097,11 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'),)) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'),)) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -3627,6 +3635,18 @@ Recognizers are the recall-oriented counterpart to the strict detectors in
 :mod:`icukit.detectors`. They deposit structurally valid candidates without requiring the
 surface to equal ICU's canonical formatting; the existing resolver can then select among
 those candidates unchanged.
+
+### class `FlexibleCompactDetector`
+
+Recognize a flexible number with reflectively derived ICU compact affixes.
+
+#### `FlexibleCompactDetector(locale: 'str', width: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping flexible compact numbers in source order.
 
 ### class `FlexibleCurrencyDetector`
 

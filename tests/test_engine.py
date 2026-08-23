@@ -61,7 +61,18 @@ def test_generation_reflects_a_non_english_locale():
 
     assert gang.names()
     assert local_skeletons != english_skeletons
-    assert set(gang.names()) <= {f"date:{skeleton}" for skeleton in local_skeletons}
+    date_names = {name for name in gang.names() if name.startswith("date:")}
+    compact_names = {name for name in gang.names() if name.startswith("number:compact:")}
+    assert date_names <= {f"date:{skeleton}" for skeleton in local_skeletons}
+    assert compact_names
+
+
+def test_generated_detectors_include_reflective_compact_numbers():
+    gang = generated_detectors("en_US")
+
+    assert "number:compact:short" in gang.names()
+    detection = next(item for item in gang.detect("1.2M") if item["type"] == "number:compact:short")
+    assert detection["value"].decimal == "1200000"
 
 
 def test_localized_literal_skeletons_are_not_wrongly_skipped():

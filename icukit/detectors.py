@@ -42,6 +42,7 @@ from .detect import Detection
 
 __all__ = [
     "Capture",
+    "CompactFormatSpec",
     "DateFormatSpec",
     "DateDetector",
     "DateTimeValue",
@@ -170,6 +171,14 @@ class NumberFormatSpec:
     min_fraction: int | None = None
     max_fraction: int | None = None
     grouping_sizes: tuple[int, ...] | None = None
+
+
+@dataclass(frozen=True)
+class CompactFormatSpec:
+    """The locale and width used for a compact-number candidate."""
+
+    locale: str
+    width: str
 
 
 @dataclass(frozen=True)

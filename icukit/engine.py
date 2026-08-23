@@ -14,8 +14,10 @@ from dataclasses import dataclass
 import icu
 
 from .detectors import DateDetector, Detector, DetectorSet
+from .recognize import FlexibleCompactDetector
 
 __all__ = [
+    "COMPACT_NUMBER_FAMILY",
     "DATE_TIME_SKELETON_FAMILY",
     "DEFAULT_FAMILIES",
     "Family",
@@ -89,9 +91,44 @@ DATE_TIME_SKELETON_FAMILY = Family(
     _date_time_skip_reason,
 )
 
-# note: Number-style, RBNF, compact, scientific, measure, relative, and interval
+
+def _compact_widths(locale: str) -> Iterable[Spec]:
+    del locale
+    return sorted(
+        name.lower()
+        for name in dir(icu.UNumberCompactStyle)
+        if not name.startswith("_") and isinstance(getattr(icu.UNumberCompactStyle, name), int)
+    )
+
+
+def _compact_invert(spec: Spec, locale: str) -> Detector | None:
+    try:
+        detector = FlexibleCompactDetector(locale, str(spec))
+    except ValueError:
+        return None
+    return detector if detector.has_affixes else None
+
+
+def _compact_skip_reason(spec: Spec, locale: str) -> str:
+    try:
+        detector = FlexibleCompactDetector(locale, str(spec))
+    except ValueError as error:
+        return str(error)
+    if not detector.has_affixes:
+        return "ICU exposed no exactly invertible compact affixes"
+    return "compact width was not invertible"
+
+
+COMPACT_NUMBER_FAMILY = Family(
+    "compact-number",
+    _compact_widths,
+    _compact_invert,
+    _compact_skip_reason,
+)
+
+# note: Number-style, RBNF, scientific, measure, relative, and interval
 # families belong here once their ICU surfaces have introspective inverters.
-DEFAULT_FAMILIES = (DATE_TIME_SKELETON_FAMILY,)
+DEFAULT_FAMILIES = (DATE_TIME_SKELETON_FAMILY, COMPACT_NUMBER_FAMILY)
 
 
 def generated_detectors_report(
