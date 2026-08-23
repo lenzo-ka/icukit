@@ -17,6 +17,7 @@ import icu
 from .breaker import break_grapheme_spans
 from .detectors import (
     Capture,
+    CompactFormatSpec,
     DateFormatSpec,
     DateTimeValue,
     MeasureFormatSpec,
@@ -27,6 +28,7 @@ from .detectors import (
 )
 
 __all__ = [
+    "FlexibleCompactDetector",
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
     "FlexibleDateDetector",
@@ -807,6 +809,171 @@ class FlexibleMeasureDetector:
             )
             cursor = end
         return detections
+
+
+class FlexibleCompactDetector:
+    """Recognize a flexible number with reflectively derived ICU compact affixes."""
+
+    group = "number"
+
+    def __init__(self, locale: str, width: str) -> None:
+        self.locale = locale
+        self.width = width
+        self.type = f"number:compact:{width}"
+        self._number = FlexibleNumberDetector(locale)
+        self._spec = CompactFormatSpec(locale, width)
+
+        styles = {
+            "short": icu.UNumberCompactStyle.SHORT,
+            "long": icu.UNumberCompactStyle.LONG,
+        }
+        if width not in styles:
+            raise ValueError(f"compact width must be 'short' or 'long': {width!r}")
+
+        formatter = icu.CompactDecimalFormat.createInstance(icu.Locale(locale), styles[width])
+        digits = _locale_digit_map(locale)
+        affixes: dict[tuple[str, str], int] = {}
+        multipliers = ("1", "2", "3", "5", "1.1", "1.2", "1.5", "2.5")
+        for power in range(16):
+            for multiplier in multipliers:
+                fed = Decimal(multiplier) * (Decimal(10) ** power)
+                operand = int(fed) if fed == fed.to_integral_value() else float(fed)
+                formatted = formatter.format(operand)
+                digit_indexes = [
+                    index for index, character in enumerate(formatted) if character in digits
+                ]
+                if not digit_indexes:
+                    continue
+                first_digit, last_digit = digit_indexes[0], digit_indexes[-1]
+                prefix = formatted[:first_digit]
+                suffix = formatted[last_digit + 1 :]
+                if not prefix and not suffix:
+                    continue
+                displayed = formatted[first_digit : last_digit + 1]
+                parsed = self._number._match(displayed, 0)
+                if parsed is None or parsed[0] != len(displayed):
+                    continue
+                displayed_value = Decimal(parsed[2].decimal)
+                if not displayed_value:
+                    continue
+                ratio = fed / displayed_value
+                magnitude = int(ratio.log10().to_integral_value())
+                if displayed_value * (Decimal(10) ** magnitude) != fed:
+                    continue
+                affixes.setdefault((prefix, suffix), magnitude)
+
+        # note: A digit-less spelled compact (French "mille" for 1000) exposes no digit
+        # run to anchor a number, so it is out of scope; keyed compacts ("1 million") and
+        # affix-bearing surfaces are covered.
+        self._affixes = affixes
+        self._ordered_affixes = tuple(
+            (prefix, suffix, magnitude)
+            for (prefix, suffix), magnitude in sorted(
+                affixes.items(), key=lambda item: (-len(item[0][1]), -len(item[0][0]))
+            )
+        )
+
+    @property
+    def has_affixes(self) -> bool:
+        """Whether ICU exposed at least one exactly invertible compact affix."""
+        return bool(self._affixes)
+
+    @staticmethod
+    def _continues_word(text: str, cursor: int) -> bool:
+        if cursor >= len(text):
+            return False
+        character = text[cursor]
+        category = icu.Char.charType(character)
+        return icu.Char.isalnum(character) or category in {
+            icu.UCharCategory.NON_SPACING_MARK,
+            icu.UCharCategory.COMBINING_SPACING_MARK,
+            icu.UCharCategory.ENCLOSING_MARK,
+            icu.UCharCategory.CONNECTOR_PUNCTUATION,
+        }
+
+    def _left_boundary(self, text: str, start: int) -> bool:
+        """Whether ``start`` begins a fresh token, not the interior of a number or word.
+
+        Scanning starts at every grapheme, so a prefix affix ("B" in Swahili "B12") or a
+        digit run could otherwise begin inside a surrounding word ("AB12") or in the tail
+        of a larger number ("2M" from "1.2M"). Rejecting a start preceded by a word
+        character or by the locale's decimal/grouping separator keeps matches token-aligned.
+        The number parser treats every space as grouping when the separator is space-like,
+        so an interior grouping space (a space sitting between digits) also bars a start,
+        while a space after a word -- a normal token boundary -- does not.
+        """
+        if start <= 0:
+            return True
+        if self._continues_word(text, start - 1):
+            return False
+        previous = text[start - 1]
+        if previous == self._number._decimal:
+            return False
+        grouping = self._number._grouping
+        if grouping and grouping in _SPACES:
+            return not (
+                previous in _SPACES and start >= 2 and text[start - 2] in self._number._digits
+            )
+        return previous != grouping
+
+    def _match(self, text: str, start: int):
+        if not self._left_boundary(text, start):
+            return None
+        for prefix, suffix, magnitude in self._ordered_affixes:
+            cursor = start
+            captures: list[Capture] = []
+            negative = False
+            if prefix:
+                # A prefix-affix locale (Swahili "M1.2") renders a negative value with the
+                # sign before the prefix, so consume an optional leading sign here rather
+                # than leaving it for the post-prefix number parse.
+                for sign, is_negative in (
+                    (self._number._minus, True),
+                    (self._number._plus, False),
+                ):
+                    if sign and text.startswith(sign, cursor):
+                        sign_end = cursor + len(sign)
+                        captures.append(Capture("sign", cursor, sign_end, sign, None, "symbol"))
+                        negative = is_negative
+                        cursor = sign_end
+                        break
+                if not text.startswith(prefix, cursor):
+                    continue
+                prefix_start = cursor
+                cursor += len(prefix)
+                captures.append(
+                    Capture("compact", prefix_start, cursor, prefix, magnitude, "symbol")
+                )
+            match = self._number._match(text, cursor)
+            if match is None:
+                continue
+            number_end, number_captures, number = match
+            # With a prefix affix the sign always precedes the prefix, so a sign on the
+            # digits ("M+1.2", or the contradictory "-M+1.2") is not a compact number.
+            if prefix and any(capture.name == "sign" for capture in number_captures):
+                continue
+            if not text.startswith(suffix, number_end):
+                continue
+            end = number_end + len(suffix)
+            if self._continues_word(text, end):
+                continue
+
+            captures.extend(number_captures)
+            if suffix:
+                captures.append(Capture("compact", number_end, end, suffix, magnitude, "symbol"))
+            captures.sort(key=lambda capture: (capture.start, capture.end))
+            # A compact surface is a rounded display, so recover its honest nominal
+            # value without inventing false precision or a range.
+            value = Decimal(number.decimal).scaleb(magnitude)
+            if negative:
+                value = -value
+            decimal = format(value, "f")
+            return end, tuple(captures), NumberValue(decimal, None)
+        return None
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping flexible compact numbers in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
 class FlexibleCurrencyNameDetector:
