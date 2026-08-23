@@ -1097,7 +1097,10 @@ class FlexiblePercentDetector:
             return None
         end = cursor + len(self._percent)
         percent = Capture("percent", cursor, end, self._percent, None, "symbol")
-        ratio = str(Decimal(value.decimal) / 100)
+        sign, digits, exponent = Decimal(value.decimal).as_tuple()
+        ratio = format(Decimal((sign, digits, exponent - 2)), "f")
+        if "." in ratio:
+            ratio = ratio.rstrip("0").rstrip(".")
         all_captures = tuple(sorted((*captures, percent), key=lambda capture: capture.start))
         return end, all_captures, NumberValue(ratio)
 
@@ -1112,7 +1115,10 @@ class FlexiblePercentDetector:
             return None
         end, captures, value = match
         percent = Capture("percent", start, symbol_end, self._percent, None, "symbol")
-        ratio = str(Decimal(value.decimal) / 100)
+        sign, digits, exponent = Decimal(value.decimal).as_tuple()
+        ratio = format(Decimal((sign, digits, exponent - 2)), "f")
+        if "." in ratio:
+            ratio = ratio.rstrip("0").rstrip(".")
         return end, (percent, *captures), NumberValue(ratio)
 
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
@@ -1438,7 +1444,8 @@ class FlexibleCompactDetector:
             captures.sort(key=lambda capture: (capture.start, capture.end))
             # A compact surface is a rounded display, so recover its honest nominal
             # value without inventing false precision or a range.
-            value = Decimal(number.decimal).scaleb(magnitude)
+            sign, digits, exponent = Decimal(number.decimal).as_tuple()
+            value = Decimal((sign, digits, exponent + magnitude))
             if negative:
                 value = -value
             decimal = format(value, "f")
@@ -2217,14 +2224,20 @@ class FlexibleFractionDetector:
         top //= divisor
         bottom = denominator // divisor
         residue = bottom
+        factors: dict[int, int] = {}
         for prime in (2, 5):
+            factors[prime] = 0
             while residue % prime == 0:
                 residue //= prime
+                factors[prime] += 1
         if residue == 1:
-            result = Decimal(top) / Decimal(bottom)
+            decimal_places = max(factors.values())
+            with localcontext() as context:
+                context.prec = len(str(abs(top))) + decimal_places + 1
+                result = Decimal(top) / Decimal(bottom)
         else:
             with localcontext() as context:
-                context.prec = 40
+                context.prec = len(str(abs(top))) + 13
                 result = (Decimal(top) / Decimal(bottom)).quantize(Decimal("1.000000000000"))
         rendered = format(result, "f")
         if "." in rendered:

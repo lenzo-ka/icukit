@@ -166,6 +166,15 @@ class TestConvenienceFunctions:
         abbrev = get_unit_abbreviation("kilometer")
         assert abbrev == "km"
 
+    def test_get_unit_abbreviation_strips_locale_digits(self):
+        assert get_unit_abbreviation("kilometer", "ar_EG") == "كم"
+
+    def test_get_unit_abbreviation_preserves_digits_in_unit_label(self):
+        assert get_unit_abbreviation("liter-per-100-kilometer", "en_US") == "L/100 km"
+
+    def test_get_unit_abbreviation_strips_plain_unit_value(self):
+        assert get_unit_abbreviation("kilometer", "en_US") == "km"
+
     def test_get_unit_info(self):
         """Test get_unit_info."""
         info = get_unit_info("kilometer")

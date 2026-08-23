@@ -127,7 +127,7 @@ Run `ik help` or `ik <command> --help` for detailed usage information.
 
 ## Supported Python Versions
 
-- Python 3.9+
+- Python 3.11+
 - Tested on Linux and macOS
 
 ## Documentation

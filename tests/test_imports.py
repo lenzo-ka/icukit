@@ -51,6 +51,16 @@ class TestImports:
         assert Transliterator is not None
         assert transliterate is not None
 
+    def test_every_advertised_export_is_importable(self):
+        import icukit
+
+        namespace = {}
+        exec("from icukit import *", namespace)
+
+        assert set(icukit.__all__) <= namespace.keys()
+        assert all(hasattr(icukit, name) for name in icukit.__all__)
+        assert len(icukit.__all__) == len(set(icukit.__all__))
+
     def test_cli_module_imports(self):
         """Test that CLI modules can be imported."""
         cli_modules = [

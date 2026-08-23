@@ -1763,7 +1763,7 @@ Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``val
 ``captures``, and ``spec`` (see the module docstring). The invariant
 ``reformat(spec, value) == surface`` holds for every accepted detection.
 
-### `abbreviation_detectors(locale: 'str') -> 'DetectorSet'`
+### `abbreviation_detectors(locale: 'str' = 'en') -> 'DetectorSet'`
 
 The lexicon-backed abbreviation detector, or an empty gang when unavailable.
 
@@ -3233,13 +3233,10 @@ Example:
 
 #### `format_for_usage(value: 'float | int', unit: 'str', usage: 'str' = 'default', width: 'str | None' = None) -> 'str'`
 
-Format a measurement using locale-preferred units.
+Format a measurement without usage-based conversion.
 
-Converts to units preferred by the locale for the given usage.
-For example, "road" usage in en_US converts km to miles.
-
-Note: Usage-based conversion may not be available in all PyICU versions.
-Falls back to standard formatting.
+PyICU does not currently expose ICU's usage-based unit preferences, so ``usage``
+is accepted for API compatibility and the measurement is formatted unchanged.
 
 Args:
     value: Numeric value
@@ -3248,12 +3245,12 @@ Args:
     width: Width style
 
 Returns:
-    Formatted measurement in locale-preferred units
+    Formatted measurement in the source unit
 
 Example:
     >>> fmt_us = MeasureFormatter("en_US")
     >>> fmt_us.format_for_usage(100, "kilometer", usage="road")
-    '62 miles'
+    '100 km'
     >>> fmt_de = MeasureFormatter("de_DE")
     >>> fmt_de.format_for_usage(100, "kilometer", usage="road")
     '100 Kilometer'

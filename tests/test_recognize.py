@@ -410,6 +410,19 @@ def test_flexible_percent_does_not_absorb_malformed_grouping():
     assert all(detection["value"].decimal != "1.23" for detection in detections)
 
 
+@pytest.mark.parametrize(
+    "surface, expected",
+    [
+        ("123456789012345678901234567890%", "1234567890123456789012345678.9"),
+        (("9" * 35) + "%", ("9" * 33) + ".99"),
+    ],
+)
+def test_flexible_percent_preserves_large_values_exactly(surface, expected):
+    detection = FlexiblePercentDetector("en_US").detect(surface)[0]
+
+    assert detection["value"].decimal == expected
+
+
 @pytest.mark.parametrize("surface", ["-", ".", "abc"])
 def test_non_numbers_do_not_match(surface):
     assert FlexibleNumberDetector("en_US").detect(surface) == []
@@ -1024,6 +1037,23 @@ def test_flexible_fraction_gains_recall(surface, decimal, names):
     assert [capture.name for capture in detection["captures"]] == names
 
 
+def test_flexible_fraction_handles_large_nonterminating_value():
+    surface = "99999999999999999999999999999/7"
+    detection = FlexibleFractionDetector("en_US").detect(surface)[0]
+
+    assert detection["value"].decimal == "14285714285714285714285714285.571428571429"
+
+
+def test_flexible_fraction_preserves_long_terminating_value_exactly():
+    surface = f"1/{2**100}"
+    detection = FlexibleFractionDetector("en_US").detect(surface)[0]
+
+    assert detection["value"].decimal == (
+        "0.000000000000000000000000000000788860905221011805411728565282786229673206435109"
+        "0230047702789306640625"
+    )
+
+
 def test_flexible_fraction_rejects_zero_denominator():
     assert FlexibleFractionDetector("en_US").detect("5/0") == []
 
@@ -1156,6 +1186,13 @@ def test_flexible_compact_gains_recall(surface, width, decimal, style):
     assert detections[0]["text"] == surface
     assert detections[0]["value"] == NumberValue(decimal, None)
     assert format_compact(int(decimal), "en_US", style) == surface
+
+
+def test_flexible_compact_preserves_large_values_exactly():
+    surface = "123456789012345678901234567890K"
+    detection = FlexibleCompactDetector("en_US", "short").detect(surface)[0]
+
+    assert detection["value"].decimal == "123456789012345678901234567890000"
 
 
 def test_flexible_compact_long_is_reflective_in_a_non_english_locale():
