@@ -44,6 +44,8 @@ __all__ = [
     "Capture",
     "CompactFormatSpec",
     "DateFormatSpec",
+    "DateIntervalSpec",
+    "DateIntervalValue",
     "DateDetector",
     "DateTimeValue",
     "Detector",
@@ -94,6 +96,19 @@ class DateTimeValue:
 
     fields: tuple[tuple[str, int], ...]
     calendar: str
+
+
+@dataclass(frozen=True)
+class DateIntervalValue:
+    """A recovered (start, end) civil date/time interval.
+
+    Each endpoint is a :class:`DateTimeValue` holding only the fields the interval pins
+    (shared higher-order fields inherited on both ends), with 1-based months and the
+    observed calendar.
+    """
+
+    start: DateTimeValue
+    end: DateTimeValue
 
 
 @dataclass(frozen=True)
@@ -166,6 +181,18 @@ class DateFormatSpec:
     calendar: str
     tz: str = "GMT"
     field_forms: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
+class DateIntervalSpec:
+    """Generative recipe for a date-interval detection.
+
+    ``locale`` and ``skeleton`` select the ICU :class:`DateIntervalFormat` that
+    reproduces the surface.
+    """
+
+    locale: str
+    skeleton: str
 
 
 @dataclass(frozen=True)

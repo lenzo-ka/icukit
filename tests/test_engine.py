@@ -4,6 +4,7 @@ import icu
 
 from icukit.detectors import DateDetector
 from icukit.engine import (
+    DATE_INTERVAL_FAMILY,
     DATE_TIME_SKELETON_FAMILY,
     generated_detectors,
     generated_detectors_report,
@@ -105,6 +106,16 @@ def test_generated_detectors_include_reflective_relative_dates():
     assert "date:relative" in spanish.names()
     detection = next(item for item in spanish.detect("ayer") if item["type"] == "date:relative")
     assert (detection["value"].offset, detection["value"].unit) == (-1, "day")
+
+
+def test_generated_detectors_include_and_report_reflective_date_intervals():
+    report = generated_detectors_report("en_US")
+    names = set(report.detectors.names())
+
+    assert "date-interval:Hm" in names
+    assert DATE_INTERVAL_FAMILY.invert("y", "en_US") is not None
+    assert any(item.family == "date-interval" for item in report.skipped)
+    assert all(item.reason for item in report.skipped if item.family == "date-interval")
 
 
 def test_localized_literal_skeletons_are_not_wrongly_skipped():

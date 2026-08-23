@@ -14,11 +14,14 @@ from math import gcd
 
 import icu
 
+from ._offsets import boundary_maps
 from .breaker import break_grapheme_spans
 from .detectors import (
     Capture,
     CompactFormatSpec,
     DateFormatSpec,
+    DateIntervalSpec,
+    DateIntervalValue,
     DateTimeValue,
     MeasureFormatSpec,
     MeasureValue,
@@ -28,6 +31,8 @@ from .detectors import (
     RelativeDateValue,
     SpelloutFormatSpec,
     ValueDetection,
+    _date_fields,
+    _pattern_runs,
 )
 
 __all__ = [
@@ -35,6 +40,7 @@ __all__ = [
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
     "FlexibleDateDetector",
+    "FlexibleDateIntervalDetector",
     "FlexibleFractionDetector",
     "FlexibleMeasureDetector",
     "FlexibleNumberDetector",
@@ -47,7 +53,12 @@ __all__ = [
     "FlexibleTextDateDetector",
 ]
 
-_SPACES = {" ", "\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}"}
+_SPACES = {
+    " ",
+    "\N{NO-BREAK SPACE}",
+    "\N{THIN SPACE}",
+    "\N{NARROW NO-BREAK SPACE}",
+}
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 # Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
@@ -212,6 +223,240 @@ class FlexibleDateDetector:
             )
             cursor = end
         return detections
+
+
+_INTERVAL_FIELDS = (
+    icu.UCalendarDateFields.ERA,
+    icu.UCalendarDateFields.YEAR,
+    icu.UCalendarDateFields.MONTH,
+    icu.UCalendarDateFields.DATE,
+    icu.UCalendarDateFields.AM_PM,
+    icu.UCalendarDateFields.HOUR,
+    icu.UCalendarDateFields.HOUR_OF_DAY,
+    icu.UCalendarDateFields.MINUTE,
+    icu.UCalendarDateFields.SECOND,
+)
+_MODELED_DATE_LETTERS = {"y", "M", "L", "d", "H", "k", "m", "s", "E", "e", "c"}
+_INTERVAL_VALUE_ORDER = ("y", "M", "d", "H", "h", "m", "s")
+
+
+def _interval_pattern_parts(pattern: str) -> tuple[str, str, str] | None:
+    """Split an ICU interval pattern where its first field letter repeats."""
+    seen: set[str] = set()
+    quoted = False
+    index = 0
+    last_field_end = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "'":
+            if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                index += 2
+                continue
+            quoted = not quoted
+            index += 1
+            continue
+        if quoted or not character.isascii() or not character.isalpha():
+            index += 1
+            continue
+        end = index + 1
+        while end < len(pattern) and pattern[end] == character:
+            end += 1
+        if character in seen:
+            return pattern[:last_field_end], pattern[last_field_end:index], pattern[index:]
+        seen.add(character)
+        last_field_end = end
+        index = end
+    return None
+
+
+def _continues_interval_word(text: str, cursor: int) -> bool:
+    if cursor < 0 or cursor >= len(text):
+        return False
+    character = text[cursor]
+    return _is_word_character(character) or (
+        icu.Char.charType(character) == icu.UCharCategory.CONNECTOR_PUNCTUATION
+    )
+
+
+def _normalize_interval_surface(surface: str) -> str:
+    """Fold the Unicode space variants (``_SPACES``) to a plain space and casefold.
+
+    This normalizes only the *kind* of whitespace, never its presence: a space and no
+    space stay distinct, so spacing inside a field (``Jan 1`` vs ``Jan1``) remains
+    significant. The range separator's spacing is relaxed elsewhere -- the gate compares
+    against a surface carrying the reflective canonical separator, whose non-space core is
+    validated by :meth:`_separator_end` -- so this stays a pure whitespace-kind fold.
+    """
+    return "".join(" " if character in _SPACES else character for character in surface).casefold()
+
+
+class FlexibleDateIntervalDetector:
+    """Recognize date/time interval surfaces by inverting ICU DateIntervalFormat recipes."""
+
+    group = "date-interval"
+
+    def __init__(self, locale: str, skeleton: str) -> None:
+        self.locale = locale
+        self.skeleton = skeleton
+        self.type = f"date-interval:{skeleton}"
+        icu_locale = icu.Locale(locale)
+        interval_info = icu.DateIntervalInfo(icu_locale)
+        matchers = []
+        for calendar_field in _INTERVAL_FIELDS:
+            pattern = interval_info.getIntervalPattern(skeleton, calendar_field)
+            parts = _interval_pattern_parts(pattern) if pattern else None
+            if parts is None:
+                continue
+            part1, separator, part2 = parts
+            letters1 = {letter for letter, _ in _pattern_runs(part1)}
+            letters2 = {letter for letter, _ in _pattern_runs(part2)}
+            if not letters1 <= _MODELED_DATE_LETTERS or not letters2 <= _MODELED_DATE_LETTERS:
+                continue
+            matchers.append(
+                (
+                    icu.SimpleDateFormat(part1, icu_locale),
+                    separator,
+                    icu.SimpleDateFormat(part2, icu_locale),
+                    _date_fields(part1),
+                    _date_fields(part2),
+                )
+            )
+        self._matchers = tuple(matchers)
+        self._calendar = icu.Calendar.createInstance(icu_locale).getType()
+        self._spec = DateIntervalSpec(locale, skeleton)
+        self._dif = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
+        self._offset_maps: tuple[list[int], dict[int, int]] | None = None
+
+    @property
+    def has_patterns(self) -> bool:
+        """Whether ICU exposed at least one modeled, splittable interval recipe."""
+        return bool(self._matchers)
+
+    def _parse_side(self, formatter, fields, text, start, cp_to_u16, u16_to_cp):
+        calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+        calendar.clear()
+        position = icu.ParsePosition(cp_to_u16[start])
+        formatter.parse(icu.UnicodeString(text), calendar, position)
+        end_u16 = position.getIndex()
+        if position.getErrorIndex() != -1 or end_u16 <= cp_to_u16[start]:
+            return None
+        end = u16_to_cp.get(end_u16)
+        if end is None:
+            return None
+        try:
+            values = {field.name: calendar.get(field.calendar_field) for field in fields}
+        except icu.ICUError:
+            return None
+        return end, values
+
+    @staticmethod
+    def _separator_end(text: str, start: int, separator: str) -> int | None:
+        cursor = start
+        pattern_cursor = 0
+        while pattern_cursor < len(separator):
+            if separator[pattern_cursor] in _SPACES:
+                while pattern_cursor < len(separator) and separator[pattern_cursor] in _SPACES:
+                    pattern_cursor += 1
+                while cursor < len(text) and text[cursor] in _SPACES:
+                    cursor += 1
+                continue
+            literal_start = pattern_cursor
+            while pattern_cursor < len(separator) and separator[pattern_cursor] not in _SPACES:
+                pattern_cursor += 1
+            literal = separator[literal_start:pattern_cursor]
+            if not text.startswith(literal, cursor):
+                return None
+            cursor += len(literal)
+        return cursor
+
+    def _endpoint(self, values: dict[str, int]) -> DateTimeValue:
+        ordered = tuple(
+            (name, values[name] + 1 if name == "M" else values[name])
+            for name in _INTERVAL_VALUE_ORDER
+            if name in values
+        )
+        return DateTimeValue(ordered, self._calendar)
+
+    def _calendar_from(self, values: dict[str, int]):
+        calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+        calendar.clear()
+        fields = {field.name: field.calendar_field for field in _date_fields("yMdHhmsE")}
+        for name, value in values.items():
+            calendar.set(fields[name], value)
+        return calendar
+
+    def _match(self, text: str, start: int):
+        if _continues_interval_word(text, start - 1):
+            return None
+        cp_to_u16, u16_to_cp = self._offset_maps
+        matches = []
+        for formatter1, separator, formatter2, fields1, fields2 in self._matchers:
+            parsed1 = self._parse_side(formatter1, fields1, text, start, cp_to_u16, u16_to_cp)
+            if parsed1 is None:
+                continue
+            end1, values1 = parsed1
+            separator_end = self._separator_end(text, end1, separator)
+            if separator_end is None:
+                continue
+            parsed2 = self._parse_side(
+                formatter2, fields2, text, separator_end, cp_to_u16, u16_to_cp
+            )
+            if parsed2 is None:
+                continue
+            end2, values2 = parsed2
+            if _continues_interval_word(text, end2):
+                continue
+            names = values1.keys() | values2.keys()
+            start_values = {
+                name: values1[name] if name in values1 else values2[name] for name in names
+            }
+            end_values = {
+                name: values2[name] if name in values2 else values1[name] for name in names
+            }
+            try:
+                start_calendar = self._calendar_from(start_values)
+                end_calendar = self._calendar_from(end_values)
+                reformatted = self._dif.format(
+                    icu.DateInterval(start_calendar.getTime(), end_calendar.getTime())
+                )
+            except icu.ICUError:
+                continue
+            # note: The reformat guard is the correctness gate for every deposited value.
+            # The two field regions are the exact surface text -- so a mis-parse whose
+            # fields would render differently is rejected. Only the separator is swapped
+            # for its reflective canonical form: the surface separator's non-space core was
+            # already validated by _separator_end, and its spacing is the sole intentional
+            # relaxation (letting "2020-2024" match canonical "2020 - 2024"). Thus a
+            # deposited interval's fields always round-trip; only separator spacing is free.
+            gate_surface = text[start:end1] + separator + text[separator_end:end2]
+            if _normalize_interval_surface(reformatted) != _normalize_interval_surface(
+                gate_surface
+            ):
+                continue
+            captures = (
+                Capture("start", start, end1, text[start:end1]),
+                Capture(
+                    "separator",
+                    end1,
+                    separator_end,
+                    text[end1:separator_end],
+                    form="symbol",
+                ),
+                Capture("end", separator_end, end2, text[separator_end:end2]),
+            )
+            value = DateIntervalValue(self._endpoint(start_values), self._endpoint(end_values))
+            matches.append((end2, captures, value))
+        return max(matches, key=lambda match: match[0], default=None)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping date-interval candidates in source order."""
+        # Compute the code-point/UTF-16 offset maps once per scan; _match reuses them for
+        # every candidate start rather than rebuilding them (avoids O(n^2) scanning).
+        self._offset_maps = boundary_maps(text)
+        try:
+            return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        finally:
+            self._offset_maps = None
 
 
 class FlexibleTextDateDetector:

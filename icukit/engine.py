@@ -17,6 +17,7 @@ import icu
 from .detectors import DateDetector, Detector, DetectorSet
 from .recognize import (
     FlexibleCompactDetector,
+    FlexibleDateIntervalDetector,
     FlexibleRelativeDateDetector,
     FlexibleScientificDetector,
     FlexibleSpelloutDetector,
@@ -26,6 +27,7 @@ from .recognize import (
 __all__ = [
     "ABBREVIATION_FAMILY",
     "COMPACT_NUMBER_FAMILY",
+    "DATE_INTERVAL_FAMILY",
     "DATE_TIME_SKELETON_FAMILY",
     "DEFAULT_FAMILIES",
     "Family",
@@ -125,6 +127,33 @@ DATE_TIME_SKELETON_FAMILY = Family(
     _date_time_skeletons,
     _date_time_invert,
     _date_time_skip_reason,
+)
+
+
+def _date_interval_skeletons(locale: str) -> Iterable[Spec]:
+    generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
+    return sorted(generator.getSkeletons())
+
+
+def _date_interval_invert(spec: Spec, locale: str) -> Detector | None:
+    skeleton = str(spec)
+    try:
+        detector = FlexibleDateIntervalDetector(locale, skeleton)
+    except (icu.ICUError, ValueError):
+        return None
+    return detector if detector.has_patterns else None
+
+
+def _date_interval_skip_reason(spec: Spec, locale: str) -> str:
+    del locale
+    return f"no invertible interval pattern for skeleton {str(spec)!r}"
+
+
+DATE_INTERVAL_FAMILY = Family(
+    "date-interval",
+    _date_interval_skeletons,
+    _date_interval_invert,
+    _date_interval_skip_reason,
 )
 
 
@@ -265,11 +294,12 @@ RELATIVE_DATE_FAMILY = Family(
     _relative_date_skip_reason,
 )
 
-# note: Measure and interval families belong here once their ICU
-# surfaces have introspective inverters. Abbreviations use their typed lexicon.
+# note: A measure family belongs here once its ICU surfaces have an introspective
+# inverter. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
     ABBREVIATION_FAMILY,
     DATE_TIME_SKELETON_FAMILY,
+    DATE_INTERVAL_FAMILY,
     COMPACT_NUMBER_FAMILY,
     RELATIVE_DATE_FAMILY,
     SCIENTIFIC_NUMBER_FAMILY,

@@ -142,6 +142,7 @@ from .datetime import (
     parse_datetime,
 )
 from .detect import Detection, collation_detect, regex_detect
+from .detectors import DateIntervalSpec, DateIntervalValue
 from .displayname import (
     DisplayNames,
     get_currency_name,
@@ -155,7 +156,12 @@ from .duration import WIDTH_NARROW as DURATION_WIDTH_NARROW
 from .duration import WIDTH_SHORT as DURATION_WIDTH_SHORT
 from .duration import WIDTH_WIDE as DURATION_WIDTH_WIDE
 from .duration import DurationFormatter, format_duration, parse_iso_duration
-from .engine import ABBREVIATION_FAMILY, generated_detectors, generated_detectors_report
+from .engine import (
+    ABBREVIATION_FAMILY,
+    DATE_INTERVAL_FAMILY,
+    generated_detectors,
+    generated_detectors_report,
+)
 from .errors import (
     AbbreviationError,
     AlphaIndexError,
@@ -279,6 +285,7 @@ from .plural import (
 from .recognize import (
     FlexibleCompactDetector,
     FlexibleCurrencyNameDetector,
+    FlexibleDateIntervalDetector,
     FlexibleScientificDetector,
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
@@ -361,6 +368,7 @@ __all__ = [
     "__version__",
     "FlexibleCompactDetector",
     "FlexibleCurrencyNameDetector",
+    "FlexibleDateIntervalDetector",
     "FlexibleScientificDetector",
     "FlexibleSpelloutDetector",
     "FlexibleTextDateDetector",
@@ -368,6 +376,9 @@ __all__ = [
     "generated_detectors_report",
     # Abbreviations
     "ABBREVIATION_FAMILY",
+    "DATE_INTERVAL_FAMILY",
+    "DateIntervalSpec",
+    "DateIntervalValue",
     "AbbreviationBoundary",
     "AbbreviationDetector",
     "AbbreviationLexicon",
