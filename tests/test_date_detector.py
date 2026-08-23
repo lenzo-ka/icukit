@@ -3,6 +3,7 @@
 import icu
 import pytest
 
+from icukit import generated_detectors
 from icukit.detectors import DateDetector, Detector
 
 LOCALES_AND_SKELETONS = [
@@ -89,6 +90,26 @@ def test_year_capture_uses_observed_calendar_digits_and_source_offsets(locale, y
 @pytest.mark.parametrize("surface", ["1/3/26", "01/03/2026", "1 /3/2026"])
 def test_permissive_noncanonical_date_surfaces_are_rejected(surface):
     assert DateDetector("en_US", "yMd").detect(surface) == []
+
+
+@pytest.mark.parametrize("skeleton", ["yM", "yMMM", "yMMMM", "yMd", "MMMd", "yMMMd", "yMMMEd"])
+def test_invalid_scientific_surface_is_not_a_date(skeleton):
+    assert DateDetector("en_US", skeleton).detect("1.2345E4") == []
+
+
+def test_generated_detectors_keep_real_candidates_for_scientific_surface():
+    detections = generated_detectors("en_US").detect("1.2345E4")
+
+    assert detections
+
+
+@pytest.mark.parametrize("surface", ["1.2345E4", "99999999", "0/0", "13/45", "aaa111bbb", "E1E1E1"])
+def test_generated_detectors_never_raise_for_adversarial_surfaces(surface):
+    assert isinstance(generated_detectors("en_US").detect(surface), list)
+
+
+def test_valid_date_detection_is_unaffected():
+    assert DateDetector("en_US", "yMMMd").detect("Jan 3, 2026")
 
 
 def test_date_detector_rejects_non_gmt_timezone():

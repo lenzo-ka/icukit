@@ -809,7 +809,13 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
                 "parse ended inside a grapheme cluster",
             )
         surface = text[start_cp:end_cp]
-        if inv.reformat(parsed) != surface:
+        try:
+            reformatted = inv.reformat(parsed)
+        except icu.ICUError:
+            # ICU accepted a parse it cannot reformat (an out-of-range field
+            # combination whose getTime() is illegal). Not a match, not fatal.
+            continue
+        if reformatted != surface:
             continue  # permissive coercion -> not accepted (not fatal)
         value, captures, spec = inv.build(parsed, surface, start_cp, cp_to_u16, u16_to_cp)
         if _contains_float(value) or _contains_float(spec) or _contains_float(captures):
