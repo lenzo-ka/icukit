@@ -142,7 +142,27 @@ from .datetime import (
     parse_datetime,
 )
 from .detect import Detection, collation_detect, regex_detect
-from .detectors import DateIntervalSpec, DateIntervalValue
+from .detectors import (
+    DateIntervalSpec,
+    DateIntervalValue,
+    DateTimeValue,
+    DetectorSet,
+    MeasureValue,
+    NumberValue,
+    RelativeDateValue,
+    ValueDetection,
+    all_detectors,
+    date_detectors,
+    detect,
+    number_detectors,
+)
+from .discover import (
+    discover_features,
+    get_api_exports,
+    get_api_info,
+    get_cli_commands,
+    search_features,
+)
 from .displayname import (
     DisplayNames,
     get_currency_name,
@@ -158,7 +178,13 @@ from .duration import WIDTH_WIDE as DURATION_WIDTH_WIDE
 from .duration import DurationFormatter, format_duration, parse_iso_duration
 from .engine import (
     ABBREVIATION_FAMILY,
+    COMPACT_NUMBER_FAMILY,
     DATE_INTERVAL_FAMILY,
+    DATE_TIME_SKELETON_FAMILY,
+    RELATIVE_DATE_FAMILY,
+    SCIENTIFIC_NUMBER_FAMILY,
+    SPELLOUT_NUMBER_FAMILY,
+    Family,
     generated_detectors,
     generated_detectors_report,
 )
@@ -284,11 +310,20 @@ from .plural import (
 )
 from .recognize import (
     FlexibleCompactDetector,
+    FlexibleCurrencyDetector,
     FlexibleCurrencyNameDetector,
+    FlexibleDateDetector,
     FlexibleDateIntervalDetector,
+    FlexibleFractionDetector,
+    FlexibleMeasureDetector,
+    FlexibleNumberDetector,
+    FlexibleOrdinalDetector,
+    FlexiblePercentDetector,
+    FlexibleRelativeDateDetector,
     FlexibleScientificDetector,
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
+    FlexibleTimeDetector,
 )
 from .regex import (
     CASE_INSENSITIVE,
@@ -367,16 +402,41 @@ from .unicode import (
 __all__ = [
     "__version__",
     "FlexibleCompactDetector",
+    "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
+    "FlexibleDateDetector",
     "FlexibleDateIntervalDetector",
+    "FlexibleFractionDetector",
+    "FlexibleMeasureDetector",
+    "FlexibleNumberDetector",
+    "FlexibleOrdinalDetector",
+    "FlexiblePercentDetector",
+    "FlexibleRelativeDateDetector",
     "FlexibleScientificDetector",
     "FlexibleSpelloutDetector",
+    "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
+    "DetectorSet",
+    "ValueDetection",
+    "DateTimeValue",
+    "MeasureValue",
+    "NumberValue",
+    "RelativeDateValue",
+    "detect",
+    "date_detectors",
+    "number_detectors",
+    "all_detectors",
     "generated_detectors",
     "generated_detectors_report",
     # Abbreviations
     "ABBREVIATION_FAMILY",
+    "COMPACT_NUMBER_FAMILY",
     "DATE_INTERVAL_FAMILY",
+    "DATE_TIME_SKELETON_FAMILY",
+    "RELATIVE_DATE_FAMILY",
+    "SCIENTIFIC_NUMBER_FAMILY",
+    "SPELLOUT_NUMBER_FAMILY",
+    "Family",
     "DateIntervalSpec",
     "DateIntervalValue",
     "AbbreviationBoundary",
@@ -408,7 +468,6 @@ __all__ = [
     "ScriptError",
     "NormalizationError",
     "RegionError",
-    "SearchError",
     "TimezoneError",
     "CalendarError",
     "CollatorError",
@@ -652,7 +711,6 @@ __all__ = [
     "format_scientific",
     "format_spellout",
     "format_ordinal",
-    "format_compact",
     "COMPACT_SHORT",
     "COMPACT_LONG",
     # Plural

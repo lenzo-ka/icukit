@@ -166,6 +166,9 @@ class TestConvenienceFunctions:
         abbrev = get_unit_abbreviation("kilometer")
         assert abbrev == "km"
 
+    def test_get_unit_abbreviation_strips_locale_digits(self):
+        assert get_unit_abbreviation("kilometer", "ar_EG") == "كم"
+
     def test_get_unit_info(self):
         """Test get_unit_info."""
         info = get_unit_info("kilometer")

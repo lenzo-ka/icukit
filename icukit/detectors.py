@@ -1031,7 +1031,7 @@ def number_detectors(
     return DetectorSet(()).with_(*members)
 
 
-def abbreviation_detectors(locale: str) -> DetectorSet:
+def abbreviation_detectors(locale: str = "en") -> DetectorSet:
     """The lexicon-backed abbreviation detector, or an empty gang when unavailable."""
     from .abbreviation_recognize import abbreviation_detectors as build
 

@@ -39,6 +39,7 @@ Example:
 from __future__ import annotations
 
 import re
+import unicodedata
 
 import icu
 
@@ -115,8 +116,9 @@ def _get_abbreviation_map(locale: str = "en_US") -> dict[str, str]:
                 mu = icu.MeasureUnit.forIdentifier(unit_name)
                 measure = icu.Measure(1, mu)
                 formatted = formatter.formatMeasure(measure)
-                # Extract abbreviation by removing the "1 " prefix
-                abbrev = formatted.replace("1", "").strip()
+                abbrev = "".join(
+                    character for character in formatted if unicodedata.category(character) != "Nd"
+                ).strip()
                 if abbrev and abbrev != unit_name:
                     # Store both lowercase and original
                     _abbreviation_map_cache[abbrev.lower()] = unit_name
@@ -177,7 +179,9 @@ def get_unit_abbreviation(unit: str, locale: str = "en_US") -> str:
         mu = icu.MeasureUnit.forIdentifier(resolve_unit(unit))
         measure = icu.Measure(1, mu)
         formatted = formatter.formatMeasure(measure)
-        return formatted.replace("1", "").strip()
+        return "".join(
+            character for character in formatted if unicodedata.category(character) != "Nd"
+        ).strip()
     except icu.ICUError as e:
         raise MeasureError(f"Cannot get abbreviation for {unit}: {e}") from e
 
@@ -524,13 +528,10 @@ class MeasureFormatter:
         usage: str = "default",
         width: str | None = None,
     ) -> str:
-        """Format a measurement using locale-preferred units.
+        """Format a measurement without usage-based conversion.
 
-        Converts to units preferred by the locale for the given usage.
-        For example, "road" usage in en_US converts km to miles.
-
-        Note: Usage-based conversion may not be available in all PyICU versions.
-        Falls back to standard formatting.
+        PyICU does not currently expose ICU's usage-based unit preferences, so ``usage``
+        is accepted for API compatibility and the measurement is formatted unchanged.
 
         Args:
             value: Numeric value
@@ -539,12 +540,12 @@ class MeasureFormatter:
             width: Width style
 
         Returns:
-            Formatted measurement in locale-preferred units
+            Formatted measurement in the source unit
 
         Example:
             >>> fmt_us = MeasureFormatter("en_US")
             >>> fmt_us.format_for_usage(100, "kilometer", usage="road")
-            '62 miles'
+            '100 km'
             >>> fmt_de = MeasureFormatter("de_DE")
             >>> fmt_de.format_for_usage(100, "kilometer", usage="road")
             '100 Kilometer'
