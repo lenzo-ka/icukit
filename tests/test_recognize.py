@@ -7,6 +7,9 @@ import pytest
 
 from icukit.detectors import (
     DateDetector,
+    DateIntervalSpec,
+    DateIntervalValue,
+    DateTimeValue,
     Detector,
     MeasureFormatSpec,
     MeasureValue,
@@ -24,6 +27,7 @@ from icukit.recognize import (
     FlexibleCurrencyDetector,
     FlexibleCurrencyNameDetector,
     FlexibleDateDetector,
+    FlexibleDateIntervalDetector,
     FlexibleFractionDetector,
     FlexibleMeasureDetector,
     FlexibleNumberDetector,
@@ -34,8 +38,189 @@ from icukit.recognize import (
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
+    _normalize_interval_surface,
 )
 from icukit.resolve import resolve
+
+
+def _interval_surface(locale, skeleton, start_fields, end_fields):
+    icu_locale = icu.Locale(locale)
+    calendars = []
+    for fields in (start_fields, end_fields):
+        calendar = icu.Calendar.createInstance(icu_locale)
+        calendar.clear()
+        for field, value in fields.items():
+            calendar.set(getattr(icu.Calendar, field), value)
+        calendars.append(calendar)
+    formatter = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
+    return formatter.format(icu.DateInterval(*(calendar.getTime() for calendar in calendars)))
+
+
+def _interval_value(start, end, calendar="gregorian"):
+    order = ("y", "M", "d", "H", "h", "m", "s")
+    return DateIntervalValue(
+        DateTimeValue(tuple((name, start[name]) for name in order if name in start), calendar),
+        DateTimeValue(tuple((name, end[name]) for name in order if name in end), calendar),
+    )
+
+
+def test_flexible_date_interval_recovers_shared_and_different_months():
+    detector = FlexibleDateIntervalDetector("en_US", "yMMMd")
+    cases = (
+        (
+            {"YEAR": 2020, "MONTH": 0, "DATE": 1},
+            {"YEAR": 2020, "MONTH": 0, "DATE": 5},
+            _interval_value({"y": 2020, "M": 1, "d": 1}, {"y": 2020, "M": 1, "d": 5}),
+        ),
+        (
+            {"YEAR": 2020, "MONTH": 0, "DATE": 1},
+            {"YEAR": 2020, "MONTH": 1, "DATE": 3},
+            _interval_value({"y": 2020, "M": 1, "d": 1}, {"y": 2020, "M": 2, "d": 3}),
+        ),
+    )
+    for start, end, expected in cases:
+        surface = _interval_surface("en_US", "yMMMd", start, end)
+        detection = detector.detect(surface)[0]
+        assert detection["text"] == surface
+        assert detection["value"] == expected
+        assert detection["spec"] == DateIntervalSpec("en_US", "yMMMd")
+
+
+def test_flexible_date_interval_recovers_numeric_month_day():
+    surface = _interval_surface(
+        "en_US",
+        "Md",
+        {"YEAR": 2020, "MONTH": 0, "DATE": 1},
+        {"YEAR": 2020, "MONTH": 1, "DATE": 3},
+    )
+    detection = FlexibleDateIntervalDetector("en_US", "Md").detect(surface)[0]
+    assert detection["value"] == _interval_value({"M": 1, "d": 1}, {"M": 2, "d": 3})
+
+
+def test_flexible_date_interval_recovers_years_with_optional_separator_spaces():
+    surface = _interval_surface("en_US", "y", {"YEAR": 2020}, {"YEAR": 2024})
+    detector = FlexibleDateIntervalDetector("en_US", "y")
+    expected = _interval_value({"y": 2020}, {"y": 2024})
+    assert detector.detect(surface)[0]["value"] == expected
+    assert detector.detect("2020–2024")[0]["value"] == expected
+
+
+def test_flexible_date_interval_recovers_24_hour_time():
+    surface = _interval_surface(
+        "en_US",
+        "Hm",
+        {"HOUR_OF_DAY": 9, "MINUTE": 0},
+        {"HOUR_OF_DAY": 17, "MINUTE": 0},
+    )
+    detection = FlexibleDateIntervalDetector("en_US", "Hm").detect(surface)[0]
+    assert detection["value"] == _interval_value({"H": 9, "m": 0}, {"H": 17, "m": 0})
+
+
+def test_flexible_date_interval_reformat_gate_and_boundaries():
+    detector = FlexibleDateIntervalDetector("en_US", "y")
+    surface = _interval_surface("en_US", "y", {"YEAR": 2020}, {"YEAR": 2024})
+    text = f"from {surface}, roughly"
+    detection = detector.detect(text)[0]
+    assert detection["text"] == surface
+    assert (detection["start"], detection["end"]) == (5, 5 + len(surface))
+    assert detector.detect(surface.replace("2024", "oops")) == []
+    assert detector.detect("x" + surface) == []
+    assert detector.detect(surface + "x") == []
+
+
+def _reformat_value(locale, skeleton, value):
+    icu_locale = icu.Locale(locale)
+    order = {
+        "y": icu.Calendar.YEAR,
+        "M": icu.Calendar.MONTH,
+        "d": icu.Calendar.DATE,
+        "H": icu.Calendar.HOUR_OF_DAY,
+        "m": icu.Calendar.MINUTE,
+    }
+    endpoints = []
+    for point in (value.start, value.end):
+        calendar = icu.Calendar.createInstance(icu_locale)
+        calendar.clear()
+        for name, field_value in point.fields:
+            calendar.set(order[name], field_value - 1 if name == "M" else field_value)
+        endpoints.append(calendar.getTime())
+    return icu.DateIntervalFormat.createInstance(skeleton, icu_locale).format(
+        icu.DateInterval(*endpoints)
+    )
+
+
+def test_flexible_date_interval_deposited_fields_round_trip():
+    # Honesty invariant: a deposited interval's field content reformats back to the exact
+    # canonical field renderings; only separator spacing is a permitted relaxation. So the
+    # recovered value reformats equal (mod whitespace kind) to the canonical surface.
+    for locale, skeleton, fields in (
+        (
+            "en_US",
+            "yMMMd",
+            ({"YEAR": 2020, "MONTH": 0, "DATE": 1}, {"YEAR": 2020, "MONTH": 0, "DATE": 5}),
+        ),
+        (
+            "de_DE",
+            "yMd",
+            ({"YEAR": 2020, "MONTH": 0, "DATE": 1}, {"YEAR": 2020, "MONTH": 1, "DATE": 3}),
+        ),
+    ):
+        canonical = _interval_surface(locale, skeleton, *fields)
+        detection = FlexibleDateIntervalDetector(locale, skeleton).detect(canonical)[0]
+        reformatted = _reformat_value(locale, skeleton, detection["value"])
+        assert _normalize_interval_surface(reformatted) == _normalize_interval_surface(canonical)
+    # The plain-dash headline surface is accepted (separator spacing is free) and still
+    # recovers the correct value.
+    plain = FlexibleDateIntervalDetector("en_US", "y").detect("2020–2024")[0]
+    assert plain["value"] == _interval_value({"y": 2020}, {"y": 2024})
+
+
+def test_flexible_date_interval_rejects_field_internal_space_corruption():
+    # Separator-spacing relaxation must NOT leak into fields. In a locale whose date fields
+    # use hyphens, inserting spaces around a field-internal hyphen breaks the field
+    # rendering, so the reformat gate rejects it -- no interval is deposited.
+    canonical = _interval_surface(
+        "agq",
+        "yMd",
+        {"YEAR": 2020, "MONTH": 0, "DATE": 1},
+        {"YEAR": 2021, "MONTH": 1, "DATE": 3},
+    )
+    detector = FlexibleDateIntervalDetector("agq", "yMd")
+    assert detector.detect(canonical)  # canonical form is recognized
+    corrupted = canonical.replace("-", " - ", 1)  # space around a field-internal hyphen
+    assert detector.detect(corrupted) == []
+
+
+def test_flexible_date_interval_rejects_connector_punctuation_boundary():
+    # A left or right connector-punctuation neighbor (an identifier underscore) means the
+    # span sits inside a token, so no interval is deposited.
+    detector = FlexibleDateIntervalDetector("en_US", "y")
+    assert detector.detect("abc_2020–2024") == []
+    assert detector.detect("2020–2024_x") == []
+
+
+def test_flexible_date_interval_reflects_non_english_locale():
+    locale = "ja_JP"
+    surface = _interval_surface(
+        locale,
+        "yMd",
+        {"YEAR": 2020, "MONTH": 0, "DATE": 1},
+        {"YEAR": 2021, "MONTH": 1, "DATE": 3},
+    )
+    detection = FlexibleDateIntervalDetector(locale, "yMd").detect(surface)[0]
+    assert detection["text"] == surface
+    assert detection["value"] == _interval_value(
+        {"y": 2020, "M": 1, "d": 1}, {"y": 2021, "M": 2, "d": 3}
+    )
+
+
+def test_flexible_date_interval_gracefully_excludes_unmodeled_12_hour_forms():
+    # Day periods, era, quarter, week, and time-zone fields are not invertible by the
+    # DateDetector field model used by this recognizer.
+    detector = FlexibleDateIntervalDetector("en_US", "hm")
+    surface = _interval_surface("en_US", "hm", {"HOUR": 9, "AM_PM": 0}, {"HOUR": 5, "AM_PM": 1})
+    assert not detector.has_patterns
+    assert detector.detect(surface) == []
 
 
 @pytest.mark.parametrize(

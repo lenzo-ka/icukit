@@ -1580,6 +1580,29 @@ assumed. ``field_forms`` records each present field's form (``("month", "short")
 
 Initialize self.  See help(type(self)) for accurate signature.
 
+### class `DateIntervalSpec`
+
+Generative recipe for a date-interval detection.
+
+``locale`` and ``skeleton`` select the ICU :class:`DateIntervalFormat` that
+reproduces the surface.
+
+#### `DateIntervalSpec(locale: 'str', skeleton: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `DateIntervalValue`
+
+A recovered (start, end) civil date/time interval.
+
+Each endpoint is a :class:`DateTimeValue` holding only the fields the interval pins
+(shared higher-order fields inherited on both ends), with 1-based months and the
+observed calendar.
+
+#### `DateIntervalValue(start: 'DateTimeValue', end: 'DateTimeValue') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `DateTimeValue`
 
 Civil date/time fields recovered from a temporal parse.
@@ -2242,11 +2265,11 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -3832,6 +3855,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible numeric dates in source order.
+
+### class `FlexibleDateIntervalDetector`
+
+Recognize date/time interval surfaces by inverting ICU DateIntervalFormat recipes.
+
+#### `FlexibleDateIntervalDetector(locale: 'str', skeleton: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping date-interval candidates in source order.
 
 ### class `FlexibleFractionDetector`
 
