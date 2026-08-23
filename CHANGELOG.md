@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.4.0] - 2026-08-23
+
+### Added
+
+- Strict, round-tripping date and number detectors, typed value and format-spec
+  classes, candidate resolution, `detect()`, and `DetectorSet` composition.
+- Flexible recognizers for numbers, numeric and textual dates, currency symbols
+  and names, compact and scientific numbers, spellout numbers, relative dates,
+  date intervals, fractions, ordinals, times, percents, and measures.
+- A reflective detector engine with `Family`, `generated_detectors()`, detector
+  reports, and abbreviation, date/time skeleton, date interval, compact number,
+  scientific number, spellout number, and relative date family constants.
+- An abbreviation subsystem with a RELAX NG-validated XML lexicon, English
+  lexicon data, compilation and loading APIs, a sentence-break post-filter, and
+  an abbreviation detector.
+- A recall evaluation harness backed by a vendored oracle and a round-trip
+  conformance harness with a golden detector inventory.
+- Measure recognition values and format specifications, plus locale-aware unit
+  abbreviation utilities.
+
+### Changed
+
+- Export the complete recognition surface from the top-level package, including
+  flexible recognizers, detector entry points and groups, value classes, and
+  reflective families; `from icukit import *` is coherent again.
+- Document Python 3.11 as the minimum supported version, matching package
+  metadata.
+
+### Fixed
+
+- Preserve exact `Decimal` values for large flexible compact numbers, percents,
+  and fractions instead of rounding, emitting exponent notation, or raising.
+- Derive unit abbreviations from ICU's numeric field position, preserving digits
+  that belong to unit labels and handling locale-specific digits correctly.
+- Treat unreformattable date parses as non-matches and recognize standalone
+  month and weekday date skeletons without crashing.
+
 ## 0.3.0
 
 ### Added
