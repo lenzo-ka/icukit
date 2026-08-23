@@ -25,6 +25,7 @@ from icukit.recognize import (
     FlexibleNumberDetector,
     FlexibleOrdinalDetector,
     FlexiblePercentDetector,
+    FlexibleScientificDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
 )
@@ -934,6 +935,77 @@ def test_flexible_compact_holds_the_bare_number_candidate_separately():
     assert compact[0]["value"] == NumberValue("1200000", None)
     assert decimal[0]["text"] == "1.2"
     assert decimal[0]["value"] == NumberValue("1.2", None)
+
+
+@pytest.mark.parametrize(
+    "surface,decimal",
+    [
+        ("1.2345E4", "12345"),
+        ("1E-3", "0.001"),
+        ("6.022E23", "602200000000000000000000"),
+        ("-1.2345E4", "-12345"),
+    ],
+)
+def test_flexible_scientific_gains_recall(surface, decimal):
+    detection = FlexibleScientificDetector("en_US").detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue(decimal, None)
+
+
+def test_flexible_scientific_round_trips_and_holds_the_mantissa_separately():
+    surface = "1.2345E4"
+    scientific = FlexibleScientificDetector("en_US").detect(surface)[0]
+    decimal = FlexibleNumberDetector("en_US").detect(surface)[0]
+
+    assert scientific["value"] == NumberValue("12345", None)
+    assert decimal["text"] == "1.2345"
+    assert decimal["value"] == NumberValue("1.2345", None)
+    assert icu.NumberFormat.createScientificInstance(icu.Locale("en_US")).format(12345.0) == surface
+
+
+def test_flexible_scientific_preserves_a_long_mantissa_exactly():
+    detection = FlexibleScientificDetector("en_US").detect("1.2345678901234567890123456789E1")[0]
+
+    assert detection["value"] == NumberValue("12.345678901234567890123456789", None)
+
+
+def test_flexible_scientific_accepts_a_large_reasonable_exponent():
+    detection = FlexibleScientificDetector("en_US").detect("1E100")[0]
+
+    assert detection["value"] == NumberValue("1" + "0" * 100, None)
+
+
+@pytest.mark.parametrize("surface", ["1E1000000", "1E100000000000"])
+def test_flexible_scientific_silently_rejects_an_oversized_expansion(surface):
+    assert FlexibleScientificDetector("en_US").detect(surface) == []
+
+
+@pytest.mark.parametrize("width", [4000, 4301])
+def test_flexible_scientific_silently_rejects_an_unrepresentable_exponent(width):
+    assert FlexibleScientificDetector("en_US").detect("1E" + "9" * width) == []
+
+
+def test_flexible_scientific_reflects_a_non_english_exponent_symbol():
+    locale = "sv_SE"
+    surface = icu.NumberFormat.createScientificInstance(icu.Locale(locale)).format(12345.0)
+
+    detection = FlexibleScientificDetector(locale).detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue("12345", None)
+
+
+@pytest.mark.parametrize("surface", ["x1E4y", "0xE", "1E", "1E4.5", "1E4,000"])
+def test_flexible_scientific_requires_complete_token_boundaries(surface):
+    assert FlexibleScientificDetector("en_US").detect(surface) == []
+
+
+def test_flexible_scientific_is_deterministic():
+    first = FlexibleScientificDetector("en_US")
+    second = FlexibleScientificDetector("en_US")
+
+    assert first.detect("1.2345E4 then 1E-3") == second.detect("1.2345E4 then 1E-3")
 
 
 def test_flexible_compact_requires_a_left_token_boundary():

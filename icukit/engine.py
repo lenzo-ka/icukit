@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import icu
 
 from .detectors import DateDetector, Detector, DetectorSet
-from .recognize import FlexibleCompactDetector
+from .recognize import FlexibleCompactDetector, FlexibleScientificDetector
 
 __all__ = [
     "COMPACT_NUMBER_FAMILY",
@@ -22,6 +22,7 @@ __all__ = [
     "DEFAULT_FAMILIES",
     "Family",
     "GenerationReport",
+    "SCIENTIFIC_NUMBER_FAMILY",
     "SkippedSpec",
     "generated_detectors",
     "generated_detectors_report",
@@ -126,9 +127,44 @@ COMPACT_NUMBER_FAMILY = Family(
     _compact_skip_reason,
 )
 
-# note: Number-style, RBNF, scientific, measure, relative, and interval
+_SCIENTIFIC_STYLES = ("scientific",)
+
+
+def _scientific_styles(locale: str) -> Iterable[Spec]:
+    del locale
+    return _SCIENTIFIC_STYLES
+
+
+def _scientific_invert(spec: Spec, locale: str) -> Detector | None:
+    try:
+        detector = FlexibleScientificDetector(locale)
+    except ValueError:
+        return None
+    return detector
+
+
+def _scientific_skip_reason(spec: Spec, locale: str) -> str:
+    try:
+        FlexibleScientificDetector(locale)
+    except ValueError as error:
+        return str(error)
+    return "scientific style was not invertible"
+
+
+SCIENTIFIC_NUMBER_FAMILY = Family(
+    "scientific-number",
+    _scientific_styles,
+    _scientific_invert,
+    _scientific_skip_reason,
+)
+
+# note: Number-style, RBNF, measure, relative, and interval
 # families belong here once their ICU surfaces have introspective inverters.
-DEFAULT_FAMILIES = (DATE_TIME_SKELETON_FAMILY, COMPACT_NUMBER_FAMILY)
+DEFAULT_FAMILIES = (
+    DATE_TIME_SKELETON_FAMILY,
+    COMPACT_NUMBER_FAMILY,
+    SCIENTIFIC_NUMBER_FAMILY,
+)
 
 
 def generated_detectors_report(
