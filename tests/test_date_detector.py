@@ -103,8 +103,47 @@ def test_generated_detectors_keep_real_candidates_for_scientific_surface():
     assert detections
 
 
-@pytest.mark.parametrize("surface", ["1.2345E4", "99999999", "0/0", "13/45", "aaa111bbb", "E1E1E1"])
+@pytest.mark.parametrize(
+    "surface",
+    [
+        "Jan",
+        "January",
+        "Feb",
+        "Wed",
+        "Wednesday",
+        "Report from Feb",
+        "Jan 1 – 5, 2020",
+        "aaa111",
+        "E1E1",
+        "1.2345E4",
+        "99999999",
+        "0/0",
+        "13/45",
+        "aaa111bbb",
+        "E1E1E1",
+    ],
+)
 def test_generated_detectors_never_raise_for_adversarial_surfaces(surface):
+    assert isinstance(generated_detectors("en_US").detect(surface), list)
+
+
+@pytest.mark.parametrize(("surface", "month"), [("Jan", 1), ("Feb", 2), ("Mar", 3)])
+def test_standalone_short_month_recovers_month_value(surface, month):
+    detections = DateDetector("en_US", "MMM").detect(surface)
+
+    assert len(detections) == 1
+    assert dict(detections[0]["value"].fields)["M"] == month
+
+
+def test_standalone_wide_month_recovers_month_value():
+    detections = DateDetector("en_US", "MMMM").detect("January")
+
+    assert len(detections) == 1
+    assert dict(detections[0]["value"].fields)["M"] == 1
+
+
+@pytest.mark.parametrize("surface", ["Jan 1 – 5, 2020", "Report from Feb"])
+def test_generated_detectors_handle_standalone_month_text(surface):
     assert isinstance(generated_detectors("en_US").detect(surface), list)
 
 
@@ -124,10 +163,8 @@ def test_date_detector_refuses_uninvertible_day_period_skeleton():
         DateDetector("en_US", "hm")
 
 
-def test_standalone_weekday_pattern_detects_without_empty_capture():
-    # ru_RU "yMdE" best pattern uses a standalone weekday ('ccc') that ICU's FieldPosition
-    # cannot locate on this build; the detector omits that capture instead of emitting a
-    # zero-length one, and still detects the date (fugu #3).
+def test_standalone_weekday_pattern_is_located_and_captured():
+    """Reflective field-id discovery locates the standalone weekday span."""
     detector = DateDetector("ru_RU", "yMdE")
     surface = detector._df.format(_instant())
 
@@ -136,5 +173,5 @@ def test_standalone_weekday_pattern_detects_without_empty_capture():
     assert len(detections) == 1
     captures = detections[0]["captures"]
     assert all(capture.end > capture.start for capture in captures)
-    assert {capture.name for capture in captures} == {"y", "M", "d"}
+    assert {capture.name for capture in captures} == {"y", "M", "d", "weekday"}
     assert tuple(name for name, _ in detections[0]["value"].fields) == ("y", "M", "d")

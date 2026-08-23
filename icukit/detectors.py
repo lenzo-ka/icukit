@@ -29,6 +29,7 @@ Everything here is pure icukit over code-point offsets -- no tiergraph.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
@@ -363,6 +364,28 @@ def _date_form(letter: str, width: int) -> str:
     return "numeric"
 
 
+@functools.cache
+def _pattern_field_id(letter: str) -> int:
+    """ICU FieldPosition field id carrying the span for CLDR pattern `letter`.
+
+    ICU gives the format vs standalone variants of month ('M' vs 'L') and weekday
+    ('E'/'e' vs 'c') distinct field ids, and this PyICU build exposes named constants
+    only for the format variants. Rather than hard-code the standalone enum values,
+    discover the id reflectively: format a probe instant with a pattern built from
+    `letter` alone and return the one field id whose reported span is non-empty.
+    """
+    probe = icu.SimpleDateFormat(letter * 3, icu.Locale("en"))
+    calendar = icu.GregorianCalendar(icu.Locale("en"))
+    calendar.set(2020, 0, 15)  # 15 Jan 2020 (a Wednesday): every month/weekday span non-empty
+    instant = calendar.getTime()
+    for field_id in range(64):  # generous upper bound on ICU's UDateFormatField enum
+        position = icu.FieldPosition(field_id)
+        probe.format(instant, position)
+        if position.getBeginIndex() != position.getEndIndex():
+            return field_id
+    return -1
+
+
 def _date_fields(pattern: str) -> tuple[_DateField, ...]:
     # This is CLDR pattern grammar, not locale data. Calendar values and displayed names
     # are obtained from the formatter/calendar at runtime.
@@ -385,14 +408,14 @@ def _date_fields(pattern: str) -> tuple[_DateField, ...]:
     for letter, width in _pattern_runs(pattern):
         if letter not in mapping:
             continue
-        name, calendar_field, format_field, value_field = mapping[letter]
+        name, calendar_field, _format_field, value_field = mapping[letter]
         found.append(
             _DateField(
                 letter,
                 width,
                 name,
                 calendar_field,
-                format_field,
+                _pattern_field_id(letter),
                 _date_form(letter, width),
                 value_field,
             )
@@ -472,7 +495,7 @@ class DateDetector:
         start_cp: int,
         cp_to_u16: list[int],
         u16_to_cp: dict[int, int],
-    ) -> tuple[object, tuple[Capture, ...], object]:
+    ) -> tuple[object, tuple[Capture, ...], object] | None:
         calendar = parsed
         values: list[tuple[str, int]] = []
         captures: list[Capture] = []
@@ -486,16 +509,11 @@ class DateDetector:
             position = icu.FieldPosition(field.format_field)
             self._df.format(calendar.getTime(), position)
             if position.getBeginIndex() == position.getEndIndex():
-                # ICU cannot locate this present field's span on this build -- e.g. a
-                # standalone weekday ('ccc'), for which no FieldPosition constant reports
-                # a span. A value field must be locatable (its value is already recorded);
-                # a display-only field (weekday) is derivable from the date via the
-                # pattern, so omit its capture rather than emit a zero-length one.
+                # A value field must be locatable; otherwise skip this candidate. A
+                # display-only field (weekday) is derivable from the date via the pattern,
+                # so omit its capture rather than emit a zero-length one.
                 if field.value_field:
-                    raise ValueError(
-                        f"{self.type}: value field {field.name!r} present in pattern "
-                        f"{self.pattern!r} but ICU could not locate its span"
-                    )
+                    return None
                 continue
             begin_u16 = start_u16 + position.getBeginIndex()
             end_u16 = start_u16 + position.getEndIndex()
@@ -784,7 +802,7 @@ class _Inverter:
     reformat: Callable[[object], str]
     build: Callable[
         [object, str, int, list[int], dict[int, int]],
-        tuple[object, tuple[Capture, ...], object],
+        tuple[object, tuple[Capture, ...], object] | None,
     ]
 
 
@@ -872,7 +890,10 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
             continue
         if reformatted != surface:
             continue  # permissive coercion -> not accepted (not fatal)
-        value, captures, spec = inv.build(parsed, surface, start_cp, cp_to_u16, u16_to_cp)
+        built = inv.build(parsed, surface, start_cp, cp_to_u16, u16_to_cp)
+        if built is None:
+            continue
+        value, captures, spec = built
         if _contains_float(value) or _contains_float(spec) or _contains_float(captures):
             raise ValueError(
                 f"{type_label}: build() produced a float in a record (§12.1: values are "
