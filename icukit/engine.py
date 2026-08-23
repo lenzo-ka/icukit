@@ -17,6 +17,7 @@ import icu
 from .detectors import DateDetector, Detector, DetectorSet
 from .recognize import (
     FlexibleCompactDetector,
+    FlexibleRelativeDateDetector,
     FlexibleScientificDetector,
     FlexibleSpelloutDetector,
     _spellout_formatter_and_ruleset,
@@ -29,6 +30,7 @@ __all__ = [
     "DEFAULT_FAMILIES",
     "Family",
     "GenerationReport",
+    "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
     "SkippedSpec",
@@ -225,12 +227,51 @@ SPELLOUT_NUMBER_FAMILY = Family(
     _spellout_skip_reason,
 )
 
-# note: measure, relative, and interval families belong here once their ICU
+
+# Relative-date specs expose the reachable unit inventory; DetectorSet intentionally
+# deduplicates the identical detector generated for each unit.
+def _relative_date_units(locale: str) -> Iterable[Spec]:
+    try:
+        detector = FlexibleRelativeDateDetector(locale)
+    except (icu.ICUError, ValueError):
+        return ()
+    return detector.reachable_units
+
+
+def _relative_date_invert(spec: Spec, locale: str) -> Detector | None:
+    try:
+        detector = FlexibleRelativeDateDetector(locale)
+    except (icu.ICUError, ValueError):
+        return None
+    return detector if detector.has_vocabulary and str(spec) in detector.reachable_units else None
+
+
+def _relative_date_skip_reason(spec: Spec, locale: str) -> str:
+    try:
+        detector = FlexibleRelativeDateDetector(locale)
+    except (icu.ICUError, ValueError) as error:
+        return str(error)
+    if not detector.has_vocabulary:
+        return "ICU exposed no invertible relative-date phrases"
+    if str(spec) not in detector.reachable_units:
+        return f"ICU exposed no invertible relative-date phrase for unit {spec!r}"
+    return "relative-date unit was not invertible"
+
+
+RELATIVE_DATE_FAMILY = Family(
+    "relative-date",
+    _relative_date_units,
+    _relative_date_invert,
+    _relative_date_skip_reason,
+)
+
+# note: Measure and interval families belong here once their ICU
 # surfaces have introspective inverters. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
     ABBREVIATION_FAMILY,
     DATE_TIME_SKELETON_FAMILY,
     COMPACT_NUMBER_FAMILY,
+    RELATIVE_DATE_FAMILY,
     SCIENTIFIC_NUMBER_FAMILY,
     SPELLOUT_NUMBER_FAMILY,
 )

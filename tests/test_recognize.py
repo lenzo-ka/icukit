@@ -13,6 +13,8 @@ from icukit.detectors import (
     NumberDetector,
     NumberFormatSpec,
     NumberValue,
+    RelativeDateSpec,
+    RelativeDateValue,
     detect,
 )
 from icukit.locale import COMPACT_LONG, COMPACT_SHORT, format_compact
@@ -27,12 +29,85 @@ from icukit.recognize import (
     FlexibleNumberDetector,
     FlexibleOrdinalDetector,
     FlexiblePercentDetector,
+    FlexibleRelativeDateDetector,
     FlexibleScientificDetector,
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
 )
 from icukit.resolve import resolve
+
+
+@pytest.mark.parametrize(
+    "surface, expected",
+    [
+        ("3 days ago", RelativeDateValue(-3, "day", "past")),
+        ("in 2 hours", RelativeDateValue(2, "hour", "future")),
+        ("next week", RelativeDateValue(1, "week", "future")),
+        ("last month", RelativeDateValue(-1, "month", "past")),
+        ("yesterday", RelativeDateValue(-1, "day", "past")),
+        ("today", RelativeDateValue(0, "day", "present")),
+        ("tomorrow", RelativeDateValue(1, "day", "future")),
+        ("now", RelativeDateValue(0, "now", "present")),
+    ],
+)
+def test_flexible_relative_dates_gain_recall(surface, expected):
+    detector = FlexibleRelativeDateDetector("en_US")
+    detection = detector.detect(surface)[0]
+
+    assert isinstance(detector, Detector)
+    assert detection["text"] == surface
+    assert detection["value"] == expected
+    assert detection["spec"] == RelativeDateSpec("en_US")
+
+
+@pytest.mark.parametrize(
+    "locale, surface, expected",
+    [
+        ("es", "hace 3 días", RelativeDateValue(-3, "day", "past")),
+        ("es", "ayer", RelativeDateValue(-1, "day", "past")),
+        ("de", "in 2 Tagen", RelativeDateValue(2, "day", "future")),
+    ],
+)
+def test_flexible_relative_dates_reflect_non_english_locales(locale, surface, expected):
+    detection = FlexibleRelativeDateDetector(locale).detect(surface)[0]
+
+    assert detection["value"] == expected
+
+
+def test_flexible_relative_date_round_trips_canonical_numeric_surface():
+    surface = "3 days ago"
+    detection = FlexibleRelativeDateDetector("en_US").detect(surface)[0]
+    formatter = icu.RelativeDateTimeFormatter(icu.Locale("en_US"))
+    unit = getattr(icu.URelativeDateTimeUnit, detection["value"].unit.upper())
+
+    assert formatter.formatNumeric(detection["value"].offset, unit) == surface
+
+
+def test_flexible_relative_date_observes_boundaries_and_skips_bare_units():
+    detector = FlexibleRelativeDateDetector("en_US")
+    text = "It happened 3 days ago, roughly."
+
+    detection = detector.detect(text)[0]
+    assert detection["text"] == "3 days ago"
+    assert (detection["start"], detection["end"]) == (12, 22)
+    assert detector.detect("3 daysago") == []
+    assert detector.detect("pretodayish") == []
+    assert detector.detect("3 days") == []
+    assert detector.detect("week") == []
+    # A prefixed numeric form ("in ...") must not fire when its prefix is inside a word.
+    assert detector.detect("xxin 2 hours") == []
+    assert detector.detect("in 2 hours").pop()["text"] == "in 2 hours"
+
+
+def test_flexible_relative_date_is_deterministic_and_holds_number_overlap():
+    surface = "3 days ago"
+    detector = FlexibleRelativeDateDetector("en_US")
+
+    assert detector.detect(surface) == detector.detect(surface)
+    relative = detector.detect(surface)[0]
+    number = FlexibleNumberDetector("en_US").detect(surface)[0]
+    assert relative["start"] <= number["start"] < number["end"] <= relative["end"]
 
 
 @pytest.mark.parametrize("surface", ["2026", "1234"])

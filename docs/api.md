@@ -1708,6 +1708,22 @@ normalized to ASCII), never from a binary ``float``. For a percent it is the rat
 
 Initialize self.  See help(type(self)) for accurate signature.
 
+### class `RelativeDateSpec`
+
+The locale used to generate a relative-date phrase.
+
+#### `RelativeDateSpec(locale: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `RelativeDateValue`
+
+A signed relative offset in one duration unit.
+
+#### `RelativeDateValue(offset: 'int', unit: 'str', direction: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `SpelloutFormatSpec`
 
 The locale and ICU rule set used for a spelled-out cardinal candidate.
@@ -2226,11 +2242,11 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -3890,6 +3906,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible percent candidates in source order.
+
+### class `FlexibleRelativeDateDetector`
+
+Recognize relative dates by inverting locale-relative ICU formatting.
+
+#### `FlexibleRelativeDateDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping relative-date candidates in source order.
 
 ### class `FlexibleScientificDetector`
 
