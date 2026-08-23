@@ -9,6 +9,7 @@ or bare reconstruction, both of which pass on buggy offsets.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,8 +20,6 @@ pytest.importorskip("tiergraph", reason="H1 example requires tiergraph (Python >
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO_ROOT / "examples" / "tiergraph_text.py"
-GOLDEN = Path(__file__).parent / "data" / "tiergraph_text_golden.json"
-
 sys.path.insert(0, str(REPO_ROOT))
 
 from tiergraph import QualifiedName, dumps, loads  # noqa: E402
@@ -216,24 +215,28 @@ def test_suggested_range_falsifier():
 
 
 def test_wire_contract():
-    j = dumps(build_graph("Meet 1/3/2026pm", "en_US", "M/d/yyyy"))
+    graph = build_graph("Meet 1/3/2026pm", "en_US", "M/d/yyyy")
+    j = dumps(graph)
     assert j.endswith("\n")
     data = json.loads(j)
-    assert data["format_version"] == "5"
     # canonical: sorted keys + 2-space indent (re-dump matches)
     assert json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n" == j
     # tier order is atom, sentence, word-break, formatted-date
-    order = [t["declaration"]["name"]["local_name"] for t in data["graph"]["tiers"]]
+    order = [tier.declaration.name.local_name for tier in graph.tiers]
     assert order == ["atom", "sentence", "word-break", "formatted-date"]
-    # deterministic re-serialization
+    # The integration installs tiergraph main unpinned. Assert its current canonical
+    # spelling is deterministic without pinning a particular wire-format version.
     assert dumps(loads(j)) == j
+    assert loads(j) == graph
 
 
 # ------------------------------------------------------------------ CLI behavior
 
 
 def _run(args, stdin: str = ""):
-    env = {"PYTHONPATH": str(REPO_ROOT), "PATH": __import__("os").environ.get("PATH", "")}
+    pythonpath = os.environ.get("PYTHONPATH")
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, (str(REPO_ROOT), pythonpath)))
     return subprocess.run(
         [sys.executable, str(EXAMPLE), *args],
         input=stdin,
@@ -247,13 +250,9 @@ def _run(args, stdin: str = ""):
 def test_cli_no_date_is_empty_success():
     r = _run(["no date here"])
     assert r.returncode == 0
-    data = json.loads(r.stdout)
-    date_tier = next(
-        t
-        for t in data["graph"]["tiers"]
-        if t["declaration"]["name"]["local_name"] == "formatted-date"
-    )
-    assert date_tier["items"] == []
+    graph = loads(r.stdout)
+    date_tier = next(tier for tier in graph.tiers if tier.declaration.name == qn("formatted-date"))
+    assert date_tier.items == ()
 
 
 def test_cli_midgrapheme_refuses_without_stdout():
@@ -269,13 +268,24 @@ def test_cli_invalid_locale_is_config_error():
     assert r.stdout == ""
 
 
-# ------------------------------------------------------------------- golden JSON
+# ---------------------------------------------------------- CLI graph structure
 
 
-def test_golden_stdout_byte_for_byte():
+def test_cli_stdout_has_expected_graph_structure():
     r = _run(["Meet 1/3/2026pm", "--locale", "en_US", "--pattern", "M/d/yyyy"])
     assert r.returncode == 0
-    assert r.stdout == GOLDEN.read_text(encoding="utf-8")
-    # a semantic guard so approving a changed golden alone cannot mask a regression
-    data = json.loads(r.stdout)
-    assert data["format_version"] == "5"
+    graph = loads(r.stdout)
+    expected = build_graph("Meet 1/3/2026pm", "en_US", "M/d/yyyy")
+
+    assert graph == expected
+    assert loads(dumps(graph)) == graph
+    assert _atom_surfaces(graph) == list("Meet 1/3/2026pm")
+    assert [(tier.declaration.name.local_name, len(tier.items)) for tier in graph.tiers] == [
+        ("atom", 15),
+        ("sentence", 1),
+        ("word-break", 7),
+        ("formatted-date", 1),
+    ]
+    assert _members(graph, "atom-in-sentence", "sentence") == {0: frozenset(range(15))}
+    assert _members(graph, "atom-in-date", "formatted-date") == {0: frozenset(range(5, 13))}
+    assert _members(graph, "atom-in-word-break", "word-break")[6] == frozenset(range(9, 15))
