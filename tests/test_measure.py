@@ -3,14 +3,18 @@
 import subprocess
 import sys
 
+import pytest
+
 from icukit import (
     WIDTH_NARROW,
     WIDTH_SHORT,
     WIDTH_WIDE,
+    MeasureError,
     MeasureFormatter,
     can_convert,
     convert_units,
     format_measure,
+    format_preferred,
     get_unit_abbreviation,
     get_unit_info,
     get_units_by_type,
@@ -99,6 +103,12 @@ class TestMeasureFormatter:
         result = fmt.convert(100, "celsius", "fahrenheit")
         assert result == 212.0
 
+    def test_convert_meter_and_kilometer(self):
+        """Test the SI meter/kilometer conversions."""
+        fmt = MeasureFormatter("en_US")
+        assert fmt.convert(1500, "meter", "kilometer") == 1.5
+        assert fmt.convert(1.5, "kilometer", "meter") == 1500.0
+
     def test_convert_and_format(self):
         """Test convert_and_format."""
         fmt = MeasureFormatter("en_US")
@@ -125,6 +135,10 @@ class TestConvenienceFunctions:
         """Test format_measure function."""
         result = format_measure(5.5, "kilometer")
         assert "5.5" in result or "5,5" in result
+
+    def test_format_preferred(self):
+        """Test reflective locale- and usage-preferred formatting."""
+        assert format_preferred(100, "kilometer", "en_US", "road") == "62 mi"
 
     def test_list_unit_types(self):
         """Test list_unit_types function."""
@@ -207,11 +221,28 @@ class TestMeasureFormatterAdvanced:
         assert "10" in result
 
     def test_format_for_usage(self):
-        """Test format_for_usage."""
+        """Test CLDR-driven usage formatting."""
         fmt = MeasureFormatter("en_US")
-        # This may or may not convert depending on ICU version
         result = fmt.format_for_usage(100, "kilometer", usage="road")
-        assert result  # Just verify we get output
+        assert result == "62 miles"
+
+    def test_format_for_usage_rejects_empty_usage(self):
+        """Reject empty or non-string usage values."""
+        fmt = MeasureFormatter("en_US")
+        with pytest.raises(MeasureError, match="nonempty string"):
+            fmt.format_for_usage(1, "kilometer", usage="")
+        with pytest.raises(MeasureError, match="nonempty string"):
+            fmt.format_for_usage(1, "kilometer", usage=None)
+
+    def test_format_for_usage_unknown_usage_falls_back(self):
+        """Unknown nonempty usages use ICU's default-preference fallback."""
+        result = format_preferred(1, "kilometer", "en_US", "not-a-real-usage")
+        assert isinstance(result, str)
+
+    def test_format_preferred_rejects_malformed_locale(self):
+        """Reject a syntactically malformed locale instead of using root fallback."""
+        with pytest.raises(MeasureError, match="Malformed locale"):
+            format_preferred(1, "kilometer", "!!!", "road")
 
 
 class TestMeasureCLI:
