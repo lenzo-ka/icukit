@@ -1091,7 +1091,19 @@ def test_flexible_fraction_composes_with_detect_and_resolve():
 
 @pytest.mark.parametrize(
     "surface, decimal",
-    [("1st", "1"), ("2nd", "2"), ("3rd", "3"), ("4th", "4"), ("21st", "21"), ("101st", "101")],
+    [
+        ("1st", "1"),
+        ("2nd", "2"),
+        ("3rd", "3"),
+        ("4th", "4"),
+        ("11th", "11"),
+        ("12th", "12"),
+        ("13th", "13"),
+        ("21st", "21"),
+        ("22nd", "22"),
+        ("23rd", "23"),
+        ("101st", "101"),
+    ],
 )
 def test_flexible_ordinal_gains_recall(surface, decimal):
     detector = FlexibleOrdinalDetector("en_US")
@@ -1107,6 +1119,41 @@ def test_flexible_ordinal_gains_recall(surface, decimal):
 def test_flexible_ordinal_rejects_wrong_affix_reflectively():
     assert FlexibleOrdinalDetector("en_US").detect("21th") == []
     assert FlexibleOrdinalDetector("en_US").detect("2th") == []
+
+
+@pytest.mark.parametrize(
+    "surface",
+    [
+        "2147483651st",
+        "2147483651th",
+        "5540584433st",
+        "5540584433th",
+        "10000000001st",
+        ("1" * 400) + "th",
+    ],
+)
+def test_flexible_ordinal_rejects_values_beyond_rbnf_reliable_range(surface):
+    assert FlexibleOrdinalDetector("en_US").detect(surface) == []
+
+
+def test_flexible_ordinal_accepts_signed_32_bit_boundary():
+    detection = FlexibleOrdinalDetector("en_US").detect("2147483647th")[0]
+
+    assert detection["text"] == "2147483647th"
+    assert detection["value"] == NumberValue("2147483647", None)
+
+
+@pytest.mark.parametrize("error", [icu.ICUError(), SystemError()])
+def test_flexible_ordinal_treats_rbnf_format_errors_as_non_matches(error):
+    class FailingRbnf:
+        def format(self, value):
+            raise error
+
+    detector = FlexibleOrdinalDetector("en_US")
+    detector._rbnf = FailingRbnf()
+    detector._rule_set_names = ()
+
+    assert detector.detect("21st") == []
 
 
 @pytest.mark.parametrize("surface", ["1er", "1re"])

@@ -62,6 +62,8 @@ _SPACES = {
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 # Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
+# Defensive cross-locale bound: ICU RBNF ordinal suffixes are reliable through signed 32-bit.
+_MAX_RBNF_ORDINAL_VALUE = 2_147_483_647
 
 
 def _is_word_character(character: str) -> bool:
@@ -2333,6 +2335,14 @@ class FlexibleOrdinalDetector:
     are the non-digit parts around each rendering. No affix is hard-coded, and no fragile
     ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
     ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+
+    Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
+    treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
+    boundary it can return an incorrect suffix, and for very large integers it can raise
+    an ICU or ``SystemError`` exception. Such inputs are not deposited. Future
+    large-ordinal correctness awaits PyICU exposing ordinal plural rules (absent in 78.3),
+    or embedding CLDR ordinal-plural data; the affix can then be derived reflectively from
+    the ordinal plural category.
     """
 
     group = "ordinal"
@@ -2360,13 +2370,18 @@ class FlexibleOrdinalDetector:
         return cursor, value
 
     def _affixes(self, value: int) -> set[tuple[str, str]]:
-        rendered_values = (
-            (self._rbnf.format(value, name) for name in self._rule_set_names)
-            if self._rule_set_names
-            else (self._rbnf.format(value),)
-        )
+        if value > _MAX_RBNF_ORDINAL_VALUE:
+            return set()
+
         affixes: set[tuple[str, str]] = set()
-        for rendered in rendered_values:
+        rule_set_names: tuple[str | None, ...] = self._rule_set_names or (None,)
+        for name in rule_set_names:
+            try:
+                rendered = (
+                    self._rbnf.format(value, name) if name is not None else self._rbnf.format(value)
+                )
+            except (icu.ICUError, SystemError):
+                return set()
             digit_indexes = [
                 index
                 for index, character in enumerate(rendered)
@@ -2379,6 +2394,8 @@ class FlexibleOrdinalDetector:
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         for digit_start in range(start, len(text)):
             if text[digit_start] not in self._digits:
+                continue
+            if digit_start > 0 and text[digit_start - 1] in self._digits:
                 continue
             digit_end, value = self._digit_run(text, digit_start)
             if value < 1:
