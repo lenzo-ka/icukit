@@ -55,6 +55,7 @@ __all__ = [
     "NumberDetector",
     "NumberValue",
     "ValueDetection",
+    "abbreviation_detectors",
     "all_detectors",
     "date_detectors",
     "detect",
@@ -955,12 +956,20 @@ def number_detectors(
     return DetectorSet(()).with_(*members)
 
 
+def abbreviation_detectors(locale: str) -> DetectorSet:
+    """The lexicon-backed abbreviation detector, or an empty gang when unavailable."""
+    from .abbreviation_recognize import abbreviation_detectors as build
+
+    return build(locale)
+
+
 def all_detectors(
     locale: str,
     skeletons: Iterable[str],
     *,
     currencies: Iterable[str] = (),
     flexible: bool = False,
+    abbreviations: bool = False,
 ) -> DetectorSet:
     """Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
 
@@ -968,4 +977,7 @@ def all_detectors(
     ``locale`` into one gang.
     """
     numbers = number_detectors(locale, currencies=currencies, flexible=flexible)
-    return date_detectors(locale, skeletons, flexible=flexible).with_(*numbers.detectors)
+    gang = date_detectors(locale, skeletons, flexible=flexible).with_(*numbers.detectors)
+    if abbreviations:
+        gang = gang.with_(*abbreviation_detectors(locale).detectors)
+    return gang

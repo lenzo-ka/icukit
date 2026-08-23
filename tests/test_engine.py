@@ -110,3 +110,8 @@ def test_generation_is_deterministic_and_deduplicated():
 
     assert first == second
     assert len(first) == len(set(first))
+
+
+def test_generated_detectors_register_abbreviations_only_with_a_lexicon():
+    assert "abbreviation" in generated_detectors("en").names()
+    assert "abbreviation" not in generated_detectors("fr").names()

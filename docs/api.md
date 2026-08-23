@@ -2,6 +2,122 @@
 
 Version: 0.3.0
 
+## icukit.abbreviation_breaker
+
+Sentence-break post-filter driven by an abbreviation lexicon.
+
+### class `AbbreviationBoundary`
+
+An ambiguous boundary retaining both possible readings.
+
+### class `AbbreviationProvenance`
+
+The lexicon decision responsible for merging a boundary.
+
+### class `AbbreviationSegmentation`
+
+Primary segmentation plus deposited ambiguous boundaries.
+
+#### `AbbreviationSegmentation(spans: 'list[BreakSpan]', ambiguous_boundaries: 'list[AbbreviationBoundary]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `AbbreviationSentenceBreaker`
+
+Post-filter ICU sentence spans using one compiled abbreviation lexicon.
+
+#### `AbbreviationSentenceBreaker(locale: 'str' = 'en_US', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `segmentations(text: 'str') -> 'AbbreviationSegmentation'`
+
+Return maximally merged spans and every ambiguous boundary.
+
+#### `spans(text: 'str') -> 'list[BreakSpan]'`
+
+Return the primary maximally merged sentence spans.
+
+## icukit.abbreviation_compile
+
+Compile abbreviation lexicons into a shared consumer-facing view.
+
+### class `CompiledLexicon`
+
+One immutable, anti-drift view shared by abbreviation consumers.
+
+``uncased-latin`` is deliberately conservative: a single dotted lowercase
+segment must be backed by a literal entry (case-insensitively), while a
+multi-part dotted lowercase surface is productive.
+
+#### `CompiledLexicon(lexicon: 'AbbreviationLexicon', entries: 'dict[str, Entry]', suppress: 'frozenset[str]', ambiguous: 'frozenset[str]', classified_surfaces: 'frozenset[str]', patterns: 'dict[str, Pattern]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `classify(surface: 'str') -> 'tuple[str | None, str | None]'`
+
+Return ``(behavior, provenance)``, preferring a literal entry.
+
+#### `pattern_kind(surface: 'str') -> 'str | None'`
+
+Return the matching productive kind, unless a literal wins.
+
+### class `PatternMatch`
+
+The behavior and typed pattern kind that classified a surface.
+
+#### `PatternMatch(behavior: 'str', kind: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `compile_lexicon(locale: 'str' = 'en') -> 'CompiledLexicon | None'`
+
+Load and compile the language lexicon, or return ``None`` when absent.
+
+Locale variants use their ICU language subtag, making ``en_US`` consume
+the packaged ``en`` lexicon while unsupported languages degrade cleanly.
+
+## icukit.abbreviation_recognize
+
+Lexicon-driven abbreviation recognition.
+
+### class `AbbreviationDetector`
+
+Deposit every literal expansion and productive-pattern reading.
+
+Expansion is interpretation rather than invertible formatting, so the
+usual ``reformat(spec, value) == surface`` invariant is intentionally
+relaxed. A zero-expansion entry deposits one ``abbreviation:none`` bare
+reading so the surface remains recognized.
+
+#### `AbbreviationDetector(locale: 'str' = 'en', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Scan token starts and return all co-located readings.
+
+### class `AbbreviationSpec`
+
+The requested locale and source lexicon language.
+
+#### `AbbreviationSpec(locale: 'str', source: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `AbbreviationValue`
+
+One abbreviation reading; ``expansion`` is absent for bare readings.
+
+#### `AbbreviationValue(surface: 'str', expansion: 'str | None', sense: 'str', cue: 'str | None', also: 'str | None', break_behavior: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `abbreviation_detectors(locale: 'str' = 'en') -> 'DetectorSet'`
+
+Return the locale's abbreviation detector gang, empty when unsupported.
+
 ## icukit.abbreviations
 
 Per-locale abbreviation lexicons.
@@ -1600,7 +1716,11 @@ Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``val
 ``captures``, and ``spec`` (see the module docstring). The invariant
 ``reformat(spec, value) == surface`` holds for every accepted detection.
 
-### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = (), flexible: 'bool' = False) -> 'DetectorSet'`
+### `abbreviation_detectors(locale: 'str') -> 'DetectorSet'`
+
+The lexicon-backed abbreviation detector, or an empty gang when unavailable.
+
+### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = (), flexible: 'bool' = False, abbreviations: 'bool' = False) -> 'DetectorSet'`
 
 Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
 
@@ -2066,12 +2186,13 @@ Example:
 
 ## icukit.engine
 
-Introspect ICU formatter surfaces and derive gangs of inverting detectors.
+Introspect ICU surfaces and inventories to derive gangs of detectors.
 
-Each :class:`Family` enumerates formatter specifications from ICU and attempts to
-construct one detector per specification.  Unsupported specifications are observable in
-the generation report, rather than making generation fail or silently narrowing the
-enumerated surface.
+Each :class:`Family` enumerates specifications from ICU or a packaged typed inventory and
+attempts to construct one detector per specification. Unsupported specifications are
+observable in the generation report, rather than making generation fail or silently
+narrowing the enumerated surface. The abbreviation family is inventory-driven because
+expansion is intentionally not an invertible formatter operation.
 
 ### class `Family`
 
@@ -2097,11 +2218,11 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
