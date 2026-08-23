@@ -15,7 +15,12 @@ from dataclasses import dataclass
 import icu
 
 from .detectors import DateDetector, Detector, DetectorSet
-from .recognize import FlexibleCompactDetector, FlexibleScientificDetector
+from .recognize import (
+    FlexibleCompactDetector,
+    FlexibleScientificDetector,
+    FlexibleSpelloutDetector,
+    _spellout_formatter_and_ruleset,
+)
 
 __all__ = [
     "ABBREVIATION_FAMILY",
@@ -25,6 +30,7 @@ __all__ = [
     "Family",
     "GenerationReport",
     "SCIENTIFIC_NUMBER_FAMILY",
+    "SPELLOUT_NUMBER_FAMILY",
     "SkippedSpec",
     "generated_detectors",
     "generated_detectors_report",
@@ -185,13 +191,48 @@ SCIENTIFIC_NUMBER_FAMILY = Family(
     _scientific_skip_reason,
 )
 
-# note: Number-style, RBNF, measure, relative, and interval families belong here once
-# their ICU surfaces have introspective inverters. Abbreviations use their typed lexicon.
+
+def _spellout_rulesets(locale: str) -> Iterable[Spec]:
+    try:
+        _, ruleset = _spellout_formatter_and_ruleset(locale)
+    except (icu.ICUError, ValueError):
+        return ()
+    return (ruleset,)
+
+
+def _spellout_invert(spec: Spec, locale: str) -> Detector | None:
+    try:
+        detector = FlexibleSpelloutDetector(locale)
+    except (icu.ICUError, ValueError):
+        return None
+    return detector if detector._ruleset == str(spec) else None
+
+
+def _spellout_skip_reason(spec: Spec, locale: str) -> str:
+    try:
+        detector = FlexibleSpelloutDetector(locale)
+    except (icu.ICUError, ValueError) as error:
+        return str(error)
+    if detector._ruleset != str(spec):
+        return "ICU selected a different cardinal spellout rule set"
+    return "spellout rule set was not invertible"
+
+
+SPELLOUT_NUMBER_FAMILY = Family(
+    "spellout-number",
+    _spellout_rulesets,
+    _spellout_invert,
+    _spellout_skip_reason,
+)
+
+# note: measure, relative, and interval families belong here once their ICU
+# surfaces have introspective inverters. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
     ABBREVIATION_FAMILY,
     DATE_TIME_SKELETON_FAMILY,
     COMPACT_NUMBER_FAMILY,
     SCIENTIFIC_NUMBER_FAMILY,
+    SPELLOUT_NUMBER_FAMILY,
 )
 
 

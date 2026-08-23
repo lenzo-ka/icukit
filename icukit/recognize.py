@@ -24,6 +24,7 @@ from .detectors import (
     MeasureValue,
     NumberFormatSpec,
     NumberValue,
+    SpelloutFormatSpec,
     ValueDetection,
 )
 
@@ -38,6 +39,7 @@ __all__ = [
     "FlexibleOrdinalDetector",
     "FlexiblePercentDetector",
     "FlexibleScientificDetector",
+    "FlexibleSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
 ]
@@ -46,6 +48,15 @@ _SPACES = {" ", "\N{NO-BREAK SPACE}", "\N{NARROW NO-BREAK SPACE}"}
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 # Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
+
+
+def _is_word_character(character: str) -> bool:
+    category = icu.Char.charType(character)
+    return icu.Char.isalnum(character) or category in {
+        icu.UCharCategory.NON_SPACING_MARK,
+        icu.UCharCategory.COMBINING_SPACING_MARK,
+        icu.UCharCategory.ENCLOSING_MARK,
+    }
 
 
 def _locale_digit_map(locale: str | icu.Locale) -> dict[str, int]:
@@ -1102,6 +1113,229 @@ class FlexibleScientificDetector:
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping scientific numbers in source order."""
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+def _spellout_formatter_and_ruleset(
+    locale: str,
+) -> tuple[icu.RuleBasedNumberFormat, str]:
+    formatter = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.SPELLOUT, icu.Locale(locale))
+    names = tuple(
+        formatter.getRuleSetName(index) for index in range(formatter.getNumberOfRuleSetNames())
+    )
+    ruleset = next(
+        (
+            name
+            for name in names
+            if "cardinal" in name.casefold()
+            and not any(excluded in name.casefold() for excluded in ("ordinal", "year", "verbose"))
+        ),
+        formatter.getDefaultRuleSetName(),
+    )
+    if ruleset not in names:
+        raise ValueError(f"ICU exposed no usable spellout rule set for {locale!r}")
+    return formatter, ruleset
+
+
+class FlexibleSpelloutDetector:
+    """Recognize canonical ICU spelled-out cardinals derived from locale RBNF data.
+
+    A lone token is suppressed only when it is one of the ambiguous unit words obtained
+    by formatting 0 through 9. Larger lone magnitudes and every multi-token canonical
+    surface remain eligible for deposit-and-hold alongside other detector candidates.
+    """
+
+    group = "number"
+    type = "number:spellout"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._rbnf, self._ruleset = _spellout_formatter_and_ruleset(locale)
+        self._spec = SpelloutFormatSpec(locale, self._ruleset)
+        values = (
+            *range(1001),
+            *(
+                multiplier * 10**power
+                for power in range(2, 13)
+                for multiplier in (*range(1, 12), 100)
+            ),
+            *(multiplier * 10**power + 1 for power in range(2, 13) for multiplier in range(1, 12)),
+            *(
+                multiplier * 10**power + 10 ** (power - 1) + 1
+                for power in range(2, 13)
+                for multiplier in (1, 2)
+            ),
+            21,
+            101,
+            1234,
+            2_000_000,
+            999,
+            999_999,
+        )
+        surfaces = tuple(self._rbnf.format(value, self._ruleset) for value in values)
+        self._connectors = frozenset(
+            character
+            for surface in surfaces
+            for character in surface
+            if not _is_word_character(character)
+        )
+        tokens: set[str] = set()
+        for surface in surfaces:
+            token: list[str] = []
+            for character in surface:
+                if _is_word_character(character):
+                    token.append(character)
+                elif token:
+                    tokens.add("".join(token).casefold())
+                    token = []
+            if token:
+                tokens.add("".join(token).casefold())
+        self._tokens = tuple(sorted(tokens, key=lambda token: (-len(token), token)))
+        tokens_by_first: dict[str, list[str]] = {}
+        for token in self._tokens:
+            tokens_by_first.setdefault(token[0], []).append(token)
+        self._tokens_by_first = {
+            first: tuple(first_tokens) for first, first_tokens in tokens_by_first.items()
+        }
+        self._ambiguous_units = frozenset(
+            self._rbnf.format(value, self._ruleset).casefold() for value in range(10)
+        )
+        # note: This lane is SPELLOUT cardinals only; RBNF NUMBERING_SYSTEM Roman
+        # numerals are intentionally out of scope.
+        # note: Reflective connector tokenization recognizes scriptio-continua/CJK and
+        # soft-hyphen-free German only in ICU's exact canonical form because ICU's own
+        # RBNF parser requires those forms. Sampling also cannot exhaust languages whose
+        # number words inflect by grammatical context and fuse conjunctions without a
+        # separator, notably Semitic construct-state/agreement systems such as Arabic and
+        # Hebrew. Their agreement-inflected numerals and fused conjunction forms are
+        # recognized only when a sample exposes them; other surfaces yield at most an
+        # honest partial because every deposit must still satisfy
+        # format(value).casefold() == surface.casefold(). This lane deliberately targets
+        # connector-separated, non-agreement locales (including major European,
+        # Cyrillic, and Indic locales); flexible CJK and Semitic-agreement coverage is out
+        # of scope. The recognition ceiling is likewise ICU's largest parseable scale
+        # word.
+
+    @staticmethod
+    def _continues_word(text: str, cursor: int) -> bool:
+        if cursor >= len(text):
+            return False
+        character = text[cursor]
+        return (
+            _is_word_character(character)
+            or icu.Char.charType(character) == icu.UCharCategory.CONNECTOR_PUNCTUATION
+        )
+
+    def _left_boundary(self, text: str, start: int) -> bool:
+        return start <= 0 or not self._continues_word(text, start - 1)
+
+    @staticmethod
+    def _casefolded_token_end(text: str, start: int, token: str) -> int | None:
+        folded = ""
+        cursor = start
+        while cursor < len(text) and len(folded) < len(token):
+            folded += text[cursor].casefold()
+            cursor += 1
+        return cursor if folded == token else None
+
+    def _token_end(self, text: str, start: int) -> int | None:
+        if start >= len(text):
+            return None
+        first = text[start].casefold()
+        if not first:
+            return None
+        for token in self._tokens_by_first.get(first[0], ()):
+            end = self._casefolded_token_end(text, start, token)
+            if end is not None:
+                return end
+        return None
+
+    def _parse_integer(self, surface: str) -> tuple[int, int] | None:
+        for candidate in (surface, surface.lower()):
+            position = icu.ParsePosition(0)
+            parsed = self._rbnf.parse(candidate, position)
+            if parsed is None or position.getIndex() <= 0:
+                continue
+            parsed_type = parsed.getType()
+            if parsed_type in (icu.Formattable.kLong, icu.Formattable.kInt64):
+                return position.getIndex(), parsed.getInt64()
+            if parsed_type == icu.Formattable.kDouble and float(parsed.getDouble()).is_integer():
+                return position.getIndex(), parsed.getInt64()
+        return None
+
+    def _integer_value(self, surface: str) -> int | None:
+        parsed = self._parse_integer(surface)
+        if parsed is None or parsed[0] != len(surface):
+            return None
+        return parsed[1]
+
+    def _match(self, text: str, start: int, token_end=None):
+        if not self._left_boundary(text, start):
+            return None
+        token_end = token_end or (lambda cursor: self._token_end(text, cursor))
+        cursor = start
+        token_ends: list[int] = []
+        expect_token = True
+        while cursor < len(text) and len(token_ends) < 256:
+            if expect_token:
+                end = token_end(cursor)
+                if end is None:
+                    break
+                cursor = end
+                token_ends.append(cursor)
+                expect_token = False
+                continue
+            connector_start = cursor
+            while cursor < len(text) and text[cursor] in self._connectors:
+                cursor += 1
+            if cursor == connector_start:
+                break
+            expect_token = True
+
+        if not token_ends:
+            return None
+        run_end = token_ends[-1]
+        parsed = self._parse_integer(text[start:run_end])
+        if parsed is None:
+            return None
+        consumed, parsed_value = parsed
+        absolute_end = start + consumed
+        candidates = [
+            (token_index, end)
+            for token_index, end in enumerate(token_ends, start=1)
+            if end <= absolute_end
+        ]
+        for token_index, end in reversed(candidates):
+            if self._continues_word(text, end):
+                continue
+            surface = text[start:end]
+            if token_index == 1 and surface.casefold() in self._ambiguous_units:
+                continue
+            if end == absolute_end:
+                value = parsed_value
+            else:
+                value = self._integer_value(surface)
+                if value is None:
+                    continue
+            canonical = self._rbnf.format(value, self._ruleset)
+            if canonical.casefold() != surface.casefold():
+                continue
+            capture = Capture("spellout", start, end, surface, str(value), "wide")
+            return end, (capture,), NumberValue(str(value), None)
+        return None
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping spelled-out cardinals in source order."""
+        token_ends: dict[int, int | None] = {}
+
+        def token_end(cursor: int) -> int | None:
+            if cursor not in token_ends:
+                token_ends[cursor] = self._token_end(text, cursor)
+            return token_ends[cursor]
+
+        def match(source: str, start: int):
+            return self._match(source, start, token_end)
+
+        return _detect_flexible(text, self.locale, self.type, self._spec, match)
 
 
 class FlexibleCurrencyNameDetector:

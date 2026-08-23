@@ -54,6 +54,7 @@ __all__ = [
     "NumberFormatSpec",
     "NumberDetector",
     "NumberValue",
+    "SpelloutFormatSpec",
     "ValueDetection",
     "abbreviation_detectors",
     "all_detectors",
@@ -180,6 +181,14 @@ class CompactFormatSpec:
 
     locale: str
     width: str
+
+
+@dataclass(frozen=True)
+class SpelloutFormatSpec:
+    """The locale and ICU rule set used for a spelled-out cardinal candidate."""
+
+    locale: str
+    ruleset: str
 
 
 @dataclass(frozen=True)

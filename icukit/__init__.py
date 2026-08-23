@@ -280,6 +280,7 @@ from .recognize import (
     FlexibleCompactDetector,
     FlexibleCurrencyNameDetector,
     FlexibleScientificDetector,
+    FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
 )
 from .regex import (
@@ -361,6 +362,7 @@ __all__ = [
     "FlexibleCompactDetector",
     "FlexibleCurrencyNameDetector",
     "FlexibleScientificDetector",
+    "FlexibleSpelloutDetector",
     "FlexibleTextDateDetector",
     "generated_detectors",
     "generated_detectors_report",

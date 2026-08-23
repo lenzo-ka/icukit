@@ -1,5 +1,7 @@
 """Tests for flexible, recall-oriented recognizers."""
 
+import time
+
 import icu
 import pytest
 
@@ -26,6 +28,7 @@ from icukit.recognize import (
     FlexibleOrdinalDetector,
     FlexiblePercentDetector,
     FlexibleScientificDetector,
+    FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
 )
@@ -1006,6 +1009,133 @@ def test_flexible_scientific_is_deterministic():
     second = FlexibleScientificDetector("en_US")
 
     assert first.detect("1.2345E4 then 1E-3") == second.detect("1.2345E4 then 1E-3")
+
+
+@pytest.mark.parametrize(
+    "surface,decimal",
+    [
+        ("twenty-three", "23"),
+        ("one hundred", "100"),
+        ("one thousand two hundred thirty-four", "1234"),
+        ("two million", "2000000"),
+    ],
+)
+def test_flexible_spellout_gains_recall(surface, decimal):
+    detection = FlexibleSpelloutDetector("en_US").detect(surface)[0]
+
+    assert detection["text"] == surface
+    assert detection["value"] == NumberValue(decimal, None)
+
+
+def test_flexible_spellout_respects_boundaries_and_lone_unit_rule():
+    detector = FlexibleSpelloutDetector("en_US")
+
+    assert [item["text"] for item in detector.detect("one hundred apples")] == ["one hundred"]
+    assert detector.detect("someone") == []
+    assert detector.detect("stone") == []
+    assert detector.detect("one") == []
+    assert detector.detect("twenty")[0]["value"] == NumberValue("20", None)
+
+
+def test_flexible_spellout_is_reflective_in_a_non_english_locale():
+    locale = "es_ES"
+    formatter = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.SPELLOUT, icu.Locale(locale))
+    english = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.SPELLOUT, icu.Locale("en_US"))
+    detector = FlexibleSpelloutDetector(locale)
+    surface = formatter.format(23, detector._ruleset)
+
+    assert surface != english.format(23)
+    assert detector.detect(surface)[0]["value"] == NumberValue("23", None)
+
+
+@pytest.mark.parametrize("locale", ["en_US", "es_ES", "fr_FR", "de_DE"])
+def test_flexible_spellout_round_trips_icu_canonical_cardinals(locale):
+    values = (31, 99, 999, 1234, 999_999, 2_000_000_000_000)
+    detector = FlexibleSpelloutDetector(locale)
+
+    for value in values:
+        surface = detector._rbnf.format(value, detector._ruleset)
+        detections = detector.detect(surface)
+
+        assert len(detections) == 1
+        assert detections[0]["text"] == surface
+        assert detections[0]["value"].decimal == str(value)
+
+
+def test_flexible_spellout_matches_case_insensitively():
+    detection = FlexibleSpelloutDetector("en_US").detect("TWENTY-THREE")[0]
+
+    assert detection["value"] == NumberValue("23", None)
+
+
+def test_flexible_spellout_span_for_spanish_999_is_not_truncated():
+    detector = FlexibleSpelloutDetector("es_ES")
+    surface = detector._rbnf.format(999, detector._ruleset)
+    detections = detector.detect(surface)
+
+    assert len(detections) == 1
+    assert detections[0]["text"] == surface
+    assert detections[0]["value"] == NumberValue("999", None)
+
+
+def test_flexible_spellout_round_trips_a_slavic_plural_scale():
+    detector = FlexibleSpelloutDetector("ru_RU")
+    value = 5_000_000_000_000
+    surface = detector._rbnf.format(value, detector._ruleset)
+    detections = detector.detect(surface)
+
+    assert len(detections) == 1
+    assert detections[0]["text"] == surface
+    assert detections[0]["value"] == NumberValue("5000000000000", None)
+
+
+def test_flexible_spellout_keeps_combining_marks_inside_tokens():
+    detector = FlexibleSpelloutDetector("ee")
+    surface = detector._rbnf.format(23, detector._ruleset)
+    mark_categories = {
+        icu.UCharCategory.NON_SPACING_MARK,
+        icu.UCharCategory.COMBINING_SPACING_MARK,
+        icu.UCharCategory.ENCLOSING_MARK,
+    }
+    detections = detector.detect(surface)
+
+    assert any(icu.Char.charType(character) in mark_categories for character in surface)
+    assert len(detections) == 1
+    assert detections[0]["text"] == surface
+    assert detections[0]["value"] == NumberValue("23", None)
+
+
+def test_flexible_spellout_round_trips_an_ewe_large_scale_junction():
+    detector = FlexibleSpelloutDetector("ee")
+    surface = detector._rbnf.format(100_001, detector._ruleset)
+    detections = detector.detect(surface)
+
+    assert len(detections) == 1
+    assert detections[0]["text"] == surface
+    assert detections[0]["value"] == NumberValue("100001", None)
+
+
+def test_flexible_spellout_dense_input_has_bounded_detection_time():
+    detector = FlexibleSpelloutDetector("en_US")
+    started = time.perf_counter()
+    detections = detector.detect("twenty-three " * 500)
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 2
+    assert len(detections) == 500
+    assert all(item["value"] == NumberValue("23", None) for item in detections)
+
+
+def test_flexible_spellout_holds_other_candidates_and_is_deterministic():
+    surface = "twenty-three"
+    first = FlexibleSpelloutDetector("en_US")
+    second = FlexibleSpelloutDetector("en_US")
+    spellout = first.detect(surface)
+    text_date = FlexibleTextDateDetector("en_US").detect(surface)
+
+    assert spellout == second.detect(surface)
+    assert spellout
+    assert isinstance(text_date, list)
 
 
 def test_flexible_compact_requires_a_left_token_boundary():
