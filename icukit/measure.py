@@ -43,6 +43,7 @@ import unicodedata
 
 import icu
 
+from ._offsets import boundary_maps
 from .errors import MeasureError
 
 __all__ = [
@@ -115,10 +116,7 @@ def _get_abbreviation_map(locale: str = "en_US") -> dict[str, str]:
             try:
                 mu = icu.MeasureUnit.forIdentifier(unit_name)
                 measure = icu.Measure(1, mu)
-                formatted = formatter.formatMeasure(measure)
-                abbrev = "".join(
-                    character for character in formatted if unicodedata.category(character) != "Nd"
-                ).strip()
+                abbrev = _format_unit_without_value(formatter, measure)
                 if abbrev and abbrev != unit_name:
                     # Store both lowercase and original
                     _abbreviation_map_cache[abbrev.lower()] = unit_name
@@ -127,6 +125,24 @@ def _get_abbreviation_map(locale: str = "en_US") -> dict[str, str]:
                 pass
 
     return _abbreviation_map_cache
+
+
+def _format_unit_without_value(formatter: icu.MeasureFormat, measure: icu.Measure) -> str:
+    """Format ``measure`` and remove only its numeric value field."""
+    position = icu.FieldPosition(icu.NumberFormat.kIntegerField)
+    formatted = formatter.formatMeasure(measure, position)
+    _, u16_to_cp = boundary_maps(formatted)
+    start = u16_to_cp[position.getBeginIndex()]
+    end = u16_to_cp[position.getEndIndex()]
+
+    def is_wrapper(character: str) -> bool:
+        return character.isspace() or unicodedata.category(character) == "Cf"
+
+    while start > 0 and is_wrapper(formatted[start - 1]):
+        start -= 1
+    while end < len(formatted) and is_wrapper(formatted[end]):
+        end += 1
+    return (formatted[:start] + formatted[end:]).strip()
 
 
 def resolve_unit(unit: str) -> str:
@@ -178,10 +194,7 @@ def get_unit_abbreviation(unit: str, locale: str = "en_US") -> str:
     try:
         mu = icu.MeasureUnit.forIdentifier(resolve_unit(unit))
         measure = icu.Measure(1, mu)
-        formatted = formatter.formatMeasure(measure)
-        return "".join(
-            character for character in formatted if unicodedata.category(character) != "Nd"
-        ).strip()
+        return _format_unit_without_value(formatter, measure)
     except icu.ICUError as e:
         raise MeasureError(f"Cannot get abbreviation for {unit}: {e}") from e
 
