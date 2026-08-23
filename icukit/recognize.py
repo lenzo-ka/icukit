@@ -24,6 +24,8 @@ from .detectors import (
     MeasureValue,
     NumberFormatSpec,
     NumberValue,
+    RelativeDateSpec,
+    RelativeDateValue,
     SpelloutFormatSpec,
     ValueDetection,
 )
@@ -38,6 +40,7 @@ __all__ = [
     "FlexibleNumberDetector",
     "FlexibleOrdinalDetector",
     "FlexiblePercentDetector",
+    "FlexibleRelativeDateDetector",
     "FlexibleScientificDetector",
     "FlexibleSpelloutDetector",
     "FlexibleTimeDetector",
@@ -597,6 +600,218 @@ class FlexibleNumberDetector:
             )
             cursor = end
         return detections
+
+
+_RELATIVE_NUMERIC_UNITS = (
+    "SECOND",
+    "MINUTE",
+    "HOUR",
+    "DAY",
+    "WEEK",
+    "MONTH",
+    "QUARTER",
+    "YEAR",
+)
+_RELATIVE_NAMED_UNITS = ("DAY", "WEEK", "MONTH", "QUARTER", "YEAR")
+_RELATIVE_DIRECTIONS = (
+    ("LAST", -1),
+    ("LAST_2", -2),
+    ("THIS", 0),
+    ("NEXT", 1),
+    ("NEXT_2", 2),
+)
+
+
+@lru_cache(maxsize=128)
+def _relative_date_vocabulary(locale: str):
+    icu_locale = icu.Locale(locale)
+    formatter = icu.RelativeDateTimeFormatter(icu_locale)
+    number_format = icu.NumberFormat.createInstance(icu_locale)
+    plural_rules = icu.PluralRules.forLocale(icu_locale)
+
+    required_samples = {0, 1, 2, 3, 5, 11, 21, 101}
+    representative_search = (*range(1001), 10_000, 100_000, 1_000_000)
+    for keyword in plural_rules.getKeywords():
+        representative = next(
+            (value for value in representative_search if plural_rules.select(value) == keyword),
+            None,
+        )
+        if representative is not None:
+            required_samples.add(representative)
+
+    numeric: dict[tuple[str, str], tuple[int, str, object]] = {}
+    for unit_member in _RELATIVE_NUMERIC_UNITS:
+        unit_enum = getattr(icu.URelativeDateTimeUnit, unit_member, None)
+        if unit_enum is None:
+            continue
+        unit_name = unit_member.lower()
+        for sign in (-1, 1):
+            for magnitude in sorted(required_samples):
+                if sign < 0 and magnitude == 0:
+                    # ICU assigns numeric zero to the future form regardless of signed zero.
+                    continue
+                surface = formatter.formatNumeric(sign * magnitude, unit_enum)
+                number_surface = number_format.format(magnitude)
+                number_start = surface.find(number_surface)
+                if number_start < 0:
+                    # note: A locale/magnitude whose numeral is not embedded is silently skipped.
+                    continue
+                number_end = number_start + len(number_surface)
+                template = (surface[:number_start], surface[number_end:])
+                if not template[0] and not template[1]:
+                    # A template with no marker words would reduce this lane to a bare-number
+                    # matcher; no ICU relative surface is a naked numeral, so skip it.
+                    continue
+                numeric.setdefault(template, (sign, unit_name, unit_enum))
+
+    named: dict[str, tuple[str, int, str, object, object]] = {}
+    for unit_member in _RELATIVE_NAMED_UNITS:
+        unit_enum = getattr(icu.UDateAbsoluteUnit, unit_member, None)
+        if unit_enum is None:
+            continue
+        for direction_member, offset in _RELATIVE_DIRECTIONS:
+            direction_enum = getattr(icu.UDateDirection, direction_member)
+            try:
+                surface = formatter.format(direction_enum, unit_enum)
+            except icu.ICUError:
+                continue
+            if surface:
+                named.setdefault(
+                    surface.casefold(),
+                    (surface, offset, unit_member.lower(), unit_enum, direction_enum),
+                )
+
+    now_unit = icu.UDateAbsoluteUnit.NOW
+    plain = icu.UDateDirection.PLAIN
+    try:
+        now_surface = formatter.format(plain, now_unit)
+    except icu.ICUError:
+        now_surface = ""
+    if now_surface:
+        named.setdefault(now_surface.casefold(), (now_surface, 0, "now", now_unit, plain))
+
+    # note: Weekday-relative offsets are out of scope for this lane.
+    return tuple(
+        (prefix, suffix, *details)
+        for (prefix, suffix), details in sorted(
+            numeric.items(), key=lambda item: (-sum(map(len, item[0])), item[0])
+        )
+    ), tuple(sorted(named.values(), key=lambda item: (-len(item[0]), item[0])))
+
+
+class FlexibleRelativeDateDetector:
+    """Recognize relative dates by inverting locale-relative ICU formatting."""
+
+    group = "date"
+    type = "date:relative"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._formatter = icu.RelativeDateTimeFormatter(icu.Locale(locale))
+        self._number = FlexibleNumberDetector(locale)
+        self._numeric_templates, self._named_phrases = _relative_date_vocabulary(locale)
+        self._spec = RelativeDateSpec(locale)
+
+    @property
+    def reachable_units(self) -> tuple[str, ...]:
+        """Unit names for which ICU exposed at least one invertible phrase."""
+        numeric = {template[3] for template in self._numeric_templates}
+        named = {phrase[2] for phrase in self._named_phrases}
+        return tuple(sorted(numeric | named))
+
+    @property
+    def has_vocabulary(self) -> bool:
+        """Whether ICU exposed any invertible relative-date phrase."""
+        return bool(self._numeric_templates or self._named_phrases)
+
+    @staticmethod
+    def _continues_word(text: str, cursor: int) -> bool:
+        if cursor >= len(text):
+            return False
+        return _is_word_character(text[cursor]) or (
+            icu.Char.charType(text[cursor]) == icu.UCharCategory.CONNECTOR_PUNCTUATION
+        )
+
+    def _left_boundary(self, text: str, start: int) -> bool:
+        return start <= 0 or not self._continues_word(text, start - 1)
+
+    @staticmethod
+    def _direction(offset: int) -> str:
+        if offset < 0:
+            return "past"
+        if offset > 0:
+            return "future"
+        return "present"
+
+    def _named_match(self, text: str, start: int):
+        for surface, offset, unit_name, unit_enum, direction_enum in self._named_phrases:
+            end = start + len(surface)
+            if text[start:end].casefold() != surface.casefold():
+                continue
+            if self._continues_word(text, end):
+                continue
+            canonical = self._formatter.format(direction_enum, unit_enum)
+            # note: The reformat guard is the correctness gate for every deposited value.
+            if canonical.casefold() != text[start:end].casefold():
+                continue
+            capture = Capture("relative", start, end, text[start:end], offset, "wide")
+            value = RelativeDateValue(offset, unit_name, self._direction(offset))
+            return end, (capture,), value
+        return None
+
+    def _numeric_match(self, text: str, start: int):
+        for prefix, suffix, sign, unit_name, unit_enum in self._numeric_templates:
+            number_start = start + len(prefix)
+            if text[start:number_start].casefold() != prefix.casefold():
+                continue
+            number = self._number._match(text, number_start)
+            if number is None:
+                continue
+            number_end, captures, number_value = number
+            if "." in number_value.decimal or number_value.decimal.startswith(("-", "+")):
+                continue
+            end = number_end + len(suffix)
+            if text[number_end:end].casefold() != suffix.casefold():
+                continue
+            if self._continues_word(text, end):
+                continue
+            offset = sign * int(number_value.decimal)
+            canonical = self._formatter.formatNumeric(offset, unit_enum)
+            if canonical.casefold() != text[start:end].casefold():
+                continue
+            markers: list[Capture] = []
+            if prefix:
+                markers.append(
+                    Capture(
+                        "relative-marker",
+                        start,
+                        number_start,
+                        text[start:number_start],
+                        None,
+                        "symbol",
+                    )
+                )
+            if suffix:
+                markers.append(
+                    Capture(
+                        "relative-marker", number_end, end, text[number_end:end], None, "symbol"
+                    )
+                )
+            all_captures = tuple(
+                sorted((*captures, *markers), key=lambda capture: (capture.start, capture.end))
+            )
+            value = RelativeDateValue(offset, unit_name, self._direction(offset))
+            return end, all_captures, value
+        return None
+
+    def _match(self, text: str, start: int):
+        if not self._left_boundary(text, start):
+            return None
+        return self._named_match(text, start) or self._numeric_match(text, start)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping relative-date candidates in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
 class FlexiblePercentDetector:

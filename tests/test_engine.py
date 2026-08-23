@@ -61,7 +61,9 @@ def test_generation_reflects_a_non_english_locale():
 
     assert gang.names()
     assert local_skeletons != english_skeletons
-    date_names = {name for name in gang.names() if name.startswith("date:")}
+    date_names = {
+        name for name in gang.names() if name.startswith("date:") and name != "date:relative"
+    }
     compact_names = {name for name in gang.names() if name.startswith("number:compact:")}
     assert date_names <= {f"date:{skeleton}" for skeleton in local_skeletons}
     assert compact_names
@@ -90,6 +92,19 @@ def test_generated_detectors_include_reflective_spellout_numbers():
     detector = next(item for item in gang.detectors if item.type == "number:spellout")
     detection = detector.detect("twenty-three")[0]
     assert detection["value"].decimal == "23"
+
+
+def test_generated_detectors_include_reflective_relative_dates():
+    gang = generated_detectors("en_US")
+
+    assert "date:relative" in gang.names()
+    detection = next(item for item in gang.detect("3 days ago") if item["type"] == "date:relative")
+    assert (detection["value"].offset, detection["value"].unit) == (-3, "day")
+
+    spanish = generated_detectors("es")
+    assert "date:relative" in spanish.names()
+    detection = next(item for item in spanish.detect("ayer") if item["type"] == "date:relative")
+    assert (detection["value"].offset, detection["value"].unit) == (-1, "day")
 
 
 def test_localized_literal_skeletons_are_not_wrongly_skipped():

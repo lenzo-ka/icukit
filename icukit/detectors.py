@@ -54,6 +54,8 @@ __all__ = [
     "NumberFormatSpec",
     "NumberDetector",
     "NumberValue",
+    "RelativeDateSpec",
+    "RelativeDateValue",
     "SpelloutFormatSpec",
     "ValueDetection",
     "abbreviation_detectors",
@@ -113,6 +115,15 @@ class MeasureValue:
 
     decimal: str
     unit: str
+
+
+@dataclass(frozen=True)
+class RelativeDateValue:
+    """A signed relative offset in one duration unit."""
+
+    offset: int
+    unit: str
+    direction: str
 
 
 # --------------------------------------------------------------------------- captures
@@ -198,6 +209,13 @@ class MeasureFormatSpec:
     locale: str
     unit: str
     width: str
+
+
+@dataclass(frozen=True)
+class RelativeDateSpec:
+    """The locale used to generate a relative-date phrase."""
+
+    locale: str
 
 
 # --------------------------------------------------------------------------- detection
