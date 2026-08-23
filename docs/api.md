@@ -1708,6 +1708,14 @@ normalized to ASCII), never from a binary ``float``. For a percent it is the rat
 
 Initialize self.  See help(type(self)) for accurate signature.
 
+### class `SpelloutFormatSpec`
+
+The locale and ICU rule set used for a spelled-out cardinal candidate.
+
+#### `SpelloutFormatSpec(locale: 'str', ruleset: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `ValueDetection`
 
 A D1 detection: a :class:`~icukit.detect.Detection` plus its generative structure.
@@ -2218,11 +2226,11 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='compact-number'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -3894,6 +3902,22 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping scientific numbers in source order.
+
+### class `FlexibleSpelloutDetector`
+
+Recognize canonical ICU spelled-out cardinals derived from locale RBNF data.
+
+A lone token is suppressed only when it is one of the ambiguous unit words obtained
+by formatting 0 through 9. Larger lone magnitudes and every multi-token canonical
+surface remain eligible for deposit-and-hold alongside other detector candidates.
+
+#### `FlexibleSpelloutDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping spelled-out cardinals in source order.
 
 ### class `FlexibleTextDateDetector`
 

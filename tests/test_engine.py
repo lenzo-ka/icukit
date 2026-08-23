@@ -84,6 +84,14 @@ def test_generated_detectors_include_reflective_scientific_numbers():
     assert detection["value"].decimal == "12345"
 
 
+def test_generated_detectors_include_reflective_spellout_numbers():
+    gang = generated_detectors("en_US")
+
+    detector = next(item for item in gang.detectors if item.type == "number:spellout")
+    detection = detector.detect("twenty-three")[0]
+    assert detection["value"].decimal == "23"
+
+
 def test_localized_literal_skeletons_are_not_wrongly_skipped():
     # A localized pattern interleaves modeled fields with locale literal text (Japanese
     # "y年M月d日"). That literal text is alphabetic under Unicode but is not a CLDR field,
