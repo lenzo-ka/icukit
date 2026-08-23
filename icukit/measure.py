@@ -80,6 +80,13 @@ _NUMBER_UNIT_WIDTH_MAP = {
     WIDTH_NARROW: icu.UNumberUnitWidth.NARROW,
 }
 
+_LOCALE_PATTERN = re.compile(
+    r"^(?:root|[A-Za-z]{2,8})(?:[-_][A-Za-z0-9]{1,8})*"
+    r"(?:\.[A-Za-z0-9-]+)?"
+    r"(?:@[A-Za-z0-9][A-Za-z0-9_-]*(?:=[A-Za-z0-9][A-Za-z0-9_-]*)?"
+    r"(?:;[A-Za-z0-9][A-Za-z0-9_-]*(?:=[A-Za-z0-9][A-Za-z0-9_-]*)?)*)?$"
+)
+
 # Cache for unit data from ICU
 _units_by_type_cache: dict | None = None
 _abbreviation_map_cache: dict | None = None
@@ -336,6 +343,9 @@ class MeasureFormatter:
             locale: Locale code (e.g., "en_US", "de_DE")
             width: Default width style (WIDE, SHORT, NARROW)
         """
+        if not isinstance(locale, str) or not _LOCALE_PATTERN.fullmatch(locale):
+            raise MeasureError(f"Malformed locale: {locale!r}")
+
         self.locale = locale
         self.width = width
         self._icu_locale = icu.Locale(locale)
@@ -563,11 +573,13 @@ class MeasureFormatter:
 
         ICU and CLDR choose the output unit from ``locale`` and ``usage``. This returns
         formatted text, not a numeric conversion to a caller-specified target unit.
+        If ICU does not recognize a nonempty usage, it falls back to the locale's
+        default unit preferences.
 
         Args:
             value: Numeric value
             unit: Source unit
-            usage: Usage context ("default", "road", "person-height", "weather", etc.)
+            usage: Nonempty usage context ("default", "road", "person-height", etc.)
             width: Width style
 
         Returns:
@@ -581,6 +593,9 @@ class MeasureFormatter:
             >>> fmt_de.format_for_usage(100, "kilometer", usage="road")
             '100 Kilometer'
         """
+        if not isinstance(usage, str) or not usage.strip():
+            raise MeasureError("Usage must be a nonempty string")
+
         width = width or self.width
         if width not in _NUMBER_UNIT_WIDTH_MAP:
             raise MeasureError(f"Invalid width: {width}. Valid: {list(_WIDTH_MAP.keys())}")
@@ -594,7 +609,7 @@ class MeasureFormatter:
                 .unitWidth(_NUMBER_UNIT_WIDTH_MAP[width])
             )
             return formatter.formatDouble(float(value))
-        except icu.ICUError as e:
+        except (icu.ICUError, icu.InvalidArgsError) as e:
             raise MeasureError(f"Failed to format {value} {unit} for usage {usage}: {e}") from e
 
     def __repr__(self) -> str:
@@ -637,13 +652,14 @@ def format_preferred(
     """Format a measurement in ICU's locale- and usage-preferred unit.
 
     ICU and CLDR choose the output unit. The result is formatted text, not a numeric
-    conversion to a caller-specified target unit.
+    conversion to a caller-specified target unit. If ICU does not recognize a
+    nonempty usage, it falls back to the locale's default unit preferences.
 
     Args:
         value: Numeric value
         unit: Source unit name or abbreviation
         locale: Locale code
-        usage: Usage context (for example, "road" or "person-height")
+        usage: Nonempty usage context (for example, "road" or "person-height")
 
     Returns:
         Locale- and usage-preferred formatted measurement

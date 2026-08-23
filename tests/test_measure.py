@@ -3,10 +3,13 @@
 import subprocess
 import sys
 
+import pytest
+
 from icukit import (
     WIDTH_NARROW,
     WIDTH_SHORT,
     WIDTH_WIDE,
+    MeasureError,
     MeasureFormatter,
     can_convert,
     convert_units,
@@ -222,6 +225,24 @@ class TestMeasureFormatterAdvanced:
         fmt = MeasureFormatter("en_US")
         result = fmt.format_for_usage(100, "kilometer", usage="road")
         assert result == "62 miles"
+
+    def test_format_for_usage_rejects_empty_usage(self):
+        """Reject empty or non-string usage values."""
+        fmt = MeasureFormatter("en_US")
+        with pytest.raises(MeasureError, match="nonempty string"):
+            fmt.format_for_usage(1, "kilometer", usage="")
+        with pytest.raises(MeasureError, match="nonempty string"):
+            fmt.format_for_usage(1, "kilometer", usage=None)
+
+    def test_format_for_usage_unknown_usage_falls_back(self):
+        """Unknown nonempty usages use ICU's default-preference fallback."""
+        result = format_preferred(1, "kilometer", "en_US", "not-a-real-usage")
+        assert isinstance(result, str)
+
+    def test_format_preferred_rejects_malformed_locale(self):
+        """Reject a syntactically malformed locale instead of using root fallback."""
+        with pytest.raises(MeasureError, match="Malformed locale"):
+            format_preferred(1, "kilometer", "!!!", "road")
 
 
 class TestMeasureCLI:

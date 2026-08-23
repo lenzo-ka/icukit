@@ -3242,11 +3242,13 @@ Format a measurement in the locale's preferred unit for a usage.
 
 ICU and CLDR choose the output unit from ``locale`` and ``usage``. This returns
 formatted text, not a numeric conversion to a caller-specified target unit.
+If ICU does not recognize a nonempty usage, it falls back to the locale's
+default unit preferences.
 
 Args:
     value: Numeric value
     unit: Source unit
-    usage: Usage context ("default", "road", "person-height", "weather", etc.)
+    usage: Nonempty usage context ("default", "road", "person-height", etc.)
     width: Width style
 
 Returns:
@@ -3349,13 +3351,14 @@ Returns:
 Format a measurement in ICU's locale- and usage-preferred unit.
 
 ICU and CLDR choose the output unit. The result is formatted text, not a numeric
-conversion to a caller-specified target unit.
+conversion to a caller-specified target unit. If ICU does not recognize a
+nonempty usage, it falls back to the locale's default unit preferences.
 
 Args:
     value: Numeric value
     unit: Source unit name or abbreviation
     locale: Locale code
-    usage: Usage context (for example, "road" or "person-height")
+    usage: Nonempty usage context (for example, "road" or "person-height")
 
 Returns:
     Locale- and usage-preferred formatted measurement
