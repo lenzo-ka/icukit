@@ -10,9 +10,11 @@ from .detectors import Capture, DetectorSet, ValueDetection
 
 __all__ = [
     "AbbreviationDetector",
+    "AbbreviationExpansion",
     "AbbreviationSpec",
     "AbbreviationValue",
     "abbreviation_detectors",
+    "reformat_abbreviation",
 ]
 
 
@@ -25,24 +27,34 @@ class AbbreviationSpec:
 
 
 @dataclass(frozen=True)
+class AbbreviationExpansion:
+    """One annotated expansion of an abbreviation surface."""
+
+    text: str
+    sense: str
+    cue: str | None = None
+
+
+@dataclass(frozen=True)
 class AbbreviationValue:
-    """One abbreviation reading; ``expansion`` is absent for bare readings."""
+    """An abbreviation surface and all of its co-located expansion annotations."""
 
     surface: str
-    expansion: str | None
-    sense: str
-    cue: str | None
-    also: str | None
-    break_behavior: str
+    expansions: tuple[AbbreviationExpansion, ...] = ()
+    also: str | None = None
+    break_behavior: str = "suppress"
+
+
+def reformat_abbreviation(spec: AbbreviationSpec, value: AbbreviationValue) -> str:
+    """Return the recognized surface; expansions are annotations, not reformats."""
+    return value.surface
 
 
 class AbbreviationDetector:
-    """Deposit every literal expansion and productive-pattern reading.
+    """Deposit one structural candidate for each recognized abbreviation surface.
 
-    Expansion is interpretation rather than invertible formatting, so the
-    usual ``reformat(spec, value) == surface`` invariant is intentionally
-    relaxed. A zero-expansion entry deposits one ``abbreviation:none`` bare
-    reading so the surface remains recognized.
+    Surface identity upholds ``reformat_abbreviation(spec, value) == text``.
+    Expansions are typed annotations on that candidate, never reformat operands.
     """
 
     group = "abbreviation"
@@ -78,22 +90,23 @@ class AbbreviationDetector:
         text: str,
         start: int,
         end: int,
-        expansion: str | None,
-        sense: str,
-        cue: str | None,
+        expansions: tuple[AbbreviationExpansion, ...],
         also: str | None,
         behavior: str,
     ) -> ValueDetection:
         surface = text[start:end]
-        return ValueDetection(
+        value = AbbreviationValue(surface, expansions, also, behavior)
+        detection = ValueDetection(
             text=surface,
             start=start,
             end=end,
-            type=f"abbreviation:{sense}",
-            value=AbbreviationValue(surface, expansion, sense, cue, also, behavior),
+            type=self.type,
+            value=value,
             captures=(Capture("surface", start, end, surface),),
             spec=self.spec,
         )
+        assert reformat_abbreviation(self.spec, value) == detection["text"]
+        return detection
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Scan token starts and return all co-located readings."""
@@ -115,26 +128,13 @@ class AbbreviationDetector:
             if literal is not None:
                 entry = self.compiled.entries[literal]
                 end = start + len(literal)
-                if entry.expansions:
-                    for expansion in entry.expansions:
-                        detections.append(
-                            self._detection(
-                                text,
-                                start,
-                                end,
-                                expansion.value,
-                                expansion.sense,
-                                expansion.cue,
-                                entry.also,
-                                entry.break_behavior,
-                            )
-                        )
-                else:
-                    detections.append(
-                        self._detection(
-                            text, start, end, None, "none", None, entry.also, entry.break_behavior
-                        )
-                    )
+                expansions = tuple(
+                    AbbreviationExpansion(expansion.value, expansion.sense, expansion.cue)
+                    for expansion in entry.expansions
+                )
+                detections.append(
+                    self._detection(text, start, end, expansions, entry.also, entry.break_behavior)
+                )
                 continue
             end = start
             while end < len(text) and (text[end].isalpha() or text[end] == "."):
@@ -147,9 +147,7 @@ class AbbreviationDetector:
                 or not self._right_boundary(text, end)
             ):
                 continue
-            detections.append(
-                self._detection(text, start, end, None, provenance, None, None, behavior)
-            )
+            detections.append(self._detection(text, start, end, (), None, behavior))
         return detections
 
 

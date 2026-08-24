@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from dataclasses import fields, is_dataclass
 
-from .abbreviation_recognize import AbbreviationSpec, AbbreviationValue
+from .abbreviation_recognize import AbbreviationExpansion, AbbreviationSpec, AbbreviationValue
 from .detectors import (
     Capture,
     CompactFormatSpec,
@@ -40,6 +40,7 @@ _KINDS = {
     MeasureValue: "measure",
     RelativeDateValue: "relative_date",
     AbbreviationValue: "abbreviation",
+    AbbreviationExpansion: "abbreviation_expansion",
     Capture: "capture",
     DateFormatSpec: _snake_case(DateFormatSpec.__name__),
     DateIntervalSpec: _snake_case(DateIntervalSpec.__name__),

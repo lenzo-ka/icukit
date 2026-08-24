@@ -58,9 +58,11 @@ from .abbreviation_breaker import (
 from .abbreviation_compile import CompiledLexicon, PatternMatch, compile_lexicon
 from .abbreviation_recognize import (
     AbbreviationDetector,
+    AbbreviationExpansion,
     AbbreviationSpec,
     AbbreviationValue,
     abbreviation_detectors,
+    reformat_abbreviation,
 )
 from .abbreviations import (
     AbbreviationLexicon,
@@ -450,6 +452,7 @@ __all__ = [
     "DateIntervalValue",
     "AbbreviationBoundary",
     "AbbreviationDetector",
+    "AbbreviationExpansion",
     "AbbreviationLexicon",
     "AbbreviationProvenance",
     "AbbreviationSegmentation",
@@ -462,6 +465,7 @@ __all__ = [
     "Pattern",
     "PatternMatch",
     "abbreviation_detectors",
+    "reformat_abbreviation",
     "available_locales",
     "compile_lexicon",
     "load_lexicon",

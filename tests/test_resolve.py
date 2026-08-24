@@ -1,5 +1,6 @@
 """Resolve a universe of overlapping detections into a best non-overlapping sequence."""
 
+from icukit.abbreviation_recognize import AbbreviationDetector, AbbreviationExpansion
 from icukit.detectors import (
     Capture,
     NumberFormatSpec,
@@ -70,6 +71,18 @@ def test_content_identical_detections_do_not_manufacture_ambiguity():
     result = resolve([a, a])
     assert result.best == (a,)
     assert not result.ambiguous
+
+
+def test_abbreviation_expansions_remain_one_resolver_candidate():
+    detections = AbbreviationDetector("en").detect("Dr.")
+    result = resolve(detections)
+
+    assert len(detections) == 1
+    assert result.best == (detections[0],)
+    assert detections[0]["value"].expansions == (
+        AbbreviationExpansion("Doctor", "title", "precedes-name"),
+        AbbreviationExpansion("Drive", "thoroughfare", "address"),
+    )
 
 
 def test_equal_span_ties_resolve_deterministically():

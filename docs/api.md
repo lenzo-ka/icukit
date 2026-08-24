@@ -48,6 +48,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`DateIntervalValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`AbbreviationBoundary`](#icukitabbreviation-breaker) — class, `icukit.abbreviation_breaker`
 - [`AbbreviationDetector`](#icukitabbreviation-recognize) — class, `icukit.abbreviation_recognize`
+- [`AbbreviationExpansion`](#icukitabbreviation-recognize) — class, `icukit.abbreviation_recognize`
 - [`AbbreviationLexicon`](#icukitabbreviations) — class, `icukit.abbreviations`
 - [`AbbreviationProvenance`](#icukitabbreviation-breaker) — class, `icukit.abbreviation_breaker`
 - [`AbbreviationSegmentation`](#icukitabbreviation-breaker) — class, `icukit.abbreviation_breaker`
@@ -60,6 +61,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`Pattern`](#icukitabbreviations) — class, `icukit.abbreviations`
 - [`PatternMatch`](#icukitabbreviation-compile) — class, `icukit.abbreviation_compile`
 - [`abbreviation_detectors`](#icukitabbreviation-recognize) — function, `icukit.abbreviation_recognize`
+- [`reformat_abbreviation`](#icukitabbreviation-recognize) — function, `icukit.abbreviation_recognize`
 - [`available_locales`](#icukitabbreviations) — function, `icukit.abbreviations`
 - [`compile_lexicon`](#icukitabbreviation-compile) — function, `icukit.abbreviation_compile`
 - [`load_lexicon`](#icukitabbreviations) — function, `icukit.abbreviations`
@@ -415,12 +417,10 @@ Lexicon-driven abbreviation recognition.
 
 ### class `AbbreviationDetector`
 
-Deposit every literal expansion and productive-pattern reading.
+Deposit one structural candidate for each recognized abbreviation surface.
 
-Expansion is interpretation rather than invertible formatting, so the
-usual ``reformat(spec, value) == surface`` invariant is intentionally
-relaxed. A zero-expansion entry deposits one ``abbreviation:none`` bare
-reading so the surface remains recognized.
+Surface identity upholds ``reformat_abbreviation(spec, value) == text``.
+Expansions are typed annotations on that candidate, never reformat operands.
 
 #### `AbbreviationDetector(locale: 'str' = 'en', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
 
@@ -429,6 +429,14 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Scan token starts and return all co-located readings.
+
+### class `AbbreviationExpansion`
+
+One annotated expansion of an abbreviation surface.
+
+#### `AbbreviationExpansion(text: 'str', sense: 'str', cue: 'str | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `AbbreviationSpec`
 
@@ -440,15 +448,19 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `AbbreviationValue`
 
-One abbreviation reading; ``expansion`` is absent for bare readings.
+An abbreviation surface and all of its co-located expansion annotations.
 
-#### `AbbreviationValue(surface: 'str', expansion: 'str | None', sense: 'str', cue: 'str | None', also: 'str | None', break_behavior: 'str') -> None`
+#### `AbbreviationValue(surface: 'str', expansions: 'tuple[AbbreviationExpansion, ...]' = (), also: 'str | None' = None, break_behavior: 'str' = 'suppress') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
 ### `abbreviation_detectors(locale: 'str' = 'en') -> 'DetectorSet'`
 
 Return the locale's abbreviation detector gang, empty when unsupported.
+
+### `reformat_abbreviation(spec: 'AbbreviationSpec', value: 'AbbreviationValue') -> 'str'`
+
+Return the recognized surface; expansions are annotations, not reformats.
 
 ## icukit.abbreviations
 
@@ -465,8 +477,8 @@ Two downstream consumers are served, though neither lives here:
     * a sentence breaker, which turns ``break="suppress"`` surfaces into
       break-exceptions and ``break="ambiguous"`` surfaces into deposited
       alternatives; and
-    * an abbreviation recognizer, which deposits the ``<expansion>`` readings
-      as competing candidates without ever forcing one.
+    * an abbreviation recognizer, which deposits one detection per surface
+      carrying every ``<expansion>`` reading as an annotation, never forcing one.
 
 This module only PARSES a lexicon into a typed, immutable model. Ambiguity is
 preserved: an entry keeps every expansion, and ``break`` distinguishes a
@@ -2281,11 +2293,15 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `ValueDetection`
 
-A D1 detection: a :class:`~icukit.detect.Detection` plus its generative structure.
+A typed detection with formatter structure or recall annotations.
 
 Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``value``,
-``captures``, and ``spec`` (see the module docstring). The invariant
-``reformat(spec, value) == surface`` holds for every accepted detection.
+``captures``, and ``spec`` (see the module docstring). For the strict,
+formatter-inverting detector family, ``reformat(spec, value) == text`` holds for every
+accepted detection. Recall recognizers such as ``Flexible*`` and abbreviations instead
+deposit structurally valid candidates with an explicit surface or annotation model.
+Abbreviation surfaces round-trip by identity; their expansions are annotations, never
+reformats.
 
 ### `abbreviation_detectors(locale: 'str' = 'en') -> 'DetectorSet'`
 
