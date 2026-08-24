@@ -4,7 +4,11 @@ import json
 
 import pytest
 
-from icukit.abbreviation_recognize import AbbreviationSpec, AbbreviationValue
+from icukit.abbreviation_recognize import (
+    AbbreviationExpansion,
+    AbbreviationSpec,
+    AbbreviationValue,
+)
 from icukit.detectors import (
     Capture,
     CompactFormatSpec,
@@ -38,7 +42,16 @@ from icukit.serialize import _to_json, detection_to_dict, detections_to_json
         (NumberValue("123.40"), "number"),
         (MeasureValue("5", "meter"), "measure"),
         (RelativeDateValue(-1, "day", "past"), "relative_date"),
-        (AbbreviationValue("Dr.", "Doctor", "title", None, None, "suppress"), "abbreviation"),
+        (
+            AbbreviationValue(
+                "Dr.",
+                (
+                    AbbreviationExpansion("Doctor", "title"),
+                    AbbreviationExpansion("Drive", "thoroughfare"),
+                ),
+            ),
+            "abbreviation",
+        ),
     ],
 )
 def test_value_kinds_are_first_and_json_native(value, kind):
@@ -57,6 +70,39 @@ def test_datetime_fields_and_decimal_schema_are_stable():
     assert number["decimal"] == "001.230"
     assert "currency" in number
     assert number["currency"] is None
+
+
+def test_abbreviation_expansions_have_annotation_schema():
+    serialized = _to_json(
+        AbbreviationValue(
+            "Dr.",
+            (
+                AbbreviationExpansion("Doctor", "title"),
+                AbbreviationExpansion("Drive", "thoroughfare", "postal context"),
+            ),
+        )
+    )
+
+    assert serialized == {
+        "kind": "abbreviation",
+        "surface": "Dr.",
+        "expansions": [
+            {
+                "kind": "abbreviation_expansion",
+                "text": "Doctor",
+                "sense": "title",
+                "cue": None,
+            },
+            {
+                "kind": "abbreviation_expansion",
+                "text": "Drive",
+                "sense": "thoroughfare",
+                "cue": "postal context",
+            },
+        ],
+        "also": None,
+        "break_behavior": "suppress",
+    }
 
 
 @pytest.mark.parametrize(

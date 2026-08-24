@@ -250,11 +250,15 @@ class RelativeDateSpec:
 
 
 class ValueDetection(Detection):
-    """A D1 detection: a :class:`~icukit.detect.Detection` plus its generative structure.
+    """A typed detection with formatter structure or recall annotations.
 
     Inherits ``text``/``start``/``end``/``type`` (code-point offsets) and adds ``value``,
-    ``captures``, and ``spec`` (see the module docstring). The invariant
-    ``reformat(spec, value) == surface`` holds for every accepted detection.
+    ``captures``, and ``spec`` (see the module docstring). For the strict,
+    formatter-inverting detector family, ``reformat(spec, value) == text`` holds for every
+    accepted detection. Recall recognizers such as ``Flexible*`` and abbreviations instead
+    deposit structurally valid candidates with an explicit surface or annotation model.
+    Abbreviation surfaces round-trip by identity; their expansions are annotations, never
+    reformats.
     """
 
     value: object

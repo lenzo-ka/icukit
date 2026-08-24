@@ -4,8 +4,10 @@ import pytest
 
 from icukit.abbreviation_recognize import (
     AbbreviationDetector,
+    AbbreviationExpansion,
     AbbreviationValue,
     abbreviation_detectors,
+    reformat_abbreviation,
 )
 from icukit.detectors import Detector
 
@@ -22,16 +24,17 @@ def test_literal_expansions_are_colocated(surface, expected):
     detections = AbbreviationDetector("en").detect(surface)
 
     assert isinstance(AbbreviationDetector("en"), Detector)
-    assert {(item["start"], item["end"]) for item in detections} == {(0, len(surface))}
-    assert {(item["value"].expansion, item["value"].sense) for item in detections} == expected
+    assert len(detections) == 1
+    assert (detections[0]["start"], detections[0]["end"]) == (0, len(surface))
+    assert {(item.text, item.sense) for item in detections[0]["value"].expansions} == expected
 
 
 def test_zero_expansion_deposits_one_bare_reading():
     detections = AbbreviationDetector("en").detect("Ms.")
 
     assert len(detections) == 1
-    assert detections[0]["type"] == "abbreviation:none"
-    assert detections[0]["value"] == AbbreviationValue("Ms.", None, "none", None, None, "suppress")
+    assert detections[0]["type"] == "abbreviation"
+    assert detections[0]["value"] == AbbreviationValue("Ms.")
 
 
 def test_token_boundaries_exclude_words_and_internal_dotted_fragments():
@@ -45,7 +48,21 @@ def test_productive_patterns_deposit_bare_readings(surface):
     detections = AbbreviationDetector("en").detect(surface)
 
     assert len(detections) == 1
-    assert detections[0]["value"].expansion is None
+    assert detections[0]["value"].expansions == ()
+
+
+def test_surface_identity_round_trips_and_expansions_are_annotations():
+    detection = AbbreviationDetector("en").detect("Dr.")[0]
+
+    assert reformat_abbreviation(detection["spec"], detection["value"]) == detection["text"]
+    assert detection["value"].expansions == (
+        AbbreviationExpansion("Doctor", "title", "precedes-name"),
+        AbbreviationExpansion("Drive", "thoroughfare", "address"),
+    )
+    assert all(
+        reformat_abbreviation(detection["spec"], detection["value"]) != expansion.text
+        for expansion in detection["value"].expansions
+    )
 
 
 def test_longest_literal_wins_without_internal_pattern_detections():

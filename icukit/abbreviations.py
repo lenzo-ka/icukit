@@ -12,8 +12,8 @@ Two downstream consumers are served, though neither lives here:
     * a sentence breaker, which turns ``break="suppress"`` surfaces into
       break-exceptions and ``break="ambiguous"`` surfaces into deposited
       alternatives; and
-    * an abbreviation recognizer, which deposits the ``<expansion>`` readings
-      as competing candidates without ever forcing one.
+    * an abbreviation recognizer, which deposits one detection per surface
+      carrying every ``<expansion>`` reading as an annotation, never forcing one.
 
 This module only PARSES a lexicon into a typed, immutable model. Ambiguity is
 preserved: an entry keeps every expansion, and ``break`` distinguishes a
