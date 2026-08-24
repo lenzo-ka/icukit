@@ -11,7 +11,7 @@ from icukit import (
     example_exception_inventory,
     load_exception_inventory,
 )
-from icukit.breaker import BreakSpan, break_word_spans
+from icukit.breaker import BreakSpan, break_sentence_spans, break_word_spans
 from icukit.detect import Detection
 from icukit.exceptions import ExceptionInventory, ExceptionRule, merge_retypes
 
@@ -105,6 +105,46 @@ def test_suppress_is_native_rbbi_and_prevents_word_break():
         ("Fig.", 4, 8),
         (" ", 8, 9),
         ("5", 9, 10),
+    ]
+
+
+def test_sentence_suppression_joins_abbreviation_to_following_sentence():
+    rule = _rule(
+        id="mr-sentence",
+        level="sentence",
+        effect="suppress",
+        type=None,
+        surface="Mr.",
+        variant="exact",
+        conditions=[
+            {
+                "id": "uppercase",
+                "kind": "unicode_set",
+                "direction": "right",
+                "set": "[[:Lu:]]",
+                "skip": {"kind": "whitespace", "max": 1},
+            }
+        ],
+        witnesses={
+            "positive": "I met Mr. Smith today.",
+            "near_miss": "SomeMr. Smith today.",
+            "condition_negatives": ["I met Mr. smith today."],
+        },
+    )
+    rule.pop("strength")
+    layer = load_exception_inventory(_inventory(rule))
+    text = "I met Mr. Smith today. He left."
+
+    spans = layer.break_spans(text, "sentence", "en")
+
+    assert [span["text"] for span in spans] == ["I met Mr. Smith today. ", "He left."]
+    assert layer.break_spans("Mr.", "sentence", "en")[0]["text"] == "Mr."
+
+    negative = "I met Ms. Smith today. She left."
+    tailored = layer.break_spans(negative, "sentence", "en")
+    vanilla = break_sentence_spans(negative, "en")
+    assert [(span["text"], span["start"], span["end"]) for span in tailored] == [
+        (span["text"], span["start"], span["end"]) for span in vanilla
     ]
 
 
