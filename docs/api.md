@@ -2,6 +2,333 @@
 
 Version: 0.4.0
 
+## Root API index
+
+Names exported by `icukit.__all__` (the `from icukit import ...` surface):
+
+- [`__version__`](#root-api-index) — constant, `icukit`
+- [`FlexibleCompactDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleCurrencyDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleCurrencyNameDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleDateDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleDateIntervalDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleFractionDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleNumberDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleOrdinalDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexiblePercentDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleRelativeDateDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleScientificDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleSpelloutDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleTextDateDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
+- [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
+- [`DateTimeValue`](#icukitdetectors) — class, `icukit.detectors`
+- [`MeasureValue`](#icukitdetectors) — class, `icukit.detectors`
+- [`NumberValue`](#icukitdetectors) — class, `icukit.detectors`
+- [`RelativeDateValue`](#icukitdetectors) — class, `icukit.detectors`
+- [`detect`](#icukitdetectors) — function, `icukit.detectors`
+- [`date_detectors`](#icukitdetectors) — function, `icukit.detectors`
+- [`number_detectors`](#icukitdetectors) — function, `icukit.detectors`
+- [`all_detectors`](#icukitdetectors) — function, `icukit.detectors`
+- [`generated_detectors`](#icukitengine) — function, `icukit.engine`
+- [`generated_detectors_report`](#icukitengine) — function, `icukit.engine`
+- [`detection_to_dict`](#icukitserialize) — function, `icukit.serialize`
+- [`detections_to_json`](#icukitserialize) — function, `icukit.serialize`
+- [`ABBREVIATION_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`COMPACT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`DATE_INTERVAL_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`DATE_TIME_SKELETON_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`Family`](#icukitengine) — class, `icukit.engine`
+- [`DateIntervalSpec`](#icukitdetectors) — class, `icukit.detectors`
+- [`DateIntervalValue`](#icukitdetectors) — class, `icukit.detectors`
+- [`AbbreviationBoundary`](#icukitabbreviation-breaker) — class, `icukit.abbreviation_breaker`
+- [`AbbreviationDetector`](#icukitabbreviation-recognize) — class, `icukit.abbreviation_recognize`
+- [`AbbreviationLexicon`](#icukitabbreviations) — class, `icukit.abbreviations`
+- [`AbbreviationProvenance`](#icukitabbreviation-breaker) — class, `icukit.abbreviation_breaker`
+- [`AbbreviationSegmentation`](#icukitabbreviation-breaker) — class, `icukit.abbreviation_breaker`
+- [`AbbreviationSentenceBreaker`](#icukitabbreviation-breaker) — class, `icukit.abbreviation_breaker`
+- [`AbbreviationSpec`](#icukitabbreviation-recognize) — class, `icukit.abbreviation_recognize`
+- [`AbbreviationValue`](#icukitabbreviation-recognize) — class, `icukit.abbreviation_recognize`
+- [`CompiledLexicon`](#icukitabbreviation-compile) — class, `icukit.abbreviation_compile`
+- [`Entry`](#icukitabbreviations) — class, `icukit.abbreviations`
+- [`Expansion`](#icukitabbreviations) — class, `icukit.abbreviations`
+- [`Pattern`](#icukitabbreviations) — class, `icukit.abbreviations`
+- [`PatternMatch`](#icukitabbreviation-compile) — class, `icukit.abbreviation_compile`
+- [`abbreviation_detectors`](#icukitabbreviation-recognize) — function, `icukit.abbreviation_recognize`
+- [`available_locales`](#icukitabbreviations) — function, `icukit.abbreviations`
+- [`compile_lexicon`](#icukitabbreviation-compile) — function, `icukit.abbreviation_compile`
+- [`load_lexicon`](#icukitabbreviations) — function, `icukit.abbreviations`
+- [`load_lexicon_file`](#icukitabbreviations) — function, `icukit.abbreviations`
+- [`parse_lexicon`](#icukitabbreviations) — function, `icukit.abbreviations`
+- [`ICUKitError`](#icukiterrors) — class, `icukit.errors`
+- [`LocaleError`](#icukiterrors) — class, `icukit.errors`
+- [`FormatError`](#icukiterrors) — class, `icukit.errors`
+- [`ParseError`](#icukiterrors) — class, `icukit.errors`
+- [`PatternError`](#icukiterrors) — class, `icukit.errors`
+- [`TransliteratorError`](#icukiterrors) — class, `icukit.errors`
+- [`ScriptError`](#icukiterrors) — class, `icukit.errors`
+- [`NormalizationError`](#icukiterrors) — class, `icukit.errors`
+- [`RegionError`](#icukiterrors) — class, `icukit.errors`
+- [`TimezoneError`](#icukiterrors) — class, `icukit.errors`
+- [`CalendarError`](#icukiterrors) — class, `icukit.errors`
+- [`CollatorError`](#icukiterrors) — class, `icukit.errors`
+- [`BidiError`](#icukiterrors) — class, `icukit.errors`
+- [`BreakerError`](#icukiterrors) — class, `icukit.errors`
+- [`MessageError`](#icukiterrors) — class, `icukit.errors`
+- [`ListFormatError`](#icukiterrors) — class, `icukit.errors`
+- [`DateTimeError`](#icukiterrors) — class, `icukit.errors`
+- [`MeasureError`](#icukiterrors) — class, `icukit.errors`
+- [`SearchError`](#icukiterrors) — class, `icukit.errors`
+- [`SpoofError`](#icukiterrors) — class, `icukit.errors`
+- [`IDNAError`](#icukiterrors) — class, `icukit.errors`
+- [`AlphaIndexError`](#icukiterrors) — class, `icukit.errors`
+- [`AbbreviationError`](#icukiterrors) — class, `icukit.errors`
+- [`PluralError`](#icukiterrors) — class, `icukit.errors`
+- [`DurationError`](#icukiterrors) — class, `icukit.errors`
+- [`DisplayNameError`](#icukiterrors) — class, `icukit.errors`
+- [`MeasureFormatter`](#icukitmeasure) — class, `icukit.measure`
+- [`format_measure`](#icukitmeasure) — function, `icukit.measure`
+- [`format_preferred`](#icukitmeasure) — function, `icukit.measure`
+- [`convert_units`](#icukitmeasure) — function, `icukit.measure`
+- [`can_convert`](#icukitmeasure) — function, `icukit.measure`
+- [`get_unit_info`](#icukitmeasure) — function, `icukit.measure`
+- [`get_units_by_type`](#icukitmeasure) — function, `icukit.measure`
+- [`resolve_unit`](#icukitmeasure) — function, `icukit.measure`
+- [`get_unit_abbreviation`](#icukitmeasure) — function, `icukit.measure`
+- [`list_units`](#icukitmeasure) — function, `icukit.measure`
+- [`list_unit_types`](#icukitmeasure) — function, `icukit.measure`
+- [`WIDTH_WIDE`](#icukitmeasure) — constant, `icukit.measure`
+- [`WIDTH_SHORT`](#icukitmeasure) — constant, `icukit.measure`
+- [`WIDTH_NARROW`](#icukitmeasure) — constant, `icukit.measure`
+- [`discover_features`](#icukitdiscover) — function, `icukit.discover`
+- [`search_features`](#icukitdiscover) — function, `icukit.discover`
+- [`get_api_exports`](#icukitdiscover) — function, `icukit.discover`
+- [`get_api_info`](#icukitdiscover) — function, `icukit.discover`
+- [`get_cli_commands`](#icukitdiscover) — function, `icukit.discover`
+- [`DateTimeFormatter`](#icukitdatetime) — class, `icukit.datetime`
+- [`format_datetime`](#icukitdatetime) — function, `icukit.datetime`
+- [`format_relative`](#icukitdatetime) — function, `icukit.datetime`
+- [`parse_datetime`](#icukitdatetime) — function, `icukit.datetime`
+- [`STYLE_FULL`](#icukitdatetime) — constant, `icukit.datetime`
+- [`STYLE_LONG`](#icukitdatetime) — constant, `icukit.datetime`
+- [`STYLE_MEDIUM`](#icukitdatetime) — constant, `icukit.datetime`
+- [`STYLE_SHORT`](#icukitdatetime) — constant, `icukit.datetime`
+- [`STYLE_NONE`](#icukitdatetime) — constant, `icukit.datetime`
+- [`PATTERNS`](#icukitdatetime) — constant, `icukit.datetime`
+- [`WIDTH_ABBREVIATED`](#icukitdatetime) — constant, `icukit.datetime`
+- [`get_month_names`](#icukitdatetime) — function, `icukit.datetime`
+- [`get_weekday_names`](#icukitdatetime) — function, `icukit.datetime`
+- [`get_era_names`](#icukitdatetime) — function, `icukit.datetime`
+- [`get_am_pm_strings`](#icukitdatetime) — function, `icukit.datetime`
+- [`get_date_symbols`](#icukitdatetime) — function, `icukit.datetime`
+- [`ListFormatter`](#icukitlist-format) — class, `icukit.list_format`
+- [`format_list`](#icukitlist-format) — function, `icukit.list_format`
+- [`STYLE_AND`](#icukitlist-format) — constant, `icukit.list_format`
+- [`STYLE_OR`](#icukitlist-format) — constant, `icukit.list_format`
+- [`STYLE_UNIT`](#icukitlist-format) — constant, `icukit.list_format`
+- [`MessageFormatter`](#icukitmessage) — class, `icukit.message`
+- [`format_message`](#icukitmessage) — function, `icukit.message`
+- [`Breaker`](#icukitbreaker) — class, `icukit.breaker`
+- [`BreakSpan`](#icukitbreaker) — class, `icukit.breaker`
+- [`RuleBreaker`](#icukitbreaker) — class, `icukit.breaker`
+- [`default_rules`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_sentences`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_words`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_lines`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_graphemes`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_word_spans`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_sentence_spans`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_line_spans`](#icukitbreaker) — function, `icukit.breaker`
+- [`break_grapheme_spans`](#icukitbreaker) — function, `icukit.breaker`
+- [`BREAK_SENTENCE`](#icukitbreaker) — constant, `icukit.breaker`
+- [`BREAK_WORD`](#icukitbreaker) — constant, `icukit.breaker`
+- [`BREAK_LINE`](#icukitbreaker) — constant, `icukit.breaker`
+- [`BREAK_CHARACTER`](#icukitbreaker) — constant, `icukit.breaker`
+- [`get_base_direction`](#icukitbidi) — function, `icukit.bidi`
+- [`get_bidi_info`](#icukitbidi) — function, `icukit.bidi`
+- [`strip_bidi_controls`](#icukitbidi) — function, `icukit.bidi`
+- [`has_bidi_controls`](#icukitbidi) — function, `icukit.bidi`
+- [`list_bidi_controls`](#icukitbidi) — function, `icukit.bidi`
+- [`DIRECTION_LTR`](#icukitbidi) — constant, `icukit.bidi`
+- [`DIRECTION_RTL`](#icukitbidi) — constant, `icukit.bidi`
+- [`DIRECTION_MIXED`](#icukitbidi) — constant, `icukit.bidi`
+- [`DIRECTION_NEUTRAL`](#icukitbidi) — constant, `icukit.bidi`
+- [`sort_strings`](#icukitcollator) — function, `icukit.collator`
+- [`compare_strings`](#icukitcollator) — function, `icukit.collator`
+- [`get_sort_key`](#icukitcollator) — function, `icukit.collator`
+- [`list_collation_types`](#icukitcollator) — function, `icukit.collator`
+- [`get_collator_info`](#icukitcollator) — function, `icukit.collator`
+- [`STRENGTH_PRIMARY`](#icukitcollator) — constant, `icukit.collator`
+- [`STRENGTH_SECONDARY`](#icukitcollator) — constant, `icukit.collator`
+- [`STRENGTH_TERTIARY`](#icukitcollator) — constant, `icukit.collator`
+- [`STRENGTH_QUATERNARY`](#icukitcollator) — constant, `icukit.collator`
+- [`STRENGTH_IDENTICAL`](#icukitcollator) — constant, `icukit.collator`
+- [`Transliterator`](#icukittransliterator) — class, `icukit.transliterator`
+- [`CommonTransliterators`](#icukittransliterator) — class, `icukit.transliterator`
+- [`transliterate`](#icukittransliterator) — function, `icukit.transliterator`
+- [`list_transliterators`](#icukittransliterator) — function, `icukit.transliterator`
+- [`get_transliterator_info`](#icukittransliterator) — function, `icukit.transliterator`
+- [`list_transliterators_info`](#icukittransliterator) — function, `icukit.transliterator`
+- [`UnicodeRegex`](#icukitregex) — class, `icukit.regex`
+- [`regex_find`](#icukitregex) — function, `icukit.regex`
+- [`regex_replace`](#icukitregex) — function, `icukit.regex`
+- [`regex_split`](#icukitregex) — function, `icukit.regex`
+- [`list_unicode_properties`](#icukitregex) — function, `icukit.regex`
+- [`list_unicode_categories`](#icukitregex) — function, `icukit.regex`
+- [`list_unicode_scripts`](#icukitregex) — function, `icukit.regex`
+- [`CASE_INSENSITIVE`](#icukitregex) — constant, `icukit.regex`
+- [`MULTILINE`](#icukitregex) — constant, `icukit.regex`
+- [`DOTALL`](#icukitregex) — constant, `icukit.regex`
+- [`COMMENTS`](#icukitregex) — constant, `icukit.regex`
+- [`detect_script`](#icukitscript) — function, `icukit.script`
+- [`detect_scripts`](#icukitscript) — function, `icukit.script`
+- [`get_char_script`](#icukitscript) — function, `icukit.script`
+- [`get_script_info`](#icukitscript) — function, `icukit.script`
+- [`is_cased`](#icukitscript) — function, `icukit.script`
+- [`is_rtl`](#icukitscript) — function, `icukit.script`
+- [`list_scripts`](#icukitscript) — function, `icukit.script`
+- [`list_scripts_info`](#icukitscript) — function, `icukit.script`
+- [`normalize`](#icukitunicode) — function, `icukit.unicode`
+- [`is_normalized`](#icukitunicode) — function, `icukit.unicode`
+- [`get_char_name`](#icukitunicode) — function, `icukit.unicode`
+- [`get_char_category`](#icukitunicode) — function, `icukit.unicode`
+- [`get_char_info`](#icukitunicode) — function, `icukit.unicode`
+- [`list_categories`](#icukitunicode) — function, `icukit.unicode`
+- [`list_blocks`](#icukitunicode) — function, `icukit.unicode`
+- [`get_block_characters`](#icukitunicode) — function, `icukit.unicode`
+- [`get_category_characters`](#icukitunicode) — function, `icukit.unicode`
+- [`NFC`](#icukitunicode) — constant, `icukit.unicode`
+- [`NFD`](#icukitunicode) — constant, `icukit.unicode`
+- [`NFKC`](#icukitunicode) — constant, `icukit.unicode`
+- [`NFKD`](#icukitunicode) — constant, `icukit.unicode`
+- [`list_regions`](#icukitregion) — function, `icukit.region`
+- [`list_regions_info`](#icukitregion) — function, `icukit.region`
+- [`get_region_info`](#icukitregion) — function, `icukit.region`
+- [`get_contained_regions`](#icukitregion) — function, `icukit.region`
+- [`list_region_types`](#icukitregion) — function, `icukit.region`
+- [`search_all`](#icukitsearch) — function, `icukit.search`
+- [`search_first`](#icukitsearch) — function, `icukit.search`
+- [`search_count`](#icukitsearch) — function, `icukit.search`
+- [`search_replace`](#icukitsearch) — function, `icukit.search`
+- [`StringSearcher`](#icukitsearch) — class, `icukit.search`
+- [`Detection`](#icukitdetect) — class, `icukit.detect`
+- [`regex_detect`](#icukitdetect) — function, `icukit.detect`
+- [`collation_detect`](#icukitdetect) — function, `icukit.detect`
+- [`Condition`](#icukitexceptions) — alias, `icukit.exceptions`
+- [`ExceptionInventory`](#icukitexceptions) — class, `icukit.exceptions`
+- [`ExceptionRule`](#icukitexceptions) — class, `icukit.exceptions`
+- [`LoadedExceptionInventory`](#icukitexceptions) — class, `icukit.exceptions`
+- [`NamedListCondition`](#icukitexceptions) — class, `icukit.exceptions`
+- [`Provenance`](#icukitexceptions) — class, `icukit.exceptions`
+- [`SkipSpec`](#icukitexceptions) — class, `icukit.exceptions`
+- [`UnicodeSetCondition`](#icukitexceptions) — class, `icukit.exceptions`
+- [`Witnesses`](#icukitexceptions) — class, `icukit.exceptions`
+- [`load_exception_inventory`](#icukitexceptions) — function, `icukit.exceptions`
+- [`merge_retypes`](#icukitexceptions) — function, `icukit.exceptions`
+- [`ExceptionConflictError`](#icukiterrors) — class, `icukit.errors`
+- [`ExceptionLoadError`](#icukiterrors) — class, `icukit.errors`
+- [`RuleRefusal`](#icukiterrors) — class, `icukit.errors`
+- [`RuleLoadError`](#icukiterrors) — class, `icukit.errors`
+- [`are_confusable`](#icukitspoof) — function, `icukit.spoof`
+- [`get_confusable_type`](#icukitspoof) — function, `icukit.spoof`
+- [`get_skeleton`](#icukitspoof) — function, `icukit.spoof`
+- [`check_string`](#icukitspoof) — function, `icukit.spoof`
+- [`get_confusable_info`](#icukitspoof) — function, `icukit.spoof`
+- [`SpoofChecker`](#icukitspoof) — class, `icukit.spoof`
+- [`CONFUSABLE_NONE`](#icukitspoof) — constant, `icukit.spoof`
+- [`CONFUSABLE_SINGLE_SCRIPT`](#icukitspoof) — constant, `icukit.spoof`
+- [`CONFUSABLE_MIXED_SCRIPT`](#icukitspoof) — constant, `icukit.spoof`
+- [`CONFUSABLE_WHOLE_SCRIPT`](#icukitspoof) — constant, `icukit.spoof`
+- [`idna_encode`](#icukitidna) — function, `icukit.idna`
+- [`idna_decode`](#icukitidna) — function, `icukit.idna`
+- [`idna_encode_label`](#icukitidna) — function, `icukit.idna`
+- [`idna_decode_label`](#icukitidna) — function, `icukit.idna`
+- [`is_ascii_domain`](#icukitidna) — function, `icukit.idna`
+- [`IDNAConverter`](#icukitidna) — class, `icukit.idna`
+- [`create_index_buckets`](#icukitalpha-index) — function, `icukit.alpha_index`
+- [`get_bucket_labels`](#icukitalpha-index) — function, `icukit.alpha_index`
+- [`get_bucket_for_name`](#icukitalpha-index) — function, `icukit.alpha_index`
+- [`AlphabeticIndex`](#icukitalpha-index) — class, `icukit.alpha_index`
+- [`list_timezones`](#icukittimezone) — function, `icukit.timezone`
+- [`list_timezones_info`](#icukittimezone) — function, `icukit.timezone`
+- [`get_timezone_info`](#icukittimezone) — function, `icukit.timezone`
+- [`get_timezone_offset`](#icukittimezone) — function, `icukit.timezone`
+- [`get_equivalent_timezones`](#icukittimezone) — function, `icukit.timezone`
+- [`list_calendars`](#icukitcalendar) — function, `icukit.calendar`
+- [`list_calendars_info`](#icukitcalendar) — function, `icukit.calendar`
+- [`get_calendar_info`](#icukitcalendar) — function, `icukit.calendar`
+- [`is_valid_calendar`](#icukitcalendar) — function, `icukit.calendar`
+- [`list_locales`](#icukitlocale) — function, `icukit.locale`
+- [`list_locales_info`](#icukitlocale) — function, `icukit.locale`
+- [`list_languages`](#icukitlocale) — function, `icukit.locale`
+- [`parse_locale`](#icukitlocale) — function, `icukit.locale`
+- [`get_locale_info`](#icukitlocale) — function, `icukit.locale`
+- [`get_locale_attributes`](#icukitlocale) — function, `icukit.locale`
+- [`get_locale_scripts`](#icukitlocale) — function, `icukit.locale`
+- [`get_locale_extended`](#icukitlocale) — function, `icukit.locale`
+- [`add_likely_subtags`](#icukitlocale) — function, `icukit.locale`
+- [`minimize_subtags`](#icukitlocale) — function, `icukit.locale`
+- [`canonicalize_locale`](#icukitlocale) — function, `icukit.locale`
+- [`get_display_name`](#icukitlocale) — function, `icukit.locale`
+- [`get_language_display_name`](#icukitlocale) — function, `icukit.locale`
+- [`is_valid_locale`](#icukitlocale) — function, `icukit.locale`
+- [`get_default_locale`](#icukitlocale) — function, `icukit.locale`
+- [`get_exemplar_characters`](#icukitlocale) — function, `icukit.locale`
+- [`get_exemplar_info`](#icukitlocale) — function, `icukit.locale`
+- [`list_exemplar_types`](#icukitlocale) — function, `icukit.locale`
+- [`EXEMPLAR_STANDARD`](#icukitlocale) — constant, `icukit.locale`
+- [`EXEMPLAR_AUXILIARY`](#icukitlocale) — constant, `icukit.locale`
+- [`EXEMPLAR_INDEX`](#icukitlocale) — constant, `icukit.locale`
+- [`EXEMPLAR_PUNCTUATION`](#icukitlocale) — constant, `icukit.locale`
+- [`get_number_symbols`](#icukitlocale) — function, `icukit.locale`
+- [`format_number`](#icukitlocale) — function, `icukit.locale`
+- [`format_currency`](#icukitlocale) — function, `icukit.locale`
+- [`format_percent`](#icukitlocale) — function, `icukit.locale`
+- [`format_scientific`](#icukitlocale) — function, `icukit.locale`
+- [`format_spellout`](#icukitlocale) — function, `icukit.locale`
+- [`format_ordinal`](#icukitlocale) — function, `icukit.locale`
+- [`COMPACT_SHORT`](#icukitlocale) — constant, `icukit.locale`
+- [`COMPACT_LONG`](#icukitlocale) — constant, `icukit.locale`
+- [`get_plural_category`](#icukitplural) — function, `icukit.plural`
+- [`get_ordinal_category`](#icukitplural) — function, `icukit.plural`
+- [`list_plural_categories`](#icukitplural) — function, `icukit.plural`
+- [`list_ordinal_categories`](#icukitplural) — function, `icukit.plural`
+- [`get_plural_rules_info`](#icukitplural) — function, `icukit.plural`
+- [`CATEGORY_ZERO`](#icukitplural) — constant, `icukit.plural`
+- [`CATEGORY_ONE`](#icukitplural) — constant, `icukit.plural`
+- [`CATEGORY_TWO`](#icukitplural) — constant, `icukit.plural`
+- [`CATEGORY_FEW`](#icukitplural) — constant, `icukit.plural`
+- [`CATEGORY_MANY`](#icukitplural) — constant, `icukit.plural`
+- [`CATEGORY_OTHER`](#icukitplural) — constant, `icukit.plural`
+- [`TYPE_CARDINAL`](#icukitplural) — constant, `icukit.plural`
+- [`TYPE_ORDINAL`](#icukitplural) — constant, `icukit.plural`
+- [`NumberParser`](#icukitparse) — class, `icukit.parse`
+- [`parse_number`](#icukitparse) — function, `icukit.parse`
+- [`parse_currency`](#icukitparse) — function, `icukit.parse`
+- [`parse_percent`](#icukitparse) — function, `icukit.parse`
+- [`DurationFormatter`](#icukitduration) — class, `icukit.duration`
+- [`format_duration`](#icukitduration) — function, `icukit.duration`
+- [`parse_iso_duration`](#icukitduration) — function, `icukit.duration`
+- [`DURATION_WIDTH_WIDE`](#icukitduration) — constant, `icukit.duration`
+- [`DURATION_WIDTH_SHORT`](#icukitduration) — constant, `icukit.duration`
+- [`DURATION_WIDTH_NARROW`](#icukitduration) — constant, `icukit.duration`
+- [`DisplayNames`](#icukitdisplayname) — class, `icukit.displayname`
+- [`get_language_name`](#icukitdisplayname) — function, `icukit.displayname`
+- [`get_script_name`](#icukitdisplayname) — function, `icukit.displayname`
+- [`get_region_name`](#icukitdisplayname) — function, `icukit.displayname`
+- [`get_currency_name`](#icukitdisplayname) — function, `icukit.displayname`
+- [`get_currency_symbol`](#icukitdisplayname) — function, `icukit.displayname`
+- [`get_locale_name`](#icukitdisplayname) — function, `icukit.displayname`
+- [`CompactFormatter`](#icukitcompact) — class, `icukit.compact`
+- [`format_compact`](#icukitlocale) — function, `icukit.locale`
+- [`COMPACT_STYLE_SHORT`](#icukitcompact) — constant, `icukit.compact`
+- [`COMPACT_STYLE_LONG`](#icukitcompact) — constant, `icukit.compact`
+
 ## icukit.abbreviation_breaker
 
 Sentence-break post-filter driven by an abbreviation lexicon.
@@ -153,6 +480,18 @@ Example:
     ['Saint', 'Street']
     >>> entry.is_ambiguous_expansion
     True
+
+### Constants and type aliases
+
+#### `BREAK_AMBIGUOUS` (constant)
+
+`'ambiguous'`
+
+#### `BREAK_SUPPRESS` (constant)
+
+`'suppress'`
+
+``break`` values (the attribute name is a Python keyword, hence the aliases).
 
 ### class `AbbreviationLexicon`
 
@@ -394,6 +733,26 @@ Example:
     >>> strip_bidi_controls('hello\u200fworld')
     'helloworld'
 
+### Constants and type aliases
+
+#### `DIRECTION_LTR` (constant)
+
+`'ltr'`
+
+Direction constants
+
+#### `DIRECTION_MIXED` (constant)
+
+`'mixed'`
+
+#### `DIRECTION_NEUTRAL` (constant)
+
+`'neutral'`
+
+#### `DIRECTION_RTL` (constant)
+
+`'rtl'`
+
 ### `get_base_direction(text: 'str') -> 'str'`
 
 Get the base direction of text using the first strong directional character.
@@ -499,6 +858,26 @@ Example:
     ['Hello world. ', 'How are you?']
     >>> break_words('Hello, world!', 'en', skip_punctuation=True)
     ['Hello', 'world']
+
+### Constants and type aliases
+
+#### `BREAK_CHARACTER` (constant)
+
+`'character'`
+
+#### `BREAK_LINE` (constant)
+
+`'line'`
+
+#### `BREAK_SENTENCE` (constant)
+
+`'sentence'`
+
+Break type constants
+
+#### `BREAK_WORD` (constant)
+
+`'word'`
 
 ### class `BreakSpan`
 
@@ -931,6 +1310,30 @@ Example:
     >>> sort_strings(["Öl", "Ol", "öl"], "de_DE")
     ['Ol', 'Öl', 'öl']
 
+### Constants and type aliases
+
+#### `STRENGTH_IDENTICAL` (constant)
+
+`'identical'`
+
+#### `STRENGTH_PRIMARY` (constant)
+
+`'primary'`
+
+Collation strength levels
+
+#### `STRENGTH_QUATERNARY` (constant)
+
+`'quaternary'`
+
+#### `STRENGTH_SECONDARY` (constant)
+
+`'secondary'`
+
+#### `STRENGTH_TERTIARY` (constant)
+
+`'tertiary'`
+
 ### `compare_strings(a: 'str', b: 'str', locale: 'str' = 'en_US', *, strength: 'str | None' = None) -> 'int'`
 
 Compare two strings using locale-aware collation.
@@ -1050,6 +1453,26 @@ Example:
     >>> format_compact(3500, locale="ja_JP")
     '3500'  # Japanese uses 万 (10000) not K (1000)
 
+### Constants and type aliases
+
+#### `COMPACT_LONG` (constant)
+
+`'LONG'`
+
+#### `COMPACT_SHORT` (constant)
+
+`'SHORT'`
+
+#### `STYLE_LONG` (constant)
+
+`'LONG'`
+
+#### `STYLE_SHORT` (constant)
+
+`'SHORT'`
+
+Re-export with convenience names
+
 ### class `CompactFormatter`
 
 Locale-aware compact number formatter.
@@ -1111,6 +1534,22 @@ Example:
 ## icukit.conformance
 
 Round-trip conformance inventory for ICU-backed value detectors.
+
+### Constants and type aliases
+
+#### `CI_MATRIX` (constant)
+
+`{'date_skeletons': ['yMd', 'yMMMd', 'yMMMEd', 'Hm'], 'envelopes': ['bare', 'embedded', 'astral_prefix', 'combining_prefix', 'adjacent', 'rtl_embedded'], 'locales': [{'currency': 'USD', 'id': 'en_US'}, {'currency': 'EUR', 'id': 'de_DE'}, {'currency': 'INR', 'id': 'hi_IN'}, {'currency': 'THB', 'id': 'th_TH'}, {'currency': 'IRR', 'id': 'fa_IR'}, {'currency': 'RUB', 'id': 'ru_RU'}], 'numbers': {'currency': ['1234.5'], 'decimal': ['1234567.5', '-1234567.5'], 'percent': ['0.07']}}`
+
+#### `FULL_MATRIX` (constant)
+
+`{'date_skeletons': ['yMd', 'yMMMd', 'yMMMEd', 'Hm'], 'envelopes': ['bare', 'embedded', 'astral_prefix', 'combining_prefix', 'adjacent', 'rtl_embedded'], 'locales': [{'currency': 'USD', 'id': 'en_US'}, {'currency': 'EUR', 'id': 'de_DE'}, {'currency': 'INR', 'id': 'hi_IN'}, {'currency': 'THB', 'id': 'th_TH'}, {'currency': 'IRR', 'id': 'fa_IR'}, {'currency': 'RUB', 'id': 'ru_RU'}], 'numbers': {'currency': ['1234.5'], 'decimal': ['1234567.5', '-1234567.5'], 'percent': ['0.07']}}`
+
+This copy is intentional: it is the single seam at which the exhaustive profile grows.
+
+#### `Profile` (type alias)
+
+`Literal['ci', 'full']`
 
 ### class `Cell`
 
@@ -1196,6 +1635,66 @@ Example:
     >>> fmt_de = DateTimeFormatter("de_DE")
     >>> print(fmt_de.format(now, style="LONG"))
     15. Januar 2024 um 15:45:30 MEZ
+
+### Constants and type aliases
+
+#### `SECONDS_PER_DAY` (constant)
+
+`86400`
+
+#### `SECONDS_PER_HOUR` (constant)
+
+`3600`
+
+#### `SECONDS_PER_MINUTE` (constant)
+
+`60`
+
+Time duration constants (seconds)
+
+#### `SECONDS_PER_MONTH` (constant)
+
+`2592000`
+
+#### `SECONDS_PER_WEEK` (constant)
+
+`604800`
+
+#### `SECONDS_PER_YEAR` (constant)
+
+`31536000`
+
+#### `STYLE_FULL` (constant)
+
+`'FULL'`
+
+Style constants
+
+#### `STYLE_LONG` (constant)
+
+`'LONG'`
+
+#### `STYLE_MEDIUM` (constant)
+
+`'MEDIUM'`
+
+#### `STYLE_NONE` (constant)
+
+`'NONE'`
+
+#### `STYLE_SHORT` (constant)
+
+`'SHORT'`
+
+#### `WIDTH_ABBREVIATED` (constant)
+
+`'ABBREVIATED'`
+
+#### `WIDTH_WIDE` (constant)
+
+`'WIDE'`
+
+Width constants for symbol names (matching measure.py convention)
 
 ### class `DateTimeFormatter`
 
@@ -2159,6 +2658,22 @@ Example:
     >>> fmt.format(hours=2, minutes=30)
     '2時間30分'
 
+### Constants and type aliases
+
+#### `WIDTH_NARROW` (constant)
+
+`'NARROW'`
+
+#### `WIDTH_SHORT` (constant)
+
+`'SHORT'`
+
+#### `WIDTH_WIDE` (constant)
+
+`'WIDE'`
+
+Width constants
+
 ### class `DurationFormatter`
 
 Locale-aware duration formatter.
@@ -2267,6 +2782,42 @@ observable in the generation report, rather than making generation fail or silen
 narrowing the enumerated surface. The abbreviation family is inventory-driven because
 expansion is intentionally not an invertible formatter operation.
 
+### Constants and type aliases
+
+#### `ABBREVIATION_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `COMPACT_NUMBER_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `DATE_INTERVAL_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `DATE_TIME_SKELETON_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `DEFAULT_FAMILIES` (constant)
+
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+
+inverter. Abbreviations use their typed lexicon.
+
+#### `RELATIVE_DATE_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `SCIENTIFIC_NUMBER_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `SPELLOUT_NUMBER_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
 ### class `Family`
 
 An introspective formatter family that can derive detectors for its specs.
@@ -2306,6 +2857,12 @@ Corpus exception rules for ICU text segmentation.
 The persisted objects in this module are deliberately JSON-shaped ``TypedDict``
 records.  Loading validates and compiles all records transactionally; applications
 only ever see the immutable compiled inventory.
+
+### Constants and type aliases
+
+#### `Condition` (type alias)
+
+`UnicodeSetCondition | NamedListCondition`
 
 ### class `ExceptionInventory`
 
@@ -2569,6 +3126,22 @@ Example:
     >>> format_list(['Äpfel', 'Orangen', 'Bananen'], 'de')
     'Äpfel, Orangen und Bananen'
 
+### Constants and type aliases
+
+#### `STYLE_AND` (constant)
+
+`'and'`
+
+List format styles
+
+#### `STYLE_OR` (constant)
+
+`'or'`
+
+#### `STYLE_UNIT` (constant)
+
+`'unit'`
+
 ### class `ListFormatter`
 
 Locale-aware list formatter.
@@ -2674,6 +3247,36 @@ Example:
         >>> from icukit import add_likely_subtags
         >>> add_likely_subtags('zh')
         'zh_Hans_CN'
+
+### Constants and type aliases
+
+#### `COMPACT_LONG` (constant)
+
+`'LONG'`
+
+#### `COMPACT_SHORT` (constant)
+
+`'SHORT'`
+
+Compact style constants
+
+#### `EXEMPLAR_AUXILIARY` (constant)
+
+`'auxiliary'`
+
+#### `EXEMPLAR_INDEX` (constant)
+
+`'index'`
+
+#### `EXEMPLAR_PUNCTUATION` (constant)
+
+`'punctuation'`
+
+#### `EXEMPLAR_STANDARD` (constant)
+
+`'standard'`
+
+Exemplar set type constants
 
 ### `add_likely_subtags(locale_str: 'str') -> 'str'`
 
@@ -3180,6 +3783,22 @@ Example:
     >>> fmt_de = MeasureFormatter("de_DE")
     >>> fmt_de.format(5.5, "kilometer")
     '5,5 Kilometer'
+
+### Constants and type aliases
+
+#### `WIDTH_NARROW` (constant)
+
+`'NARROW'`
+
+#### `WIDTH_SHORT` (constant)
+
+`'SHORT'`
+
+#### `WIDTH_WIDE` (constant)
+
+`'WIDE'`
+
+Width constants
 
 ### class `MeasureFormatter`
 
@@ -3756,6 +4375,44 @@ Example:
     >>> list_plural_categories("ar")
     ['zero', 'one', 'two', 'few', 'many', 'other']
 
+### Constants and type aliases
+
+#### `CATEGORY_FEW` (constant)
+
+`'few'`
+
+#### `CATEGORY_MANY` (constant)
+
+`'many'`
+
+#### `CATEGORY_ONE` (constant)
+
+`'one'`
+
+#### `CATEGORY_OTHER` (constant)
+
+`'other'`
+
+#### `CATEGORY_TWO` (constant)
+
+`'two'`
+
+#### `CATEGORY_ZERO` (constant)
+
+`'zero'`
+
+Category constants
+
+#### `TYPE_CARDINAL` (constant)
+
+`'cardinal'`
+
+Type constants
+
+#### `TYPE_ORDINAL` (constant)
+
+`'ordinal'`
+
 ### `get_ordinal_category(number: 'int | float', locale: 'str' = 'en_US') -> 'str'`
 
 Get the ordinal category for a number.
@@ -4170,6 +4827,26 @@ See Also:
     * :func:`regex_replace`: Convenience function for replacements
     * :func:`regex_split`: Convenience function for splitting
 
+### Constants and type aliases
+
+#### `CASE_INSENSITIVE` (constant)
+
+`2`
+
+Flags
+
+#### `COMMENTS` (constant)
+
+`4`
+
+#### `DOTALL` (constant)
+
+`32`
+
+#### `MULTILINE` (constant)
+
+`8`
+
 ### class `UnicodeRegex`
 
 Unicode-aware regular expression operations using ICU.
@@ -4525,6 +5202,12 @@ the contest as ambiguous rather than guessing.
 
 This is additive: :func:`~icukit.detectors.detect` is unchanged; resolution is an opt-in layer.
 
+### Constants and type aliases
+
+#### `DEFAULT_EPSILON` (constant)
+
+`1.0`
+
 ### class `Resolution`
 
 The weighed reading of a universe of detections.
@@ -4772,6 +5455,30 @@ Example:
     >>> search_first("cafe", "The café is here", strength="primary")
     {'start': 4, 'end': 8, 'text': 'café'}
 
+### Constants and type aliases
+
+#### `STRENGTH_IDENTICAL` (constant)
+
+`'identical'`
+
+#### `STRENGTH_PRIMARY` (constant)
+
+`'primary'`
+
+Search strength levels (reuse collator terminology)
+
+#### `STRENGTH_QUATERNARY` (constant)
+
+`'quaternary'`
+
+#### `STRENGTH_SECONDARY` (constant)
+
+`'secondary'`
+
+#### `STRENGTH_TERTIARY` (constant)
+
+`'tertiary'`
+
 ### class `StringSearcher`
 
 Reusable locale-aware string searcher.
@@ -4916,6 +5623,26 @@ Example:
     True
     >>> get_skeleton("pаypal")
     'paypal'
+
+### Constants and type aliases
+
+#### `CONFUSABLE_MIXED_SCRIPT` (constant)
+
+`2`
+
+#### `CONFUSABLE_NONE` (constant)
+
+`0`
+
+Confusable result flags (bitmask values from ICU)
+
+#### `CONFUSABLE_SINGLE_SCRIPT` (constant)
+
+`1`
+
+#### `CONFUSABLE_WHOLE_SCRIPT` (constant)
+
+`4`
 
 ### class `SpoofChecker`
 
@@ -5373,6 +6100,26 @@ Example:
         'Lu'  # Letter, uppercase
         >>> get_char_category('5')
         'Nd'  # Number, decimal digit
+
+### Constants and type aliases
+
+#### `NFC` (constant)
+
+`'NFC'`
+
+Normalization form constants
+
+#### `NFD` (constant)
+
+`'NFD'`
+
+#### `NFKC` (constant)
+
+`'NFKC'`
+
+#### `NFKD` (constant)
+
+`'NFKD'`
 
 ### `get_block_characters(block_name: 'str') -> 'list[str]'`
 
