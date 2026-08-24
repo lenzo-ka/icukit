@@ -11,10 +11,13 @@ Usage:
 """
 
 import argparse
+import ast
+import enum
 import inspect
 import sys
+import types
 from pathlib import Path
-from typing import Any
+from typing import Any, get_origin
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -67,6 +70,98 @@ def get_function_info(func) -> dict[str, Any]:
     }
 
 
+def get_source_assignments(module) -> dict[str, dict[str, str]]:
+    """Return stable source forms and nearby documentation for assignments."""
+    source = inspect.getsource(module)
+    tree = ast.parse(source)
+    lines = source.splitlines()
+    assignments = {}
+
+    for index, node in enumerate(tree.body):
+        names = []
+        value = None
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names = [target.id for target in targets if isinstance(target, ast.Name)]
+            value = node.value
+        if not names or value is None:
+            continue
+
+        doc = ""
+        if index + 1 < len(tree.body):
+            next_node = tree.body[index + 1]
+            if (
+                isinstance(next_node, ast.Expr)
+                and isinstance(next_node.value, ast.Constant)
+                and isinstance(next_node.value.value, str)
+            ):
+                doc = next_node.value.value
+        if not doc and node.lineno > 1:
+            previous = lines[node.lineno - 2].strip()
+            if previous.startswith("#"):
+                doc = previous.removeprefix("#").strip()
+
+        annotation = node.annotation if isinstance(node, ast.AnnAssign) else None
+        for name in names:
+            assignments[name] = {
+                "value": ast.unparse(value),
+                "annotation": ast.unparse(annotation) if annotation else "",
+                "doc": doc,
+            }
+
+    return assignments
+
+
+def is_type_alias(name: str, obj: Any, source_info: dict[str, str]) -> bool:
+    """Identify explicit and conventional exported type aliases."""
+    if source_info.get("annotation") in {"TypeAlias", "typing.TypeAlias"}:
+        return True
+    if isinstance(obj, types.UnionType) or get_origin(obj) is not None:
+        return True
+    return bool(name[:1].isupper() and not name.isupper())
+
+
+def stable_repr(value: Any) -> str:
+    """Return a compact representation with deterministic container ordering."""
+    if isinstance(value, enum.Enum):
+        return f"{type(value).__name__}.{value.name}"
+    if isinstance(value, dict):
+        items = sorted(value.items(), key=lambda item: stable_repr(item[0]))
+        return (
+            "{" + ", ".join(f"{stable_repr(key)}: {stable_repr(item)}" for key, item in items) + "}"
+        )
+    if isinstance(value, (set, frozenset)):
+        rendered = ", ".join(sorted(stable_repr(item) for item in value))
+        return f"{type(value).__name__}({{{rendered}}})"
+    if isinstance(value, tuple):
+        rendered = ", ".join(stable_repr(item) for item in value)
+        if len(value) == 1:
+            rendered += ","
+        return f"({rendered})"
+    if isinstance(value, list):
+        return "[" + ", ".join(stable_repr(item) for item in value) + "]"
+    if isinstance(value, (str, bytes, int, float, complex, bool, type(None))):
+        return repr(value)
+    return f"<{type(value).__module__}.{type(value).__qualname__}>"
+
+
+def get_data_info(name: str, obj: Any, source_info: dict[str, str]) -> dict[str, str]:
+    """Extract documentation for an exported constant or type alias."""
+    alias = is_type_alias(name, obj, source_info)
+    if alias:
+        annotation = source_info.get("annotation")
+        value = source_info.get("value") or stable_repr(obj)
+        form = value if not annotation or annotation.endswith("TypeAlias") else annotation
+    else:
+        form = stable_repr(obj)
+    return {
+        "name": name,
+        "kind": "alias" if alias else "constant",
+        "form": form,
+        "doc": source_info.get("doc", ""),
+    }
+
+
 def extract_lib_docs() -> dict[str, Any]:
     """Extract documentation from the icukit library modules."""
     import importlib
@@ -76,6 +171,7 @@ def extract_lib_docs() -> dict[str, Any]:
     docs = {
         "version": icukit.__version__,
         "modules": {},
+        "root_exports": [],
     }
 
     docs["package_doc"] = get_module_doc(icukit)
@@ -101,33 +197,72 @@ def extract_lib_docs() -> dict[str, Any]:
 
         classes = []
         functions = []
+        data = []
+        source_assignments = get_source_assignments(module)
 
         exported_names = getattr(module, "__all__", None)
         if exported_names is None:
-            members = (
-                obj
+            member_names = sorted(
+                name
                 for name, obj in inspect.getmembers(module)
                 if not name.startswith("_")
-                and getattr(obj, "__module__", None) == f"icukit.{mod_name}"
+                and (
+                    name in source_assignments
+                    or getattr(obj, "__module__", None) == f"icukit.{mod_name}"
+                )
             )
         else:
-            members = (getattr(module, name) for name in exported_names)
+            member_names = list(exported_names)
 
-        for obj in members:
+        for name in member_names:
+            obj = getattr(module, name)
             if inspect.isclass(obj):
                 classes.append(get_class_info(obj))
             elif inspect.isfunction(obj):
                 functions.append(get_function_info(obj))
+            else:
+                data.append(get_data_info(name, obj, source_assignments.get(name, {})))
 
         # Sort by name for consistent output
         classes.sort(key=lambda x: x["name"])
         functions.sort(key=lambda x: x["name"])
+        data.sort(key=lambda x: x["name"])
 
         docs["modules"][mod_name] = {
             "doc": mod_doc,
             "classes": classes,
             "functions": functions,
+            "data": data,
         }
+
+    root_origins = {}
+    init_tree = ast.parse(inspect.getsource(icukit))
+    for node in init_tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module:
+            origin = node.module.lstrip(".")
+            for imported in node.names:
+                root_origins[imported.asname or imported.name] = origin
+
+    module_entries = {
+        (mod_name, entry["name"]): entry["kind"]
+        for mod_name, mod_info in docs["modules"].items()
+        for entry in mod_info["data"]
+    }
+    for name in icukit.__all__:
+        obj = getattr(icukit, name)
+        origin = root_origins.get(name) or getattr(obj, "__module__", "icukit")
+        origin = origin.removeprefix("icukit.")
+        if origin == "icukit":
+            origin = ""
+        if inspect.isclass(obj):
+            kind = "class"
+        elif inspect.isfunction(obj):
+            kind = "function"
+        else:
+            kind = module_entries.get(
+                (origin, name), "alias" if is_type_alias(name, obj, {}) else "constant"
+            )
+        docs["root_exports"].append({"name": name, "kind": kind, "origin": origin})
 
     return docs
 
@@ -192,7 +327,18 @@ def generate_api_markdown(lib_docs: dict[str, Any]) -> str:
         "",
         f"Version: {lib_docs['version']}",
         "",
+        "## Root API index",
+        "",
+        "Names exported by `icukit.__all__` (the `from icukit import ...` surface):",
+        "",
     ]
+
+    for entry in lib_docs["root_exports"]:
+        origin = entry["origin"]
+        module_name = f"icukit.{origin}" if origin else "icukit"
+        anchor = f"icukit{origin.replace('_', '-')}" if origin else "root-api-index"
+        lines.append(f"- [`{entry['name']}`](#{anchor}) — {entry['kind']}, `{module_name}`")
+    lines.append("")
 
     for mod_name, mod_info in lib_docs["modules"].items():
         lines.extend(
@@ -203,6 +349,14 @@ def generate_api_markdown(lib_docs: dict[str, Any]) -> str:
                 "",
             ]
         )
+
+        if mod_info["data"]:
+            lines.extend(["### Constants and type aliases", ""])
+            for entry in mod_info["data"]:
+                label = "type alias" if entry["kind"] == "alias" else "constant"
+                lines.extend([f"#### `{entry['name']}` ({label})", "", f"`{entry['form']}`", ""])
+                if entry["doc"]:
+                    lines.extend([entry["doc"], ""])
 
         # Classes
         for cls_info in mod_info["classes"]:
