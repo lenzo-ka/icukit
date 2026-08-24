@@ -73,6 +73,12 @@ class GenerationReport:
     skipped: tuple[SkippedSpec, ...]
 
 
+@dataclass(frozen=True)
+class _Probe:
+    detector: Detector | None
+    reason: str = ""
+
+
 def _abbreviation_specs(locale: str) -> Iterable[Spec]:
     from .abbreviation_compile import compile_lexicon
 
@@ -104,22 +110,22 @@ def _date_time_skeletons(locale: str) -> Iterable[Spec]:
 
 
 def _date_time_invert(spec: Spec, locale: str) -> Detector | None:
+    return _date_time_probe(spec, locale).detector
+
+
+def _date_time_probe(spec: Spec, locale: str) -> _Probe:
     skeleton = str(spec)
     try:
         detector = DateDetector(locale, skeleton)
-    except ValueError:
-        return None
-    return detector if detector.pattern else None
+    except ValueError as error:
+        return _Probe(None, str(error))
+    if not detector.pattern:
+        return _Probe(None, "ICU returned an empty best pattern")
+    return _Probe(detector)
 
 
 def _date_time_skip_reason(spec: Spec, locale: str) -> str:
-    try:
-        detector = DateDetector(locale, str(spec))
-    except ValueError as error:
-        return str(error)
-    if not detector.pattern:
-        return "ICU returned an empty best pattern"
-    return "date/time skeleton was not invertible"
+    return _date_time_probe(spec, locale).reason or "date/time skeleton was not invertible"
 
 
 DATE_TIME_SKELETON_FAMILY = Family(
@@ -136,12 +142,18 @@ def _date_interval_skeletons(locale: str) -> Iterable[Spec]:
 
 
 def _date_interval_invert(spec: Spec, locale: str) -> Detector | None:
+    return _date_interval_probe(spec, locale).detector
+
+
+def _date_interval_probe(spec: Spec, locale: str) -> _Probe:
     skeleton = str(spec)
     try:
         detector = FlexibleDateIntervalDetector(locale, skeleton)
     except (icu.ICUError, ValueError):
-        return None
-    return detector if detector.has_patterns else None
+        return _Probe(None, f"no invertible interval pattern for skeleton {skeleton!r}")
+    if not detector.has_patterns:
+        return _Probe(None, f"no invertible interval pattern for skeleton {skeleton!r}")
+    return _Probe(detector)
 
 
 def _date_interval_skip_reason(spec: Spec, locale: str) -> str:
@@ -167,21 +179,21 @@ def _compact_widths(locale: str) -> Iterable[Spec]:
 
 
 def _compact_invert(spec: Spec, locale: str) -> Detector | None:
-    try:
-        detector = FlexibleCompactDetector(locale, str(spec))
-    except ValueError:
-        return None
-    return detector if detector.has_affixes else None
+    return _compact_probe(spec, locale).detector
 
 
-def _compact_skip_reason(spec: Spec, locale: str) -> str:
+def _compact_probe(spec: Spec, locale: str) -> _Probe:
     try:
         detector = FlexibleCompactDetector(locale, str(spec))
     except ValueError as error:
-        return str(error)
+        return _Probe(None, str(error))
     if not detector.has_affixes:
-        return "ICU exposed no exactly invertible compact affixes"
-    return "compact width was not invertible"
+        return _Probe(None, "ICU exposed no exactly invertible compact affixes")
+    return _Probe(detector)
+
+
+def _compact_skip_reason(spec: Spec, locale: str) -> str:
+    return _compact_probe(spec, locale).reason or "compact width was not invertible"
 
 
 COMPACT_NUMBER_FAMILY = Family(
@@ -200,19 +212,20 @@ def _scientific_styles(locale: str) -> Iterable[Spec]:
 
 
 def _scientific_invert(spec: Spec, locale: str) -> Detector | None:
+    return _scientific_probe(spec, locale).detector
+
+
+def _scientific_probe(spec: Spec, locale: str) -> _Probe:
+    del spec
     try:
         detector = FlexibleScientificDetector(locale)
-    except ValueError:
-        return None
-    return detector
+    except ValueError as error:
+        return _Probe(None, str(error))
+    return _Probe(detector)
 
 
 def _scientific_skip_reason(spec: Spec, locale: str) -> str:
-    try:
-        FlexibleScientificDetector(locale)
-    except ValueError as error:
-        return str(error)
-    return "scientific style was not invertible"
+    return _scientific_probe(spec, locale).reason or "scientific style was not invertible"
 
 
 SCIENTIFIC_NUMBER_FAMILY = Family(
@@ -232,21 +245,21 @@ def _spellout_rulesets(locale: str) -> Iterable[Spec]:
 
 
 def _spellout_invert(spec: Spec, locale: str) -> Detector | None:
-    try:
-        detector = FlexibleSpelloutDetector(locale)
-    except (icu.ICUError, ValueError):
-        return None
-    return detector if detector._ruleset == str(spec) else None
+    return _spellout_probe(spec, locale).detector
 
 
-def _spellout_skip_reason(spec: Spec, locale: str) -> str:
+def _spellout_probe(spec: Spec, locale: str) -> _Probe:
     try:
         detector = FlexibleSpelloutDetector(locale)
     except (icu.ICUError, ValueError) as error:
-        return str(error)
+        return _Probe(None, str(error))
     if detector._ruleset != str(spec):
-        return "ICU selected a different cardinal spellout rule set"
-    return "spellout rule set was not invertible"
+        return _Probe(None, "ICU selected a different cardinal spellout rule set")
+    return _Probe(detector)
+
+
+def _spellout_skip_reason(spec: Spec, locale: str) -> str:
+    return _spellout_probe(spec, locale).reason or "spellout rule set was not invertible"
 
 
 SPELLOUT_NUMBER_FAMILY = Family(
@@ -268,23 +281,23 @@ def _relative_date_units(locale: str) -> Iterable[Spec]:
 
 
 def _relative_date_invert(spec: Spec, locale: str) -> Detector | None:
-    try:
-        detector = FlexibleRelativeDateDetector(locale)
-    except (icu.ICUError, ValueError):
-        return None
-    return detector if detector.has_vocabulary and str(spec) in detector.reachable_units else None
+    return _relative_date_probe(spec, locale).detector
 
 
-def _relative_date_skip_reason(spec: Spec, locale: str) -> str:
+def _relative_date_probe(spec: Spec, locale: str) -> _Probe:
     try:
         detector = FlexibleRelativeDateDetector(locale)
     except (icu.ICUError, ValueError) as error:
-        return str(error)
+        return _Probe(None, str(error))
     if not detector.has_vocabulary:
-        return "ICU exposed no invertible relative-date phrases"
+        return _Probe(None, "ICU exposed no invertible relative-date phrases")
     if str(spec) not in detector.reachable_units:
-        return f"ICU exposed no invertible relative-date phrase for unit {spec!r}"
-    return "relative-date unit was not invertible"
+        return _Probe(None, f"ICU exposed no invertible relative-date phrase for unit {spec!r}")
+    return _Probe(detector)
+
+
+def _relative_date_skip_reason(spec: Spec, locale: str) -> str:
+    return _relative_date_probe(spec, locale).reason or "relative-date unit was not invertible"
 
 
 RELATIVE_DATE_FAMILY = Family(
@@ -306,6 +319,15 @@ DEFAULT_FAMILIES = (
     SPELLOUT_NUMBER_FAMILY,
 )
 
+_FAMILY_PROBES = (
+    (DATE_TIME_SKELETON_FAMILY, _date_time_probe),
+    (DATE_INTERVAL_FAMILY, _date_interval_probe),
+    (COMPACT_NUMBER_FAMILY, _compact_probe),
+    (RELATIVE_DATE_FAMILY, _relative_date_probe),
+    (SCIENTIFIC_NUMBER_FAMILY, _scientific_probe),
+    (SPELLOUT_NUMBER_FAMILY, _spellout_probe),
+)
+
 
 def generated_detectors_report(
     locale: str, families: Iterable[Family] = DEFAULT_FAMILIES
@@ -315,15 +337,21 @@ def generated_detectors_report(
     skipped: list[SkippedSpec] = []
     for family in families:
         for spec in family.enumerate(locale):
-            detector = family.invert(spec, locale)
+            probe_function = next(
+                (probe for known_family, probe in _FAMILY_PROBES if family is known_family), None
+            )
+            probe = probe_function(spec, locale) if probe_function is not None else None
+            detector = probe.detector if probe is not None else family.invert(spec, locale)
             if detector is not None:
                 detectors = detectors.with_(detector)
                 continue
-            reason = (
-                family.skip_reason(spec, locale)
-                if family.skip_reason is not None
-                else "family returned no inverter"
-            )
+            reason = probe.reason if probe is not None else ""
+            if not reason:
+                reason = (
+                    family.skip_reason(spec, locale)
+                    if family.skip_reason is not None
+                    else "family returned no inverter"
+                )
             skipped.append(SkippedSpec(family.name, spec, reason))
     return GenerationReport(detectors, tuple(skipped))
 

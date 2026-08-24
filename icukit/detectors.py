@@ -995,7 +995,9 @@ def date_detectors(locale: str, skeletons: Iterable[str], *, flexible: bool = Fa
     ``skeletons`` are ICU date-time skeletons (``"yMd"``, ``"yMMMd"``); each becomes a
     :class:`DateDetector`. Members are deduplicated by type, so a repeated skeleton is
     harmless. A skeleton whose pattern carries an uninvertible field raises (see
-    :class:`DateDetector`).
+    :class:`DateDetector`). When ``flexible`` is true, the gang additionally contains
+    only a :class:`~icukit.recognize.FlexibleTextDateDetector`; it does not add the
+    flexible numeric-date or other flexible date recognizers.
     """
     members: list[Detector] = [DateDetector(locale, skeleton) for skeleton in skeletons]
     if flexible:
@@ -1017,6 +1019,10 @@ def number_detectors(
 
     ``decimal`` and ``percent`` add the plain decimal and percent detectors; each ISO code
     in ``currencies`` adds a currency detector (type ``number:currency:<ISO>``).
+    When ``flexible`` is true, the gang additionally contains only a
+    :class:`~icukit.recognize.FlexibleCurrencyNameDetector` for each requested currency;
+    it does not add flexible decimal, percent, symbol-currency, compact, scientific,
+    spellout, fraction, or ordinal recognizers.
     """
     members: list[Detector] = []
     if decimal:

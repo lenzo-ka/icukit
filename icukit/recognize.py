@@ -8,6 +8,8 @@ those candidates unchanged.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from functools import lru_cache
 from math import gcd
@@ -64,6 +66,14 @@ _SLASHES = {"/", "\N{FRACTION SLASH}"}
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
 # Defensive cross-locale bound: ICU RBNF ordinal suffixes are reliable through signed 32-bit.
 _MAX_RBNF_ORDINAL_VALUE = 2_147_483_647
+
+
+@dataclass(frozen=True)
+class _FlexibleMatch:
+    end: int
+    captures: tuple[Capture, ...]
+    value: object
+    spec: object | None = None
 
 
 def _is_word_character(character: str) -> bool:
@@ -202,29 +212,7 @@ class FlexibleDateDetector:
         """Return greedy, non-overlapping flexible numeric dates in source order."""
         if self._inert:
             return []
-        starts = sorted({span["start"] for span in break_grapheme_spans(text, self.locale)})
-        detections: list[ValueDetection] = []
-        cursor = 0
-        for start in starts:
-            if start < cursor:
-                continue
-            match = self._match(text, start)
-            if match is None:
-                continue
-            end, captures, value = match
-            detections.append(
-                ValueDetection(
-                    text=text[start:end],
-                    start=start,
-                    end=end,
-                    type=self.type,
-                    value=value,
-                    captures=captures,
-                    spec=self._spec,
-                )
-            )
-            cursor = end
-        return detections
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
 _INTERVAL_FIELDS = (
@@ -824,29 +812,7 @@ class FlexibleNumberDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible decimal candidates in source order."""
-        starts = sorted({span["start"] for span in break_grapheme_spans(text, self.locale)})
-        detections: list[ValueDetection] = []
-        cursor = 0
-        for start in starts:
-            if start < cursor:
-                continue
-            match = self._match(text, start)
-            if match is None:
-                continue
-            end, captures, value = match
-            detections.append(
-                ValueDetection(
-                    text=text[start:end],
-                    start=start,
-                    end=end,
-                    type=self.type,
-                    value=value,
-                    captures=captures,
-                    spec=self._spec,
-                )
-            )
-            cursor = end
-        return detections
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
 _RELATIVE_NUMERIC_UNITS = (
@@ -1247,7 +1213,7 @@ class FlexibleMeasureDetector:
             icu.UCharCategory.CONNECTOR_PUNCTUATION,
         }
 
-    def _match(self, text: str, start: int):
+    def _match(self, text: str, start: int) -> _FlexibleMatch | None:
         match = self._number._match(text, start)
         if match is None:
             return None
@@ -1263,34 +1229,17 @@ class FlexibleMeasureDetector:
                 continue
             unit_capture = Capture("unit", unit_start, end, surface, self.unit, "symbol")
             spec = MeasureFormatSpec(self.locale, self.unit, width)
-            return end, (*captures, unit_capture), MeasureValue(value.decimal, self.unit), spec
+            return _FlexibleMatch(
+                end,
+                (*captures, unit_capture),
+                MeasureValue(value.decimal, self.unit),
+                spec,
+            )
         return None
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible measure candidates in source order."""
-        starts = sorted({span["start"] for span in break_grapheme_spans(text, self.locale)})
-        detections: list[ValueDetection] = []
-        cursor = 0
-        for start in starts:
-            if start < cursor:
-                continue
-            result = self._match(text, start)
-            if result is None:
-                continue
-            end, captures, value, spec = result
-            detections.append(
-                ValueDetection(
-                    text=text[start:end],
-                    start=start,
-                    end=end,
-                    type=self.type,
-                    value=value,
-                    captures=captures,
-                    spec=spec,
-                )
-            )
-            cursor = end
-        return detections
+        return _detect_flexible(text, self.locale, self.type, None, self._match)
 
 
 class FlexibleCompactDetector:
@@ -2450,7 +2399,13 @@ class FlexibleOrdinalDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
-def _detect_flexible(text, locale, type_label, spec, match):
+def _detect_flexible(
+    text: str,
+    locale: str,
+    type_label: str,
+    spec: object | None,
+    match: Callable[[str, int], tuple[int, tuple[Capture, ...], object] | _FlexibleMatch | None],
+) -> list[ValueDetection]:
     starts = sorted({span["start"] for span in break_grapheme_spans(text, locale)})
     detections: list[ValueDetection] = []
     cursor = 0
@@ -2460,7 +2415,12 @@ def _detect_flexible(text, locale, type_label, spec, match):
         result = match(text, start)
         if result is None:
             continue
-        end, captures, value = result
+        if isinstance(result, _FlexibleMatch):
+            end, captures, value = result.end, result.captures, result.value
+            match_spec = result.spec if result.spec is not None else spec
+        else:
+            end, captures, value = result
+            match_spec = spec
         detections.append(
             ValueDetection(
                 text=text[start:end],
@@ -2469,7 +2429,7 @@ def _detect_flexible(text, locale, type_label, spec, match):
                 type=type_label,
                 value=value,
                 captures=captures,
-                spec=spec,
+                spec=match_spec,
             )
         )
         cursor = end

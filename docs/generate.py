@@ -102,14 +102,18 @@ def extract_lib_docs() -> dict[str, Any]:
         classes = []
         functions = []
 
-        # Get public members defined in this module
-        for name, obj in inspect.getmembers(module):
-            if name.startswith("_"):
-                continue
-            # Only include items defined in this module (not imports)
-            if getattr(obj, "__module__", None) != f"icukit.{mod_name}":
-                continue
+        exported_names = getattr(module, "__all__", None)
+        if exported_names is None:
+            members = (
+                obj
+                for name, obj in inspect.getmembers(module)
+                if not name.startswith("_")
+                and getattr(obj, "__module__", None) == f"icukit.{mod_name}"
+            )
+        else:
+            members = (getattr(module, name) for name in exported_names)
 
+        for obj in members:
             if inspect.isclass(obj):
                 classes.append(get_class_info(obj))
             elif inspect.isfunction(obj):

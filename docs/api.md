@@ -1088,6 +1088,26 @@ Example:
     >>> fmt.format(1234567, style="LONG")
     '1.2 million'
 
+### `format_compact(value: 'int | float', locale_str: 'str' = 'en_US', style: 'str' = 'SHORT') -> 'str'`
+
+Format a number in compact form with locale-appropriate abbreviations.
+
+Args:
+    value: Number to format.
+    locale_str: Locale for formatting.
+    style: COMPACT_SHORT ("1.2M") or COMPACT_LONG ("1.2 million").
+
+Returns:
+    Compact formatted string.
+
+Example:
+    >>> format_compact(1234567, 'en_US')
+    '1.2M'
+    >>> format_compact(1234567, 'de_DE')
+    '1,2 Mio.'
+    >>> format_compact(1234567, 'en_US', COMPACT_LONG)
+    '1.2 million'
+
 ## icukit.conformance
 
 Round-trip conformance inventory for ICU-backed value detectors.
@@ -1781,7 +1801,9 @@ A gang of date detectors for ``locale``, one per skeleton.
 ``skeletons`` are ICU date-time skeletons (``"yMd"``, ``"yMMMd"``); each becomes a
 :class:`DateDetector`. Members are deduplicated by type, so a repeated skeleton is
 harmless. A skeleton whose pattern carries an uninvertible field raises (see
-:class:`DateDetector`).
+:class:`DateDetector`). When ``flexible`` is true, the gang additionally contains
+only a :class:`~icukit.recognize.FlexibleTextDateDetector`; it does not add the
+flexible numeric-date or other flexible date recognizers.
 
 ### `detect(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]') -> 'list[ValueDetection]'`
 
@@ -1804,6 +1826,10 @@ A gang of number detectors for ``locale``.
 
 ``decimal`` and ``percent`` add the plain decimal and percent detectors; each ISO code
 in ``currencies`` adds a currency detector (type ``number:currency:<ISO>``).
+When ``flexible`` is true, the gang additionally contains only a
+:class:`~icukit.recognize.FlexibleCurrencyNameDetector` for each requested currency;
+it does not add flexible decimal, percent, symbol-currency, compact, scientific,
+spellout, fraction, or ordinal recognizers.
 
 ## icukit.discover
 

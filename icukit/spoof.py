@@ -25,6 +25,7 @@ __all__ = [
     "check_string",
     "get_skeleton",
     "get_confusable_info",
+    "get_confusable_type",
     "SpoofChecker",
     "CONFUSABLE_NONE",
     "CONFUSABLE_SINGLE_SCRIPT",

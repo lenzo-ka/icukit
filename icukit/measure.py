@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Callable
 
 import icu
 
@@ -88,8 +89,8 @@ _LOCALE_PATTERN = re.compile(
 )
 
 # Cache for unit data from ICU
-_units_by_type_cache: dict | None = None
-_abbreviation_map_cache: dict | None = None
+_units_by_type_cache: dict[str, list[str]] | None = None
+_abbreviation_map_cache: dict[str, str] | None = None
 
 
 def _get_units_by_type() -> dict[str, list[str]]:
@@ -98,13 +99,16 @@ def _get_units_by_type() -> dict[str, list[str]]:
     if _units_by_type_cache is not None:
         return _units_by_type_cache
 
-    _units_by_type_cache = {}
+    # Assign the (empty) dict to the global before populating so a mid-loop
+    # ICU failure memoizes the partial state, matching prior cache semantics.
+    units_by_type: dict[str, list[str]] = {}
+    _units_by_type_cache = units_by_type
     for unit_type in icu.MeasureUnit.getAvailableTypes():
         units = []
         for mu in icu.MeasureUnit.getAvailable(unit_type):
             units.append(mu.getSubtype())
         if units:
-            _units_by_type_cache[unit_type] = sorted(units)
+            units_by_type[unit_type] = sorted(units)
 
     return _units_by_type_cache
 
@@ -119,7 +123,10 @@ def _get_abbreviation_map(locale: str = "en_US") -> dict[str, str]:
     if _abbreviation_map_cache is not None:
         return _abbreviation_map_cache
 
-    _abbreviation_map_cache = {}
+    # Assign the (empty) dict to the global before populating so a mid-build
+    # ICU failure memoizes the partial state, matching prior cache semantics.
+    abbreviation_map: dict[str, str] = {}
+    _abbreviation_map_cache = abbreviation_map
     formatter = icu.MeasureFormat(
         icu.Locale(locale),
         icu.UMeasureFormatWidth.SHORT,
@@ -133,12 +140,38 @@ def _get_abbreviation_map(locale: str = "en_US") -> dict[str, str]:
                 abbrev = _format_unit_without_value(formatter, measure)
                 if abbrev and abbrev != unit_name:
                     # Store both lowercase and original
-                    _abbreviation_map_cache[abbrev.lower()] = unit_name
-                    _abbreviation_map_cache[abbrev] = unit_name
+                    abbreviation_map[abbrev.lower()] = unit_name
+                    abbreviation_map[abbrev] = unit_name
             except icu.ICUError:
                 pass
 
     return _abbreviation_map_cache
+
+
+_CONVERSIONS: dict[tuple[str, str], Callable[[float], float]] = {
+    ("meter", "kilometer"): lambda value: value / 1000,
+    ("kilometer", "meter"): lambda value: value * 1000,
+    ("kilometer", "mile"): lambda value: value * 0.621371,
+    ("mile", "kilometer"): lambda value: value * 1.60934,
+    ("meter", "foot"): lambda value: value * 3.28084,
+    ("foot", "meter"): lambda value: value * 0.3048,
+    ("meter", "yard"): lambda value: value * 1.09361,
+    ("yard", "meter"): lambda value: value * 0.9144,
+    ("inch", "centimeter"): lambda value: value * 2.54,
+    ("centimeter", "inch"): lambda value: value / 2.54,
+    ("celsius", "fahrenheit"): lambda value: value * 9 / 5 + 32,
+    ("fahrenheit", "celsius"): lambda value: (value - 32) * 5 / 9,
+    ("celsius", "kelvin"): lambda value: value + 273.15,
+    ("kelvin", "celsius"): lambda value: value - 273.15,
+    ("kilogram", "pound"): lambda value: value * 2.20462,
+    ("pound", "kilogram"): lambda value: value * 0.453592,
+    ("gram", "ounce"): lambda value: value * 0.035274,
+    ("ounce", "gram"): lambda value: value * 28.3495,
+    ("liter", "gallon"): lambda value: value * 0.264172,
+    ("gallon", "liter"): lambda value: value * 3.78541,
+    ("milliliter", "fluid-ounce"): lambda value: value * 0.033814,
+    ("fluid-ounce", "milliliter"): lambda value: value * 29.5735,
+}
 
 
 def _format_unit_without_value(formatter: icu.MeasureFormat, measure: icu.Measure) -> str:
@@ -461,40 +494,9 @@ class MeasureFormatter:
         from_unit = resolve_unit(from_unit)
         to_unit = resolve_unit(to_unit)
 
-        # Explicit conversion factors; these are not supplied by ICU. The SI
-        # meter/kilometer relationship is defined by the BIPM SI Brochure.
-        conversions = {
-            # Length
-            ("meter", "kilometer"): lambda v: v / 1000,
-            ("kilometer", "meter"): lambda v: v * 1000,
-            ("kilometer", "mile"): lambda v: v * 0.621371,
-            ("mile", "kilometer"): lambda v: v * 1.60934,
-            ("meter", "foot"): lambda v: v * 3.28084,
-            ("foot", "meter"): lambda v: v * 0.3048,
-            ("meter", "yard"): lambda v: v * 1.09361,
-            ("yard", "meter"): lambda v: v * 0.9144,
-            ("inch", "centimeter"): lambda v: v * 2.54,
-            ("centimeter", "inch"): lambda v: v / 2.54,
-            # Temperature
-            ("celsius", "fahrenheit"): lambda v: v * 9 / 5 + 32,
-            ("fahrenheit", "celsius"): lambda v: (v - 32) * 5 / 9,
-            ("celsius", "kelvin"): lambda v: v + 273.15,
-            ("kelvin", "celsius"): lambda v: v - 273.15,
-            # Mass
-            ("kilogram", "pound"): lambda v: v * 2.20462,
-            ("pound", "kilogram"): lambda v: v * 0.453592,
-            ("gram", "ounce"): lambda v: v * 0.035274,
-            ("ounce", "gram"): lambda v: v * 28.3495,
-            # Volume
-            ("liter", "gallon"): lambda v: v * 0.264172,
-            ("gallon", "liter"): lambda v: v * 3.78541,
-            ("milliliter", "fluid-ounce"): lambda v: v * 0.033814,
-            ("fluid-ounce", "milliliter"): lambda v: v * 29.5735,
-        }
-
         key = (from_unit, to_unit)
-        if key in conversions:
-            return conversions[key](float(value))
+        if key in _CONVERSIONS:
+            return _CONVERSIONS[key](float(value))
 
         # If same unit, return as-is
         if from_unit == to_unit:
