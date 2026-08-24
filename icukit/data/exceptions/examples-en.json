@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "corpus": "examples",
+  "named_lists": {
+    "example_surnames": ["Smith", "Jones"]
+  },
+  "rules": [
+    {
+      "id": "example:figure-before-number",
+      "locale": "en",
+      "level": "word",
+      "effect": "suppress",
+      "surface": "Fig.",
+      "variant": "exact",
+      "conditions": [
+        {
+          "id": "following-number",
+          "kind": "unicode_set",
+          "direction": "right",
+          "set": "[[:N:]]",
+          "skip": {"kind": "whitespace", "max": 1}
+        }
+      ],
+      "unconditionality": "conditional",
+      "provenance": {"source": "icukit-example"},
+      "witnesses": {
+        "positive": "See Fig. 5",
+        "near_miss": "ConFig. 5",
+        "condition_negatives": ["See Fig. A"]
+      }
+    },
+    {
+      "id": "example:number-abbreviation",
+      "locale": "en",
+      "level": "word",
+      "effect": "retype",
+      "type": "exception:abbreviation",
+      "surface": "No",
+      "variant": "collation",
+      "strength": "primary",
+      "conditions": [
+        {
+          "id": "following-period",
+          "kind": "unicode_set",
+          "direction": "right",
+          "set": "[.]",
+          "skip": {"kind": "none", "max": 0}
+        }
+      ],
+      "unconditionality": "conditional",
+      "provenance": {"source": "icukit-example"},
+      "witnesses": {
+        "positive": "No. 5",
+        "near_miss": "Casino. 5",
+        "condition_negatives": ["No! 5"]
+      }
+    },
+    {
+      "id": "example:title-before-surname",
+      "locale": "en",
+      "level": "word",
+      "effect": "retype",
+      "type": "exception:title",
+      "surface": "Dr",
+      "variant": "exact",
+      "conditions": [
+        {
+          "id": "following-surname",
+          "kind": "named_list",
+          "direction": "right",
+          "list": "example_surnames",
+          "skip": {"kind": "whitespace", "max": 1}
+        }
+      ],
+      "unconditionality": "conditional",
+      "provenance": {"source": "icukit-example"},
+      "witnesses": {
+        "positive": "Dr Smith",
+        "near_miss": "Drone Smith",
+        "condition_negatives": ["Dr Brown"]
+      }
+    }
+  ]
+}

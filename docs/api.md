@@ -234,6 +234,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`UnicodeSetCondition`](#icukitexceptions) — class, `icukit.exceptions`
 - [`Witnesses`](#icukitexceptions) — class, `icukit.exceptions`
 - [`load_exception_inventory`](#icukitexceptions) — function, `icukit.exceptions`
+- [`compose_inventories`](#icukitexceptions) — function, `icukit.exceptions`
+- [`example_exception_inventory`](#icukitexceptions) — function, `icukit.exceptions`
 - [`merge_retypes`](#icukitexceptions) — function, `icukit.exceptions`
 - [`ExceptionConflictError`](#icukiterrors) — class, `icukit.errors`
 - [`ExceptionLoadError`](#icukiterrors) — class, `icukit.errors`
@@ -2968,6 +2970,18 @@ dict(iterable) -> new dictionary initialized as if via:
         d[k] = v
 dict(**kwargs) -> new dictionary initialized with the name=value pairs
     in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### `compose_inventories(layers: 'Sequence[ExceptionInventory]', *, disable: 'Sequence[str]' = ()) -> 'LoadedExceptionInventory'`
+
+Compose ordered inventories, then validate and atomically publish the result.
+
+Later layers replace rules with the same ID and named lists with the same name.
+Disabled IDs are removed after composition. The composed corpus label joins layer
+corpus names with ``" + "``. Loading is opt-in and does not alter default breakers.
+
+### `example_exception_inventory() -> 'ExceptionInventory'`
+
+Return electable example rules; they are never loaded or applied by default.
 
 ### `load_exception_inventory(inventory: 'ExceptionInventory') -> 'LoadedExceptionInventory'`
 

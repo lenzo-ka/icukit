@@ -8,7 +8,10 @@ only ever see the immutable compiled inventory.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+from importlib.resources import files
+from json import loads
 from typing import Literal, NotRequired, TypedDict, cast
 
 import icu
@@ -35,6 +38,8 @@ __all__ = [
     "SkipSpec",
     "UnicodeSetCondition",
     "Witnesses",
+    "compose_inventories",
+    "example_exception_inventory",
     "load_exception_inventory",
     "merge_retypes",
 ]
@@ -639,8 +644,7 @@ def _run_witnesses(rule: _CompiledRule, raw: ExceptionRule) -> list[RuleRefusal]
     return errors
 
 
-def load_exception_inventory(inventory: ExceptionInventory) -> LoadedExceptionInventory:
-    """Validate, compile, witness-test, and atomically publish an inventory."""
+def _load_exception_inventory(inventory: object) -> LoadedExceptionInventory:
     if not isinstance(inventory, dict):
         raise ExceptionLoadError([_refuse("<inventory>", "INVALID_INVENTORY", "not an object")])
     errors: list[RuleRefusal] = []
@@ -692,3 +696,105 @@ def load_exception_inventory(inventory: ExceptionInventory) -> LoadedExceptionIn
         {name: tuple(words) for name, words in cast(dict[str, list[str]], named_lists).items()},
         tuple(compiled),
     )
+
+
+def compose_inventories(
+    layers: Sequence[ExceptionInventory], *, disable: Sequence[str] = ()
+) -> LoadedExceptionInventory:
+    """Compose ordered inventories, then validate and atomically publish the result.
+
+    Later layers replace rules with the same ID and named lists with the same name.
+    Disabled IDs are removed after composition. The composed corpus label joins layer
+    corpus names with ``" + "``. Loading is opt-in and does not alter default breakers.
+    """
+    errors: list[RuleRefusal] = []
+    corpora: list[str] = []
+    named_lists: dict[str, list[str]] = {}
+    rules: dict[str, object] = {}
+    for layer_index, layer in enumerate(layers):
+        if not isinstance(layer, dict):
+            errors.append(
+                _refuse("<inventory>", "INVALID_INVENTORY", f"layer {layer_index}: not an object")
+            )
+            continue
+        if layer.get("schema_version") != 1:
+            errors.append(
+                _refuse(
+                    "<inventory>",
+                    "INVALID_SCHEMA_VERSION",
+                    f"layer {layer_index}: expected 1",
+                )
+            )
+        corpus = layer.get("corpus")
+        if not isinstance(corpus, str) or not corpus:
+            errors.append(
+                _refuse(
+                    "<inventory>",
+                    "INVALID_CORPUS",
+                    f"layer {layer_index}: nonempty string required",
+                )
+            )
+        else:
+            corpora.append(corpus)
+        layer_lists = layer.get("named_lists", {})
+        if not isinstance(layer_lists, dict):
+            errors.append(
+                _refuse(
+                    "<inventory>",
+                    "INVALID_NAMED_LISTS",
+                    f"layer {layer_index}: object required",
+                )
+            )
+        else:
+            named_lists.update(cast(dict[str, list[str]], layer_lists))
+        layer_rules = layer.get("rules")
+        if not isinstance(layer_rules, list):
+            errors.append(
+                _refuse("<inventory>", "INVALID_RULES", f"layer {layer_index}: list required")
+            )
+            continue
+        layer_ids = [rule.get("id") for rule in layer_rules if isinstance(rule, dict)]
+        if len(layer_ids) != len(set(layer_ids)):
+            errors.append(
+                _refuse(
+                    "<inventory>",
+                    "DUPLICATE_RULE_ID",
+                    f"layer {layer_index}: rule ids must be unique",
+                )
+            )
+        for rule in layer_rules:
+            rule_id = rule.get("id") if isinstance(rule, dict) else None
+            if isinstance(rule_id, str):
+                rules[rule_id] = rule
+            else:
+                errors.append(
+                    _refuse(
+                        "<unknown>", "INVALID_RULE", f"layer {layer_index}: rule has no string id"
+                    )
+                )
+    disabled = list(disable)
+    for rule_id in disabled:
+        if rule_id not in rules:
+            errors.append(_refuse(str(rule_id), "UNKNOWN_DISABLED_ID", "not in composed rules"))
+        else:
+            del rules[rule_id]
+    if errors:
+        raise ExceptionLoadError(errors)
+    composed: ExceptionInventory = {
+        "schema_version": 1,
+        "corpus": " + ".join(corpora) or "<composed>",
+        "named_lists": named_lists,
+        "rules": cast(list[ExceptionRule], list(rules.values())),
+    }
+    return _load_exception_inventory(composed)
+
+
+def load_exception_inventory(inventory: ExceptionInventory) -> LoadedExceptionInventory:
+    """Validate, compile, witness-test, and atomically publish an inventory."""
+    return _load_exception_inventory(inventory)
+
+
+def example_exception_inventory() -> ExceptionInventory:
+    """Return electable example rules; they are never loaded or applied by default."""
+    resource = files("icukit").joinpath("data/exceptions/examples-en.json")
+    return cast(ExceptionInventory, loads(resource.read_text(encoding="utf-8")))
