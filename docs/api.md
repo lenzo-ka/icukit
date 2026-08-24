@@ -176,8 +176,11 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`list_transliterators_info`](#icukittransliterator) — function, `icukit.transliterator`
 - [`UnicodeRegex`](#icukitregex) — class, `icukit.regex`
 - [`regex_find`](#icukitregex) — function, `icukit.regex`
+- [`regex_fullmatch`](#icukitregex) — function, `icukit.regex`
 - [`regex_replace`](#icukitregex) — function, `icukit.regex`
+- [`regex_search`](#icukitregex) — function, `icukit.regex`
 - [`regex_split`](#icukitregex) — function, `icukit.regex`
+- [`parse_substitution`](#icukitregex) — function, `icukit.regex`
 - [`list_unicode_properties`](#icukitregex) — function, `icukit.regex`
 - [`list_unicode_categories`](#icukitregex) — function, `icukit.regex`
 - [`list_unicode_scripts`](#icukitregex) — function, `icukit.regex`
@@ -195,6 +198,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`list_scripts_info`](#icukitscript) — function, `icukit.script`
 - [`normalize`](#icukitunicode) — function, `icukit.unicode`
 - [`is_normalized`](#icukitunicode) — function, `icukit.unicode`
+- [`decode_unicode_escapes`](#icukitunicode) — function, `icukit.unicode`
+- [`encode_unicode_escapes`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_name`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_category`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_info`](#icukitunicode) — function, `icukit.unicode`
@@ -5019,6 +5024,22 @@ List Unicode scripts with structured info.
 Returns:
     List of dicts with 'name' and 'pattern' keys.
 
+### `parse_substitution(expr: 'str') -> 'tuple[str, str, bool, bool]'`
+
+Parse a sed-style ``s/pattern/replacement/flags`` expression.
+
+The delimiter may be any character. Recognized flags are ``g`` (global)
+and ``i`` (ignore case); other flags are ignored.
+
+Args:
+    expr: Substitution expression to parse.
+
+Returns:
+    Pattern, replacement, global flag, and ignore-case flag.
+
+Raises:
+    ValueError: If the expression is malformed.
+
 ### `regex_find(pattern: 'str', text: 'str', flags: 'int' = 0) -> 'list[dict[str, Any]]'`
 
 Find all matches of pattern in text.
@@ -5030,6 +5051,20 @@ Args:
 
 Returns:
     List of match dictionaries.
+
+### `regex_fullmatch(pattern: 'str', text: 'str', flags: 'int' = 0) -> 'bool'`
+
+Test whether a pattern matches the entire stripped text.
+
+The pattern is wrapped with ``^`` and ``$`` exactly as supplied.
+
+Args:
+    pattern: ICU regex pattern.
+    text: Text to strip and match.
+    flags: Regex flags.
+
+Returns:
+    True if the anchored pattern produces a match.
 
 ### `regex_replace(pattern: 'str', text: 'str', replacement: 'str', flags: 'int' = 0, limit: 'int' = -1) -> 'str'`
 
@@ -5044,6 +5079,18 @@ Args:
 
 Returns:
     Text with replacements.
+
+### `regex_search(pattern: 'str', text: 'str', flags: 'int' = 0) -> 'bool'`
+
+Test whether a pattern occurs anywhere in text.
+
+Args:
+    pattern: ICU regex pattern.
+    text: Text to search.
+    flags: Regex flags.
+
+Returns:
+    True if at least one match is found.
 
 ### `regex_split(pattern: 'str', text: 'str', flags: 'int' = 0, limit: 'int' = -1) -> 'list[str]'`
 
@@ -6120,6 +6167,28 @@ Normalization form constants
 #### `NFKD` (constant)
 
 `'NFKD'`
+
+### `decode_unicode_escapes(text: 'str') -> 'str'`
+
+Decode Unicode escape sequences in text.
+
+Recognizes ``\uXXXX``, ``\UXXXXXXXX``, ``\xXX``, and ``U+XXXX`` through
+``U+XXXXXX`` notation. Invalid Python-style escapes leave the post-``U+``
+conversion text unchanged.
+
+### `encode_unicode_escapes(text: 'str', format: 'str' = 'uplus') -> 'str'`
+
+Encode text in one of the CLI's five Unicode escape formats.
+
+Args:
+    text: Text to encode. Escape sequences are decoded before encoding.
+    format: One of ``u``, ``U``, ``x``, ``uplus``, or ``char``.
+
+Returns:
+    Encoded text, or decoded text for the ``char`` format.
+
+Raises:
+    ValueError: If format is not supported.
 
 ### `get_block_characters(block_name: 'str') -> 'list[str]'`
 

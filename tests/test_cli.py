@@ -4,6 +4,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 import icukit
 
 
@@ -250,6 +252,32 @@ class TestRegexCommand:
         """Search should return 1 when pattern not found."""
         code, out, err = run_cli("regex", "search", r"\d+", input_text="abc")
         assert code == 1
+        assert out == "\n"
+        assert err == ""
+
+    def test_regex_script_malformed_expression(self):
+        code, out, err = run_cli("regex", "script", "s/abc", input_text="abc")
+        assert code == 1
+        assert out == ""
+        assert err == "Error: Invalid expression, need pattern and replacement: s/abc\n"
+
+    def test_regex_script_substitution(self):
+        code, out, err = run_cli("regex", "script", "s/a/X/g", input_text="banana")
+        assert (code, out, err) == (0, "bXnXnX\n", "")
+
+    @pytest.mark.parametrize(
+        ("format", "expected"),
+        [
+            ("u", r"\u03B1\uD83D\uDE00" + "\n"),
+            ("U", r"\U000003B1\U0001F600" + "\n"),
+            ("x", r"\xCE\xB1\xF0\x9F\x98\x80" + "\n"),
+            ("uplus", "U+03B1 U+1F600\n"),
+            ("char", "α😀\n"),
+        ],
+    )
+    def test_unicode_encode_formats(self, format, expected):
+        code, out, err = run_cli("unicode", "encode", "-t", r"\u03B1\U0001F600", "--format", format)
+        assert (code, out, err) == (0, expected, "")
 
     def test_regex_match_success(self):
         """Match should return MATCH for full match."""

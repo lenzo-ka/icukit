@@ -48,11 +48,37 @@ Example:
 
 from __future__ import annotations
 
+import codecs
+import re
 from typing import Any
 
 import icu
 
 from .errors import NormalizationError
+
+__all__ = [
+    "NFC",
+    "NFD",
+    "NFKC",
+    "NFKD",
+    "decode_unicode_escapes",
+    "encode_unicode_escapes",
+    "get_block_characters",
+    "get_category_characters",
+    "get_char_category",
+    "get_char_info",
+    "get_char_name",
+    "is_normalized",
+    "list_blocks",
+    "list_categories",
+    "normalize",
+]
+
+_SURROGATE_OFFSET = 0x10000
+_HIGH_SURROGATE_BASE = 0xD800
+_LOW_SURROGATE_BASE = 0xDC00
+_SURROGATE_SHIFT = 10
+_SURROGATE_MASK = 0x3FF
 
 
 def _get_category_short_name(cat_value: int) -> str:
@@ -79,6 +105,63 @@ _NORMALIZERS = {
     NFKC: icu.Normalizer2.getNFKCInstance,
     NFKD: icu.Normalizer2.getNFKDInstance,
 }
+
+
+def decode_unicode_escapes(text: str) -> str:
+    """Decode Unicode escape sequences in text.
+
+    Recognizes ``\\uXXXX``, ``\\UXXXXXXXX``, ``\\xXX``, and ``U+XXXX`` through
+    ``U+XXXXXX`` notation. Invalid Python-style escapes leave the post-``U+``
+    conversion text unchanged.
+    """
+
+    def replace_uplus(match):
+        codepoint = int(match.group(1), 16)
+        return chr(codepoint)
+
+    text = re.sub(r"U\+([0-9A-Fa-f]{4,6})", replace_uplus, text)
+    try:
+        text = codecs.decode(text, "unicode_escape")
+    except (UnicodeDecodeError, ValueError):
+        pass
+    return text
+
+
+def encode_unicode_escapes(text: str, format: str = "uplus") -> str:
+    """Encode text in one of the CLI's five Unicode escape formats.
+
+    Args:
+        text: Text to encode. Escape sequences are decoded before encoding.
+        format: One of ``u``, ``U``, ``x``, ``uplus``, or ``char``.
+
+    Returns:
+        Encoded text, or decoded text for the ``char`` format.
+
+    Raises:
+        ValueError: If format is not supported.
+    """
+    text = decode_unicode_escapes(text)
+    if format == "char":
+        return text
+    if format == "u":
+        result = []
+        for char in text:
+            codepoint = ord(char)
+            if codepoint < _SURROGATE_OFFSET:
+                result.append(f"\\u{codepoint:04X}")
+            else:
+                codepoint -= _SURROGATE_OFFSET
+                high = _HIGH_SURROGATE_BASE + (codepoint >> _SURROGATE_SHIFT)
+                low = _LOW_SURROGATE_BASE + (codepoint & _SURROGATE_MASK)
+                result.append(f"\\u{high:04X}\\u{low:04X}")
+        return "".join(result)
+    if format == "U":
+        return "".join(f"\\U{ord(char):08X}" for char in text)
+    if format == "x":
+        return "".join(f"\\x{byte:02X}" for byte in text.encode("utf-8"))
+    if format == "uplus":
+        return " ".join(f"U+{ord(char):04X}" for char in text)
+    raise ValueError(f"Invalid escape format: {format}")
 
 
 def normalize(text: str, form: str = NFC) -> str:

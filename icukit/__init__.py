@@ -335,8 +335,11 @@ from .regex import (
     list_unicode_categories,
     list_unicode_properties,
     list_unicode_scripts,
+    parse_substitution,
     regex_find,
+    regex_fullmatch,
     regex_replace,
+    regex_search,
     regex_split,
 )
 from .region import (
@@ -390,6 +393,8 @@ from .unicode import (
     NFD,
     NFKC,
     NFKD,
+    decode_unicode_escapes,
+    encode_unicode_escapes,
     get_block_characters,
     get_category_characters,
     get_char_category,
@@ -585,8 +590,11 @@ __all__ = [
     # Regex
     "UnicodeRegex",
     "regex_find",
+    "regex_fullmatch",
     "regex_replace",
+    "regex_search",
     "regex_split",
+    "parse_substitution",
     "list_unicode_properties",
     "list_unicode_categories",
     "list_unicode_scripts",
@@ -606,6 +614,8 @@ __all__ = [
     # Unicode
     "normalize",
     "is_normalized",
+    "decode_unicode_escapes",
+    "encode_unicode_escapes",
     "get_char_name",
     "get_char_category",
     "get_char_info",

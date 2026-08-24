@@ -14,8 +14,11 @@ from ...regex import (
     list_unicode_categories,
     list_unicode_properties,
     list_unicode_scripts,
+    parse_substitution,
     regex_find,
+    regex_fullmatch,
     regex_replace,
+    regex_search,
     regex_split,
 )
 from ..base import open_output, process_input
@@ -367,12 +370,9 @@ Common Scripts:
             flags = cls._get_flags(args)
 
             def match_processor(text):
-                # Anchor pattern
-                anchored_pattern = f"^{args.pattern}$"
-                matches = regex_find(anchored_pattern, text.strip(), flags=flags)
-
-                if matches:
+                if regex_fullmatch(args.pattern, text, flags=flags):
                     if getattr(args, "verbose", False):
+                        matches = regex_find(f"^{args.pattern}$", text.strip(), flags=flags)
                         return f"MATCH: {matches[0]['text']}"
                     return "MATCH"
                 else:
@@ -397,8 +397,7 @@ Common Scripts:
 
             def search_processor(text):
                 nonlocal found
-                matches = regex_find(args.pattern, text, flags=flags)
-                if matches:
+                if regex_search(args.pattern, text, flags=flags):
                     found = True
                 return ""  # No output
 
@@ -412,54 +411,10 @@ Common Scripts:
             return 2
 
     @classmethod
-    def _parse_sed_expression(cls, expr: str):
-        """Parse a sed-style substitution expression.
-
-        Supports: s/pattern/replacement/flags
-        Delimiter can be any character (e.g., s|pat|rep|, s#pat#rep#)
-        Flags: g (global), i (ignore case)
-
-        Returns: (pattern, replacement, global_flag, ignore_case_flag)
-        """
-        if not expr or len(expr) < 4:
-            raise ValueError(f"Invalid expression: {expr}")
-
-        # Check for 's' command
-        if expr[0] != "s":
-            raise ValueError(f"Expression must start with 's': {expr}")
-
-        delimiter = expr[1]
-        parts = []
-        current = []
-        i = 2
-        while i < len(expr):
-            if expr[i] == delimiter and (i == 0 or expr[i - 1] != "\\"):
-                parts.append("".join(current))
-                current = []
-            else:
-                current.append(expr[i])
-            i += 1
-        parts.append("".join(current))  # Last part (flags)
-
-        if len(parts) < 2:
-            raise ValueError(f"Invalid expression, need pattern and replacement: {expr}")
-
-        pattern = parts[0]
-        replacement = parts[1]
-        flags_str = parts[2] if len(parts) > 2 else ""
-
-        global_flag = "g" in flags_str
-        ignore_case = "i" in flags_str
-
-        return pattern, replacement, global_flag, ignore_case
-
-    @classmethod
     def cmd_script(cls, args):
         """Execute sed-style substitution expression."""
         try:
-            pattern, replacement, global_flag, ignore_case = cls._parse_sed_expression(
-                args.expression
-            )
+            pattern, replacement, global_flag, ignore_case = parse_substitution(args.expression)
 
             flags = cls._get_flags(args)
             if ignore_case:

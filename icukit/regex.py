@@ -92,6 +92,23 @@ from ._offsets import codepoint_map, to_codepoint
 from .errors import PatternError
 from .script import list_scripts as _list_scripts
 
+__all__ = [
+    "CASE_INSENSITIVE",
+    "COMMENTS",
+    "DOTALL",
+    "MULTILINE",
+    "UnicodeRegex",
+    "list_unicode_categories",
+    "list_unicode_properties",
+    "list_unicode_scripts",
+    "parse_substitution",
+    "regex_find",
+    "regex_fullmatch",
+    "regex_replace",
+    "regex_search",
+    "regex_split",
+]
+
 
 class UnicodeRegex:
     r"""Unicode-aware regular expression operations using ICU.
@@ -493,6 +510,79 @@ def regex_find(pattern: str, text: str, flags: int = 0) -> list[dict[str, Any]]:
     """
     regex = UnicodeRegex(pattern, flags)
     return regex.find_all(text)
+
+
+def regex_fullmatch(pattern: str, text: str, flags: int = 0) -> bool:
+    """Test whether a pattern matches the entire stripped text.
+
+    The pattern is wrapped with ``^`` and ``$`` exactly as supplied.
+
+    Args:
+        pattern: ICU regex pattern.
+        text: Text to strip and match.
+        flags: Regex flags.
+
+    Returns:
+        True if the anchored pattern produces a match.
+    """
+    anchored_pattern = f"^{pattern}$"
+    return bool(regex_find(anchored_pattern, text.strip(), flags=flags))
+
+
+def regex_search(pattern: str, text: str, flags: int = 0) -> bool:
+    """Test whether a pattern occurs anywhere in text.
+
+    Args:
+        pattern: ICU regex pattern.
+        text: Text to search.
+        flags: Regex flags.
+
+    Returns:
+        True if at least one match is found.
+    """
+    return bool(regex_find(pattern, text, flags=flags))
+
+
+def parse_substitution(expr: str) -> tuple[str, str, bool, bool]:
+    """Parse a sed-style ``s/pattern/replacement/flags`` expression.
+
+    The delimiter may be any character. Recognized flags are ``g`` (global)
+    and ``i`` (ignore case); other flags are ignored.
+
+    Args:
+        expr: Substitution expression to parse.
+
+    Returns:
+        Pattern, replacement, global flag, and ignore-case flag.
+
+    Raises:
+        ValueError: If the expression is malformed.
+    """
+    if not expr or len(expr) < 4:
+        raise ValueError(f"Invalid expression: {expr}")
+    if expr[0] != "s":
+        raise ValueError(f"Expression must start with 's': {expr}")
+
+    delimiter = expr[1]
+    parts = []
+    current = []
+    i = 2
+    while i < len(expr):
+        if expr[i] == delimiter and (i == 0 or expr[i - 1] != "\\"):
+            parts.append("".join(current))
+            current = []
+        else:
+            current.append(expr[i])
+        i += 1
+    parts.append("".join(current))
+
+    if len(parts) < 2:
+        raise ValueError(f"Invalid expression, need pattern and replacement: {expr}")
+
+    pattern = parts[0]
+    replacement = parts[1]
+    flags_str = parts[2] if len(parts) > 2 else ""
+    return pattern, replacement, "g" in flags_str, "i" in flags_str
 
 
 def regex_replace(

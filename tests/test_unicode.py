@@ -8,6 +8,8 @@ from icukit import (
     NFKC,
     NFKD,
     NormalizationError,
+    decode_unicode_escapes,
+    encode_unicode_escapes,
     get_block_characters,
     get_category_characters,
     get_char_category,
@@ -18,6 +20,47 @@ from icukit import (
     list_categories,
     normalize,
 )
+
+
+class TestUnicodeEscapes:
+    """Tests for Unicode escape conversion."""
+
+    @pytest.mark.parametrize(
+        ("escaped", "expected"),
+        [
+            (r"\u03B1", "α"),
+            (r"\U0001F600", "😀"),
+            (r"\x41", "A"),
+            ("U+03B1 U+1F600", "Î± ð\x9f\x98\x80"),
+            (r"\uD83D\uDE00", "\ud83d\ude00"),
+            (r"\uZZZZ", r"\uZZZZ"),
+        ],
+    )
+    def test_decode_unicode_escapes(self, escaped, expected):
+        assert decode_unicode_escapes(escaped) == expected
+
+    @pytest.mark.parametrize(
+        ("format", "expected"),
+        [
+            ("u", r"\u03B1\uD83D\uDE00"),
+            ("U", r"\U000003B1\U0001F600"),
+            ("x", r"\xCE\xB1\xF0\x9F\x98\x80"),
+            ("uplus", "U+03B1 U+1F600"),
+            ("char", "α😀"),
+        ],
+    )
+    def test_encode_unicode_escapes_formats(self, format, expected):
+        assert encode_unicode_escapes(r"\u03B1\U0001F600", format=format) == expected
+
+    def test_encode_preserves_decoding_of_literal_non_ascii_text(self):
+        assert encode_unicode_escapes("α", format="char") == "Î±"
+
+    def test_encode_decodes_input_first(self):
+        assert encode_unicode_escapes(r"\u03B1") == "U+03B1"
+
+    def test_encode_rejects_invalid_format(self):
+        with pytest.raises(ValueError, match="Invalid escape format: bad"):
+            encode_unicode_escapes("A", format="bad")
 
 
 class TestNormalize:
