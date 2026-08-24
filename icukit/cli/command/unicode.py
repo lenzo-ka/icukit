@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import codecs
-import re
 import sys
 
 from ...errors import NormalizationError
@@ -14,6 +12,8 @@ from ...unicode import (
     NFD,
     NFKC,
     NFKD,
+    decode_unicode_escapes,
+    encode_unicode_escapes,
     get_block_characters,
     get_category_characters,
     get_char_info,
@@ -25,13 +25,6 @@ from ...unicode import (
 )
 from ..base import open_output, process_input
 from ..subcommand_base import SubcommandBase
-
-# Unicode surrogate pair constants
-_SURROGATE_OFFSET = 0x10000
-_HIGH_SURROGATE_BASE = 0xD800
-_LOW_SURROGATE_BASE = 0xDC00
-_SURROGATE_SHIFT = 10
-_SURROGATE_MASK = 0x3FF
 
 
 class UnicodeCommand(SubcommandBase):
@@ -230,32 +223,6 @@ Examples:
         )
 
     @classmethod
-    def _decode_escapes(cls, text: str) -> str:
-        """Decode Unicode escape sequences in text.
-
-        Handles:
-            - \\uXXXX (4-digit Unicode)
-            - \\UXXXXXXXX (8-digit Unicode)
-            - \\xXX (hex byte)
-            - U+XXXX or U+XXXXXX (Unicode notation)
-        """
-
-        # Handle U+XXXX notation (not a Python escape)
-        def replace_uplus(match):
-            codepoint = int(match.group(1), 16)
-            return chr(codepoint)
-
-        text = re.sub(r"U\+([0-9A-Fa-f]{4,6})", replace_uplus, text)
-
-        # Handle Python-style escapes (\uXXXX, \UXXXXXXXX, \xXX)
-        try:
-            text = codecs.decode(text, "unicode_escape")
-        except (UnicodeDecodeError, ValueError):
-            pass  # Not valid escapes, return as-is
-
-        return text
-
-    @classmethod
     def cmd_normalize(cls, args):
         """Normalize text to a Unicode form."""
         try:
@@ -288,7 +255,7 @@ Examples:
     def cmd_name(cls, args):
         """Get Unicode character name(s)."""
         text = cls._read_input(args).strip()
-        text = cls._decode_escapes(text)
+        text = decode_unicode_escapes(text)
         as_json = getattr(args, "json", False)
         no_header = getattr(args, "no_header", False)
 
@@ -312,7 +279,7 @@ Examples:
     def cmd_info(cls, args):
         """Get character information."""
         text = cls._read_input(args).strip()
-        text = cls._decode_escapes(text)
+        text = decode_unicode_escapes(text)
         as_json = getattr(args, "json", False)
         no_header = getattr(args, "no_header", False)
 
@@ -419,35 +386,6 @@ Examples:
         text = cls._read_input(args).strip()
         fmt = getattr(args, "format", "uplus")
 
-        # Always decode escapes first (so we work with actual chars)
-        text = cls._decode_escapes(text)
-
-        if fmt == "char":
-            # Already decoded, just print
-            print(text)
-        elif fmt == "u":
-            # \uXXXX format (surrogate pairs for > U+FFFF)
-            result = []
-            for char in text:
-                cp = ord(char)
-                if cp < _SURROGATE_OFFSET:
-                    result.append(f"\\u{cp:04X}")
-                else:
-                    # Encode as surrogate pair
-                    cp -= _SURROGATE_OFFSET
-                    high = _HIGH_SURROGATE_BASE + (cp >> _SURROGATE_SHIFT)
-                    low = _LOW_SURROGATE_BASE + (cp & _SURROGATE_MASK)
-                    result.append(f"\\u{high:04X}\\u{low:04X}")
-            print("".join(result))
-        elif fmt == "U":
-            # \UXXXXXXXX format
-            print("".join(f"\\U{ord(c):08X}" for c in text))
-        elif fmt == "x":
-            # \xXX format (UTF-8 bytes)
-            utf8_bytes = text.encode("utf-8")
-            print("".join(f"\\x{b:02X}" for b in utf8_bytes))
-        elif fmt == "uplus":
-            # U+XXXX format
-            print(" ".join(f"U+{ord(c):04X}" for c in text))
+        print(encode_unicode_escapes(text, format=fmt))
 
         return 0

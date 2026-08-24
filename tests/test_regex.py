@@ -9,8 +9,11 @@ from icukit import (
     list_unicode_categories,
     list_unicode_properties,
     list_unicode_scripts,
+    parse_substitution,
     regex_find,
+    regex_fullmatch,
     regex_replace,
+    regex_search,
     regex_split,
 )
 
@@ -24,6 +27,42 @@ class TestUnicodeRegex:
         matches = regex_find(r"\p{Script=Han}+", text)
         assert len(matches) == 1
         assert matches[0]["text"] == "世界"
+
+    def test_regex_fullmatch_strips_and_anchors(self):
+        assert regex_fullmatch(r"\d+", " 123\n") is True
+        assert regex_fullmatch(r"\d+", "abc123") is False
+
+    def test_regex_fullmatch_preserves_pattern_anchoring_quirk(self):
+        assert regex_fullmatch("a|b", "ab") is True
+
+    def test_regex_search_is_boolean(self):
+        assert regex_search(r"\d+", "abc123") is True
+        assert regex_search(r"\d+", "abc") is False
+
+    @pytest.mark.parametrize(
+        ("expression", "expected"),
+        [
+            ("s/foo/bar/g", ("foo", "bar", True, False)),
+            ("s|foo|bar|i", ("foo", "bar", False, True)),
+            (r"s/a\//b/gx/ignored", (r"a\/", "b", True, False)),
+            ("s/a/b", ("a", "b", False, False)),
+        ],
+    )
+    def test_parse_substitution(self, expression, expected):
+        assert parse_substitution(expression) == expected
+
+    @pytest.mark.parametrize(
+        ("expression", "message"),
+        [
+            ("", "Invalid expression: "),
+            ("x/a/b/", "Expression must start with 's': x/a/b/"),
+            ("s/abc", "Invalid expression, need pattern and replacement: s/abc"),
+        ],
+    )
+    def test_parse_substitution_errors(self, expression, message):
+        with pytest.raises(ValueError) as exc_info:
+            parse_substitution(expression)
+        assert str(exc_info.value) == message
 
     def test_regex_find_greek(self):
         """Test finding Greek matches."""
