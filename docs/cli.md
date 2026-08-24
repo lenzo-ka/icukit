@@ -586,6 +586,29 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
+## `icukit detect`
+
+Recognize typed values in running text. Offsets are half-open Unicode code-point
+indices. The default set covers dates, date intervals, compact numbers, relative
+dates, scientific numbers, spellout numbers, abbreviations, decimals, and percents.
+Currencies and measures require explicit --currency and --measure options.
+
+Overlapping candidates for a span are expected: recognition deposits a candidate
+forest, and downstream consumers perform disambiguation.
+
+**Options:**
+
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `--currency`: Add an ISO currency (default: `[]`)
+- `--measure`: Add an ICU measure unit (default: `[]`)
+- `--skeleton`: Add a date skeleton (default: `[]`)
+- `-o, --output`: Output file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--jsonl`: One JSON object per line (one detection per line) (default: `False`)
+
 ## `icukit discover`
 
 Discover icukit's available features, API exports, and CLI commands.

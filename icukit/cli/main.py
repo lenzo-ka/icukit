@@ -16,6 +16,7 @@ from .command import (
     CollatorCommand,
     CompactCommand,
     DateTimeCommand,
+    DetectCommand,
     DiscoverCommand,
     DisplayNameCommand,
     DurationCommand,
@@ -148,6 +149,9 @@ def create_parser():
 
     register_command("datetime", ["dt", "date"])
     DateTimeCommand.add_subparser(subparsers)
+
+    register_command("detect", ["recognize", "rec"])
+    DetectCommand.add_subparser(subparsers)
 
     register_command("discover", ["disc", "features"])
     DiscoverCommand.add_subparser(subparsers)
