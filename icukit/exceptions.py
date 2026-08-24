@@ -175,10 +175,13 @@ def _quote_rbbi(value: str) -> str:
 
 
 def _insert_rbbi(base: str, additions: list[str]) -> str:
-    """Insert tailoring rules immediately before ICU's terminal ``.;`` rule."""
-    seam = base.rfind(".;")
-    if seam < 0:
+    """Insert tailoring statements before ICU's terminal catch-all statement."""
+    catch_all = base.rfind(".;")
+    if catch_all < 0:
         raise ValueError("base RBBI has no terminal catch-all")
+    # Sentence rules end a larger statement with ``.;``.  Splicing at the dot
+    # would split that rule; the actual seam is the preceding statement boundary.
+    seam = base.rfind(";", 0, catch_all) + 1
     return base[:seam] + "".join(additions) + base[seam:]
 
 
@@ -549,8 +552,18 @@ def _rbbi_condition(condition: _CompiledCondition) -> str:
 
 def _rbbi_rule(rule: _CompiledRule) -> str:
     context = "".join(_rbbi_condition(condition) for condition in rule.conditions)
-    slash = " / " + context if context else ""
-    return f"{_quote_rbbi(rule.surface)}{slash} {{{rule.status}}};"
+    if rule.level == "sentence":
+        # A look-ahead slash creates a boundary after the surface.  Sentence
+        # suppression instead has to consume the right context so chaining can
+        # carry the match through the rest of the sentence.  Encode the same
+        # lexical anchor as _anchored_exact in the rule itself: sentence chaining
+        # does not preserve the generated status for the post-match guard.
+        prefix = r"[[^\p{L}\p{N}_]{bof}] "
+        suffix = " " + context if context else ""
+    else:
+        prefix = ""
+        suffix = " / " + context if context else ""
+    return f"{prefix}{_quote_rbbi(rule.surface)}{suffix} {{{rule.status}}};"
 
 
 def _run_suppressions(
@@ -560,14 +573,20 @@ def _run_suppressions(
     tailored = RuleBreaker(source).spans(text)
     original = _base_spans(text, level, locale)
     by_status = {cast(int, rule.status): rule for rule in rules}
+    matches = {rule.id: _detections(rule, text, locale) for rule in rules}
     result: list[BreakSpan] = []
     for span in tailored:
         generated = next((status for status in span["statuses"] if status in by_status), None)
-        if generated is None or span["text"] == by_status[generated].surface:
+        rule = by_status.get(generated) if generated is not None else None
+        anchored = rule is not None and any(
+            span["start"] <= match["start"] and match["end"] <= span["end"]
+            for match in matches[rule.id]
+        )
+        if generated is None or anchored:
             result.append(span)
             continue
-        # ``!!chain`` may join a literal rule to a preceding base match (Con + Fig.).
-        # Such a span violates the literal anchor and is restored without coalescing.
+        # ``!!chain`` may join a literal rule to a lexical prefix (Con + Fig.).
+        # A span with no anchored detection is restored without coalescing.
         result.extend(
             base
             for base in original
