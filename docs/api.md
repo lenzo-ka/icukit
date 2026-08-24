@@ -4890,6 +4890,19 @@ Example:
     >>> search_replace("cafe", "Visit the café", "tea", strength="primary")
     'Visit the tea'
 
+## icukit.serialize
+
+recognition-output serializer — converts typed ValueDetection candidates to plain JSON;
+no external deps; reusable by downstream consumers.
+
+### `detection_to_dict(detection: 'ValueDetection') -> 'dict'`
+
+Convert one typed detection to an ordered, plain JSON-native dictionary.
+
+### `detections_to_json(detections) -> 'list[dict]'`
+
+Convert typed detections to a list containing only JSON-native values.
+
 ## icukit.spoof
 
 Confusable and homoglyph detection using ICU's SpoofChecker.

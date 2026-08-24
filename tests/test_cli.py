@@ -1,5 +1,6 @@
 """Tests for icukit CLI."""
 
+import json
 import subprocess
 import sys
 
@@ -27,6 +28,60 @@ class TestCLIBasics:
         assert code == 0
         assert "icukit" in out.lower()
         assert "transliterate" in out
+
+
+class TestDetectCommand:
+    """Test typed running-text recognition."""
+
+    def test_measure_json(self):
+        code, out, err = run_cli("detect", "-t", "5 m", "--measure", "meter", "-j")
+        assert code == 0, err
+        data = json.loads(out)
+        assert any(item["value"]["kind"] == "measure" for item in data)
+        assert any(item["value"].get("unit") == "meter" for item in data)
+
+    def test_date_json(self):
+        code, out, err = run_cli("detect", "-t", "January 3, 2025", "-j")
+        assert code == 0, err
+        data = json.loads(out)
+        assert any(item["value"]["kind"] == "datetime" for item in data)
+
+    def test_jsonl(self):
+        code, out, err = run_cli("detect", "-t", "5 m", "--measure", "meter", "--jsonl")
+        assert code == 0, err
+        lines = out.splitlines()
+        assert lines
+        assert all("type" in json.loads(line) for line in lines)
+
+    def test_default_tsv_and_no_header(self):
+        args = ("detect", "-t", "5 m", "--measure", "meter")
+        code, out, err = run_cli(*args)
+        assert code == 0, err
+        assert out.splitlines()[0] == "start\tend\ttype\ttext"
+        assert len(out.splitlines()) >= 2
+
+        code, out, err = run_cli(*args, "-H")
+        assert code == 0, err
+        assert "start\tend\ttype\ttext" not in out
+        assert out.strip()
+
+    def test_empty_result_keeps_tsv_header(self):
+        # No detections must still emit the header, not a blank line.
+        code, out, err = run_cli("detect", "-t", "!!!")
+        assert code == 0, err
+        assert out.splitlines() == ["start\tend\ttype\ttext"]
+
+    def test_empty_jsonl_emits_no_blank_line(self):
+        # Empty JSONL must produce zero lines, not one blank (invalid) line.
+        code, out, err = run_cli("detect", "-t", "!!!", "--jsonl")
+        assert code == 0, err
+        assert out.splitlines() == []
+
+    def test_explicit_empty_text_overrides_stdin(self):
+        # An explicit --text "" is honored (returns []); it must not fall through to stdin.
+        code, out, err = run_cli("detect", "-t", "", "-j", input_text="January 3, 2025")
+        assert code == 0, err
+        assert json.loads(out) == []
 
     def test_version(self):
         """CLI should show version."""

@@ -357,6 +357,7 @@ from .script import (
     list_scripts_info,
 )
 from .search import StringSearcher, search_all, search_count, search_first, search_replace
+from .serialize import detection_to_dict, detections_to_json
 from .spoof import (
     CONFUSABLE_MIXED_SCRIPT,
     CONFUSABLE_NONE,
@@ -429,6 +430,8 @@ __all__ = [
     "all_detectors",
     "generated_detectors",
     "generated_detectors_report",
+    "detection_to_dict",
+    "detections_to_json",
     # Abbreviations
     "ABBREVIATION_FAMILY",
     "COMPACT_NUMBER_FAMILY",

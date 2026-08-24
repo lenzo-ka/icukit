@@ -9,6 +9,7 @@ from .calendar import CalendarCommand
 from .collator import CollatorCommand
 from .compact import CompactCommand
 from .datetime import DateTimeCommand
+from .detect import DetectCommand
 from .discover import DiscoverCommand
 from .displayname import DisplayNameCommand
 from .duration import DurationCommand
@@ -38,6 +39,7 @@ __all__ = [
     "CollatorCommand",
     "CompactCommand",
     "DateTimeCommand",
+    "DetectCommand",
     "DiscoverCommand",
     "DisplayNameCommand",
     "DurationCommand",
