@@ -232,6 +232,8 @@ from .exceptions import (
     SkipSpec,
     UnicodeSetCondition,
     Witnesses,
+    compose_inventories,
+    example_exception_inventory,
     load_exception_inventory,
     merge_retypes,
 )
@@ -658,6 +660,8 @@ __all__ = [
     "UnicodeSetCondition",
     "Witnesses",
     "load_exception_inventory",
+    "compose_inventories",
+    "example_exception_inventory",
     "merge_retypes",
     "ExceptionConflictError",
     "ExceptionLoadError",

@@ -60,7 +60,12 @@ include = ["icukit*"]
 exclude = ["eval*"]
 
 [tool.setuptools.package-data]
-icukit = ["py.typed", "data/abbreviations/*.xml", "data/abbreviations/*.rng"]
+icukit = [
+    "py.typed",
+    "data/abbreviations/*.xml",
+    "data/abbreviations/*.rng",
+    "data/exceptions/*.json",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -4,8 +4,14 @@ from copy import deepcopy
 
 import pytest
 
-from icukit import ExceptionConflictError, ExceptionLoadError, load_exception_inventory
-from icukit.breaker import BreakSpan
+from icukit import (
+    ExceptionConflictError,
+    ExceptionLoadError,
+    compose_inventories,
+    example_exception_inventory,
+    load_exception_inventory,
+)
+from icukit.breaker import BreakSpan, break_word_spans
 from icukit.detect import Detection
 from icukit.exceptions import ExceptionInventory, ExceptionRule, merge_retypes
 
@@ -350,3 +356,109 @@ def test_collation_condition_negative_requires_literal_surface_case():
         load_exception_inventory(_inventory(rule))
 
     assert "VACUOUS_CONDITION_NEGATIVE" in caught.value.reason_codes
+
+
+def _suppression(rule_id: str, surface: str) -> ExceptionRule:
+    rule = _rule(
+        id=rule_id,
+        effect="suppress",
+        type=None,
+        surface=surface,
+        variant="exact",
+        conditions=[],
+        unconditionality="empirical",
+        witnesses={
+            "positive": f"See {surface} 5",
+            "near_miss": f"Con{surface} 5",
+            "condition_negatives": [],
+        },
+    )
+    rule.pop("strength")
+    return rule
+
+
+def test_compose_adds_rules_from_an_overlay():
+    composed = compose_inventories(
+        [_inventory(_rule()), _inventory(_suppression("figure", "Fig."))]
+    )
+
+    spans = composed.break_spans("No. See Fig. 5", "word", "en")
+
+    assert spans[0]["types"] == ["exception:abbreviation"]
+    assert any(span["text"] == "Fig." for span in spans)
+    assert composed.corpus == "tests + tests"
+
+
+def test_compose_disables_a_rule_and_refuses_an_unknown_id():
+    base = _inventory(_suppression("figure", "Fig."))
+    composed = compose_inventories([base], disable=["figure"])
+
+    assert composed.break_spans("See Fig. 5", "word", "en") == break_word_spans("See Fig. 5", "en")
+    with pytest.raises(ExceptionLoadError) as caught:
+        compose_inventories([base], disable=["missing"])
+    assert "UNKNOWN_DISABLED_ID" in caught.value.reason_codes
+
+
+def test_compose_later_rule_with_same_id_wins():
+    first = _rule(id="shared", type="exception:first")
+    second = _rule(id="shared", type="exception:second")
+
+    spans = compose_inventories([_inventory(first), _inventory(second)]).break_spans(
+        "No. Next", "word", "en"
+    )
+
+    assert spans[0]["types"] == ["exception:second"]
+
+
+def test_compose_assigns_distinct_suppression_statuses():
+    composed = compose_inventories(
+        [
+            _inventory(_suppression("figure", "Fig.")),
+            _inventory(_suppression("equation", "Eq.")),
+        ]
+    )
+
+    spans = composed.break_spans("Fig. 5 Eq. 6", "word", "en")
+    generated = [
+        next(status for status in span["statuses"] if 1000 <= status < 2000)
+        for span in spans
+        if span["text"] in {"Fig.", "Eq."}
+    ]
+    assert len(generated) == 2
+    assert len(set(generated)) == 2
+
+
+def test_compose_is_transactional_when_a_witness_fails():
+    bad = _rule(
+        id="bad",
+        witnesses={
+            "positive": "absent",
+            "near_miss": "Casino. Next",
+            "condition_negatives": ["No! Next"],
+        },
+    )
+
+    with pytest.raises(ExceptionLoadError) as caught:
+        compose_inventories([_inventory(_rule()), _inventory(bad)])
+
+    assert "WITNESS_POSITIVE_FAILED" in caught.value.reason_codes
+    assert {refusal.rule_id for refusal in caught.value.refusals} == {"bad"}
+
+
+def test_composition_is_inert_until_explicitly_applied():
+    text = "See Fig. 5"
+    vanilla = break_word_spans(text, "en")
+    compose_inventories([_inventory(_suppression("figure", "Fig."))])
+
+    assert break_word_spans(text, "en") == vanilla
+
+
+def test_example_inventory_is_electable_and_passes_its_witnesses():
+    text = "See Fig. 5"
+    vanilla = break_word_spans(text, "en")
+    inventory = example_exception_inventory()
+
+    assert inventory["corpus"] == "examples"
+    assert break_word_spans(text, "en") == vanilla
+    loaded = compose_inventories([inventory])
+    assert any(span["text"] == "Fig." for span in loaded.break_spans(text, "word", "en"))
