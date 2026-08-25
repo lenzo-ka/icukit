@@ -528,8 +528,17 @@ def _merge_spans(text: str, spans: list[BreakSpan]) -> BreakSpan:
     merged["start"] = spans[0]["start"]
     merged["text"] = text[merged["start"] : merged["end"]]
     merged["types"] = list(dict.fromkeys(item for span in spans for item in span["types"]))
-    merged["statuses"] = list(dict.fromkeys(item for span in spans for item in span["statuses"]))
+    if "break_type" not in merged:
+        # Word statuses describe tokens, so preserve every contributing token status.
+        merged["statuses"] = list(
+            dict.fromkeys(item for span in spans for item in span["statuses"])
+        )
     return merged
+
+
+def _mandatory_boundaries(base: list[BreakSpan]) -> set[int]:
+    """Return line boundaries ICU classified as mandatory."""
+    return {span["end"] for span in base if span.get("break_type") == "mandatory"}
 
 
 def _filter_suppressions(
@@ -540,17 +549,18 @@ def _filter_suppressions(
 ) -> tuple[list[BreakSpan], set[int]]:
     """Drop base boundaries made false by matching suppression surfaces.
 
-    Internal boundaries split the surface itself and are always dropped. Some
+    Internal optional boundaries split the surface itself and are dropped. Some
     breakers attach trailing whitespace to a punctuation boundary (notably the
     sentence breaker); when there is no internal boundary, drop that immediately
-    following boundary instead.
+    following optional boundary instead. Mandatory line breaks are never dropped.
     """
     boundaries = {span["end"] for span in base[:-1]}
+    suppressible = boundaries - _mandatory_boundaries(base)
     dropped: set[int] = set()
     for rule in rules:
         for match in _detections(rule, text, locale):
             internal = {
-                boundary for boundary in boundaries if match["start"] < boundary < match["end"]
+                boundary for boundary in suppressible if match["start"] < boundary < match["end"]
             }
             if internal:
                 dropped.update(internal)
@@ -558,14 +568,15 @@ def _filter_suppressions(
             following = next(
                 (
                     boundary
-                    for boundary in sorted(boundaries)
+                    for boundary in sorted(suppressible)
                     if boundary >= match["end"] and text[match["end"] : boundary].isspace()
                 ),
                 None,
             )
-            if match["end"] in boundaries:
+            owns_punctuation = _PUNCTUATION.contains(text[match["end"] - 1])
+            if match["end"] in suppressible and owns_punctuation:
                 dropped.add(match["end"])
-            elif following is not None and _PUNCTUATION.contains(text[match["end"] - 1]):
+            elif following is not None and owns_punctuation:
                 dropped.add(following)
 
     result: list[BreakSpan] = []
@@ -588,8 +599,27 @@ def _fires(rule: _CompiledRule, text: str) -> bool:
         merged = merge_retypes(text, _base_spans(text, rule.level, rule.locale), detections)
         return any(rule.type in span["types"] for span in merged)
     base = _base_spans(text, rule.level, rule.locale)
-    _, dropped = _filter_suppressions(text, base, [rule], rule.locale)
-    return bool(dropped)
+    filtered, _ = _filter_suppressions(text, base, [rule], rule.locale)
+    if filtered == base:
+        return False
+    # A suppression witness must demonstrate that the matching surface owns a
+    # removed boundary: inside the surface, or immediately after its punctuation
+    # (including whitespace attached by the breaker). Merely changing any boundary
+    # is not sufficient evidence that the rule fired as intended.
+    filtered_boundaries = {span["end"] for span in filtered}
+    removed = {span["end"] for span in base[:-1]} - filtered_boundaries
+    for match in _detections(rule, text, rule.locale):
+        if any(match["start"] < boundary < match["end"] for boundary in removed):
+            return True
+        if not _PUNCTUATION.contains(text[match["end"] - 1]):
+            continue
+        if any(
+            boundary == match["end"]
+            or (boundary > match["end"] and text[match["end"] : boundary].isspace())
+            for boundary in removed
+        ):
+            return True
+    return False
 
 
 def _run_witnesses(rule: _CompiledRule, raw: ExceptionRule) -> list[RuleRefusal]:

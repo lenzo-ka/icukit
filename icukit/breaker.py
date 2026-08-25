@@ -208,7 +208,10 @@ class Breaker:
                 if start != end:
                     break_type = (
                         "mandatory"
-                        if any(100 <= status <= 199 for status in statuses)
+                        if any(
+                            icu.ULineBreakTag.HARD <= status < icu.ULineBreakTag.HARD_LIMIT
+                            for status in statuses
+                        )
                         else "optional"
                     )
                     yield _make_span(text, start, end, [], statuses, break_type)
