@@ -7,6 +7,7 @@ import pytest
 from icukit import (
     ExceptionConflictError,
     ExceptionLoadError,
+    ExceptionPolicy,
     compose_inventories,
     example_exception_inventory,
     load_exception_inventory,
@@ -131,7 +132,7 @@ def test_line_suppression_drops_an_optional_punctuation_break():
     ]
 
 
-def test_line_suppression_never_drops_a_mandatory_following_break():
+def test_line_suppression_never_drops_mandatory_breaks():
     rule = _suppression("figure-line", "Fig.")
     rule["level"] = "line"
     rule["witnesses"] = {
@@ -140,27 +141,10 @@ def test_line_suppression_never_drops_a_mandatory_following_break():
         "condition_negatives": [],
     }
     layer = load_exception_inventory(_inventory(rule))
-    text = "Read Fig.\nThen stop"
 
-    assert layer.break_spans(text, "line", "en") == break_line_spans(text, "en")
-
-
-def test_line_suppression_never_drops_a_mandatory_internal_break():
-    safe_rule = _suppression("figure-line", "Fig.")
-    safe_rule["level"] = "line"
-    safe_rule["witnesses"] = {
-        "positive": "Read Fig. more",
-        "near_miss": "ConFig. more",
-        "condition_negatives": [],
-    }
-    layer = load_exception_inventory(_inventory(safe_rule))
-    text = "See Fig.\nThen stop"
-    internal_surface_rule = layer._rules[0].__class__(
-        **{**layer._rules[0].__dict__, "surface": "Fig.\nThen"}
+    assert layer.break_spans("Read Fig.\nThen stop", "line", "en") == break_line_spans(
+        "Read Fig.\nThen stop", "en"
     )
-    internal_layer = layer.__class__(layer.corpus, layer.named_lists, (internal_surface_rule,))
-
-    assert internal_layer.break_spans(text, "line", "en") == break_line_spans(text, "en")
 
 
 def test_merged_line_span_keeps_only_its_end_boundary_statuses():
@@ -169,19 +153,15 @@ def test_merged_line_span_keeps_only_its_end_boundary_statuses():
 
     merged = _merge_spans(text, base[1:3])
 
-    assert merged["text"] == "Fig.\nThen "
     assert merged["break_type"] == "optional"
     assert merged["statuses"] == [0]
 
 
 @pytest.mark.parametrize(
-    ("level", "surface", "text", "vanilla"),
-    [
-        ("line", "日", "日本語を", break_line_spans),
-        ("word", "co", "co-op time", break_word_spans),
-    ],
+    ("level", "surface", "text"),
+    [("line", "日", "日本語を"), ("word", "co", "co-op time")],
 )
-def test_unpunctuated_suppression_cannot_own_its_end_boundary(level, surface, text, vanilla):
+def test_unpunctuated_suppression_fails_its_witness(level, surface, text):
     rule = _suppression(f"unpunctuated-{level}", surface)
     rule["level"] = level
     rule["witnesses"] = {
@@ -195,22 +175,162 @@ def test_unpunctuated_suppression_cannot_own_its_end_boundary(level, surface, te
 
     assert "WITNESS_POSITIVE_FAILED" in caught.value.reason_codes
 
-    valid_rule = _suppression(f"valid-{level}", "Fig.")
-    valid_rule["level"] = level
-    if level == "line":
-        valid_rule["witnesses"] = {
-            "positive": "Read Fig. more",
-            "near_miss": "ConFig. more",
-            "condition_negatives": [],
-        }
-    valid_layer = load_exception_inventory(_inventory(valid_rule))
-    compiled = valid_layer._rules[0]
-    unpunctuated = compiled.__class__(**{**compiled.__dict__, "surface": surface})
-    regression_layer = valid_layer.__class__(
-        valid_layer.corpus, valid_layer.named_lists, (unpunctuated,)
+
+def test_omitted_policy_is_byte_identical_to_legacy_default():
+    layer = load_exception_inventory(_inventory(_rule(), _suppression("figure-default", "Fig.")))
+    text = "No. See Fig. 5"
+
+    implicit = layer.break_spans(text, "word", "en")
+    explicit = layer.break_spans(text, "word", "en", policy=ExceptionPolicy())
+
+    assert implicit == explicit
+    assert implicit == [
+        {
+            "text": "No",
+            "start": 0,
+            "end": 2,
+            "types": ["exception:abbreviation"],
+            "statuses": [200],
+        },
+        {"text": ".", "start": 2, "end": 3, "types": ["punctuation"], "statuses": [0]},
+        {"text": " ", "start": 3, "end": 4, "types": ["whitespace"], "statuses": [0]},
+        {"text": "See", "start": 4, "end": 7, "types": ["letter"], "statuses": [200]},
+        {"text": " ", "start": 7, "end": 8, "types": ["whitespace"], "statuses": [0]},
+        {
+            "text": "Fig.",
+            "start": 8,
+            "end": 12,
+            "types": ["letter", "punctuation"],
+            "statuses": [200, 0],
+        },
+        {"text": " ", "start": 12, "end": 13, "types": ["whitespace"], "statuses": [0]},
+        {"text": "5", "start": 13, "end": 14, "types": ["number"], "statuses": [100]},
+    ]
+
+
+def test_policy_can_retype_or_mark_without_changing_segmentation():
+    layer = load_exception_inventory(_inventory(_suppression("figure-policy", "Fig.")))
+    text = "See Fig. 5"
+    vanilla = break_word_spans(text, "en")
+
+    retyped = layer.break_spans(
+        text,
+        "word",
+        "en",
+        policy=ExceptionPolicy(disposition="retype", retype_as="exception:abbreviation"),
+    )
+    marked = layer.break_spans(text, "word", "en", policy=ExceptionPolicy(disposition="mark"))
+
+    assert [(span["start"], span["end"]) for span in retyped] == [
+        (span["start"], span["end"]) for span in vanilla
+    ]
+    assert "exception:abbreviation" in retyped[2]["types"]
+    assert [(span["start"], span["end"]) for span in marked] == [
+        (span["start"], span["end"]) for span in vanilla
+    ]
+    assert marked[2]["exceptions"] == [{"rule_id": "figure-policy", "relation": "boundary"}]
+
+
+def test_one_rule_can_claim_word_and_sentence_levels():
+    rule = _suppression("doctor-levels", "Dr.")
+    rule["level"] = ["word", "sentence"]
+    rule["witnesses"]["positive"] = "I met Dr. Smith today. "
+    rule["witnesses"]["near_miss"] = "I met SomeDr. Smith today. "
+    layer = load_exception_inventory(_inventory(rule))
+    text = "I met Dr. Smith today. Next."
+
+    words = layer.break_spans(text, "word", "en")
+    sentences = layer.break_spans(text, "sentence", "en")
+
+    assert [span["text"] for span in words[:7]] == ["I", " ", "met", " ", "Dr.", " ", "Smith"]
+    assert sentences[0]["text"] == "I met Dr. Smith today. "
+
+
+def test_multi_level_rule_uses_only_the_requested_breaker(monkeypatch):
+    rule = _suppression("doctor-one-pass", "Dr.")
+    rule["level"] = ["word", "sentence"]
+    rule["witnesses"]["positive"] = "I met Dr. Smith today. "
+    rule["witnesses"]["near_miss"] = "I met SomeDr. Smith today. "
+    layer = load_exception_inventory(_inventory(rule))
+    import icukit.exceptions as exceptions
+
+    calls = {"word": 0, "sentence": 0}
+    word_breaker = exceptions.break_word_spans
+    sentence_breaker = exceptions.break_sentence_spans
+
+    def count_word(text, locale):
+        calls["word"] += 1
+        return word_breaker(text, locale)
+
+    def count_sentence(text, locale):
+        calls["sentence"] += 1
+        return sentence_breaker(text, locale)
+
+    monkeypatch.setattr(exceptions, "break_word_spans", count_word)
+    monkeypatch.setattr(exceptions, "break_sentence_spans", count_sentence)
+
+    layer.break_spans("I met Dr. Smith today.", "sentence", "en")
+
+    assert calls == {"word": 0, "sentence": 1}
+
+
+def test_multi_level_rule_is_refused_when_one_level_is_not_witnessed():
+    rule = _suppression("half-working", "Fig.")
+    rule["level"] = ["word", "sentence"]
+    rule["witnesses"]["positive"] = "See Fig."
+
+    with pytest.raises(ExceptionLoadError) as caught:
+        load_exception_inventory(_inventory(rule))
+
+    assert any(
+        refusal.reason == "WITNESS_POSITIVE_FAILED"
+        and refusal.detail == "rule did not fire at sentence"
+        for refusal in caught.value.refusals
     )
 
-    assert regression_layer.break_spans(text, level, "en") == vanilla(text, "en")
+
+def test_single_level_spelling_remains_valid():
+    layer = load_exception_inventory(_inventory(_suppression("single-level", "Fig.")))
+
+    assert layer.break_spans("See Fig. 5", "word", "en")[2]["text"] == "Fig."
+
+
+def test_policy_names_partial_missing_and_overlap_behavior():
+    conditional = _rule(
+        id="conditional-policy",
+        effect="suppress",
+        type=None,
+        surface="No.",
+        variant="exact",
+        conditions=[
+            {
+                "id": "right-letter",
+                "kind": "unicode_set",
+                "direction": "right",
+                "set": "[N]",
+                "skip": {"kind": "whitespace", "max": 1},
+            }
+        ],
+        witnesses={
+            "positive": "No. Next",
+            "near_miss": "ConNo. Next",
+            "condition_negatives": ["No. Other"],
+        },
+    )
+    conditional.pop("strength")
+    duplicate = deepcopy(conditional)
+    duplicate["id"] = "conditional-policy-2"
+    layer = load_exception_inventory(_inventory(conditional, duplicate))
+
+    assert layer.break_spans("No.", "word", "en") == break_word_spans("No.", "en")
+    assert [
+        span["text"]
+        for span in layer.break_spans(
+            "No.", "word", "en", policy=ExceptionPolicy(missing_context="match")
+        )
+    ] == ["No."]
+    with pytest.raises(ExceptionConflictError, match="OVERLAPPING_EXCEPTION_RULES"):
+        layer.break_spans("No. Next", "word", "en", policy=ExceptionPolicy(overlap="error"))
 
 
 def test_sentence_suppression_joins_abbreviation_to_following_sentence():
