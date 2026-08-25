@@ -29,6 +29,7 @@ from .errors import ExceptionConflictError, ExceptionLoadError, RuleRefusal
 __all__ = [
     "Condition",
     "ExceptionInventory",
+    "ExceptionPolicy",
     "ExceptionRule",
     "LoadedExceptionInventory",
     "NamedListCondition",
@@ -46,6 +47,48 @@ Level = Literal["sentence", "word", "line"]
 Effect = Literal["suppress", "retype"]
 Direction = Literal["left", "right"]
 Variant = Literal["exact", "collation"]
+
+
+@dataclass(frozen=True)
+class ExceptionPolicy:
+    """Choose how matching exception rules affect candidate boundaries.
+
+    The defaults preserve each rule's authored effect at its declared level,
+    require every condition, reject absent context, and combine compatible
+    overlaps. ``retype_as`` is used by the explicit ``"retype"`` disposition.
+
+    ``missing_context`` governs an edge of the *complete* text: a condition that
+    runs off the start or end of the string with no character left to inspect.
+    The text passed to :meth:`LoadedExceptionInventory.break_spans` is always
+    taken to be complete. A caller feeding text incrementally must not rely on
+    this dimension to describe a buffer that is merely unfinished, because a
+    condition reaching past the end of a partial buffer is undetermined rather
+    than absent, and either value would decide it prematurely. Such a caller
+    should withhold a tail of the buffer and break only the prefix whose context
+    has already arrived.
+    """
+
+    disposition: Literal["rule", "suppress", "retype", "mark"] = "rule"
+    conditions: Literal["all", "any"] = "all"
+    missing_context: Literal["fail", "match"] = "fail"
+    overlap: Literal["combine", "first", "error"] = "combine"
+    retype_as: str = "exception:match"
+
+    def __post_init__(self) -> None:
+        choices = {
+            "disposition": (
+                self.disposition,
+                {"rule", "suppress", "retype", "mark"},
+            ),
+            "conditions": (self.conditions, {"all", "any"}),
+            "missing_context": (self.missing_context, {"fail", "match"}),
+            "overlap": (self.overlap, {"combine", "first", "error"}),
+        }
+        for name, (value, allowed) in choices.items():
+            if value not in allowed:
+                raise ValueError(f"invalid exception policy {name}: {value!r}")
+        if not _TYPE_RE.fullmatch(self.retype_as):
+            raise ValueError(f"invalid exception policy retype_as: {self.retype_as!r}")
 
 
 class SkipSpec(TypedDict):
@@ -89,7 +132,7 @@ class Witnesses(TypedDict):
 class ExceptionRule(TypedDict):
     id: str
     locale: str
-    level: Level
+    level: Level | list[Level]
     effect: Effect
     type: NotRequired[str | None]
     surface: str
@@ -144,7 +187,7 @@ class _CompiledCondition:
 class _CompiledRule:
     id: str
     locale: str
-    level: Level
+    levels: tuple[Level, ...]
     effect: Effect
     type: str | None
     surface: str
@@ -256,8 +299,19 @@ def _compile_rule(
     if not isinstance(locale, str) or not _LOCALE_RE.fullmatch(locale):
         errors.append(_refuse(rule_id, "INVALID_LOCALE", repr(locale)))
     level = raw.get("level")
-    if level not in {"sentence", "word", "line"}:
-        errors.append(_refuse(rule_id, "INVALID_LEVEL", repr(level)))
+    level_values = level if isinstance(level, list) else [level]
+    valid_levels = {"sentence", "word", "line"}
+    level_shape_valid = bool(level_values) and all(
+        isinstance(value, str) and value in valid_levels for value in level_values
+    )
+    if not level_shape_valid or len(level_values) != len(set(map(repr, level_values))):
+        errors.append(
+            _refuse(
+                rule_id,
+                "INVALID_LEVEL",
+                "expected a level or a nonempty list of unique levels",
+            )
+        )
     effect = raw.get("effect")
     if effect not in {"suppress", "retype"}:
         errors.append(_refuse(rule_id, "INVALID_EFFECT", repr(effect)))
@@ -349,7 +403,7 @@ def _compile_rule(
         _CompiledRule(
             rule_id,
             cast(str, locale),
-            cast(Level, level),
+            tuple(cast(list[Level], level_values)),
             cast(Effect, effect),
             cast(str | None, type_name),
             cast(str, surface),
@@ -423,6 +477,19 @@ def _condition_matches(
     return adjacent is not None and adjacent["text"] in condition.words
 
 
+def _condition_result(
+    condition: _CompiledCondition,
+    text: str,
+    start: int,
+    end: int,
+    locale: str,
+    policy: ExceptionPolicy,
+) -> bool:
+    if _condition_position(text, start, end, condition) is None:
+        return policy.missing_context == "match"
+    return _condition_matches(condition, text, start, end, locale)
+
+
 def _anchored_exact(rule: _CompiledRule, text: str) -> list[Detection]:
     # A surface starts at a lexical boundary. This is the compiler invariant exercised by
     # the deliberately naive near-miss variant in the witness harness.
@@ -430,7 +497,13 @@ def _anchored_exact(rule: _CompiledRule, text: str) -> list[Detection]:
     return regex_detect(text, pattern, cast(str, rule.type))
 
 
-def _detections(rule: _CompiledRule, text: str, locale: str) -> list[Detection]:
+def _detections(
+    rule: _CompiledRule,
+    text: str,
+    locale: str,
+    policy: ExceptionPolicy | None = None,
+) -> list[Detection]:
+    policy = policy or ExceptionPolicy()
     if rule.variant == "exact":
         found = _anchored_exact(rule, text)
     else:
@@ -447,11 +520,15 @@ def _detections(rule: _CompiledRule, text: str, locale: str) -> list[Detection]:
             if item["start"] == 0
             or not (text[item["start"] - 1].isalnum() or text[item["start"] - 1] == "_")
         ]
+    if not rule.conditions:
+        return found
+    predicate = all if policy.conditions == "all" else any
     return [
         item
         for item in found
-        if all(
-            _condition_matches(c, text, item["start"], item["end"], locale) for c in rule.conditions
+        if predicate(
+            _condition_result(c, text, item["start"], item["end"], locale, policy)
+            for c in rule.conditions
         )
     ]
 
@@ -499,28 +576,55 @@ class LoadedExceptionInventory:
     named_lists: dict[str, tuple[str, ...]]
     _rules: tuple[_CompiledRule, ...]
 
-    def break_spans(self, text: str, level: Level, locale: str = "en_US") -> list[BreakSpan]:
-        """Segment ``text`` and apply all matching suppression/retype rules."""
+    def break_spans(
+        self,
+        text: str,
+        level: Level,
+        locale: str = "en_US",
+        *,
+        policy: ExceptionPolicy | None = None,
+    ) -> list[BreakSpan]:
+        """Segment ``text`` and apply matching rules under ``policy``."""
+        policy = policy or ExceptionPolicy()
         selected = [
             rule
             for rule in self._rules
-            if rule.level == level and _locale_applies(rule.locale, locale)
+            if level in rule.levels and _locale_applies(rule.locale, locale)
         ]
-        suppressions = [rule for rule in selected if rule.effect == "suppress"]
         base = _base_spans(text, level, locale)
-        if suppressions:
-            base, _ = _filter_suppressions(text, base, suppressions, locale)
+        boundary_rules = [
+            rule for rule in selected if rule.effect == "suppress" or policy.disposition != "rule"
+        ]
+        claims = _boundary_claims(text, base, boundary_rules, locale, policy)
+        if policy.overlap == "error" and any(len(rule_ids) > 1 for rule_ids in claims.values()):
+            raise ExceptionConflictError("OVERLAPPING_EXCEPTION_RULES")
+        if policy.overlap == "first":
+            claims = {boundary: rule_ids[:1] for boundary, rule_ids in claims.items()}
+        if boundary_rules:
+            if policy.disposition in {"rule", "suppress"}:
+                base = _drop_boundaries(text, base, set(claims))
+            elif policy.disposition == "retype":
+                base = _annotate_boundaries(base, claims, policy.retype_as, mark=False)
+            else:
+                base = _annotate_boundaries(base, claims, policy.retype_as, mark=True)
         detections = [
             detection
             for rule in selected
-            if rule.effect == "retype"
-            for detection in _detections(rule, text, locale)
+            if rule.effect == "retype" and policy.disposition == "rule"
+            for detection in _detections(rule, text, locale, policy)
         ]
         return merge_retypes(text, base, detections)
 
-    def apply(self, text: str, level: Level, locale: str = "en_US") -> list[BreakSpan]:
+    def apply(
+        self,
+        text: str,
+        level: Level,
+        locale: str = "en_US",
+        *,
+        policy: ExceptionPolicy | None = None,
+    ) -> list[BreakSpan]:
         """Alias for :meth:`break_spans`."""
-        return self.break_spans(text, level, locale)
+        return self.break_spans(text, level, locale, policy=policy)
 
 
 def _merge_spans(text: str, spans: list[BreakSpan]) -> BreakSpan:
@@ -529,7 +633,6 @@ def _merge_spans(text: str, spans: list[BreakSpan]) -> BreakSpan:
     merged["text"] = text[merged["start"] : merged["end"]]
     merged["types"] = list(dict.fromkeys(item for span in spans for item in span["types"]))
     if "break_type" not in merged:
-        # Word statuses describe tokens, so preserve every contributing token status.
         merged["statuses"] = list(
             dict.fromkeys(item for span in spans for item in span["statuses"])
         )
@@ -554,16 +657,29 @@ def _filter_suppressions(
     sentence breaker); when there is no internal boundary, drop that immediately
     following optional boundary instead. Mandatory line breaks are never dropped.
     """
+    policy = ExceptionPolicy()
+    dropped = set(_boundary_claims(text, base, rules, locale, policy))
+    return _drop_boundaries(text, base, dropped), dropped
+
+
+def _boundary_claims(
+    text: str,
+    base: list[BreakSpan],
+    rules: list[_CompiledRule],
+    locale: str,
+    policy: ExceptionPolicy,
+) -> dict[int, list[str]]:
     boundaries = {span["end"] for span in base[:-1]}
     suppressible = boundaries - _mandatory_boundaries(base)
-    dropped: set[int] = set()
+    claims: dict[int, list[str]] = {}
     for rule in rules:
-        for match in _detections(rule, text, locale):
+        for match in _detections(rule, text, locale, policy):
             internal = {
                 boundary for boundary in suppressible if match["start"] < boundary < match["end"]
             }
             if internal:
-                dropped.update(internal)
+                for boundary in internal:
+                    claims.setdefault(boundary, []).append(rule.id)
                 continue
             following = next(
                 (
@@ -575,10 +691,13 @@ def _filter_suppressions(
             )
             owns_punctuation = _PUNCTUATION.contains(text[match["end"] - 1])
             if match["end"] in suppressible and owns_punctuation:
-                dropped.add(match["end"])
+                claims.setdefault(match["end"], []).append(rule.id)
             elif following is not None and owns_punctuation:
-                dropped.add(following)
+                claims.setdefault(following, []).append(rule.id)
+    return claims
 
+
+def _drop_boundaries(text: str, base: list[BreakSpan], dropped: set[int]) -> list[BreakSpan]:
     result: list[BreakSpan] = []
     run: list[BreakSpan] = []
     for span in base:
@@ -588,24 +707,38 @@ def _filter_suppressions(
             run = []
     if run:
         result.append(_merge_spans(text, run))
-    return result, dropped
+    return result
 
 
-def _fires(rule: _CompiledRule, text: str) -> bool:
+def _annotate_boundaries(
+    base: list[BreakSpan], claims: dict[int, list[str]], type_name: str, *, mark: bool
+) -> list[BreakSpan]:
+    result: list[BreakSpan] = []
+    for original in base:
+        span = cast(BreakSpan, dict(original))
+        rule_ids = claims.get(span["end"])
+        if rule_ids:
+            if mark:
+                span["exceptions"] = [
+                    {"rule_id": rule_id, "relation": "boundary"} for rule_id in rule_ids
+                ]
+            elif type_name not in span["types"]:
+                span["types"] = [*span["types"], type_name]
+        result.append(span)
+    return result
+
+
+def _fires(rule: _CompiledRule, text: str, level: Level) -> bool:
     if rule.effect == "retype":
         detections = _detections(rule, text, rule.locale)
         if not detections:
             return False
-        merged = merge_retypes(text, _base_spans(text, rule.level, rule.locale), detections)
+        merged = merge_retypes(text, _base_spans(text, level, rule.locale), detections)
         return any(rule.type in span["types"] for span in merged)
-    base = _base_spans(text, rule.level, rule.locale)
+    base = _base_spans(text, level, rule.locale)
     filtered, _ = _filter_suppressions(text, base, [rule], rule.locale)
     if filtered == base:
         return False
-    # A suppression witness must demonstrate that the matching surface owns a
-    # removed boundary: inside the surface, or immediately after its punctuation
-    # (including whitespace attached by the breaker). Merely changing any boundary
-    # is not sufficient evidence that the rule fired as intended.
     filtered_boundaries = {span["end"] for span in filtered}
     removed = {span["end"] for span in base[:-1]} - filtered_boundaries
     for match in _detections(rule, text, rule.locale):
@@ -628,10 +761,15 @@ def _run_witnesses(rule: _CompiledRule, raw: ExceptionRule) -> list[RuleRefusal]
     near_miss = cast(str, _text(witnesses["near_miss"]))
     errors: list[RuleRefusal] = []
     try:
-        if not _fires(rule, positive):
-            errors.append(_refuse(rule.id, "WITNESS_POSITIVE_FAILED", "rule did not fire"))
-        if _fires(rule, near_miss):
-            errors.append(_refuse(rule.id, "WITNESS_NEAR_MISS_FAILED", "real rule fired"))
+        for level in rule.levels:
+            if not _fires(rule, positive, level):
+                errors.append(
+                    _refuse(rule.id, "WITNESS_POSITIVE_FAILED", f"rule did not fire at {level}")
+                )
+            if _fires(rule, near_miss, level):
+                errors.append(
+                    _refuse(rule.id, "WITNESS_NEAR_MISS_FAILED", f"real rule fired at {level}")
+                )
         # Deliberately faulty compiler seam: bare search, with no lexical boundary.
         naive = (
             rule.surface in near_miss
@@ -669,8 +807,15 @@ def _run_witnesses(rule: _CompiledRule, raw: ExceptionRule) -> list[RuleRefusal]
             ]
             if values[index] or any(not value for i, value in enumerate(values) if i != index):
                 errors.append(_refuse(rule.id, "VACUOUS_CONDITION_NEGATIVE", str(index)))
-            if _fires(rule, negative_text):
-                errors.append(_refuse(rule.id, "WITNESS_CONDITION_NEGATIVE_FAILED", str(index)))
+            for level in rule.levels:
+                if _fires(rule, negative_text, level):
+                    errors.append(
+                        _refuse(
+                            rule.id,
+                            "WITNESS_CONDITION_NEGATIVE_FAILED",
+                            f"condition {index} fired at {level}",
+                        )
+                    )
     except ExceptionConflictError as error:
         errors.append(_refuse(rule.id, str(error), "witness requires an unsupported mutation"))
     except Exception as error:  # compilation/runtime backend errors become transactional refusals

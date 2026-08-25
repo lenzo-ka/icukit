@@ -70,6 +70,7 @@ class BreakSpan(TypedDict):
     statuses: list[int]
     break_type: NotRequired[str]
     abbreviations: NotRequired[list[dict[str, str]]]
+    exceptions: NotRequired[list[dict[str, str]]]
 
 
 def _make_span(

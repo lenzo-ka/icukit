@@ -228,6 +228,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`collation_detect`](#icukitdetect) — function, `icukit.detect`
 - [`Condition`](#icukitexceptions) — alias, `icukit.exceptions`
 - [`ExceptionInventory`](#icukitexceptions) — class, `icukit.exceptions`
+- [`ExceptionPolicy`](#icukitexceptions) — class, `icukit.exceptions`
 - [`ExceptionRule`](#icukitexceptions) — class, `icukit.exceptions`
 - [`LoadedExceptionInventory`](#icukitexceptions) — class, `icukit.exceptions`
 - [`NamedListCondition`](#icukitexceptions) — class, `icukit.exceptions`
@@ -2899,6 +2900,28 @@ dict(iterable) -> new dictionary initialized as if via:
 dict(**kwargs) -> new dictionary initialized with the name=value pairs
     in the keyword argument list.  For example:  dict(one=1, two=2)
 
+### class `ExceptionPolicy`
+
+Choose how matching exception rules affect candidate boundaries.
+
+The defaults preserve each rule's authored effect at its declared level,
+require every condition, reject absent context, and combine compatible
+overlaps. ``retype_as`` is used by the explicit ``"retype"`` disposition.
+
+``missing_context`` governs an edge of the *complete* text: a condition that
+runs off the start or end of the string with no character left to inspect.
+The text passed to :meth:`LoadedExceptionInventory.break_spans` is always
+taken to be complete. A caller feeding text incrementally must not rely on
+this dimension to describe a buffer that is merely unfinished, because a
+condition reaching past the end of a partial buffer is undetermined rather
+than absent, and either value would decide it prematurely. Such a caller
+should withhold a tail of the buffer and break only the prefix whose context
+has already arrived.
+
+#### `ExceptionPolicy(disposition: "Literal['rule', 'suppress', 'retype', 'mark']" = 'rule', conditions: "Literal['all', 'any']" = 'all', missing_context: "Literal['fail', 'match']" = 'fail', overlap: "Literal['combine', 'first', 'error']" = 'combine', retype_as: 'str' = 'exception:match') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `ExceptionRule`
 
 dict() -> new empty dictionary
@@ -2919,13 +2942,13 @@ An immutable, validated exception inventory.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-#### `apply(text: 'str', level: 'Level', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+#### `apply(text: 'str', level: 'Level', locale: 'str' = 'en_US', *, policy: 'ExceptionPolicy | None' = None) -> 'list[BreakSpan]'`
 
 Alias for :meth:`break_spans`.
 
-#### `break_spans(text: 'str', level: 'Level', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+#### `break_spans(text: 'str', level: 'Level', locale: 'str' = 'en_US', *, policy: 'ExceptionPolicy | None' = None) -> 'list[BreakSpan]'`
 
-Segment ``text`` and apply all matching suppression/retype rules.
+Segment ``text`` and apply matching rules under ``policy``.
 
 ### class `NamedListCondition`
 

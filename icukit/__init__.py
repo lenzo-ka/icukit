@@ -225,6 +225,7 @@ from .errors import (
 from .exceptions import (
     Condition,
     ExceptionInventory,
+    ExceptionPolicy,
     ExceptionRule,
     LoadedExceptionInventory,
     NamedListCondition,
@@ -652,6 +653,7 @@ __all__ = [
     # Exception layer
     "Condition",
     "ExceptionInventory",
+    "ExceptionPolicy",
     "ExceptionRule",
     "LoadedExceptionInventory",
     "NamedListCondition",
