@@ -18,12 +18,10 @@ import icu
 
 from .breaker import (
     BreakSpan,
-    RuleBreaker,
     break_grapheme_spans,
     break_line_spans,
     break_sentence_spans,
     break_word_spans,
-    default_rules,
 )
 from .detect import Detection, collation_detect, regex_detect
 from .errors import ExceptionConflictError, ExceptionLoadError, RuleRefusal
@@ -113,6 +111,8 @@ class ExceptionInventory(TypedDict):
 _TYPE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*:[A-Za-z_][A-Za-z0-9_.-]*$")
 _LOCALE_RE = re.compile(r"^(?:und|[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,8})*)$")
 _STRENGTHS = {"primary", "secondary", "tertiary", "quaternary", "identical"}
+_PUNCTUATION = icu.UnicodeSet("[[:P:]]")
+_PUNCTUATION.freeze()
 _RULE_KEYS = {
     "id",
     "locale",
@@ -135,7 +135,7 @@ class _CompiledCondition:
     kind: str
     direction: Direction
     skip_kind: str
-    skip_max: int
+    skip_max: int | None
     unicode_set: icu.UnicodeSet | None = None
     words: frozenset[str] = frozenset()
 
@@ -151,7 +151,6 @@ class _CompiledRule:
     variant: Variant
     strength: str
     conditions: tuple[_CompiledCondition, ...]
-    status: int | None
 
 
 def _refuse(rule_id: str, code: str, detail: str) -> RuleRefusal:
@@ -168,21 +167,6 @@ def _text(witness: object) -> str | None:
 
 def _quote_regex(value: str) -> str:
     return "\\Q" + value.replace("\\E", "\\E\\\\E\\Q") + "\\E"
-
-
-def _quote_rbbi(value: str) -> str:
-    return "'" + value.replace("'", "''") + "'"
-
-
-def _insert_rbbi(base: str, additions: list[str]) -> str:
-    """Insert tailoring statements before ICU's terminal catch-all statement."""
-    catch_all = base.rfind(".;")
-    if catch_all < 0:
-        raise ValueError("base RBBI has no terminal catch-all")
-    # Sentence rules end a larger statement with ``.;``.  Splicing at the dot
-    # would split that rule; the actual seam is the preceding statement boundary.
-    seam = base.rfind(";", 0, catch_all) + 1
-    return base[:seam] + "".join(additions) + base[seam:]
 
 
 def _compile_condition(
@@ -202,13 +186,12 @@ def _compile_condition(
         return None, [_refuse(rule_id, "INVALID_SKIP", f"condition {index} has invalid skip")]
     skip_kind = cast(str, skip["kind"])
     maximum = skip.get("max", 0 if skip_kind == "none" else 1)
-    if maximum is None:
-        code = "UNHOSTABLE_UNBOUNDED_LEFT" if direction == "left" else "UNHOSTABLE_UNBOUNDED_RIGHT"
-        return None, [_refuse(rule_id, code, f"condition {index} has unbounded whitespace")]
-    if not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 0:
+    if maximum is not None and (
+        not isinstance(maximum, int) or isinstance(maximum, bool) or maximum < 0
+    ):
         return None, [_refuse(rule_id, "INVALID_SKIP", f"condition {index} has invalid max")]
     if skip_kind == "whitespace" and "max" not in skip:
-        # The schema default is one; an explicit null/omission intended as unbounded is refused.
+        # Omission uses the schema default; explicit null means unbounded.
         maximum = 1
     if skip_kind == "none" and maximum != 0:
         return None, [_refuse(rule_id, "INVALID_SKIP", "none skip requires max=0")]
@@ -257,7 +240,6 @@ def _compile_condition(
 def _compile_rule(
     raw: object,
     named_lists: dict[str, list[str]],
-    status: int | None,
 ) -> tuple[_CompiledRule | None, list[RuleRefusal]]:
     if not isinstance(raw, dict):
         return None, [_refuse("<unknown>", "INVALID_RULE", "rule is not an object")]
@@ -309,26 +291,23 @@ def _compile_rule(
         errors.append(_refuse(rule_id, "CONDITIONS_REQUIRED", "conditional rule has no conditions"))
     elif unconditionality == "empirical" and conditions_raw:
         errors.append(_refuse(rule_id, "CONDITIONS_FORBIDDEN", "empirical rule has conditions"))
-    if effect == "suppress" and variant == "collation":
-        errors.append(_refuse(rule_id, "UNHOSTABLE_NEEDS_REPLACE", "collation suppression"))
     conditions: list[_CompiledCondition] = []
     for index, condition_raw in enumerate(conditions_raw):
         condition, condition_errors = _compile_condition(condition_raw, index, named_lists, rule_id)
         errors.extend(condition_errors)
         if condition is not None:
             conditions.append(condition)
-    if effect == "suppress" and any(c.direction == "left" for c in conditions):
-        errors.append(
-            _refuse(
-                rule_id,
-                "UNHOSTABLE_SUPPRESS_LEFT",
-                "suppress rules cannot host left context: RBBI has none (regardless of bound)",
-            )
-        )
-    if effect == "suppress" and any(c.kind == "named_list" for c in conditions):
-        errors.append(
-            _refuse(rule_id, "UNHOSTABLE_NEEDS_REPLACE", "named-list suppression is post-pass")
-        )
+    if effect == "retype":
+        for condition in conditions:
+            if condition.skip_max is None:
+                side = condition.direction.upper()
+                errors.append(
+                    _refuse(
+                        rule_id,
+                        f"UNHOSTABLE_UNBOUNDED_{side}",
+                        "retype condition has unbounded whitespace",
+                    )
+                )
     for first_index, first in enumerate(conditions):
         if first.kind != "unicode_set" or first.unicode_set is None:
             continue
@@ -377,7 +356,6 @@ def _compile_rule(
             cast(Variant, variant),
             cast(str, strength),
             tuple(conditions),
-            status,
         ),
         [],
     )
@@ -407,7 +385,9 @@ def _condition_position(
     position = start - 1 if step < 0 else end
     skipped = 0
     while 0 <= position < len(text) and text[position].isspace():
-        if condition.skip_kind != "whitespace" or skipped == condition.skip_max:
+        if condition.skip_kind != "whitespace" or (
+            condition.skip_max is not None and skipped == condition.skip_max
+        ):
             break
         skipped += 1
         position += step
@@ -527,10 +507,9 @@ class LoadedExceptionInventory:
             if rule.level == level and _locale_applies(rule.locale, locale)
         ]
         suppressions = [rule for rule in selected if rule.effect == "suppress"]
+        base = _base_spans(text, level, locale)
         if suppressions:
-            base = _run_suppressions(text, level, locale, suppressions)
-        else:
-            base = _base_spans(text, level, locale)
+            base, _ = _filter_suppressions(text, base, suppressions, locale)
         detections = [
             detection
             for rule in selected
@@ -544,55 +523,61 @@ class LoadedExceptionInventory:
         return self.break_spans(text, level, locale)
 
 
-def _rbbi_condition(condition: _CompiledCondition) -> str:
-    assert condition.unicode_set is not None
-    whitespace = "[\\p{White_Space}]?" * condition.skip_max
-    return whitespace + condition.unicode_set.toPattern()
+def _merge_spans(text: str, spans: list[BreakSpan]) -> BreakSpan:
+    merged = cast(BreakSpan, dict(spans[-1]))
+    merged["start"] = spans[0]["start"]
+    merged["text"] = text[merged["start"] : merged["end"]]
+    merged["types"] = list(dict.fromkeys(item for span in spans for item in span["types"]))
+    merged["statuses"] = list(dict.fromkeys(item for span in spans for item in span["statuses"]))
+    return merged
 
 
-def _rbbi_rule(rule: _CompiledRule) -> str:
-    context = "".join(_rbbi_condition(condition) for condition in rule.conditions)
-    if rule.level == "sentence":
-        # A look-ahead slash creates a boundary after the surface.  Sentence
-        # suppression instead has to consume the right context so chaining can
-        # carry the match through the rest of the sentence.  Encode the same
-        # lexical anchor as _anchored_exact in the rule itself: sentence chaining
-        # does not preserve the generated status for the post-match guard.
-        prefix = r"[[^\p{L}\p{N}_]{bof}] "
-        suffix = " " + context if context else ""
-    else:
-        prefix = ""
-        suffix = " / " + context if context else ""
-    return f"{prefix}{_quote_rbbi(rule.surface)}{suffix} {{{rule.status}}};"
+def _filter_suppressions(
+    text: str,
+    base: list[BreakSpan],
+    rules: list[_CompiledRule],
+    locale: str,
+) -> tuple[list[BreakSpan], set[int]]:
+    """Drop base boundaries made false by matching suppression surfaces.
 
+    Internal boundaries split the surface itself and are always dropped. Some
+    breakers attach trailing whitespace to a punctuation boundary (notably the
+    sentence breaker); when there is no internal boundary, drop that immediately
+    following boundary instead.
+    """
+    boundaries = {span["end"] for span in base[:-1]}
+    dropped: set[int] = set()
+    for rule in rules:
+        for match in _detections(rule, text, locale):
+            internal = {
+                boundary for boundary in boundaries if match["start"] < boundary < match["end"]
+            }
+            if internal:
+                dropped.update(internal)
+                continue
+            following = next(
+                (
+                    boundary
+                    for boundary in sorted(boundaries)
+                    if boundary >= match["end"] and text[match["end"] : boundary].isspace()
+                ),
+                None,
+            )
+            if match["end"] in boundaries:
+                dropped.add(match["end"])
+            elif following is not None and _PUNCTUATION.contains(text[match["end"] - 1]):
+                dropped.add(following)
 
-def _run_suppressions(
-    text: str, level: Level, locale: str, rules: list[_CompiledRule]
-) -> list[BreakSpan]:
-    source = _insert_rbbi(default_rules(level, locale), [_rbbi_rule(rule) for rule in rules])
-    tailored = RuleBreaker(source).spans(text)
-    original = _base_spans(text, level, locale)
-    by_status = {cast(int, rule.status): rule for rule in rules}
-    matches = {rule.id: _detections(rule, text, locale) for rule in rules}
     result: list[BreakSpan] = []
-    for span in tailored:
-        generated = next((status for status in span["statuses"] if status in by_status), None)
-        rule = by_status.get(generated) if generated is not None else None
-        anchored = rule is not None and any(
-            span["start"] <= match["start"] and match["end"] <= span["end"]
-            for match in matches[rule.id]
-        )
-        if generated is None or anchored:
-            result.append(span)
-            continue
-        # ``!!chain`` may join a literal rule to a lexical prefix (Con + Fig.).
-        # A span with no anchored detection is restored without coalescing.
-        result.extend(
-            base
-            for base in original
-            if span["start"] <= base["start"] and base["end"] <= span["end"]
-        )
-    return result
+    run: list[BreakSpan] = []
+    for span in base:
+        run.append(span)
+        if span["end"] not in dropped:
+            result.append(_merge_spans(text, run))
+            run = []
+    if run:
+        result.append(_merge_spans(text, run))
+    return result, dropped
 
 
 def _fires(rule: _CompiledRule, text: str) -> bool:
@@ -602,9 +587,9 @@ def _fires(rule: _CompiledRule, text: str) -> bool:
             return False
         merged = merge_retypes(text, _base_spans(text, rule.level, rule.locale), detections)
         return any(rule.type in span["types"] for span in merged)
-    tailored = _run_suppressions(text, rule.level, rule.locale, [rule])
     base = _base_spans(text, rule.level, rule.locale)
-    return [(s["start"], s["end"]) for s in tailored] != [(s["start"], s["end"]) for s in base]
+    _, dropped = _filter_suppressions(text, base, [rule], rule.locale)
+    return bool(dropped)
 
 
 def _run_witnesses(rule: _CompiledRule, raw: ExceptionRule) -> list[RuleRefusal]:
@@ -684,23 +669,10 @@ def _load_exception_inventory(inventory: object) -> LoadedExceptionInventory:
     ids = [rule.get("id") for rule in rules if isinstance(rule, dict)]
     if len(ids) != len(set(ids)):
         errors.append(_refuse("<inventory>", "DUPLICATE_RULE_ID", "rule ids must be unique"))
-    suppress_ids = sorted(
-        cast(str, rule.get("id"))
-        for rule in rules
-        if isinstance(rule, dict)
-        and rule.get("effect") == "suppress"
-        and isinstance(rule.get("id"), str)
-    )
-    if len(suppress_ids) > 1000:
-        errors.append(_refuse("<inventory>", "STATUS_RANGE_EXHAUSTED", "1000 statuses available"))
-    statuses = {rule_id: 1000 + index for index, rule_id in enumerate(suppress_ids)}
     compiled: list[_CompiledRule] = []
     raw_by_id: dict[str, ExceptionRule] = {}
     for raw in rules:
-        raw_id = raw.get("id") if isinstance(raw, dict) else None
-        rule, rule_errors = _compile_rule(
-            raw, cast(dict[str, list[str]], named_lists), statuses.get(raw_id)
-        )
+        rule, rule_errors = _compile_rule(raw, cast(dict[str, list[str]], named_lists))
         errors.extend(rule_errors)
         if rule is not None:
             compiled.append(rule)

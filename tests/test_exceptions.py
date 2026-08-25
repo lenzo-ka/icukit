@@ -79,7 +79,7 @@ def test_real_no_casino_near_miss_is_mechanically_non_vacuous():
     assert casino[0]["types"] == ["letter"]
 
 
-def test_suppress_is_native_rbbi_and_prevents_word_break():
+def test_suppress_post_filter_prevents_word_break():
     rule = _rule(
         id="fig-suppress",
         effect="suppress",
@@ -159,9 +159,9 @@ def test_combining_cluster_may_not_be_bisected():
         merge_retypes(text, base, [detection])
 
 
-def test_transactional_loader_collects_all_refusals():
-    bad_left = _rule(
-        id="bad-left",
+def test_left_context_suppression_loads_and_filters():
+    left = _rule(
+        id="left",
         effect="suppress",
         type=None,
         surface="Fig.",
@@ -180,6 +180,18 @@ def test_transactional_loader_collects_all_refusals():
             "condition_negatives": ["B Fig."],
         },
     )
+    left.pop("strength")
+    layer = load_exception_inventory(_inventory(left))
+
+    assert [span["text"] for span in layer.break_spans("A Fig.", "word", "en")] == [
+        "A",
+        " ",
+        "Fig.",
+    ]
+    assert layer.break_spans("B Fig.", "word", "en") == break_word_spans("B Fig.", "en")
+
+
+def test_transactional_loader_collects_remaining_refusals():
     bad_unbounded = _rule(
         id="bad-unbounded",
         effect="retype",
@@ -201,13 +213,38 @@ def test_transactional_loader_collects_all_refusals():
     bad_type = _rule(id="bad-type", type="not-local-grammar")
 
     with pytest.raises(ExceptionLoadError) as caught:
-        load_exception_inventory(_inventory(bad_left, bad_unbounded, bad_type))
+        load_exception_inventory(_inventory(bad_unbounded, bad_type))
 
-    # bounded left context on a suppress rule refuses because RBBI has NO left context,
-    # not because it is unbounded -- the two reasons are distinct codes.
-    assert "UNHOSTABLE_SUPPRESS_LEFT" in caught.value.reason_codes
     assert "UNHOSTABLE_UNBOUNDED_LEFT" in caught.value.reason_codes
     assert "INVALID_TYPE" in caught.value.reason_codes
+
+
+def test_unbounded_context_suppression_loads_and_filters():
+    rule = _rule(
+        id="unbounded-left",
+        effect="suppress",
+        type=None,
+        surface="Fig.",
+        variant="exact",
+        conditions=[
+            {
+                "id": "left",
+                "kind": "unicode_set",
+                "direction": "left",
+                "set": "[A]",
+                "skip": {"kind": "whitespace", "max": None},
+            }
+        ],
+        witnesses={
+            "positive": "A   Fig.",
+            "near_miss": "Configure Fig.",
+            "condition_negatives": ["B   Fig."],
+        },
+    )
+    rule.pop("strength")
+    layer = load_exception_inventory(_inventory(rule))
+
+    assert any(span["text"] == "Fig." for span in layer.break_spans("A     Fig.", "word", "en"))
 
 
 def test_nonseparable_unicode_conditions_refuse():
@@ -293,23 +330,12 @@ def test_collation_primary_strength_retypes_case_folded_surface():
     ]
 
 
-def test_unhostable_needs_replace_refuses_all_three_paths():
-    collation_suppression = _rule(
-        id="collation-suppression",
-        effect="suppress",
-        type=None,
-        conditions=[],
-        unconditionality="empirical",
-    )
-    with pytest.raises(ExceptionLoadError) as caught:
-        load_exception_inventory(_inventory(collation_suppression))
-    assert "UNHOSTABLE_NEEDS_REPLACE" in caught.value.reason_codes
-
+def test_named_list_condition_can_guard_suppression():
     named_list_suppression = _rule(
         id="named-list-suppression",
         effect="suppress",
         type=None,
-        surface="Dr",
+        surface="Dr.",
         variant="exact",
         conditions=[
             {
@@ -321,17 +347,19 @@ def test_unhostable_needs_replace_refuses_all_three_paths():
             }
         ],
         witnesses={
-            "positive": "Dr Smith",
-            "near_miss": "Drone Smith",
-            "condition_negatives": ["Dr who"],
+            "positive": "Dr. Smith",
+            "near_miss": "DroneDr. Smith",
+            "condition_negatives": ["Dr. who"],
         },
     )
     named_list_suppression.pop("strength")
     inventory = _inventory(named_list_suppression)
     inventory["named_lists"] = {"surnames": ["Smith", "Jones"]}
-    with pytest.raises(ExceptionLoadError) as caught:
-        load_exception_inventory(inventory)
-    assert "UNHOSTABLE_NEEDS_REPLACE" in caught.value.reason_codes
+    layer = load_exception_inventory(inventory)
+    assert layer.break_spans("Dr. Smith", "word", "en")[0]["text"] == "Dr."
+
+
+def test_unhostable_needs_replace_remains_for_retype_coalescing():
 
     base: list[BreakSpan] = [
         {"text": "a", "start": 0, "end": 1, "types": ["letter"], "statuses": [200]},
@@ -450,7 +478,7 @@ def test_compose_later_rule_with_same_id_wins():
     assert spans[0]["types"] == ["exception:second"]
 
 
-def test_compose_assigns_distinct_suppression_statuses():
+def test_compose_applies_multiple_suppressions_without_reserved_statuses():
     composed = compose_inventories(
         [
             _inventory(_suppression("figure", "Fig.")),
@@ -459,13 +487,8 @@ def test_compose_assigns_distinct_suppression_statuses():
     )
 
     spans = composed.break_spans("Fig. 5 Eq. 6", "word", "en")
-    generated = [
-        next(status for status in span["statuses"] if 1000 <= status < 2000)
-        for span in spans
-        if span["text"] in {"Fig.", "Eq."}
-    ]
-    assert len(generated) == 2
-    assert len(set(generated)) == 2
+    assert [span["text"] for span in spans] == ["Fig.", " ", "5", " ", "Eq.", " ", "6"]
+    assert all(status < 1000 for span in spans for status in span["statuses"])
 
 
 def test_compose_is_transactional_when_a_witness_fails():
