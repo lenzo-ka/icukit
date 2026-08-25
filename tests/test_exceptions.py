@@ -11,9 +11,14 @@ from icukit import (
     example_exception_inventory,
     load_exception_inventory,
 )
-from icukit.breaker import BreakSpan, break_sentence_spans, break_word_spans
+from icukit.breaker import (
+    BreakSpan,
+    break_line_spans,
+    break_sentence_spans,
+    break_word_spans,
+)
 from icukit.detect import Detection
-from icukit.exceptions import ExceptionInventory, ExceptionRule, merge_retypes
+from icukit.exceptions import ExceptionInventory, ExceptionRule, _merge_spans, merge_retypes
 
 
 def _rule(**changes) -> ExceptionRule:
@@ -106,6 +111,106 @@ def test_suppress_post_filter_prevents_word_break():
         (" ", 8, 9),
         ("5", 9, 10),
     ]
+
+
+def test_line_suppression_drops_an_optional_punctuation_break():
+    rule = _suppression("figure-line", "Fig.")
+    rule["level"] = "line"
+    rule["witnesses"] = {
+        "positive": "Read Fig. more",
+        "near_miss": "ConFig. more",
+        "condition_negatives": [],
+    }
+    layer = load_exception_inventory(_inventory(rule))
+
+    spans = layer.break_spans("Read Fig. more", "line", "en")
+
+    assert [(span["text"], span["break_type"], span["statuses"]) for span in spans] == [
+        ("Read ", "optional", [0]),
+        ("Fig. more", "optional", [0]),
+    ]
+
+
+def test_line_suppression_never_drops_a_mandatory_following_break():
+    rule = _suppression("figure-line", "Fig.")
+    rule["level"] = "line"
+    rule["witnesses"] = {
+        "positive": "Read Fig. more",
+        "near_miss": "ConFig. more",
+        "condition_negatives": [],
+    }
+    layer = load_exception_inventory(_inventory(rule))
+    text = "Read Fig.\nThen stop"
+
+    assert layer.break_spans(text, "line", "en") == break_line_spans(text, "en")
+
+
+def test_line_suppression_never_drops_a_mandatory_internal_break():
+    safe_rule = _suppression("figure-line", "Fig.")
+    safe_rule["level"] = "line"
+    safe_rule["witnesses"] = {
+        "positive": "Read Fig. more",
+        "near_miss": "ConFig. more",
+        "condition_negatives": [],
+    }
+    layer = load_exception_inventory(_inventory(safe_rule))
+    text = "See Fig.\nThen stop"
+    internal_surface_rule = layer._rules[0].__class__(
+        **{**layer._rules[0].__dict__, "surface": "Fig.\nThen"}
+    )
+    internal_layer = layer.__class__(layer.corpus, layer.named_lists, (internal_surface_rule,))
+
+    assert internal_layer.break_spans(text, "line", "en") == break_line_spans(text, "en")
+
+
+def test_merged_line_span_keeps_only_its_end_boundary_statuses():
+    text = "See Fig.\nThen stop"
+    base = break_line_spans(text, "en")
+
+    merged = _merge_spans(text, base[1:3])
+
+    assert merged["text"] == "Fig.\nThen "
+    assert merged["break_type"] == "optional"
+    assert merged["statuses"] == [0]
+
+
+@pytest.mark.parametrize(
+    ("level", "surface", "text", "vanilla"),
+    [
+        ("line", "日", "日本語を", break_line_spans),
+        ("word", "co", "co-op time", break_word_spans),
+    ],
+)
+def test_unpunctuated_suppression_cannot_own_its_end_boundary(level, surface, text, vanilla):
+    rule = _suppression(f"unpunctuated-{level}", surface)
+    rule["level"] = level
+    rule["witnesses"] = {
+        "positive": text,
+        "near_miss": f"x{surface}",
+        "condition_negatives": [],
+    }
+
+    with pytest.raises(ExceptionLoadError) as caught:
+        load_exception_inventory(_inventory(rule))
+
+    assert "WITNESS_POSITIVE_FAILED" in caught.value.reason_codes
+
+    valid_rule = _suppression(f"valid-{level}", "Fig.")
+    valid_rule["level"] = level
+    if level == "line":
+        valid_rule["witnesses"] = {
+            "positive": "Read Fig. more",
+            "near_miss": "ConFig. more",
+            "condition_negatives": [],
+        }
+    valid_layer = load_exception_inventory(_inventory(valid_rule))
+    compiled = valid_layer._rules[0]
+    unpunctuated = compiled.__class__(**{**compiled.__dict__, "surface": surface})
+    regression_layer = valid_layer.__class__(
+        valid_layer.corpus, valid_layer.named_lists, (unpunctuated,)
+    )
+
+    assert regression_layer.break_spans(text, level, "en") == vanilla(text, "en")
 
 
 def test_sentence_suppression_joins_abbreviation_to_following_sentence():
