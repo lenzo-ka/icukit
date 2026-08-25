@@ -227,6 +227,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`regex_detect`](#icukitdetect) — function, `icukit.detect`
 - [`collation_detect`](#icukitdetect) — function, `icukit.detect`
 - [`Condition`](#icukitexceptions) — alias, `icukit.exceptions`
+- [`ExceptionContextBounds`](#icukitexceptions) — class, `icukit.exceptions`
 - [`ExceptionInventory`](#icukitexceptions) — class, `icukit.exceptions`
 - [`ExceptionPolicy`](#icukitexceptions) — class, `icukit.exceptions`
 - [`ExceptionRule`](#icukitexceptions) — class, `icukit.exceptions`
@@ -2888,6 +2889,23 @@ only ever see the immutable compiled inventory.
 
 `UnicodeSetCondition | NamedListCondition`
 
+### class `ExceptionContextBounds`
+
+Maximum code-point reach of a loaded exception inventory.
+
+``right`` is measured after a match's end, and ``left`` before its start.
+``max_surface_length`` records the longest declared surface, while
+``right_from_match_start`` combines each rule's match extent and right
+context. Collation match extent is unbounded because collation-equivalent
+text may contain arbitrarily many ignorable code points. ``None`` means
+that direction is unbounded, while zero means that no rule inspects beyond
+the match. Direction-specific rule IDs identify every source of unbounded
+reach.
+
+#### `ExceptionContextBounds(left: 'int | None', right: 'int | None', max_surface_length: 'int', right_from_match_start: 'int | None', unbounded_rule_ids: 'tuple[str, ...]' = (), unbounded_left_rule_ids: 'tuple[str, ...]' = (), unbounded_right_rule_ids: 'tuple[str, ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `ExceptionInventory`
 
 dict() -> new empty dictionary
@@ -3010,21 +3028,24 @@ dict(iterable) -> new dictionary initialized as if via:
 dict(**kwargs) -> new dictionary initialized with the name=value pairs
     in the keyword argument list.  For example:  dict(one=1, two=2)
 
-### `compose_inventories(layers: 'Sequence[ExceptionInventory]', *, disable: 'Sequence[str]' = ()) -> 'LoadedExceptionInventory'`
+### `compose_inventories(layers: 'Sequence[ExceptionInventory]', *, disable: 'Sequence[str]' = (), require_finite_context: 'bool' = False) -> 'LoadedExceptionInventory'`
 
 Compose ordered inventories, then validate and atomically publish the result.
 
 Later layers replace rules with the same ID and named lists with the same name.
 Disabled IDs are removed after composition. The composed corpus label joins layer
 corpus names with ``" + "``. Loading is opt-in and does not alter default breakers.
+Set ``require_finite_context`` to refuse rules with unbounded context reach.
 
 ### `example_exception_inventory() -> 'ExceptionInventory'`
 
 Return electable example rules; they are never loaded or applied by default.
 
-### `load_exception_inventory(inventory: 'ExceptionInventory') -> 'LoadedExceptionInventory'`
+### `load_exception_inventory(inventory: 'ExceptionInventory', *, require_finite_context: 'bool' = False) -> 'LoadedExceptionInventory'`
 
 Validate, compile, witness-test, and atomically publish an inventory.
+
+Set ``require_finite_context`` to refuse rules with unbounded context reach.
 
 ### `merge_retypes(text: 'str', base_spans: 'list[BreakSpan]', detections: 'list[Detection]') -> 'list[BreakSpan]'`
 

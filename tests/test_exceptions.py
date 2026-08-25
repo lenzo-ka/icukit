@@ -1,6 +1,7 @@
 """Discriminating end-to-end tests for the H2 v1 exception layer."""
 
 from copy import deepcopy
+from json import dumps
 
 import pytest
 
@@ -18,7 +19,7 @@ from icukit.breaker import (
     break_sentence_spans,
     break_word_spans,
 )
-from icukit.detect import Detection
+from icukit.detect import Detection, collation_detect
 from icukit.exceptions import ExceptionInventory, ExceptionRule, _merge_spans, merge_retypes
 
 
@@ -668,6 +669,224 @@ def _suppression(rule_id: str, surface: str) -> ExceptionRule:
     )
     rule.pop("strength")
     return rule
+
+
+def _context_suppression(
+    rule_id: str,
+    *,
+    surface: str = "Fig.",
+    direction: str = "right",
+    maximum: int | None = 1,
+) -> ExceptionRule:
+    spaces = " " * (maximum if isinstance(maximum, int) else 3)
+    positive = f"A {surface}{spaces}Z" if direction == "right" else f"Z{spaces}{surface}"
+    near_miss = f"A Con{surface}{spaces}Z" if direction == "right" else f"Z{spaces}Con{surface}"
+    negative = f"A {surface}{spaces}X" if direction == "right" else f"X{spaces}{surface}"
+    rule = _suppression(rule_id, surface)
+    rule["conditions"] = [
+        {
+            "id": "context",
+            "kind": "unicode_set",
+            "direction": direction,
+            "set": "[Z]",
+            "skip": {"kind": "whitespace", "max": maximum},
+        }
+    ]
+    rule["unconditionality"] = "conditional"
+    rule["witnesses"] = {
+        "positive": positive,
+        "near_miss": near_miss,
+        "condition_negatives": [negative],
+    }
+    return rule
+
+
+def test_context_bounds_are_derived_from_surface_skip_and_direction():
+    short = load_exception_inventory(
+        _inventory(_context_suppression("short", surface="Fig.", maximum=3))
+    )
+    long = load_exception_inventory(
+        _inventory(_context_suppression("long", surface="Figure.", maximum=5))
+    )
+    left = load_exception_inventory(
+        _inventory(_context_suppression("left-bound", direction="left", maximum=3))
+    )
+
+    assert short.context_bounds.left == 0
+    assert short.context_bounds.right == 3 + 1
+    assert short.context_bounds.right_from_match_start == len("Fig.") + 3 + 1
+    assert long.context_bounds.max_surface_length == len("Figure.")
+    assert long.context_bounds.right_from_match_start == len("Figure.") + 5 + 1
+    assert left.context_bounds.left == 3 + 1
+    assert left.context_bounds.right == 0
+
+
+def test_named_list_context_bound_uses_longest_loaded_member():
+    rule = _context_suppression("named")
+    rule["conditions"] = [
+        {
+            "id": "name",
+            "kind": "named_list",
+            "direction": "right",
+            "list": "names",
+            "skip": {"kind": "whitespace", "max": 1},
+        }
+    ]
+    rule["witnesses"] = {
+        "positive": "A Fig. Zedekiah",
+        "near_miss": "A ConFig. Zedekiah",
+        "condition_negatives": ["A Fig. Xavier"],
+    }
+    inventory = _inventory(rule)
+    inventory["named_lists"] = {"names": ["Zed", "Zedekiah"]}
+
+    loaded = load_exception_inventory(inventory)
+
+    assert loaded.context_bounds.right == 1 + len("Zedekiah") + 1
+
+
+@pytest.mark.parametrize(
+    ("direction", "positive", "longer"),
+    [
+        ("right", "Dr. Smith", "Dr. Smithy"),
+        ("left", "Smith Dr.", "XSmith Dr."),
+    ],
+)
+def test_named_list_context_bound_includes_token_terminator(direction, positive, longer):
+    rule = _context_suppression("smith", surface="Dr.", direction=direction)
+    rule["conditions"] = [
+        {
+            "id": "name",
+            "kind": "named_list",
+            "direction": direction,
+            "list": "names",
+            "skip": {"kind": "whitespace", "max": 1},
+        }
+    ]
+    rule["witnesses"] = {
+        "positive": positive,
+        "near_miss": "ConDr. Smith" if direction == "right" else "Smith ConDr.",
+        "condition_negatives": [longer],
+    }
+    inventory = _inventory(rule)
+    inventory["named_lists"] = {"names": ["Smith"]}
+
+    loaded = load_exception_inventory(inventory)
+
+    expected = 1 + len("Smith") + 1
+    assert getattr(loaded.context_bounds, direction) == expected
+
+
+def test_collation_combining_marks_make_match_extent_unbounded():
+    text = "á" + "\N{COMBINING ACUTE ACCENT}" * 10 + " Z"
+    detections = collation_detect(text, "a", "term", locale="de", strength="primary")
+    assert detections[0]["end"] == 11
+
+    rule = _rule(
+        id="combining-collation",
+        locale="de",
+        surface="a",
+        conditions=[
+            {
+                "id": "right-z",
+                "kind": "unicode_set",
+                "direction": "right",
+                "set": "[Z]",
+                "skip": {"kind": "whitespace", "max": 1},
+            }
+        ],
+        witnesses={
+            "positive": text,
+            "near_miss": "X" + text,
+            "condition_negatives": ["a X"],
+        },
+    )
+    loaded = load_exception_inventory(_inventory(rule))
+
+    assert loaded.context_bounds.right == 2
+    assert loaded.context_bounds.right_from_match_start is None
+    assert loaded.context_bounds.unbounded_rule_ids == ("combining-collation",)
+    assert loaded.context_bounds.unbounded_right_rule_ids == ("combining-collation",)
+
+    with pytest.raises(ExceptionLoadError) as caught:
+        load_exception_inventory(_inventory(rule), require_finite_context=True)
+    assert caught.value.refusals[0].detail.endswith("collation match extent")
+
+
+def test_collation_expansion_makes_match_extent_unbounded():
+    detections = collation_detect("ss", "ß", "term", locale="de", strength="primary")
+    assert [(item["start"], item["end"]) for item in detections] == [(0, 2)]
+
+    rule = _rule(
+        id="sharp-s-collation",
+        locale="de",
+        surface="ß",
+        conditions=[],
+        unconditionality="empirical",
+        witnesses={
+            "positive": "ss",
+            "near_miss": "Xss",
+            "condition_negatives": [],
+        },
+    )
+    loaded = load_exception_inventory(_inventory(rule))
+
+    assert loaded.context_bounds.max_surface_length == 1
+    assert loaded.context_bounds.right_from_match_start is None
+    assert loaded.context_bounds.unbounded_rule_ids == ("sharp-s-collation",)
+
+
+def test_context_bounds_for_conditionless_and_mixed_unbounded_rules():
+    conditionless = load_exception_inventory(_inventory(_suppression("plain", "Fig.")))
+    mixed = load_exception_inventory(
+        _inventory(
+            _context_suppression("bounded", maximum=2),
+            _context_suppression("unbounded", surface="Eq.", maximum=None),
+        )
+    )
+
+    assert conditionless.context_bounds.left == 0
+    assert conditionless.context_bounds.right == 0
+    assert conditionless.context_bounds.max_surface_length == len("Fig.")
+    assert conditionless.context_bounds.right_from_match_start == len("Fig.")
+    assert conditionless.context_bounds.unbounded_rule_ids == ()
+    assert mixed.context_bounds.left == 0
+    assert mixed.context_bounds.right is None
+    assert mixed.context_bounds.right_from_match_start is None
+    assert mixed.context_bounds.unbounded_right_rule_ids == ("unbounded",)
+    assert mixed.context_bounds.unbounded_rule_ids == ("unbounded",)
+
+
+def test_finite_context_requirement_refuses_each_unbounded_rule_id():
+    inventory = _inventory(
+        _context_suppression("bounded", maximum=2),
+        _context_suppression("right-unbounded", maximum=None),
+        _context_suppression("left-unbounded", direction="left", maximum=None),
+    )
+
+    with pytest.raises(ExceptionLoadError) as caught:
+        load_exception_inventory(inventory, require_finite_context=True)
+
+    assert caught.value.reason_codes == ("UNBOUNDED_CONTEXT", "UNBOUNDED_CONTEXT")
+    assert tuple(refusal.rule_id for refusal in caught.value.refusals) == (
+        "right-unbounded",
+        "left-unbounded",
+    )
+
+    with pytest.raises(ExceptionLoadError, match="right-unbounded: UNBOUNDED_CONTEXT"):
+        compose_inventories([inventory], require_finite_context=True)
+
+
+def test_default_loading_behavior_is_unchanged_for_unbounded_context():
+    inventory = _inventory(_context_suppression("unbounded", maximum=None))
+    text = "A Fig.     Z"
+
+    implicit = load_exception_inventory(inventory)
+    explicit = load_exception_inventory(inventory, require_finite_context=False)
+
+    assert dumps(implicit.break_spans(text, "word", "en"), sort_keys=True) == dumps(
+        explicit.break_spans(text, "word", "en"), sort_keys=True
+    )
 
 
 def test_compose_adds_rules_from_an_overlay():
