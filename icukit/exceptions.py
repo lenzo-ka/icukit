@@ -28,6 +28,7 @@ from .errors import ExceptionConflictError, ExceptionLoadError, RuleRefusal
 
 __all__ = [
     "Condition",
+    "ExceptionContextBounds",
     "ExceptionInventory",
     "ExceptionPolicy",
     "ExceptionRule",
@@ -194,6 +195,83 @@ class _CompiledRule:
     variant: Variant
     strength: str
     conditions: tuple[_CompiledCondition, ...]
+
+
+@dataclass(frozen=True)
+class ExceptionContextBounds:
+    """Maximum code-point reach of a loaded exception inventory.
+
+    ``right`` is measured after a match's end, and ``left`` before its start.
+    ``max_surface_length`` records the longest declared surface, while
+    ``right_from_match_start`` combines each rule's match extent and right
+    context. Collation match extent is unbounded because collation-equivalent
+    text may contain arbitrarily many ignorable code points. ``None`` means
+    that direction is unbounded, while zero means that no rule inspects beyond
+    the match. Direction-specific rule IDs identify every source of unbounded
+    reach.
+    """
+
+    left: int | None
+    right: int | None
+    max_surface_length: int
+    right_from_match_start: int | None
+    unbounded_rule_ids: tuple[str, ...] = ()
+    unbounded_left_rule_ids: tuple[str, ...] = ()
+    unbounded_right_rule_ids: tuple[str, ...] = ()
+
+
+def _condition_reach(
+    condition: _CompiledCondition,
+) -> int | None:
+    if condition.skip_max is None:
+        return None
+    inspected = 1
+    if condition.kind == "named_list":
+        # The word-break terminator is required to establish that the entire
+        # adjacent token, rather than a longer token with a listed prefix, matched.
+        inspected = max((len(word) for word in condition.words), default=0) + 1
+    return condition.skip_max + inspected
+
+
+def _context_bounds(
+    rules: tuple[_CompiledRule, ...],
+) -> ExceptionContextBounds:
+    left = 0
+    right = 0
+    max_surface_length = max((len(rule.surface) for rule in rules), default=0)
+    right_from_match_start = max_surface_length
+    unbounded_left: list[str] = []
+    unbounded_right: list[str] = []
+    unbounded: list[str] = []
+    unbounded_right_context = False
+    for rule in rules:
+        if rule.variant == "collation":
+            unbounded.append(rule.id)
+            unbounded_right.append(rule.id)
+        for condition in rule.conditions:
+            reach = _condition_reach(condition)
+            if reach is None:
+                if rule.id not in unbounded:
+                    unbounded.append(rule.id)
+                target = unbounded_left if condition.direction == "left" else unbounded_right
+                if rule.id not in target:
+                    target.append(rule.id)
+                if condition.direction == "right":
+                    unbounded_right_context = True
+            elif condition.direction == "left":
+                left = max(left, reach)
+            else:
+                right = max(right, reach)
+                right_from_match_start = max(right_from_match_start, len(rule.surface) + reach)
+    return ExceptionContextBounds(
+        None if unbounded_left else left,
+        None if unbounded_right_context else right,
+        max_surface_length,
+        None if unbounded_right else right_from_match_start,
+        tuple(unbounded),
+        tuple(unbounded_left),
+        tuple(unbounded_right),
+    )
 
 
 def _refuse(rule_id: str, code: str, detail: str) -> RuleRefusal:
@@ -576,6 +654,11 @@ class LoadedExceptionInventory:
     named_lists: dict[str, tuple[str, ...]]
     _rules: tuple[_CompiledRule, ...]
 
+    @property
+    def context_bounds(self) -> ExceptionContextBounds:
+        """Return context reach derived from the inventory's compiled rules."""
+        return _context_bounds(self._rules)
+
     def break_spans(
         self,
         text: str,
@@ -823,7 +906,9 @@ def _run_witnesses(rule: _CompiledRule, raw: ExceptionRule) -> list[RuleRefusal]
     return errors
 
 
-def _load_exception_inventory(inventory: object) -> LoadedExceptionInventory:
+def _load_exception_inventory(
+    inventory: object, *, require_finite_context: bool = False
+) -> LoadedExceptionInventory:
     if not isinstance(inventory, dict):
         raise ExceptionLoadError([_refuse("<inventory>", "INVALID_INVENTORY", "not an object")])
     errors: list[RuleRefusal] = []
@@ -857,21 +942,44 @@ def _load_exception_inventory(inventory: object) -> LoadedExceptionInventory:
             errors.extend(_run_witnesses(rule, raw_by_id[rule.id]))
     if errors:
         raise ExceptionLoadError(errors)
-    return LoadedExceptionInventory(
+    loaded = LoadedExceptionInventory(
         cast(str, corpus),
         {name: tuple(words) for name, words in cast(dict[str, list[str]], named_lists).items()},
         tuple(compiled),
     )
+    if require_finite_context:
+        refusals = []
+        for rule in loaded._rules:
+            causes = []
+            if rule.variant == "collation":
+                causes.append("collation match extent")
+            if any(condition.skip_max is None for condition in rule.conditions):
+                causes.append("unbounded skip.max")
+            if causes:
+                refusals.append(
+                    _refuse(
+                        rule.id,
+                        "UNBOUNDED_CONTEXT",
+                        f"rule has unbounded context reach: {', '.join(causes)}",
+                    )
+                )
+        if refusals:
+            raise ExceptionLoadError(refusals)
+    return loaded
 
 
 def compose_inventories(
-    layers: Sequence[ExceptionInventory], *, disable: Sequence[str] = ()
+    layers: Sequence[ExceptionInventory],
+    *,
+    disable: Sequence[str] = (),
+    require_finite_context: bool = False,
 ) -> LoadedExceptionInventory:
     """Compose ordered inventories, then validate and atomically publish the result.
 
     Later layers replace rules with the same ID and named lists with the same name.
     Disabled IDs are removed after composition. The composed corpus label joins layer
     corpus names with ``" + "``. Loading is opt-in and does not alter default breakers.
+    Set ``require_finite_context`` to refuse rules with unbounded context reach.
     """
     errors: list[RuleRefusal] = []
     corpora: list[str] = []
@@ -952,12 +1060,17 @@ def compose_inventories(
         "named_lists": named_lists,
         "rules": cast(list[ExceptionRule], list(rules.values())),
     }
-    return _load_exception_inventory(composed)
+    return _load_exception_inventory(composed, require_finite_context=require_finite_context)
 
 
-def load_exception_inventory(inventory: ExceptionInventory) -> LoadedExceptionInventory:
-    """Validate, compile, witness-test, and atomically publish an inventory."""
-    return _load_exception_inventory(inventory)
+def load_exception_inventory(
+    inventory: ExceptionInventory, *, require_finite_context: bool = False
+) -> LoadedExceptionInventory:
+    """Validate, compile, witness-test, and atomically publish an inventory.
+
+    Set ``require_finite_context`` to refuse rules with unbounded context reach.
+    """
+    return _load_exception_inventory(inventory, require_finite_context=require_finite_context)
 
 
 def example_exception_inventory() -> ExceptionInventory:

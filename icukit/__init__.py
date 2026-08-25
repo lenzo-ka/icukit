@@ -224,6 +224,7 @@ from .errors import (
 )
 from .exceptions import (
     Condition,
+    ExceptionContextBounds,
     ExceptionInventory,
     ExceptionPolicy,
     ExceptionRule,
@@ -652,6 +653,7 @@ __all__ = [
     "collation_detect",
     # Exception layer
     "Condition",
+    "ExceptionContextBounds",
     "ExceptionInventory",
     "ExceptionPolicy",
     "ExceptionRule",
