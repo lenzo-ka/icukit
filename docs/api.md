@@ -2902,6 +2902,12 @@ that direction is unbounded, while zero means that no rule inspects beyond
 the match. Direction-specific rule IDs identify every source of unbounded
 reach.
 
+At runtime, mandatory breaks may provide a nearer dynamic anchor: an
+incremental caller's usable horizon in each direction is the minimum of
+this static reach and the distance to the next mandatory boundary. This
+object remains inventory-only because that dynamic distance depends on the
+text being segmented.
+
 #### `ExceptionContextBounds(left: 'int | None', right: 'int | None', max_surface_length: 'int', right_from_match_start: 'int | None', unbounded_rule_ids: 'tuple[str, ...]' = (), unbounded_left_rule_ids: 'tuple[str, ...]' = (), unbounded_right_rule_ids: 'tuple[str, ...]' = ()) -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -2936,7 +2942,14 @@ than absent, and either value would decide it prematurely. Such a caller
 should withhold a tail of the buffer and break only the prefix whose context
 has already arrived.
 
-#### `ExceptionPolicy(disposition: "Literal['rule', 'suppress', 'retype', 'mark']" = 'rule', conditions: "Literal['all', 'any']" = 'all', missing_context: "Literal['fail', 'match']" = 'fail', overlap: "Literal['combine', 'first', 'error']" = 'combine', retype_as: 'str' = 'exception:match') -> None`
+``mandatory_breaks`` controls whitespace-skipping conditions. ``"barrier"``
+prevents them from inspecting or crossing an ICU mandatory line-break
+sequence, while ``"cross"`` preserves the former cross-line behavior. A
+barrier-blocked condition is false regardless of ``missing_context``; a rule
+at a line start therefore behaves differently from the same rule at the true
+start of the complete text.
+
+#### `ExceptionPolicy(disposition: "Literal['rule', 'suppress', 'retype', 'mark']" = 'rule', conditions: "Literal['all', 'any']" = 'all', missing_context: "Literal['fail', 'match']" = 'fail', mandatory_breaks: "Literal['barrier', 'cross']" = 'barrier', overlap: "Literal['combine', 'first', 'error']" = 'combine', retype_as: 'str' = 'exception:match') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
