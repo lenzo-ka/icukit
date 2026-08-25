@@ -1,7 +1,7 @@
 """Discriminating end-to-end tests for the H2 v1 exception layer."""
 
 from copy import deepcopy
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from json import dumps
 
 import icu
@@ -22,7 +22,14 @@ from icukit.breaker import (
     break_word_spans,
 )
 from icukit.detect import Detection, collation_detect
-from icukit.exceptions import ExceptionInventory, ExceptionRule, _merge_spans, merge_retypes
+from icukit.exceptions import (
+    ExceptionInventory,
+    ExceptionRule,
+    _condition_position,
+    _mandatory_info_supplier,
+    _merge_spans,
+    merge_retypes,
+)
 
 
 def _rule(**changes) -> ExceptionRule:
@@ -171,6 +178,241 @@ def _paragraph_separator() -> str:
             if icu.Char.charName(char) == "PARAGRAPH SEPARATOR":
                 return char
     raise AssertionError("ICU did not expose the paragraph separator")
+
+
+def _barrier_rule(
+    direction="right",
+    maximum=8,
+    *,
+    kind="unicode_set",
+    levels="word",
+    conditions=None,
+):
+    target = "Z" if kind == "unicode_set" else "Zed"
+    context = (
+        {
+            "id": "context",
+            "kind": "unicode_set",
+            "direction": direction,
+            "set": "[Z]",
+            "skip": {"kind": "whitespace", "max": maximum},
+        }
+        if kind == "unicode_set"
+        else {
+            "id": "context",
+            "kind": "named_list",
+            "direction": direction,
+            "list": "contexts",
+            "skip": {"kind": "whitespace", "max": maximum},
+        }
+    )
+    rule = _rule(
+        id="mandatory-context",
+        level=levels,
+        effect="retype",
+        type="exception:barrier",
+        surface="No",
+        variant="exact",
+        conditions=conditions or [context],
+        witnesses={
+            "positive": f"No {target}" if direction == "right" else f"{target} No",
+            "near_miss": f"ConNo {target}" if direction == "right" else f"{target} ConNo",
+            "condition_negatives": ["No X" if direction == "right" else "X No"],
+        },
+    )
+    rule.pop("strength")
+    inventory = _inventory(rule)
+    inventory["named_lists"] = {"contexts": ["Zed"]}
+    return rule, inventory
+
+
+def _barrier_fired(layer, text, level="word", policy=None):
+    spans = layer.break_spans(text, level, "en", policy=policy)
+    return any("exception:barrier" in span["types"] for span in spans)
+
+
+def test_mandatory_break_policy_values():
+    assert ExceptionPolicy().mandatory_breaks == "barrier"
+    assert ExceptionPolicy(mandatory_breaks="barrier").mandatory_breaks == "barrier"
+    assert ExceptionPolicy(mandatory_breaks="cross").mandatory_breaks == "cross"
+    with pytest.raises(ValueError, match="mandatory_breaks"):
+        ExceptionPolicy(mandatory_breaks="invalid")
+
+
+@pytest.mark.parametrize("direction", ["left", "right"])
+@pytest.mark.parametrize("separator", ["\n", pytest.param(None, id="paragraph-separator")])
+def test_mandatory_sequences_block_context_in_both_directions(direction, separator):
+    separator = _paragraph_separator() if separator is None else separator
+    _, inventory = _barrier_rule(direction)
+    layer = load_exception_inventory(inventory)
+    text = f"Z{separator}No" if direction == "left" else f"No{separator}Zed"
+
+    assert not _barrier_fired(layer, text)
+    assert _barrier_fired(layer, text, policy=ExceptionPolicy(mandatory_breaks="cross"))
+
+
+@pytest.mark.parametrize(("direction", "text"), [("right", "No\r\nZed"), ("left", "Z\r\nNo")])
+def test_crlf_constituent_nearest_the_match_is_barrier_blocked(direction, text):
+    _, inventory = _barrier_rule(direction)
+    layer = load_exception_inventory(inventory)
+
+    assert not _barrier_fired(layer, text)
+    assert _barrier_fired(layer, text, policy=ExceptionPolicy(mandatory_breaks="cross"))
+
+
+@pytest.mark.parametrize(
+    ("maximum", "direction", "text"),
+    [
+        (1, "right", "No \nZed"),
+        (1, "left", "Z\n No"),
+    ],
+)
+def test_skip_budget_landing_on_mandatory_character_is_symmetric(maximum, direction, text):
+    rule, inventory = _barrier_rule(direction, maximum)
+    layer = load_exception_inventory(inventory)
+    condition = layer._rules[0].conditions[0]
+    start = text.index(rule["surface"])
+    result = _condition_position(
+        text,
+        start,
+        start + len(rule["surface"]),
+        condition,
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "en"),
+    )
+
+    assert result.outcome == "barrier"
+    assert not _barrier_fired(layer, text)
+
+
+@pytest.mark.parametrize(("direction", "text"), [("right", "No\nZ"), ("left", "Z\nNo")])
+def test_zero_skip_landing_on_break_character_is_blocked_in_both_directions(direction, text):
+    rule, inventory = _barrier_rule(direction)
+    layer = load_exception_inventory(inventory)
+    condition = replace(layer._rules[0].conditions[0], skip_max=0)
+    start = text.index(rule["surface"])
+    result = _condition_position(
+        text,
+        start,
+        start + len(rule["surface"]),
+        condition,
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "en"),
+    )
+
+    assert result.outcome == "barrier"
+
+
+@pytest.mark.parametrize(("direction", "text"), [("right", "No.   \nZ"), ("left", "Z\n   No.")])
+def test_unbounded_whitespace_skip_stops_at_barrier(direction, text):
+    rule = _context_suppression(
+        "unbounded-barrier", surface="No.", direction=direction, maximum=None
+    )
+    layer = load_exception_inventory(_inventory(rule))
+
+    assert layer.break_spans(text, "word", "en") == break_word_spans(text, "en")
+    assert layer.break_spans(
+        text, "word", "en", policy=ExceptionPolicy(mandatory_breaks="cross")
+    ) != break_word_spans(text, "en")
+
+
+def test_barrier_block_does_not_consult_missing_context_but_true_edge_does():
+    _, inventory = _barrier_rule("right")
+    layer = load_exception_inventory(inventory)
+    policy = ExceptionPolicy(missing_context="match")
+
+    assert not _barrier_fired(layer, "No\nZed", policy=policy)
+    assert _barrier_fired(layer, "No", policy=policy)
+
+
+def test_any_and_all_treat_a_blocked_condition_as_false():
+    blocked, _ = _barrier_rule("right")
+    matching = {
+        "id": "left",
+        "kind": "unicode_set",
+        "direction": "left",
+        "set": "[A]",
+        "skip": {"kind": "whitespace", "max": 1},
+    }
+    blocked_condition = blocked["conditions"][0]
+    blocked["conditions"] = [blocked_condition, matching]
+    blocked["witnesses"] = {
+        "positive": "A No Zed",
+        "near_miss": "A ConNo Zed",
+        "condition_negatives": ["A No X", "B No Zed"],
+    }
+    layer = load_exception_inventory(_inventory(blocked))
+
+    assert not _barrier_fired(layer, "A No\nZed")
+    assert _barrier_fired(layer, "A No\nZed", policy=ExceptionPolicy(conditions="any"))
+    assert not _barrier_fired(
+        layer,
+        "B No\nZed",
+        policy=ExceptionPolicy(conditions="any", missing_context="match"),
+    )
+
+
+@pytest.mark.parametrize("kind", ["unicode_set", "named_list"])
+@pytest.mark.parametrize("level", ["word", "sentence", "line"])
+def test_barrier_applies_to_condition_kinds_and_break_levels(kind, level):
+    _, inventory = _barrier_rule(kind=kind, levels=["word", "sentence", "line"])
+    layer = load_exception_inventory(inventory)
+
+    assert not _barrier_fired(layer, "No\nZed", level)
+
+
+def test_ordinary_space_and_optional_line_opportunity_are_not_barriers():
+    _, inventory = _barrier_rule("right", 1)
+    layer = load_exception_inventory(inventory)
+
+    assert _barrier_fired(layer, "No Zed")
+    assert any(span["end"] == 3 for span in break_line_spans("No Zed", "en")[:-1])
+
+
+def test_none_skip_remains_unchanged_and_does_not_request_mandatory_info(monkeypatch):
+    layer = load_exception_inventory(_inventory(_rule()))
+    import icukit.exceptions as exceptions
+
+    def fail_line(*args):
+        raise AssertionError("unexpected line pass")
+
+    monkeypatch.setattr(exceptions, "break_line_spans", fail_line)
+
+    assert layer.break_spans("No. Next", "word", "en")[0]["types"] == ["exception:abbreviation"]
+
+
+@pytest.mark.parametrize("disposition", ["rule", "suppress", "retype", "mark"])
+def test_barrier_blocks_suppression_and_forced_dispositions(disposition):
+    rule = _context_suppression("barrier-disposition", surface="No.", maximum=None)
+    layer = load_exception_inventory(_inventory(rule))
+    text = "No.\nZ"
+    barrier = ExceptionPolicy(disposition=disposition)
+    cross = ExceptionPolicy(disposition=disposition, mandatory_breaks="cross")
+
+    assert layer.break_spans(text, "word", "en", policy=barrier) == break_word_spans(text, "en")
+    assert layer.break_spans(text, "word", "en", policy=cross) != break_word_spans(text, "en")
+
+
+def test_many_barrier_conditions_share_one_mandatory_line_pass(monkeypatch):
+    first, _ = _barrier_rule()
+    second = deepcopy(first)
+    second["id"] = "mandatory-context-two"
+    layer = load_exception_inventory(_inventory(first, second))
+    import icukit.exceptions as exceptions
+
+    calls = 0
+    line_breaker = exceptions.break_line_spans
+
+    def count_line(text, locale):
+        nonlocal calls
+        calls += 1
+        return line_breaker(text, locale)
+
+    monkeypatch.setattr(exceptions, "break_line_spans", count_line)
+
+    layer.break_spans("No\nZed No\nZed", "word", "en")
+
+    assert calls == 1
 
 
 @pytest.mark.parametrize("separator", ["\n", pytest.param(None, id="paragraph-separator")])
