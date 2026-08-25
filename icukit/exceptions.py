@@ -8,7 +8,7 @@ only ever see the immutable compiled inventory.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from importlib.resources import files
 from json import loads
@@ -48,6 +48,11 @@ Level = Literal["sentence", "word", "line"]
 Effect = Literal["suppress", "retype"]
 Direction = Literal["left", "right"]
 Variant = Literal["exact", "collation"]
+
+_MANDATORY_LINE_BREAK_VALUES = frozenset(
+    icu.Char.getPropertyValueEnum(icu.UProperty.LINE_BREAK, alias)
+    for alias in ("BK", "CR", "LF", "NL")
+)
 
 
 @dataclass(frozen=True)
@@ -675,10 +680,11 @@ class LoadedExceptionInventory:
             if level in rule.levels and _locale_applies(rule.locale, locale)
         ]
         base = _base_spans(text, level, locale)
+        mandatory_info = _mandatory_info_supplier(text, locale, base if level == "line" else None)
         boundary_rules = [
             rule for rule in selected if rule.effect == "suppress" or policy.disposition != "rule"
         ]
-        claims = _boundary_claims(text, base, boundary_rules, locale, policy)
+        claims = _boundary_claims(text, base, boundary_rules, locale, policy, mandatory_info)
         if policy.overlap == "error" and any(len(rule_ids) > 1 for rule_ids in claims.values()):
             raise ExceptionConflictError("OVERLAPPING_EXCEPTION_RULES")
         if policy.overlap == "first":
@@ -722,9 +728,39 @@ def _merge_spans(text: str, spans: list[BreakSpan]) -> BreakSpan:
     return merged
 
 
-def _mandatory_boundaries(base: list[BreakSpan]) -> set[int]:
-    """Return line boundaries ICU classified as mandatory."""
-    return {span["end"] for span in base if span.get("break_type") == "mandatory"}
+@dataclass(frozen=True)
+class _MandatoryLineInfo:
+    boundaries: frozenset[int]
+    sequence_positions: frozenset[int]
+
+
+def _mandatory_line_info(text: str, line_spans: list[BreakSpan]) -> _MandatoryLineInfo:
+    return _MandatoryLineInfo(
+        boundaries=frozenset(
+            span["end"] for span in line_spans if span.get("break_type") == "mandatory"
+        ),
+        sequence_positions=frozenset(
+            position
+            for position, char in enumerate(text)
+            if icu.Char.getIntPropertyValue(ord(char), icu.UProperty.LINE_BREAK)
+            in _MANDATORY_LINE_BREAK_VALUES
+        ),
+    )
+
+
+def _mandatory_info_supplier(
+    text: str, locale: str, line_spans: list[BreakSpan] | None = None
+) -> Callable[[], _MandatoryLineInfo]:
+    info: _MandatoryLineInfo | None = None
+
+    def supply() -> _MandatoryLineInfo:
+        nonlocal info
+        if info is None:
+            spans = line_spans if line_spans is not None else break_line_spans(text, locale)
+            info = _mandatory_line_info(text, spans)
+        return info
+
+    return supply
 
 
 def _filter_suppressions(
@@ -732,6 +768,7 @@ def _filter_suppressions(
     base: list[BreakSpan],
     rules: list[_CompiledRule],
     locale: str,
+    mandatory_info: Callable[[], _MandatoryLineInfo],
 ) -> tuple[list[BreakSpan], set[int]]:
     """Drop base boundaries made false by matching suppression surfaces.
 
@@ -741,7 +778,7 @@ def _filter_suppressions(
     following optional boundary instead. Mandatory line breaks are never dropped.
     """
     policy = ExceptionPolicy()
-    dropped = set(_boundary_claims(text, base, rules, locale, policy))
+    dropped = set(_boundary_claims(text, base, rules, locale, policy, mandatory_info))
     return _drop_boundaries(text, base, dropped), dropped
 
 
@@ -751,14 +788,14 @@ def _boundary_claims(
     rules: list[_CompiledRule],
     locale: str,
     policy: ExceptionPolicy,
+    mandatory_info: Callable[[], _MandatoryLineInfo],
 ) -> dict[int, list[str]]:
     boundaries = {span["end"] for span in base[:-1]}
-    suppressible = boundaries - _mandatory_boundaries(base)
     claims: dict[int, list[str]] = {}
     for rule in rules:
         for match in _detections(rule, text, locale, policy):
             internal = {
-                boundary for boundary in suppressible if match["start"] < boundary < match["end"]
+                boundary for boundary in boundaries if match["start"] < boundary < match["end"]
             }
             if internal:
                 for boundary in internal:
@@ -767,17 +804,22 @@ def _boundary_claims(
             following = next(
                 (
                     boundary
-                    for boundary in sorted(suppressible)
+                    for boundary in sorted(boundaries)
                     if boundary >= match["end"] and text[match["end"] : boundary].isspace()
                 ),
                 None,
             )
             owns_punctuation = _PUNCTUATION.contains(text[match["end"] - 1])
-            if match["end"] in suppressible and owns_punctuation:
+            if match["end"] in boundaries and owns_punctuation:
                 claims.setdefault(match["end"], []).append(rule.id)
             elif following is not None and owns_punctuation:
                 claims.setdefault(following, []).append(rule.id)
-    return claims
+    if not claims:
+        return claims
+    mandatory = mandatory_info().boundaries
+    return {
+        boundary: rule_ids for boundary, rule_ids in claims.items() if boundary not in mandatory
+    }
 
 
 def _drop_boundaries(text: str, base: list[BreakSpan], dropped: set[int]) -> list[BreakSpan]:
@@ -819,7 +861,8 @@ def _fires(rule: _CompiledRule, text: str, level: Level) -> bool:
         merged = merge_retypes(text, _base_spans(text, level, rule.locale), detections)
         return any(rule.type in span["types"] for span in merged)
     base = _base_spans(text, level, rule.locale)
-    filtered, _ = _filter_suppressions(text, base, [rule], rule.locale)
+    mandatory_info = _mandatory_info_supplier(text, rule.locale, base if level == "line" else None)
+    filtered, _ = _filter_suppressions(text, base, [rule], rule.locale, mandatory_info)
     if filtered == base:
         return False
     filtered_boundaries = {span["end"] for span in filtered}

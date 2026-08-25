@@ -205,5 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project scratch files
+/untracked/
+
 TODO.md
 PATTERNS.md

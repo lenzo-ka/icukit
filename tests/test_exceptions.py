@@ -1,8 +1,10 @@
 """Discriminating end-to-end tests for the H2 v1 exception layer."""
 
 from copy import deepcopy
+from dataclasses import asdict
 from json import dumps
 
+import icu
 import pytest
 
 from icukit import (
@@ -146,6 +148,166 @@ def test_line_suppression_never_drops_mandatory_breaks():
     assert layer.break_spans("Read Fig.\nThen stop", "line", "en") == break_line_spans(
         "Read Fig.\nThen stop", "en"
     )
+
+
+def _sentence_suppression() -> ExceptionRule:
+    rule = _suppression("captain-sentence", "Capt.")
+    rule["level"] = "sentence"
+    rule["witnesses"] = {
+        "positive": "We met Capt. Smith today.",
+        "near_miss": "We met SomeCapt. Smith today.",
+        "condition_negatives": [],
+    }
+    return rule
+
+
+def _paragraph_separator() -> str:
+    mandatory = icu.UnicodeSet(r"[\p{lb=BK}]")
+    for range_index in range(mandatory.getRangeCount()):
+        start = ord(mandatory.getRangeStart(range_index))
+        end = ord(mandatory.getRangeEnd(range_index))
+        for code_point in range(start, end + 1):
+            char = chr(code_point)
+            if icu.Char.charName(char) == "PARAGRAPH SEPARATOR":
+                return char
+    raise AssertionError("ICU did not expose the paragraph separator")
+
+
+@pytest.mark.parametrize("separator", ["\n", pytest.param(None, id="paragraph-separator")])
+def test_sentence_suppression_never_drops_mandatory_break(separator):
+    separator = _paragraph_separator() if separator is None else separator
+    layer = load_exception_inventory(_inventory(_sentence_suppression()))
+    text = f"We met Capt.{separator}Smith today."
+    mandatory_offset = len("We met Capt.") + 1
+
+    spans = layer.break_spans(text, "sentence", "en")
+
+    assert mandatory_offset in {span["end"] for span in spans}
+
+
+def test_sentence_suppression_preserves_each_consecutive_mandatory_break():
+    layer = load_exception_inventory(_inventory(_sentence_suppression()))
+    text = "We met Capt.\n\nSmith today."
+
+    spans = layer.break_spans(text, "sentence", "en")
+
+    assert {len("We met Capt.\n"), len("We met Capt.\n\n")} <= {span["end"] for span in spans}
+
+
+def test_word_suppression_keeps_mandatory_offsets_as_a_guard():
+    layer = load_exception_inventory(_inventory(_suppression("captain-word", "Capt.")))
+    text = "We met Capt.\nSmith today."
+    mandatory_offsets = {
+        span["end"] for span in break_line_spans(text, "en") if span["break_type"] == "mandatory"
+    }
+
+    spans = layer.break_spans(text, "word", "en")
+
+    assert mandatory_offsets <= {span["end"] for span in spans}
+
+
+def test_line_suppression_reuses_base_line_pass(monkeypatch):
+    rule = _suppression("figure-line-pass", "Fig.")
+    rule["level"] = "line"
+    rule["witnesses"] = {
+        "positive": "Read Fig. more",
+        "near_miss": "Read ConFig. more",
+        "condition_negatives": [],
+    }
+    layer = load_exception_inventory(_inventory(rule))
+    import icukit.exceptions as exceptions
+
+    calls = 0
+    line_breaker = exceptions.break_line_spans
+
+    def count_line(text, locale):
+        nonlocal calls
+        calls += 1
+        return line_breaker(text, locale)
+
+    monkeypatch.setattr(exceptions, "break_line_spans", count_line)
+
+    layer.break_spans("Read Fig.\nThen stop", "line", "en")
+
+    assert calls == 1
+
+
+def test_line_without_matching_detection_skips_mandatory_info(monkeypatch):
+    rule = _suppression("figure-line-lazy", "Fig.")
+    rule["level"] = "line"
+    rule["witnesses"] = {
+        "positive": "Read Fig. more",
+        "near_miss": "Read ConFig. more",
+        "condition_negatives": [],
+    }
+    layer = load_exception_inventory(_inventory(rule))
+    import icukit.exceptions as exceptions
+
+    line_calls = 0
+    property_calls = 0
+    line_breaker = exceptions.break_line_spans
+    icu_char = exceptions.icu.Char
+
+    def count_line(text, locale):
+        nonlocal line_calls
+        line_calls += 1
+        return line_breaker(text, locale)
+
+    class CountChar:
+        @staticmethod
+        def getIntPropertyValue(code_point, property_name):
+            nonlocal property_calls
+            property_calls += 1
+            return icu_char.getIntPropertyValue(code_point, property_name)
+
+    monkeypatch.setattr(exceptions, "break_line_spans", count_line)
+    monkeypatch.setattr(exceptions.icu, "Char", CountChar)
+
+    layer.break_spans("Nothing matches here.", "line", "en")
+
+    assert line_calls == 1
+    assert property_calls == 0
+
+
+@pytest.mark.parametrize("disposition", ["rule", "suppress", "retype", "mark"])
+def test_policy_dispositions_cannot_claim_mandatory_boundary(disposition):
+    layer = load_exception_inventory(_inventory(_sentence_suppression()))
+    text = "We met Capt.\nSmith today."
+
+    assert layer.break_spans(
+        text, "sentence", "en", policy=ExceptionPolicy(disposition=disposition)
+    ) == break_sentence_spans(text, "en")
+
+
+def test_no_matching_detection_skips_line_pass(monkeypatch):
+    layer = load_exception_inventory(_inventory(_sentence_suppression()))
+    import icukit.exceptions as exceptions
+
+    def fail_line(*args):
+        raise AssertionError("unexpected line pass")
+
+    monkeypatch.setattr(exceptions, "break_line_spans", fail_line)
+
+    layer.break_spans("Nothing matches here.", "sentence", "en")
+
+
+def test_many_candidate_claims_use_at_most_one_line_pass(monkeypatch):
+    layer = load_exception_inventory(_inventory(_sentence_suppression()))
+    import icukit.exceptions as exceptions
+
+    calls = 0
+    line_breaker = exceptions.break_line_spans
+
+    def count_line(text, locale):
+        nonlocal calls
+        calls += 1
+        return line_breaker(text, locale)
+
+    monkeypatch.setattr(exceptions, "break_line_spans", count_line)
+
+    layer.break_spans("Capt. Smith met Capt. Jones.", "sentence", "en")
+
+    assert calls <= 1
 
 
 def test_merged_line_span_keeps_only_its_end_boundary_statuses():
@@ -719,6 +881,18 @@ def test_context_bounds_are_derived_from_surface_skip_and_direction():
     assert long.context_bounds.right_from_match_start == len("Figure.") + 5 + 1
     assert left.context_bounds.left == 3 + 1
     assert left.context_bounds.right == 0
+
+
+def test_context_bounds_serialization_remains_byte_identical():
+    loaded = load_exception_inventory(
+        _inventory(_context_suppression("stable-bounds", surface="Fig.", maximum=3))
+    )
+
+    assert dumps(asdict(loaded.context_bounds), sort_keys=True, separators=(",", ":")) == (
+        '{"left":0,"max_surface_length":4,"right":4,'
+        '"right_from_match_start":8,"unbounded_left_rule_ids":[],'
+        '"unbounded_right_rule_ids":[],"unbounded_rule_ids":[]}'
+    )
 
 
 def test_named_list_context_bound_uses_longest_loaded_member():
