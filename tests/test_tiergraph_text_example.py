@@ -1,9 +1,9 @@
 """Discriminating tests for the H1 tiergraph text example.
 
-Skipped entirely on Python < 3.12 / when tiergraph is absent (the example is a >= 3.12
-dev-only integration). Witnesses avoid non-discriminating invariants: offsets are
-asserted as explicit integers and token content, never via ``text[start:end] == surface``
-or bare reconstruction, both of which pass on buggy offsets.
+Skipped entirely on Python < 3.12 because the tiergraph dependency requires 3.12 or
+newer. Witnesses avoid non-discriminating invariants: offsets are asserted as explicit
+integers and token content, never via ``text[start:end] == surface`` or bare
+reconstruction, both of which pass on buggy offsets.
 """
 
 from __future__ import annotations
@@ -16,7 +16,10 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("tiergraph", reason="H1 example requires tiergraph (Python >= 3.12)")
+if sys.version_info < (3, 12):
+    pytest.skip("tiergraph requires Python >= 3.12", allow_module_level=True)
+
+# Skip only unsupported configurations; a missing declared dependency must fail loudly.
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO_ROOT / "examples" / "tiergraph_text.py"
