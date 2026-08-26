@@ -72,11 +72,19 @@ class ExceptionPolicy:
     than absent, and either value would decide it prematurely. Such a caller
     should withhold a tail of the buffer and break only the prefix whose context
     has already arrived.
+
+    ``mandatory_breaks`` controls whitespace-skipping conditions. ``"barrier"``
+    prevents them from inspecting or crossing an ICU mandatory line-break
+    sequence, while ``"cross"`` preserves the former cross-line behavior. A
+    barrier-blocked condition is false regardless of ``missing_context``; a rule
+    at a line start therefore behaves differently from the same rule at the true
+    start of the complete text.
     """
 
     disposition: Literal["rule", "suppress", "retype", "mark"] = "rule"
     conditions: Literal["all", "any"] = "all"
     missing_context: Literal["fail", "match"] = "fail"
+    mandatory_breaks: Literal["barrier", "cross"] = "barrier"
     overlap: Literal["combine", "first", "error"] = "combine"
     retype_as: str = "exception:match"
 
@@ -88,6 +96,7 @@ class ExceptionPolicy:
             ),
             "conditions": (self.conditions, {"all", "any"}),
             "missing_context": (self.missing_context, {"fail", "match"}),
+            "mandatory_breaks": (self.mandatory_breaks, {"barrier", "cross"}),
             "overlap": (self.overlap, {"combine", "first", "error"}),
         }
         for name, (value, allowed) in choices.items():
@@ -214,6 +223,12 @@ class ExceptionContextBounds:
     that direction is unbounded, while zero means that no rule inspects beyond
     the match. Direction-specific rule IDs identify every source of unbounded
     reach.
+
+    At runtime, mandatory breaks may provide a nearer dynamic anchor: an
+    incremental caller's usable horizon in each direction is the minimum of
+    this static reach and the distance to the next mandatory boundary. This
+    object remains inventory-only because that dynamic distance depends on the
+    text being segmented.
     """
 
     left: int | None
@@ -516,19 +531,43 @@ def _base_spans(text: str, level: Level, locale: str) -> list[BreakSpan]:
 
 
 def _condition_position(
-    text: str, start: int, end: int, condition: _CompiledCondition
-) -> int | None:
+    text: str,
+    start: int,
+    end: int,
+    condition: _CompiledCondition,
+    policy: ExceptionPolicy,
+    mandatory_info: Callable[[], _MandatoryLineInfo],
+) -> _ConditionPosition:
     step = -1 if condition.direction == "left" else 1
     position = start - 1 if step < 0 else end
     skipped = 0
-    while 0 <= position < len(text) and text[position].isspace():
+    while 0 <= position < len(text):
+        barrier = condition.skip_kind == "whitespace" and policy.mandatory_breaks == "barrier"
+        info = mandatory_info() if barrier else None
+        if info is not None and position in info.sequence_positions:
+            return _ConditionPosition("barrier")
+        if not text[position].isspace():
+            return _ConditionPosition("found", position)
         if condition.skip_kind != "whitespace" or (
             condition.skip_max is not None and skipped == condition.skip_max
         ):
-            break
+            return _ConditionPosition("found", position)
         skipped += 1
-        position += step
-    return position if 0 <= position < len(text) else None
+        next_position = position + step
+        if info is not None and (
+            next_position in info.sequence_positions
+            or (step > 0 and next_position in info.boundaries)
+            or (step < 0 and position in info.boundaries)
+        ):
+            return _ConditionPosition("barrier")
+        position = next_position
+    return _ConditionPosition("missing")
+
+
+@dataclass(frozen=True)
+class _ConditionPosition:
+    outcome: Literal["found", "missing", "barrier"]
+    position: int | None = None
 
 
 def _condition_matches(
@@ -537,10 +576,8 @@ def _condition_matches(
     start: int,
     end: int,
     locale: str,
+    position: int,
 ) -> bool:
-    position = _condition_position(text, start, end, condition)
-    if position is None:
-        return False
     if condition.kind == "unicode_set":
         assert condition.unicode_set is not None
         return condition.unicode_set.contains(text[position])
@@ -567,10 +604,15 @@ def _condition_result(
     end: int,
     locale: str,
     policy: ExceptionPolicy,
+    mandatory_info: Callable[[], _MandatoryLineInfo],
 ) -> bool:
-    if _condition_position(text, start, end, condition) is None:
+    result = _condition_position(text, start, end, condition, policy, mandatory_info)
+    if result.outcome == "missing":
         return policy.missing_context == "match"
-    return _condition_matches(condition, text, start, end, locale)
+    if result.outcome == "barrier":
+        return False
+    assert result.position is not None
+    return _condition_matches(condition, text, start, end, locale, result.position)
 
 
 def _anchored_exact(rule: _CompiledRule, text: str) -> list[Detection]:
@@ -585,8 +627,10 @@ def _detections(
     text: str,
     locale: str,
     policy: ExceptionPolicy | None = None,
+    mandatory_info: Callable[[], _MandatoryLineInfo] | None = None,
 ) -> list[Detection]:
     policy = policy or ExceptionPolicy()
+    mandatory_info = mandatory_info or _mandatory_info_supplier(text, locale)
     if rule.variant == "exact":
         found = _anchored_exact(rule, text)
     else:
@@ -610,7 +654,7 @@ def _detections(
         item
         for item in found
         if predicate(
-            _condition_result(c, text, item["start"], item["end"], locale, policy)
+            _condition_result(c, text, item["start"], item["end"], locale, policy, mandatory_info)
             for c in rule.conditions
         )
     ]
@@ -700,7 +744,7 @@ class LoadedExceptionInventory:
             detection
             for rule in selected
             if rule.effect == "retype" and policy.disposition == "rule"
-            for detection in _detections(rule, text, locale, policy)
+            for detection in _detections(rule, text, locale, policy, mandatory_info)
         ]
         return merge_retypes(text, base, detections)
 
@@ -793,7 +837,7 @@ def _boundary_claims(
     boundaries = {span["end"] for span in base[:-1]}
     claims: dict[int, list[str]] = {}
     for rule in rules:
-        for match in _detections(rule, text, locale, policy):
+        for match in _detections(rule, text, locale, policy, mandatory_info):
             internal = {
                 boundary for boundary in boundaries if match["start"] < boundary < match["end"]
             }
@@ -921,13 +965,17 @@ def _run_witnesses(rule: _CompiledRule, raw: ExceptionRule) -> list[RuleRefusal]
             if surface_start < 0:
                 errors.append(_refuse(rule.id, "VACUOUS_CONDITION_NEGATIVE", str(index)))
                 continue
+            policy = ExceptionPolicy()
+            mandatory_info = _mandatory_info_supplier(negative_text, rule.locale)
             values = [
-                _condition_matches(
+                _condition_result(
                     condition,
                     negative_text,
                     surface_start,
                     surface_start + len(rule.surface),
                     rule.locale,
+                    policy,
+                    mandatory_info,
                 )
                 for condition in rule.conditions
             ]
