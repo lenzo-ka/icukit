@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from lxml import etree as lxml_etree
 
 from icukit.abbreviations import (
     BREAK_AMBIGUOUS,
@@ -55,8 +56,8 @@ _BREAKS = {BREAK_SUPPRESS, BREAK_AMBIGUOUS}
 
 
 def _relaxng():
-    """Compile the RELAX NG grammar, skipping if lxml is unavailable."""
-    lxml_etree = pytest.importorskip("lxml.etree")
+    """Compile the RELAX NG grammar."""
+    # A missing declared test dependency is a broken environment, not a reason to skip.
     return lxml_etree, lxml_etree.RelaxNG(lxml_etree.parse(str(_RNG_PATH)))
 
 

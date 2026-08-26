@@ -51,19 +51,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest
-          pip install -e .
+          pip install -e ".[dev]"
 
       - name: Run tests
         run: |
           python -m pytest tests/ -v
 
   tiergraph-integration:
-    # The tiergraph text example (examples/tiergraph_text.py) is a dev-only
-    # integration: it imports tiergraph, which requires Python >= 3.12 and has no
-    # PyPI release, so it is installed here from its public sibling checkout rather
-    # than declared in icukit's package metadata. The normal `test` job does not
-    # install tiergraph, so tests/test_tiergraph_text_example.py importorskips there
-    # (including on 3.11) and is exercised only in this job.
+    # The normal `test` job covers the released tiergraph version users receive.
+    # This separate integration is an upstream canary: it installs tiergraph from
+    # the sibling repository's main branch to detect compatibility breaks early.
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -80,7 +77,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
-      - name: Check out tiergraph (sibling, editable — no PyPI release)
+      - name: Check out tiergraph upstream canary (sibling, editable)
         uses: actions/checkout@v4
         with:
           repository: lenzo-ka/tiergraph
