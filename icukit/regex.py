@@ -11,7 +11,10 @@ Key Features:
     * True Unicode-aware case-insensitive matching
     * Character class operations with Unicode sets
     * Efficient find, replace, and split operations
-    * Named capture groups
+    * Indexed capture groups with text and code-point spans. ICU named groups remain
+      available in patterns, backreferences, and replacements, but PyICU does not
+      expose name-based capture lookup, so match results key groups by their 1-based
+      numeric index.
 
 Unicode Properties:
     The module supports all Unicode properties including:
@@ -88,7 +91,12 @@ from typing import Any
 
 import icu
 
-from ._offsets import codepoint_map, to_codepoint
+from ._offsets import (
+    boundary_maps,
+    codepoint_map,
+    to_codepoint,
+    u16_boundary_to_codepoint,
+)
 from .errors import PatternError
 from .script import list_scripts as _list_scripts
 
@@ -155,7 +163,7 @@ class UnicodeRegex:
             >>> regex = UnicodeRegex(r'\\((\\p{L}+)(\\p{N}+)\\)')
             >>> match = regex.find('Code (A123) here')
             >>> print(match['groups'])
-            {1: 'A', 2: '123'}
+            {1: {'text': 'A', 'start': 6, 'end': 7}, 2: {'text': '123', 'start': 7, 'end': 10}}
     """
 
     # Common Unicode properties for reference
@@ -294,29 +302,48 @@ class UnicodeRegex:
     def find(self, text: str, start: int = 0) -> dict[str, Any] | None:
         """Find first match in text.
 
+        ``groups`` maps every declared capture group's 1-based numeric index to a
+        record containing ``text``, ``start``, and ``end``. Positions are Python
+        code-point indices. A group that did not participate has ``None`` for all
+        three fields; a group that matched an empty string has ``text == ""`` and
+        equal non-``None`` positions. Test participation with
+        ``group["text"] is None``, not truthiness. Named groups are returned by
+        numeric index because PyICU exposes no name lookup. When a quantified group
+        captures repeatedly, ICU reports only its final captured instance; earlier
+        instances are not retrievable through this API.
+
+        For a complete scan, prefer ``find_all`` or ``iter_matches``, which handle
+        progress themselves. When driving ``find`` manually, advance like this::
+
+            if match["start"] == match["end"]:
+                if match["end"] == len(text):
+                    break
+                start = match["end"] + 1
+            else:
+                start = match["end"]
+
+        Reusing an unchanged zero-width ``end`` returns the same match forever. The
+        terminal check must come before the increment, so the loop ends rather than
+        constructing ``len(text) + 1``. Adding one advances exactly one code point
+        and cannot land inside a surrogate pair, because these positions are
+        code-point indices.
+
         Args:
             text: Text to search.
-            start: Starting position.
+            start: Non-negative Python code-point index at which searching begins. A
+                value greater than ``len(text)`` returns ``None``.
 
         Returns:
             Match dict with text, start, end, and groups, or None if no match.
         """
+        if start < 0:
+            raise ValueError("start must be non-negative")
+        if start > len(text):
+            return None
         matcher = self._regex.matcher(text)
-        offmap = codepoint_map(text)
-        if matcher.find(start):
-            result = {
-                "text": matcher.group(),
-                "start": to_codepoint(offmap, matcher.start()),
-                "end": to_codepoint(offmap, matcher.end()),
-                "groups": {},
-            }
-
-            # Get groups
-            for i in range(1, matcher.groupCount() + 1):
-                group_text = matcher.group(i)
-                result["groups"][i] = group_text
-
-            return result
+        cp_to_u16, u16_to_cp = boundary_maps(text)
+        if matcher.find(cp_to_u16[start]):
+            return _match_record(matcher, u16_to_cp)
         return None
 
     def find_all(self, text: str) -> list[dict[str, Any]]:
@@ -330,21 +357,10 @@ class UnicodeRegex:
         """
         matches = []
         matcher = self._regex.matcher(text)
-        offmap = codepoint_map(text)
+        _, u16_to_cp = boundary_maps(text)
 
         while matcher.find():
-            match = {
-                "text": matcher.group(),
-                "start": to_codepoint(offmap, matcher.start()),
-                "end": to_codepoint(offmap, matcher.end()),
-                "groups": {},
-            }
-
-            # Get groups
-            for i in range(1, matcher.groupCount() + 1):
-                match["groups"][i] = matcher.group(i)
-
-            matches.append(match)
+            matches.append(_match_record(matcher, u16_to_cp))
 
         return matches
 
@@ -474,20 +490,40 @@ class UnicodeRegex:
             Match dictionaries.
         """
         matcher = self._regex.matcher(text)
-        offmap = codepoint_map(text)
+        _, u16_to_cp = boundary_maps(text)
 
         while matcher.find():
-            match = {
-                "text": matcher.group(),
-                "start": to_codepoint(offmap, matcher.start()),
-                "end": to_codepoint(offmap, matcher.end()),
-                "groups": {},
+            yield _match_record(matcher, u16_to_cp)
+
+
+def _codepoint_boundary(u16_to_cp: dict[int, int], offset: int) -> int:
+    converted = u16_boundary_to_codepoint(u16_to_cp, offset)
+    if converted is None:
+        raise RuntimeError(f"ICU regex returned non-boundary UTF-16 offset {offset}")
+    return converted
+
+
+def _match_record(matcher, u16_to_cp: dict[int, int]) -> dict[str, Any]:
+    groups = {}
+    for index in range(1, matcher.groupCount() + 1):
+        start = matcher.start(index)
+        end = matcher.end(index)
+        if start == -1 or end == -1:
+            if start != end:
+                raise RuntimeError("ICU regex returned inconsistent capture offsets")
+            groups[index] = {"text": None, "start": None, "end": None}
+        else:
+            groups[index] = {
+                "text": matcher.group(index),
+                "start": _codepoint_boundary(u16_to_cp, start),
+                "end": _codepoint_boundary(u16_to_cp, end),
             }
-
-            for i in range(1, matcher.groupCount() + 1):
-                match["groups"][i] = matcher.group(i)
-
-            yield match
+    return {
+        "text": matcher.group(),
+        "start": _codepoint_boundary(u16_to_cp, matcher.start()),
+        "end": _codepoint_boundary(u16_to_cp, matcher.end()),
+        "groups": groups,
+    }
 
 
 # Flags
