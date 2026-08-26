@@ -286,7 +286,9 @@ Common Scripts:
                                 "end": m["end"],
                             }
                             if m["groups"]:
-                                match_info["groups"] = list(m["groups"].values())
+                                match_info["groups"] = [
+                                    group["text"] for group in m["groups"].values()
+                                ]
                             result.append(match_info)
                         if getattr(args, "json", False):
                             return format_json(result)
