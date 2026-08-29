@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TypedDict
 from unicodedata import category
 
+from ._offsets import offset_maps, set_span_offsets
 from .abbreviation_compile import CompiledLexicon, compile_lexicon
 from .abbreviations import AbbreviationLexicon
 from .breaker import Breaker, BreakSpan
@@ -90,6 +91,7 @@ class AbbreviationSentenceBreaker:
             return AbbreviationSegmentation(original, [])
         merged: list[BreakSpan] = []
         ambiguous: list[AbbreviationBoundary] = []
+        maps = offset_maps(text)
         current = original[0].copy()
         provenance: list[AbbreviationProvenance] = []
         for following in original[1:]:
@@ -110,7 +112,7 @@ class AbbreviationSentenceBreaker:
                 provenance.append(
                     {"surface": found[0], "break_behavior": behavior, "provenance": source}
                 )
-                current["end"] = following["end"]
+                set_span_offsets(current, current["start"], following["end"], maps)
                 current["text"] = text[current["start"] : current["end"]]
                 if "abbreviation" not in current["types"]:
                     current["types"].append("abbreviation")

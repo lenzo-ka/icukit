@@ -16,6 +16,7 @@ from typing import Literal, NotRequired, TypedDict, cast
 
 import icu
 
+from ._offsets import OffsetMaps, offset_maps, set_span_offsets
 from .breaker import (
     BreakSpan,
     break_grapheme_spans,
@@ -760,9 +761,9 @@ class LoadedExceptionInventory:
         return self.break_spans(text, level, locale, policy=policy)
 
 
-def _merge_spans(text: str, spans: list[BreakSpan]) -> BreakSpan:
+def _merge_spans(text: str, spans: list[BreakSpan], maps: OffsetMaps) -> BreakSpan:
     merged = cast(BreakSpan, dict(spans[-1]))
-    merged["start"] = spans[0]["start"]
+    set_span_offsets(merged, spans[0]["start"], spans[-1]["end"], maps)
     merged["text"] = text[merged["start"] : merged["end"]]
     merged["types"] = list(dict.fromkeys(item for span in spans for item in span["types"]))
     if "break_type" not in merged:
@@ -869,13 +870,14 @@ def _boundary_claims(
 def _drop_boundaries(text: str, base: list[BreakSpan], dropped: set[int]) -> list[BreakSpan]:
     result: list[BreakSpan] = []
     run: list[BreakSpan] = []
+    maps = offset_maps(text)
     for span in base:
         run.append(span)
         if span["end"] not in dropped:
-            result.append(_merge_spans(text, run))
+            result.append(_merge_spans(text, run, maps))
             run = []
     if run:
-        result.append(_merge_spans(text, run))
+        result.append(_merge_spans(text, run, maps))
     return result
 
 

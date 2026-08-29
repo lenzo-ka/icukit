@@ -908,7 +908,11 @@ Break type constants
 
 ### class `BreakSpan`
 
-A segment with code-point offsets into its source text.
+A segment with offsets into its source text in three index spaces.
+
+``start`` and ``end`` remain compatibility aliases for the explicitly named
+``codepoint_start`` and ``codepoint_end``. ``utf8_*`` values count bytes;
+``utf16_*`` values count code units.
 
 ``break_type``, present only for line spans, describes the break at the
 span's end boundary.
@@ -994,9 +998,9 @@ Example:
     >>> breaker.break_sentences('Hello world. How are you?')
     ['Hello world. ', 'How are you?']
 
-#### `break_word_spans(text: 'str') -> 'list[BreakSpan]'`
+#### `break_word_spans(text: 'str', skip_whitespace: 'bool' = False, skip_punctuation: 'bool' = False) -> 'list[BreakSpan]'`
 
-Return every word segment as a structured span.
+Return word spans, optionally excluding whitespace or punctuation.
 
 #### `break_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 
@@ -1062,9 +1066,9 @@ Args:
 Yields:
     Individual sentence strings.
 
-#### `iter_word_spans(text: 'str') -> 'Iterator[BreakSpan]'`
+#### `iter_word_spans(text: 'str', skip_whitespace: 'bool' = False, skip_punctuation: 'bool' = False) -> 'Iterator[BreakSpan]'`
 
-Yield every word segment with code-point offsets and ICU status.
+Yield word spans, optionally excluding whitespace or punctuation.
 
 #### `iter_words(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'Iterator[str]'`
 
@@ -1077,6 +1081,13 @@ Args:
 
 Yields:
     Individual word/token strings.
+
+#### `tokenize_sentence_spans(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[list[BreakSpan]]'`
+
+Break into sentences containing filtered word spans.
+
+Word offsets remain relative to *text*, not to each sentence substring.
+Empty tokenized sentences are omitted, matching :meth:`tokenize_sentences`.
 
 #### `tokenize_sentences(text: 'str', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[list[str]]'`
 
@@ -1181,9 +1192,9 @@ Example:
     >>> break_sentences('Hello. World.', 'en')
     ['Hello. ', 'World.']
 
-### `break_word_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+### `break_word_spans(text: 'str', locale: 'str' = 'en_US', skip_whitespace: 'bool' = False, skip_punctuation: 'bool' = False) -> 'list[BreakSpan]'`
 
-Return every word segment with code-point offsets and ICU status.
+Return word spans, optionally excluding whitespace or punctuation.
 
 ### `break_words(text: 'str', locale: 'str' = 'en_US', skip_whitespace: 'bool' = True, skip_punctuation: 'bool' = False) -> 'list[str]'`
 

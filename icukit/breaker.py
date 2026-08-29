@@ -27,7 +27,7 @@ from typing import NotRequired, TypedDict
 
 import icu
 
-from ._offsets import codepoint_map, to_codepoint
+from ._offsets import OffsetMaps, offset_maps, set_span_offsets
 from .errors import BreakerError
 
 __all__ = [
@@ -57,7 +57,11 @@ BREAK_CHARACTER = "character"
 
 
 class BreakSpan(TypedDict):
-    """A segment with code-point offsets into its source text.
+    """A segment with offsets into its source text in three index spaces.
+
+    ``start`` and ``end`` remain compatibility aliases for the explicitly named
+    ``codepoint_start`` and ``codepoint_end``. ``utf8_*`` values count bytes;
+    ``utf16_*`` values count code units.
 
     ``break_type``, present only for line spans, describes the break at the
     span's end boundary.
@@ -66,6 +70,12 @@ class BreakSpan(TypedDict):
     text: str
     start: int
     end: int
+    codepoint_start: int
+    codepoint_end: int
+    utf8_start: int
+    utf8_end: int
+    utf16_start: int
+    utf16_end: int
     types: list[str]
     statuses: list[int]
     break_type: NotRequired[str]
@@ -79,34 +89,43 @@ def _make_span(
     end: int,
     types: list[str],
     statuses: list[int],
+    maps: OffsetMaps,
     break_type: str | None = None,
 ) -> BreakSpan:
-    """Build a span; offsets are Python code-point indices."""
+    """Build a span with offsets in every supported index space."""
     span: BreakSpan = {
         "text": text[start:end],
-        "start": start,
-        "end": end,
+        "start": 0,
+        "end": 0,
+        "codepoint_start": 0,
+        "codepoint_end": 0,
+        "utf8_start": 0,
+        "utf8_end": 0,
+        "utf16_start": 0,
+        "utf16_end": 0,
         "types": types,
         "statuses": statuses,
     }
+    set_span_offsets(span, start, end, maps)
     if break_type is not None:
         span["break_type"] = break_type
     return span
 
 
-def _iter_spans(bi, text: str) -> Iterator[tuple[int, int, list[int]]]:
+def _iter_spans(bi, text: str) -> Iterator[tuple[int, int, list[int], OffsetMaps]]:
     """Yield code-point boundaries and statuses from an ICU iterator."""
     us = icu.UnicodeString(text)
     bi.setText(us)
-    offmap = codepoint_map(text)
+    maps = offset_maps(text)
 
     start = bi.first()
     for end in bi:
         statuses = list(bi.getRuleStatusVec())
         yield (
-            to_codepoint(offmap, start),
-            to_codepoint(offmap, end),
+            maps.utf16_to_cp[start],
+            maps.utf16_to_cp[end],
             statuses,
+            maps,
         )
         start = end
 
@@ -171,29 +190,46 @@ class Breaker:
         except icu.ICUError as e:
             raise BreakerError(f"Invalid locale '{locale}': {e}") from e
 
-    def iter_word_spans(self, text: str) -> Iterator[BreakSpan]:
-        """Yield every word segment with code-point offsets and ICU status."""
+    def iter_word_spans(
+        self,
+        text: str,
+        skip_whitespace: bool = False,
+        skip_punctuation: bool = False,
+    ) -> Iterator[BreakSpan]:
+        """Yield word spans, optionally excluding whitespace or punctuation."""
         try:
             bi = icu.BreakIterator.createWordInstance(self._locale_obj)
-            for start, end, statuses in _iter_spans(bi, text):
+            for start, end, statuses, maps in _iter_spans(bi, text):
                 if start != end:
-                    yield _make_span(
-                        text, start, end, _word_types(text[start:end], statuses), statuses
+                    span = _make_span(
+                        text,
+                        start,
+                        end,
+                        _word_types(text[start:end], statuses),
+                        statuses,
+                        maps,
                     )
+                    if not _skip_word(span, skip_whitespace, skip_punctuation):
+                        yield span
         except icu.ICUError as e:
             raise BreakerError(f"Failed to break words: {e}") from e
 
-    def break_word_spans(self, text: str) -> list[BreakSpan]:
-        """Return every word segment as a structured span."""
-        return list(self.iter_word_spans(text))
+    def break_word_spans(
+        self,
+        text: str,
+        skip_whitespace: bool = False,
+        skip_punctuation: bool = False,
+    ) -> list[BreakSpan]:
+        """Return word spans, optionally excluding whitespace or punctuation."""
+        return list(self.iter_word_spans(text, skip_whitespace, skip_punctuation))
 
     def iter_sentence_spans(self, text: str) -> Iterator[BreakSpan]:
         """Yield every sentence segment with code-point offsets."""
         try:
             bi = icu.BreakIterator.createSentenceInstance(self._locale_obj)
-            for start, end, _statuses in _iter_spans(bi, text):
+            for start, end, _statuses, maps in _iter_spans(bi, text):
                 if start != end:
-                    yield _make_span(text, start, end, [], [])
+                    yield _make_span(text, start, end, [], [], maps)
         except icu.ICUError as e:
             raise BreakerError(f"Failed to break sentences: {e}") from e
 
@@ -205,7 +241,7 @@ class Breaker:
         """Yield line segments; break type describes each end boundary."""
         try:
             bi = icu.BreakIterator.createLineInstance(self._locale_obj)
-            for start, end, statuses in _iter_spans(bi, text):
+            for start, end, statuses, maps in _iter_spans(bi, text):
                 if start != end:
                     break_type = (
                         "mandatory"
@@ -215,7 +251,7 @@ class Breaker:
                         )
                         else "optional"
                     )
-                    yield _make_span(text, start, end, [], statuses, break_type)
+                    yield _make_span(text, start, end, [], statuses, maps, break_type)
         except icu.ICUError as e:
             raise BreakerError(f"Failed to find line breaks: {e}") from e
 
@@ -227,9 +263,9 @@ class Breaker:
         """Yield every grapheme cluster with code-point offsets."""
         try:
             bi = icu.BreakIterator.createCharacterInstance(self._locale_obj)
-            for start, end, _statuses in _iter_spans(bi, text):
+            for start, end, _statuses, maps in _iter_spans(bi, text):
                 if start != end:
-                    yield _make_span(text, start, end, [], [])
+                    yield _make_span(text, start, end, [], [], maps)
         except icu.ICUError as e:
             raise BreakerError(f"Failed to break graphemes: {e}") from e
 
@@ -312,9 +348,8 @@ class Breaker:
         Yields:
             Individual word/token strings.
         """
-        for span in self.iter_word_spans(text):
-            if not _skip_word(span, skip_whitespace, skip_punctuation):
-                yield span["text"]
+        for span in self.iter_word_spans(text, skip_whitespace, skip_punctuation):
+            yield span["text"]
 
     def break_lines(self, text: str) -> list[str]:
         """Find line break opportunities in text.
@@ -392,19 +427,33 @@ class Breaker:
             >>> breaker.tokenize_sentences('Hello world. How are you?')
             [['Hello', 'world', '.'], ['How', 'are', 'you', '?']]
         """
+        return [
+            [word["text"] for word in sentence]
+            for sentence in self.tokenize_sentence_spans(text, skip_whitespace, skip_punctuation)
+        ]
+
+    def tokenize_sentence_spans(
+        self,
+        text: str,
+        skip_whitespace: bool = True,
+        skip_punctuation: bool = False,
+    ) -> list[list[BreakSpan]]:
+        """Break into sentences containing filtered word spans.
+
+        Word offsets remain relative to *text*, not to each sentence substring.
+        Empty tokenized sentences are omitted, matching :meth:`tokenize_sentences`.
+        """
         sentences = self.break_sentence_spans(text)
-        words = self.break_word_spans(text)
+        words = self.break_word_spans(text, skip_whitespace, skip_punctuation)
 
         result = []
         wi = 0
         for sentence in sentences:
-            tokens = []
+            tokens: list[BreakSpan] = []
             while wi < len(words) and words[wi]["start"] < sentence["end"]:
                 word = words[wi]
                 wi += 1
-                if _skip_word(word, skip_whitespace, skip_punctuation):
-                    continue
-                tokens.append(word["text"])
+                tokens.append(word)
             if tokens:
                 result.append(tokens)
         return result
@@ -491,9 +540,9 @@ class RuleBreaker:
     def iter_spans(self, text: str) -> Iterator[BreakSpan]:
         """Yield every custom-rule segment with offsets and raw statuses."""
         bi = icu.RuleBasedBreakIterator(self.rules)
-        for start, end, statuses in _iter_spans(bi, text):
+        for start, end, statuses, maps in _iter_spans(bi, text):
             if start != end:
-                yield _make_span(text, start, end, self._types(statuses), statuses)
+                yield _make_span(text, start, end, self._types(statuses), statuses, maps)
 
     def spans(self, text: str) -> list[BreakSpan]:
         """Return every custom-rule segment as a structured span."""
@@ -591,9 +640,14 @@ def break_graphemes(text: str, locale: str = "en_US") -> list[str]:
     return Breaker(locale).break_graphemes(text)
 
 
-def break_word_spans(text: str, locale: str = "en_US") -> list[BreakSpan]:
-    """Return every word segment with code-point offsets and ICU status."""
-    return Breaker(locale).break_word_spans(text)
+def break_word_spans(
+    text: str,
+    locale: str = "en_US",
+    skip_whitespace: bool = False,
+    skip_punctuation: bool = False,
+) -> list[BreakSpan]:
+    """Return word spans, optionally excluding whitespace or punctuation."""
+    return Breaker(locale).break_word_spans(text, skip_whitespace, skip_punctuation)
 
 
 def break_sentence_spans(text: str, locale: str = "en_US") -> list[BreakSpan]:

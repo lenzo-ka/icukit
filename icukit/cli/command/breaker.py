@@ -14,6 +14,32 @@ from ..subcommand_base import SubcommandBase, handles_errors
 class BreakerCommand(SubcommandBase):
     """Text breaking/segmentation command."""
 
+    SPAN_COLUMNS = [
+        "text",
+        "codepoint_start",
+        "codepoint_end",
+        "utf8_start",
+        "utf8_end",
+        "utf16_start",
+        "utf16_end",
+        "types",
+        "statuses",
+    ]
+
+    @classmethod
+    def _add_spans_option(cls, parser, *, line_break_type=False):
+        fields = (
+            "JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, "
+            "UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets"
+        )
+        if line_break_type:
+            fields += ", plus the break_type at each span's end boundary"
+        parser.add_argument(
+            "--spans",
+            action="store_true",
+            help=f"Output structured spans ({fields})",
+        )
+
     @classmethod
     def add_subparser(cls, subparsers):
         """Add the break command with its subcommands."""
@@ -91,6 +117,7 @@ Examples:
     def _configure_sentences(cls, parser):
         """Configure sentences subcommand."""
         cls._add_locale_option(parser)
+        cls._add_spans_option(parser)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
 
@@ -98,6 +125,7 @@ Examples:
     def _configure_words(cls, parser):
         """Configure words subcommand."""
         cls._add_locale_option(parser)
+        cls._add_spans_option(parser)
         parser.add_argument(
             "--skip-punctuation",
             "-p",
@@ -116,6 +144,7 @@ Examples:
     def _configure_lines(cls, parser):
         """Configure lines subcommand."""
         cls._add_locale_option(parser)
+        cls._add_spans_option(parser, line_break_type=True)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
 
@@ -123,12 +152,14 @@ Examples:
     def _configure_graphemes(cls, parser):
         """Configure graphemes subcommand."""
         cls._add_locale_option(parser)
-        parser.add_argument(
+        display_group = parser.add_mutually_exclusive_group()
+        display_group.add_argument(
             "--show-codepoints",
             "-c",
             action="store_true",
             help="Show Unicode codepoints for each grapheme",
         )
+        cls._add_spans_option(display_group)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
 
@@ -136,6 +167,7 @@ Examples:
     def _configure_tokenize(cls, parser):
         """Configure tokenize subcommand."""
         cls._add_locale_option(parser)
+        cls._add_spans_option(parser)
         parser.add_argument(
             "--skip-punctuation",
             "-p",
@@ -148,8 +180,18 @@ Examples:
     @classmethod
     @handles_errors(BreakerError)
     def cmd_sentences(cls, args):
-        """Break text into sentences."""
+        """Break text into sentences; spans retain unstripped source segments."""
         breaker = Breaker(args.locale)
+
+        if getattr(args, "spans", False):
+            text = "\n".join(cls._read_lines(args))
+            print_output(
+                breaker.break_sentence_spans(text),
+                as_json=getattr(args, "json", False),
+                columns=cls.SPAN_COLUMNS,
+                headers=not getattr(args, "no_header", False),
+            )
+            return 0
 
         def processor(text):
             for sentence in breaker.iter_sentences(text):
@@ -168,6 +210,17 @@ Examples:
         skip_ws = not getattr(args, "include_whitespace", False)
 
         as_json = getattr(args, "json", False)
+
+        if getattr(args, "spans", False):
+            text = "\n".join(cls._read_lines(args))
+            spans = breaker.break_word_spans(text, skip_ws, skip_punct)
+            print_output(
+                spans,
+                as_json=as_json,
+                columns=cls.SPAN_COLUMNS,
+                headers=not getattr(args, "no_header", False),
+            )
+            return 0
 
         if as_json:
             # Collect all words for JSON output
@@ -191,6 +244,16 @@ Examples:
         breaker = Breaker(args.locale)
 
         as_json = getattr(args, "json", False)
+
+        if getattr(args, "spans", False):
+            text = "\n".join(cls._read_lines(args))
+            print_output(
+                breaker.break_line_spans(text),
+                as_json=as_json,
+                columns=[*cls.SPAN_COLUMNS, "break_type"],
+                headers=not getattr(args, "no_header", False),
+            )
+            return 0
 
         if as_json:
             lines = cls._read_lines(args)
@@ -217,6 +280,15 @@ Examples:
 
         lines = cls._read_lines(args)
         text = "\n".join(lines)
+        if getattr(args, "spans", False):
+            print_output(
+                breaker.break_grapheme_spans(text),
+                as_json=as_json,
+                columns=cls.SPAN_COLUMNS,
+                headers=not no_header,
+            )
+            return 0
+
         graphemes = breaker.break_graphemes(text)
 
         if show_codepoints or as_json:
@@ -245,6 +317,23 @@ Examples:
 
         lines = cls._read_lines(args)
         text = "\n".join(lines)
+        if getattr(args, "spans", False):
+            tokenized = breaker.tokenize_sentence_spans(text, skip_punctuation=skip_punct)
+            if as_json:
+                print_output(tokenized, as_json=True)
+            else:
+                rows = [
+                    {"sentence": sentence_number, **span}
+                    for sentence_number, sentence in enumerate(tokenized, 1)
+                    for span in sentence
+                ]
+                print_output(
+                    rows,
+                    columns=["sentence", *cls.SPAN_COLUMNS],
+                    headers=not getattr(args, "no_header", False),
+                )
+            return 0
+
         tokenized = breaker.tokenize_sentences(text, skip_punctuation=skip_punct)
 
         if as_json:
