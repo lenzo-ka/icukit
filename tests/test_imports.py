@@ -2,6 +2,15 @@
 
 from importlib import import_module
 
+FORMATTER_EXPORTS = {
+    "flatten_extended",
+    "format_json",
+    "format_output",
+    "format_simple_list",
+    "format_tsv",
+    "print_output",
+}
+
 
 class TestImports:
     """Test that icukit modules and exports can be imported."""
@@ -60,6 +69,25 @@ class TestImports:
         assert set(icukit.__all__) <= namespace.keys()
         assert all(hasattr(icukit, name) for name in icukit.__all__)
         assert len(icukit.__all__) == len(set(icukit.__all__))
+
+    def test_formatter_exports_are_exact(self):
+        from icukit import formatters
+
+        assert set(formatters.__all__) == FORMATTER_EXPORTS
+
+    def test_formatter_exports_are_indexed_from_package_root(self):
+        import icukit
+        from icukit import formatters
+
+        root_formatter_exports = {
+            name
+            for name in icukit.__all__
+            if getattr(getattr(icukit, name), "__module__", None) == "icukit.formatters"
+        }
+
+        assert root_formatter_exports == FORMATTER_EXPORTS
+        for name in FORMATTER_EXPORTS:
+            assert getattr(icukit, name) is getattr(formatters, name)
 
     def test_cli_module_imports(self):
         """Test that CLI modules can be imported."""

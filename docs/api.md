@@ -109,6 +109,12 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`WIDTH_NARROW`](#icukitmeasure) — constant, `icukit.measure`
 - [`discover_features`](#icukitdiscover) — function, `icukit.discover`
 - [`search_features`](#icukitdiscover) — function, `icukit.discover`
+- [`flatten_extended`](#icukitformatters) — function, `icukit.formatters`
+- [`format_json`](#icukitformatters) — function, `icukit.formatters`
+- [`format_output`](#icukitformatters) — function, `icukit.formatters`
+- [`format_simple_list`](#icukitformatters) — function, `icukit.formatters`
+- [`format_tsv`](#icukitformatters) — function, `icukit.formatters`
+- [`print_output`](#icukitformatters) — function, `icukit.formatters`
 - [`get_api_exports`](#icukitdiscover) — function, `icukit.discover`
 - [`get_api_info`](#icukitdiscover) — function, `icukit.discover`
 - [`get_cli_commands`](#icukitdiscover) — function, `icukit.discover`
@@ -3063,6 +3069,105 @@ Set ``require_finite_context`` to refuse rules with unbounded context reach.
 ### `merge_retypes(text: 'str', base_spans: 'list[BreakSpan]', detections: 'list[Detection]') -> 'list[BreakSpan]'`
 
 Retype owning spans by containment; never split, replace, or coalesce them.
+
+## icukit.formatters
+
+Output formatters for rendering structured data.
+
+This module provides formatters for rendering data as JSON, TSV, or the
+human-readable output used by icukit's command-line interface.
+
+Usage:
+    data = [{"id": "foo", "value": 1}, {"id": "bar", "value": 2}]
+
+    # TSV output (default)
+    print(format_tsv(data))
+
+    # JSON output
+    print(format_json(data))
+
+    # Auto-format based on args
+    print(format_output(data, as_json=args.json))
+
+### `flatten_extended(data: 'Sequence[dict[str, Any]]', extended_columns: 'list[str]') -> 'list[dict[str, Any]]'`
+
+Copy rows and promote selected ``extended`` values to top-level keys.
+
+Args:
+    data: Rows to copy. Each row may contain an ``extended`` mapping.
+    extended_columns: Keys to read from each row's ``extended`` mapping. A missing
+        key is promoted with the value ``None``. Nested dictionaries are rendered
+        as comma-separated ``key=value`` pairs in their iteration order.
+
+Returns:
+    New shallow copies with the requested keys promoted. Input rows are not
+    mutated, and the ``extended`` key is retained in each copied row.
+
+### `format_json(data: 'Any', indent: 'int | None' = 2) -> 'str'`
+
+Serialize data as JSON text.
+
+Args:
+    data: Data to serialize. Values unsupported by JSON are converted to strings.
+    indent: Number of spaces to use for each indentation level, or ``None`` for
+        compact output.
+
+Returns:
+    JSON text containing non-ASCII characters without ASCII escaping.
+
+### `format_output(data: 'Any', as_json: 'bool' = False, columns: 'list[str] | None' = None, headers: 'bool' = True) -> 'str'`
+
+Render data as JSON or as icukit's human-readable command output.
+
+Args:
+    data: Data to render. In non-JSON mode, non-empty sequences of mappings become
+        TSV, non-empty sequences of strings become newline-separated text, and
+        mappings become sorted labeled sections, with a newline before each label.
+        Other values fall back to JSON.
+    as_json: Render as JSON. A sequence containing one item is unwrapped first.
+    columns: Columns to include in TSV output, in order.
+    headers: Include a TSV header when more than one column is rendered.
+
+Returns:
+    Formatted text without a trailing newline.
+
+### `format_simple_list(data: 'Sequence[Any]') -> 'str'`
+
+Render a sequence as newline-separated text.
+
+Args:
+    data: Items to render. Each item is converted to a string.
+
+Returns:
+    Newline-separated text without a trailing newline, or an empty string when
+    *data* is empty.
+
+### `format_tsv(data: 'Sequence[dict[str, Any]]', columns: 'list[str] | None' = None, headers: 'bool' = True) -> 'str'`
+
+Render a sequence of mappings as tab-separated text.
+
+Args:
+    data: Rows to render. Missing columns and empty values are displayed as ``-``.
+    columns: Columns to include, in order. By default, use the first row's keys.
+    headers: Include a header when rendering more than one column. Single-column
+        output never includes a header.
+
+Returns:
+    TSV text without a trailing newline, or an empty string when *data* is empty.
+
+### `print_output(data: 'Any', as_json: 'bool' = False, columns: 'list[str] | None' = None, headers: 'bool' = True, file: 'TextIO | None' = None, extended_columns: 'list[str] | None' = None) -> 'None'`
+
+Render data and write it followed by a newline.
+
+Args:
+    data: Data accepted by :func:`format_output`.
+    as_json: Render as JSON.
+    columns: Base columns to include in TSV output, in order.
+    headers: Include a TSV header when more than one column is rendered.
+    file: Text stream to write to. Defaults to standard output.
+    extended_columns: Keys from each row's ``extended`` mapping to append as TSV
+        columns. Nested mapping values are rendered as comma-separated ``key=value``
+        pairs. This transformation is not applied to JSON output.
 
 ## icukit.idna
 
