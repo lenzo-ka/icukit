@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import sys
+from contextlib import redirect_stdout
 
 from .. import __version__
 from ..errors import ICUKitError
+from .base import open_output
 from .command import (
     AlphaIndexCommand,
     BidiCommand,
@@ -232,7 +234,17 @@ def main():
     if hasattr(args, "func"):
         args._parser = parser
         try:
-            return args.func(args)
+            output_path = getattr(args, "output", None)
+            command_succeeded = False
+            with open_output(output_path, should_commit=lambda: command_succeeded) as output:
+                # Commands that already use open_output should write to the same
+                # stream instead of opening the destination a second time.
+                if output_path:
+                    args.output = None
+                with redirect_stdout(output):
+                    result = args.func(args)
+                command_succeeded = result in (None, 0)
+            return result
         except ICUKitError as e:
             # Backstop: any icukit error that escapes a command handler is
             # reported as a clean message rather than a raw traceback.

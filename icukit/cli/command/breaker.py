@@ -228,11 +228,12 @@ Examples:
         """Break text into sentences; spans retain unstripped source segments."""
         breaker = Breaker(args.locale)
         cls._validate_provenance(args)
+        as_json = getattr(args, "json", False)
 
         if getattr(args, "spans", False):
             text = "\n".join(cls._read_lines(args))
             spans = breaker.break_sentence_spans(text)
-            if getattr(args, "json", False):
+            if as_json:
                 cls._print_json(args, spans)
             else:
                 print_output(
@@ -242,7 +243,7 @@ Examples:
                 )
             return 0
 
-        if getattr(args, "provenance", False):
+        if as_json:
             text = "\n".join(cls._read_lines(args))
             sentences = [sentence.strip() for sentence in breaker.iter_sentences(text)]
             cls._print_json(args, sentences)

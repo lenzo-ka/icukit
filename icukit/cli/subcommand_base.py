@@ -145,7 +145,11 @@ class SubcommandBase:
     def _add_output_options(cls, parser, include_header=True):
         """Add common output options: -o, -j, -H."""
         output_group = parser.add_argument_group("output options")
-        output_group.add_argument("-o", "--output", help="Output file (default: stdout)")
+        output_group.add_argument(
+            "-o",
+            "--output",
+            help="Output file in UTF-8; atomically replaces an existing file (default: stdout)",
+        )
         output_group.add_argument("-j", "--json", action="store_true", help="Output in JSON format")
         if include_header:
             output_group.add_argument(

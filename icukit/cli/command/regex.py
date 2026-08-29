@@ -261,12 +261,20 @@ Common Scripts:
         """Find pattern matches in text."""
         try:
             flags = cls._get_flags(args)
+            line_number = 0
 
             def find_processor(text):
+                nonlocal line_number
+                line_number += 1
                 matches = regex_find(args.pattern, text, flags=flags)
 
+                def add_line_number(result):
+                    if getattr(args, "line_numbers", False) and result:
+                        return "\n".join(f"{line_number}:{line}" for line in result.splitlines())
+                    return result
+
                 if args.count:
-                    return str(len(matches))
+                    result = str(len(matches))
                 elif args.all:
                     if args.limit:
                         matches = matches[: args.limit]
@@ -276,7 +284,7 @@ Common Scripts:
                         if getattr(args, "json", False):
                             return format_json(result)
                         else:
-                            return "\n".join(result)
+                            return add_line_number("\n".join(result))
                     elif args.groups:
                         result = []
                         for m in matches:
@@ -293,12 +301,12 @@ Common Scripts:
                         if getattr(args, "json", False):
                             return format_json(result)
                         else:
-                            return "\n".join(m["match"] for m in result)
+                            return add_line_number("\n".join(m["match"] for m in result))
                     else:
                         if getattr(args, "json", False):
                             return format_json(matches)
                         else:
-                            return "\n".join(m["text"] for m in matches)
+                            return add_line_number("\n".join(m["text"] for m in matches))
                 else:
                     # Find first match
                     if matches:
@@ -306,9 +314,11 @@ Common Scripts:
                         if getattr(args, "json", False):
                             return format_json(match)
                         else:
-                            return match["text"]
+                            return add_line_number(match["text"])
                     else:
-                        return ""
+                        result = ""
+
+                return add_line_number(result)
 
             with open_output(getattr(args, "output", None)) as output:
                 process_input(args, find_processor, output)
@@ -323,15 +333,17 @@ Common Scripts:
         """Replace pattern matches with text."""
         try:
             flags = cls._get_flags(args)
+            as_json = getattr(args, "json", False)
 
             def replace_processor(text):
-                return regex_replace(
+                result = regex_replace(
                     args.pattern,
                     text,
                     args.replacement,
                     flags=flags,
                     limit=args.limit if args.limit else -1,
                 )
+                return format_json(result) if as_json else result
 
             with open_output(getattr(args, "output", None)) as output:
                 process_input(args, replace_processor, output)
@@ -419,13 +431,15 @@ Common Scripts:
             pattern, replacement, global_flag, ignore_case = parse_substitution(args.expression)
 
             flags = cls._get_flags(args)
+            as_json = getattr(args, "json", False)
             if ignore_case:
                 flags |= CASE_INSENSITIVE
 
             limit = -1 if global_flag else 1
 
             def script_processor(text):
-                return regex_replace(pattern, text, replacement, flags=flags, limit=limit)
+                result = regex_replace(pattern, text, replacement, flags=flags, limit=limit)
+                return format_json(result) if as_json else result
 
             with open_output(getattr(args, "output", None)) as output:
                 process_input(args, script_processor, output)
