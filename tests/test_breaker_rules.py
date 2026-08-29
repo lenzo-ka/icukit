@@ -82,6 +82,20 @@ def test_astral_offsets_are_code_points():
     assert spans[-1]["end"] == len(text)
 
 
+def test_rule_breaker_offsets_round_trip_in_all_spaces():
+    text = "é中👍 Fig."
+    spans = RuleBreaker(BASE_RULES).spans(text)
+    utf8 = text.encode("utf-8")
+    utf16 = text.encode("utf-16-le")
+
+    for span in spans:
+        assert text[span["codepoint_start"] : span["codepoint_end"]] == span["text"]
+        assert utf8[span["utf8_start"] : span["utf8_end"]] == span["text"].encode("utf-8")
+        assert utf16[2 * span["utf16_start"] : 2 * span["utf16_end"]] == span["text"].encode(
+            "utf-16-le"
+        )
+
+
 def test_iter_spans_is_reentrant():
     breaker = RuleBreaker(BASE_RULES, {200: "letter"})
     first = breaker.iter_spans("AB 12")

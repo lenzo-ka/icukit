@@ -7,6 +7,50 @@ cross that encoding-unit seam.
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping
+from typing import NamedTuple
+
+
+class OffsetMaps(NamedTuple):
+    """Cumulative offsets at every code-point boundary in a text."""
+
+    cp_to_utf8: list[int]
+    cp_to_utf16: list[int]
+    utf16_to_cp: dict[int, int]
+
+
+def offset_maps(text: str) -> OffsetMaps:
+    """Build UTF-8, UTF-16, and code-point boundary maps in one linear pass."""
+    cp_to_utf8 = [0]
+    cp_to_utf16 = [0]
+    utf16_to_cp = {0: 0}
+    utf8_offset = 0
+    utf16_offset = 0
+    for cp_index, char in enumerate(text, 1):
+        utf8_offset += len(char.encode("utf-8"))
+        utf16_offset += 2 if ord(char) > 0xFFFF else 1
+        cp_to_utf8.append(utf8_offset)
+        cp_to_utf16.append(utf16_offset)
+        utf16_to_cp[utf16_offset] = cp_index
+    return OffsetMaps(cp_to_utf8, cp_to_utf16, utf16_to_cp)
+
+
+def set_span_offsets(
+    span: MutableMapping[str, object],
+    start: int,
+    end: int,
+    maps: OffsetMaps,
+) -> None:
+    """Set every offset representation for a code-point range on a span."""
+    span["start"] = start
+    span["end"] = end
+    span["codepoint_start"] = start
+    span["codepoint_end"] = end
+    span["utf8_start"] = maps.cp_to_utf8[start]
+    span["utf8_end"] = maps.cp_to_utf8[end]
+    span["utf16_start"] = maps.cp_to_utf16[start]
+    span["utf16_end"] = maps.cp_to_utf16[end]
+
 
 def codepoint_map(text: str) -> list[int] | None:
     """Map ICU UTF-16 offsets to Python string code-point indices.
@@ -61,16 +105,8 @@ def boundary_maps(text: str) -> tuple[list[int], dict[int, int]]:
         ``u16_to_cp`` maps each *genuine* UTF-16 boundary offset to its code-point
         index. Offsets interior to a surrogate pair are not keys of ``u16_to_cp``.
     """
-    cp_to_u16: list[int] = []
-    u16_to_cp: dict[int, int] = {}
-    unit = 0
-    for index, char in enumerate(text):
-        cp_to_u16.append(unit)
-        u16_to_cp[unit] = index
-        unit += 2 if ord(char) > 0xFFFF else 1
-    cp_to_u16.append(unit)
-    u16_to_cp[unit] = len(text)
-    return cp_to_u16, u16_to_cp
+    maps = offset_maps(text)
+    return maps.cp_to_utf16, maps.utf16_to_cp
 
 
 def u16_boundary_to_codepoint(u16_to_cp: dict[int, int], offset: int) -> int | None:

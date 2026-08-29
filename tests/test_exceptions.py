@@ -15,6 +15,7 @@ from icukit import (
     example_exception_inventory,
     load_exception_inventory,
 )
+from icukit._offsets import offset_maps
 from icukit.breaker import (
     BreakSpan,
     break_line_spans,
@@ -556,7 +557,7 @@ def test_merged_line_span_keeps_only_its_end_boundary_statuses():
     text = "See Fig.\nThen stop"
     base = break_line_spans(text, "en")
 
-    merged = _merge_spans(text, base[1:3])
+    merged = _merge_spans(text, base[1:3], offset_maps(text))
 
     assert merged["break_type"] == "optional"
     assert merged["statuses"] == [0]
@@ -589,7 +590,7 @@ def test_omitted_policy_is_byte_identical_to_legacy_default():
     explicit = layer.break_spans(text, "word", "en", policy=ExceptionPolicy())
 
     assert implicit == explicit
-    assert implicit == [
+    expected = [
         {
             "text": "No",
             "start": 0,
@@ -611,6 +612,16 @@ def test_omitted_policy_is_byte_identical_to_legacy_default():
         {"text": " ", "start": 12, "end": 13, "types": ["whitespace"], "statuses": [0]},
         {"text": "5", "start": 13, "end": 14, "types": ["number"], "statuses": [100]},
     ]
+    for span in expected:
+        span.update(
+            codepoint_start=span["start"],
+            codepoint_end=span["end"],
+            utf8_start=span["start"],
+            utf8_end=span["end"],
+            utf16_start=span["start"],
+            utf16_end=span["end"],
+        )
+    assert implicit == expected
 
 
 def test_policy_can_retype_or_mark_without_changing_segmentation():

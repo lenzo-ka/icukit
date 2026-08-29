@@ -5,6 +5,16 @@ import pytest
 from icukit.abbreviation_breaker import AbbreviationSentenceBreaker
 
 
+def _assert_all_offset_spaces(text, span):
+    utf8 = text.encode("utf-8")
+    utf16 = text.encode("utf-16-le")
+    assert text[span["codepoint_start"] : span["codepoint_end"]] == span["text"]
+    assert utf8[span["utf8_start"] : span["utf8_end"]] == span["text"].encode("utf-8")
+    assert utf16[2 * span["utf16_start"] : 2 * span["utf16_end"]] == span["text"].encode(
+        "utf-16-le"
+    )
+
+
 @pytest.mark.parametrize(
     "text",
     ["U.S.A. Is large.", "see e.g. This."],
@@ -20,6 +30,14 @@ def test_literal_suppression_and_provenance():
     assert spans[0]["text"] == "Dr. Smith arrived. "
     assert "abbreviation" in spans[0]["types"]
     assert spans[0]["abbreviations"][0]["surface"] == "Dr."
+
+
+def test_merged_abbreviation_span_round_trips_in_every_offset_space():
+    text = "😀 é Dr. Smith arrived. Next."
+    spans = AbbreviationSentenceBreaker("en").spans(text)
+
+    assert spans[0]["text"] == "😀 é Dr. Smith arrived. "
+    _assert_all_offset_spaces(text, spans[0])
 
 
 def test_left_boundary_guard_does_not_match_literal_tail():

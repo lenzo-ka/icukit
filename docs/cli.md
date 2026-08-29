@@ -169,6 +169,7 @@ Examples:
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--show-codepoints, -c`: Show Unicode codepoints for each grapheme (default: `False`)
+- `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-o, --output`: Output file (default: stdout)
@@ -181,11 +182,24 @@ Examples:
 
 - `help_command`: Subcommand to show help for
 
-### `icukit break sentences` (aliases: l, line, lines, s, sent)
+### `icukit break lines` (aliases: l, line)
 
 **Options:**
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets, plus the break_type at each span's end boundary) (default: `False`)
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-o, --output`: Output file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit break sentences` (aliases: s, sent)
+
+**Options:**
+
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-o, --output`: Output file (default: stdout)
@@ -197,6 +211,7 @@ Examples:
 **Options:**
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `--skip-punctuation, -p`: Skip punctuation tokens (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
@@ -209,6 +224,7 @@ Examples:
 **Options:**
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `--skip-punctuation, -p`: Skip punctuation tokens (default: `False`)
 - `--include-whitespace`: Include whitespace tokens (excluded by default) (default: `False`)
 - `-t, --text`: Process TEXT directly
