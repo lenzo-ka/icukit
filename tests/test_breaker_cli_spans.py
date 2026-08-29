@@ -82,10 +82,10 @@ def test_flat_span_json_has_integral_codepoint_offsets_and_mode_metadata(mode):
     assert all(("break_type" in span) == (mode == "lines") for span in spans)
 
 
-def test_sentence_spans_retain_trailing_whitespace_while_legacy_output_strips_it():
+def test_sentence_spans_retain_trailing_whitespace_while_plain_json_strips_it():
     text = "One. Two."
-    code, legacy, err = run_cli("break", "sentences", "--json", "-t", text)
-    assert (code, err, legacy) == (0, "", "One.\nTwo.\n")
+    code, plain, err = run_cli("break", "sentences", "--json", "-t", text)
+    assert (code, err, json.loads(plain)) == (0, "", ["One.", "Two."])
 
     code, out, err = run_cli("break", "sentences", "--spans", "--json", "-t", text)
     spans = json.loads(out)

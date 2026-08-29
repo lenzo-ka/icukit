@@ -182,15 +182,22 @@ Examples:
     def cmd_sentences(cls, args):
         """Break text into sentences; spans retain unstripped source segments."""
         breaker = Breaker(args.locale)
+        as_json = getattr(args, "json", False)
 
         if getattr(args, "spans", False):
             text = "\n".join(cls._read_lines(args))
             print_output(
                 breaker.break_sentence_spans(text),
-                as_json=getattr(args, "json", False),
+                as_json=as_json,
                 columns=cls.SPAN_COLUMNS,
                 headers=not getattr(args, "no_header", False),
             )
+            return 0
+
+        if as_json:
+            text = "\n".join(cls._read_lines(args))
+            sentences = [sentence.strip() for sentence in breaker.iter_sentences(text)]
+            print_output(sentences, as_json=True)
             return 0
 
         def processor(text):

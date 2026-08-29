@@ -360,7 +360,15 @@ Examples:
                 rules = f.read()
             trans = Transliterator.from_rules(args.name, rules)
             with open_output(getattr(args, "output", None)) as output:
-                process_input(args, trans.transliterate, output)
+                if getattr(args, "json", False):
+                    content = cls._read_input(args)
+                    print_output(
+                        [{"transliterator": args.name, "result": trans.transliterate(content)}],
+                        as_json=True,
+                        file=output,
+                    )
+                else:
+                    process_input(args, trans.transliterate, output)
             return 0
         except TransliteratorError as e:
             print(f"Error: {e}", file=sys.stderr)

@@ -68,7 +68,7 @@ Examples:
 - `-l, --locale`: Locale for bucket labels (default: en_US) (default: `en_US`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -119,7 +119,7 @@ Examples:
 
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -133,7 +133,7 @@ Examples:
 
 **Options:**
 
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -172,7 +172,7 @@ Examples:
 - `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -190,7 +190,7 @@ Examples:
 - `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets, plus the break_type at each span's end boundary) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -202,7 +202,7 @@ Examples:
 - `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -215,7 +215,7 @@ Examples:
 - `--skip-punctuation, -p`: Skip punctuation tokens (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -229,7 +229,7 @@ Examples:
 - `--include-whitespace`: Include whitespace tokens (excluded by default) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -266,7 +266,7 @@ Examples:
 **Options:**
 
 - `calendar`: Calendar type (e.g., gregorian, hebrew)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -275,7 +275,7 @@ Examples:
 **Options:**
 
 - `-s, --short`: Show only calendar type names (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -330,7 +330,7 @@ Examples:
 
 - `locale`: Locale to get collator info for (default: en_US) (default: `en_US`)
 - `--extended, -x`: Include extended attributes (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -339,7 +339,7 @@ Examples:
 **Options:**
 
 - `what`: What to list (default: types) (default: `types`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -422,7 +422,7 @@ Examples:
 **Options:**
 
 - `text`: Text to check
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -445,7 +445,7 @@ Examples:
 
 - `string1`: First string
 - `string2`: Second string
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -513,7 +513,7 @@ Examples:
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Name width: wide (Before Christ) or abbreviated (BC) (default: `WIDE`)
 - `-c, --calendar`: Calendar system
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -552,7 +552,7 @@ Examples:
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Name width: wide (January) or abbreviated (Jan) (default: `WIDE`)
 - `-c, --calendar`: Calendar system (gregorian, hebrew, islamic, etc.)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -587,7 +587,7 @@ Examples:
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-c, --calendar`: Calendar system
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -598,7 +598,7 @@ Examples:
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Name width: wide (Sunday) or abbreviated (Sun) (default: `WIDE`)
 - `-c, --calendar`: Calendar system
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -620,7 +620,7 @@ forest, and downstream consumers perform disambiguation.
 - `--currency`: Add an ISO currency (default: `[]`)
 - `--measure`: Add an ICU measure unit (default: `[]`)
 - `--skeleton`: Add a date skeleton (default: `[]`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 - `--jsonl`: One JSON object per line (one detection per line) (default: `False`)
@@ -650,7 +650,7 @@ Examples:
 
 **Options:**
 
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -665,7 +665,7 @@ Examples:
 **Options:**
 
 - `query`: Search query
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -834,7 +834,7 @@ Examples:
 **Options:**
 
 - `duration`: ISO 8601 duration string to parse
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ## `icukit help`
@@ -930,7 +930,7 @@ Examples:
 
 - `locale`: Locale identifier (e.g., en_US)
 - `--display, -d`: Locale for display names (default: en) (default: `en`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -971,7 +971,7 @@ Examples:
 - `locale`: Locale code (default: en_US) (default: `en_US`)
 - `--type, -t`: Exemplar type: standard, auxiliary, index, punctuation (default: standard) (default: `standard`)
 - `--all, -a`: Show all exemplar types (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1003,7 +1003,7 @@ Examples:
 - `locales`: Locale identifier(s) (e.g., en_US)
 - `--display, -d`: Locale for display names (default: en) (default: `en`)
 - `-x, --extended`: Include extended attributes (calendar, currency, RTL, etc.) (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1017,7 +1017,7 @@ Examples:
 - `--language`: Filter by language code (e.g., en, es)
 - `--region`: Filter by region code (e.g., US, MX)
 - `--script`: Filter by script code (e.g., Latn, Hans)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1039,7 +1039,7 @@ Examples:
 **Options:**
 
 - `locale`: Locale string to parse
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1067,7 +1067,7 @@ Examples:
 **Options:**
 
 - `locale`: Locale code (default: en_US) (default: `en_US`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1161,7 +1161,7 @@ Examples:
 **Options:**
 
 - `unit`: Unit name or abbreviation
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure range` (aliases: r)
@@ -1178,7 +1178,7 @@ Examples:
 
 **Options:**
 
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure units` (aliases: list, u)
@@ -1186,7 +1186,7 @@ Examples:
 **Options:**
 
 - `-t, --type`: Filter by unit type (e.g., length, mass, temperature)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure usage` (aliases: use)
@@ -1294,7 +1294,7 @@ Examples:
 - `text`: Currency string to parse
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--strict`: Strict parsing (no lenient mode) (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit parse help` (aliases: h)
@@ -1363,7 +1363,7 @@ Examples:
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-t, --type`: Plural type (default: cardinal) (default: `cardinal`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit plural help` (aliases: h)
@@ -1377,7 +1377,7 @@ Examples:
 **Options:**
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit plural ordinal` (aliases: get, o, ord, s, select)
@@ -1487,7 +1487,7 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1529,7 +1529,7 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1540,7 +1540,7 @@ Common Scripts:
 - `expression`: Substitution expression: s/pattern/replacement/[gi] (delimiter can be any char)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1566,7 +1566,7 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1603,7 +1603,7 @@ Examples:
 **Options:**
 
 - `code`: Region code to get contained regions for
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1619,7 +1619,7 @@ Examples:
 
 - `code`: Region code (e.g., US, FR, 001)
 - `-x, --extended`: Include extended attributes (contained_regions) (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1630,7 +1630,7 @@ Examples:
 - `what`: What to list (default: regions) (default: `regions`)
 - `--type, -t`: Region type filter (default: territory) (default: `territory`)
 - `-s, --short`: Show only region codes (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1669,7 +1669,7 @@ Examples:
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-a, --all`: Detect all scripts in text (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1685,7 +1685,7 @@ Examples:
 
 - `script`: Script name (e.g., Greek, Latin, Han)
 - `-x, --extended`: Include extended attributes (sample_char) (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1695,7 +1695,7 @@ Examples:
 
 - `--cased`: Only cased scripts (default: `False`)
 - `--rtl`: Only RTL scripts (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1753,7 +1753,7 @@ Examples:
 - `files`: Process FILE(s)
 - `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength (default: tertiary/exact)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1829,7 +1829,7 @@ Examples:
 **Options:**
 
 - `timezone`: Timezone ID to find equivalents for
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1845,7 +1845,7 @@ Examples:
 
 - `timezone`: Timezone ID (e.g., America/New_York)
 - `-x, --extended`: Include extended attributes (region, windows_id, equivalent_ids) (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1855,7 +1855,7 @@ Examples:
 
 - `--country, -c`: Filter by country code (e.g., US, DE, JP)
 - `-s, --short`: Show only timezone IDs (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1891,7 +1891,7 @@ Examples:
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-n, --name`: Name for custom transliterator (default: `custom`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit transliterate help` (aliases: h)
@@ -1907,7 +1907,7 @@ Examples:
 - `expression`: ICU transform expression (e.g., "NFD; [:Nonspacing Mark:] Remove; NFC")
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1920,7 +1920,7 @@ Examples:
 - `--to`: Filter by target script
 - `--scripts`: Group by source scripts (default: `False`)
 - `-s, --short`: Show only IDs (default: `False`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1931,7 +1931,7 @@ Examples:
 - `transliterators`: Transliterator name(s) - comma-separated or regex
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -1942,7 +1942,7 @@ Examples:
 - `transliterators`: Transliterator name(s) for reverse
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -2005,7 +2005,7 @@ Examples:
 **Options:**
 
 - `name`: Unicode block name (e.g., 'Basic Latin')
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -2014,7 +2014,7 @@ Examples:
 **Options:**
 
 - `code`: Unicode category code (e.g., 'Lu', 'Nd')
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -2023,7 +2023,7 @@ Examples:
 **Options:**
 
 - `type`: What to list (default: categories) (default: `categories`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -2033,7 +2033,7 @@ Examples:
 
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
@@ -2066,5 +2066,5 @@ Examples:
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-f, --form`: Normalization form (default: NFC) (default: `NFC`)
-- `-o, --output`: Output file (default: stdout)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)

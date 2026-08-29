@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from ...errors import NormalizationError
-from ...formatters import print_output
+from ...formatters import format_json, print_output
 from ...unicode import (
     NFC,
     NFD,
@@ -227,9 +227,11 @@ Examples:
         """Normalize text to a Unicode form."""
         try:
             form = args.form
+            as_json = getattr(args, "json", False)
 
             def processor(text):
-                return normalize(text, form)
+                result = normalize(text, form)
+                return format_json(result) if as_json else result
 
             with open_output(getattr(args, "output", None)) as output:
                 process_input(args, processor, output)
