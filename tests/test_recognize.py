@@ -1459,13 +1459,35 @@ def test_flexible_spellout_round_trips_an_ewe_large_scale_junction():
     assert detections[0]["value"] == NumberValue("100001", None)
 
 
-def test_flexible_spellout_dense_input_has_bounded_detection_time():
+def test_flexible_spellout_dense_input_has_linear_token_evaluations():
     detector = FlexibleSpelloutDetector("en_US")
+    repetitions = 500
+    surface = "twenty-three " * repetitions
+    token_evaluations = 0
+    original_token_end = detector._token_end
+
+    def counted_token_end(text, start):
+        nonlocal token_evaluations
+        token_evaluations += 1
+        return original_token_end(text, start)
+
+    detector._token_end = counted_token_end
     started = time.perf_counter()
-    detections = detector.detect("twenty-three " * 500)
+    detections = detector.detect(surface)
     elapsed = time.perf_counter() - started
 
-    assert elapsed < 2
+    # Each repeated surface has two tokens. The shared cache in detect() must keep
+    # overlapping candidate scans from evaluating either token more than once.
+    # The bound carries headroom: today's count is exactly 2 per repetition, and a
+    # benign refactor probing one extra cursor should not fail, while dropping the
+    # cache entirely evaluates over a hundred thousand times.
+    assert token_evaluations <= 3 * repetitions
+    # A catastrophe guard, deliberately far above any load this test can meet: the
+    # count above watches one mechanism, so a super-linear regression elsewhere in
+    # detect() is invisible to it. This bound is roughly twenty times the observed
+    # worst case, so it cannot fail on a busy machine, and it is not a substitute
+    # for measuring the memo.
+    assert elapsed < 30
     assert len(detections) == 500
     assert all(item["value"] == NumberValue("23", None) for item in detections)
 
