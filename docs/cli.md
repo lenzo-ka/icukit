@@ -175,6 +175,7 @@ Examples:
 - `-o, --output`: Output file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break help` (aliases: h)
 
@@ -193,6 +194,7 @@ Examples:
 - `-o, --output`: Output file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break sentences` (aliases: s, sent)
 
@@ -205,6 +207,7 @@ Examples:
 - `-o, --output`: Output file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break tokenize` (aliases: t, tok)
 
@@ -218,6 +221,7 @@ Examples:
 - `-o, --output`: Output file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break words` (aliases: w, word)
 
@@ -232,6 +236,7 @@ Examples:
 - `-o, --output`: Output file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ## `icukit calendar`
 
