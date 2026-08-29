@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import stat
 import sys
+import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any, TextIO
@@ -11,15 +14,58 @@ from ..errors import ICUKitError
 
 
 @contextmanager
-def open_output(output_path: str | None) -> Iterator[TextIO]:
-    """Open output file or return stdout."""
+def open_output(
+    output_path: str | None, should_commit: Callable[[], bool] | None = None
+) -> Iterator[TextIO]:
+    """Open stdout or atomically replace an output file with UTF-8 text.
+
+    A named output is written to a temporary file in the destination directory
+    and moved into place only after the producer completes successfully. Existing
+    files are replaced; missing or unwritable directories fail without changing
+    the destination.
+
+    Args:
+        output_path: Destination path, or ``None`` to yield standard output.
+        should_commit: Optional callback evaluated after output closes. When it
+            returns false, discard the temporary output instead of replacing the
+            destination.
+
+    Yields:
+        A writable text stream.
+    """
     if output_path:
+        directory = os.path.dirname(os.path.abspath(output_path))
         try:
-            f = open(output_path, "w")
+            try:
+                output_mode = stat.S_IMODE(os.stat(output_path).st_mode)
+            except FileNotFoundError:
+                current_umask = os.umask(0)
+                os.umask(current_umask)
+                output_mode = 0o666 & ~current_umask
+            fd, temporary_path = tempfile.mkstemp(prefix=".icukit-", dir=directory)
         except OSError as e:
             raise ICUKitError(f"cannot write {output_path}: {e.strerror}") from e
-        with f:
-            yield f
+        try:
+            os.fchmod(fd, output_mode)
+            f = os.fdopen(fd, "w", encoding="utf-8")
+        except OSError as e:
+            os.close(fd)
+            os.unlink(temporary_path)
+            raise ICUKitError(f"cannot write {output_path}: {e.strerror}") from e
+        try:
+            with f:
+                yield f
+            if should_commit is not None and not should_commit():
+                return
+            try:
+                os.replace(temporary_path, output_path)
+            except OSError as e:
+                raise ICUKitError(f"cannot write {output_path}: {e.strerror}") from e
+        finally:
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
     else:
         yield sys.stdout
 
