@@ -176,15 +176,9 @@ def extract_lib_docs() -> dict[str, Any]:
 
     docs["package_doc"] = get_module_doc(icukit)
 
-    # Discover submodules by looking at icukit package directory
-    # Exclude internal modules (formatters)
+    # Discover public submodules by looking at icukit package directory.
     pkg_path = Path(icukit.__file__).parent
-    exclude = {"formatters"}
-    module_names = sorted(
-        p.stem
-        for p in pkg_path.glob("*.py")
-        if not p.stem.startswith("_") and p.stem not in exclude
-    )
+    module_names = sorted(p.stem for p in pkg_path.glob("*.py") if not p.stem.startswith("_"))
 
     # Put errors at end since it's just reference
     if "errors" in module_names:

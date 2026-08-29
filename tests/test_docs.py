@@ -21,6 +21,22 @@ def test_api_reference_covers_exported_data_and_root_surface():
         assert f"[`{name}`]" in api
 
 
+def test_api_reference_covers_formatters_module():
+    api = API_DOC.read_text()
+
+    assert "## icukit.formatters" in api
+    for name in (
+        "flatten_extended",
+        "format_json",
+        "format_output",
+        "format_simple_list",
+        "format_tsv",
+        "print_output",
+    ):
+        assert f"[`{name}`](#icukitformatters)" in api
+        assert f"### `{name}(" in api
+
+
 def test_documentation_generation_is_idempotent(tmp_path):
     command = [sys.executable, str(ROOT / "docs" / "generate.py"), "--output", str(tmp_path)]
     subprocess.run(command, cwd=ROOT, check=True)

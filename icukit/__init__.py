@@ -239,6 +239,14 @@ from .exceptions import (
     load_exception_inventory,
     merge_retypes,
 )
+from .formatters import (
+    flatten_extended,
+    format_json,
+    format_output,
+    format_simple_list,
+    format_tsv,
+    print_output,
+)
 from .idna import (
     IDNAConverter,
     idna_decode,
@@ -520,6 +528,13 @@ __all__ = [
     # Discover
     "discover_features",
     "search_features",
+    # Output formatting
+    "flatten_extended",
+    "format_json",
+    "format_output",
+    "format_simple_list",
+    "format_tsv",
+    "print_output",
     "get_api_exports",
     "get_api_info",
     "get_cli_commands",
