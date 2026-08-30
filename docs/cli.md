@@ -166,7 +166,30 @@ Examples:
   # Emit one word object per line
   icukit break words --jsonl -t 'Hello, world!'
 
-### `icukit break graphemes` (aliases: chars, g)
+  # Show the standard ICU word rules to start a tailoring from
+  icukit break rules --kind word
+
+  # Segment with a custom RBBI rule file
+  icukit break custom -r my.rules -t 'See Fig. 5 now'
+
+### `icukit break custom` (aliases: cust)
+
+Segment text with a caller-supplied ICU RBBI rule set rather than a locale's standard iterator. Segment types come only from --status-type, since rule statuses are defined by the rule set, not by ICU. Because the rule set determines the boundaries, --provenance adds a rules_sha256 digest of it to the version stamp; the four standard version keys alone do not identify a custom rule set.
+
+**Options:**
+
+- `-r, --rules`: ICU RBBI rule file to segment with
+- `--status-type`: Map numeric rule status N to type name NAME (repeatable)
+- `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--jsonl`: One JSON object per line: one segment per line (a full span object with --spans); takes precedence over --json (default: `False`)
+- `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
+
+### `icukit break graphemes` (aliases: c, chars, g)
 
 **Options:**
 
@@ -199,6 +222,19 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 - `--jsonl`: One JSON object per line: one line segment per line (a full span object with --spans); takes precedence over --json (default: `False`)
+- `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
+
+### `icukit break rules` (aliases: r, rule)
+
+Show ICU's standard root rule source as a tailoring base. Locale dictionary and keyword behavior, including CJK dictionary breaking and lw= line options, is not represented, so recompiling the text may not faithfully clone the locale iterator.
+
+**Options:**
+
+- `-k, --kind`: Iterator kind (default: word) (default: `word`)
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `--jsonl`: One JSON object per line: a single rule-set record; takes precedence over --json (default: `False`)
 - `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break sentences` (aliases: s, sent)
