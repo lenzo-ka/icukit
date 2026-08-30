@@ -84,7 +84,7 @@ Examples:
 
 - `locale`: Locale for bucket labels (default: en_US) (default: `en_US`)
 
-## `icukit bidi`
+## `icukit bidi` (aliases: bi, dir)
 
 Analyze and manipulate bidirectional (mixed LTR/RTL) text.
 
@@ -106,7 +106,7 @@ Examples:
   # List all bidi control characters
   icukit bidi list
 
-### `icukit bidi check` (aliases: c, clean, s, strip)
+### `icukit bidi check` (aliases: c)
 
 **Options:**
 
@@ -137,7 +137,14 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-## `icukit break`
+### `icukit bidi strip` (aliases: clean, s)
+
+**Options:**
+
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+
+## `icukit break` (aliases: br, brk)
 
 Break text into linguistic units using ICU's BreakIterator.
 
@@ -282,7 +289,7 @@ Show ICU's standard root rule source as a tailoring base. Locale dictionary and 
 - `--jsonl`: One JSON object per line: one word per line (a full span object with --spans); takes precedence over --json (default: `False`)
 - `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
-## `icukit calendar`
+## `icukit calendar` (aliases: cal)
 
 Query available calendar systems (Gregorian, Buddhist, Hebrew, Islamic, etc.).
 
@@ -424,7 +431,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
-## `icukit compact`
+## `icukit compact` (aliases: abbrev, cmp)
 
 Format large numbers with locale-appropriate abbreviations.
 
@@ -466,65 +473,7 @@ Examples:
 - `-s, --style`: Format style (default: SHORT) (default: `SHORT`)
 - `--separator`: Separator for multiple numbers (default: tab) (default: `	`)
 
-## `icukit confusable` (aliases: homoglyph, spoof)
-
-Detect visually confusable strings using ICU's SpoofChecker.
-
-Useful for security applications to detect phishing attempts where
-attackers use lookalike characters (e.g., Cyrillic 'а' vs Latin 'a').
-
-Examples:
-  # Check if two strings are confusable
-  icukit spoof compare 'paypal' 'pаypal'
-
-  # Get skeleton form (normalized for comparison)
-  icukit spoof skeleton 'pаypal'
-
-  # Check a string for suspicious characters
-  icukit spoof check 'pаypal'
-
-  # Detailed confusability info
-  icukit spoof info 'paypal' 'pаypal' --json
-
-### `icukit confusable check` (aliases: chk)
-
-**Options:**
-
-- `text`: Text to check
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
-- `-j, --json`: Output in JSON format (default: `False`)
-- `-H, --no-header`: Suppress header in TSV output (default: `False`)
-
-### `icukit confusable compare` (aliases: c, cmp)
-
-**Options:**
-
-- `string1`: First string
-- `string2`: Second string
-
-### `icukit confusable help` (aliases: h)
-
-**Options:**
-
-- `help_command`: Subcommand to show help for
-
-### `icukit confusable info` (aliases: i)
-
-**Options:**
-
-- `string1`: First string
-- `string2`: Second string
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
-- `-j, --json`: Output in JSON format (default: `False`)
-- `-H, --no-header`: Suppress header in TSV output (default: `False`)
-
-### `icukit confusable skeleton` (aliases: s, skel)
-
-**Options:**
-
-- `text`: Text to get skeleton for
-
-## `icukit datetime`
+## `icukit datetime` (aliases: date, dt)
 
 Format dates and times according to locale conventions.
 
@@ -572,6 +521,16 @@ Examples:
   icukit datetime eras --locale en_US
   icukit datetime ampm --locale zh_CN
   icukit datetime symbols --locale ar_SA --json
+
+### `icukit datetime ampm` (aliases: am)
+
+**Options:**
+
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `-c, --calendar`: Calendar system
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
 ### `icukit datetime calendars` (aliases: cal)
 
@@ -665,7 +624,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
-### `icukit datetime symbols` (aliases: am, ampm, sym)
+### `icukit datetime symbols` (aliases: sym)
 
 **Options:**
 
@@ -686,7 +645,7 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-## `icukit detect`
+## `icukit detect` (aliases: rec, recognize)
 
 Recognize typed values in running text. Offsets are half-open Unicode code-point
 indices. The default set covers dates, date intervals, compact numbers, relative
@@ -709,7 +668,7 @@ forest, and downstream consumers perform disambiguation.
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 - `--jsonl`: One JSON object per line (one detection per line) (default: `False`)
 
-## `icukit discover`
+## `icukit discover` (aliases: disc, features)
 
 Discover icukit's available features, API exports, and CLI commands.
 
@@ -730,7 +689,23 @@ Examples:
   # JSON output
   icukit discover all --json
 
-### `icukit discover commands` (aliases: a, all, api, cli, cmds)
+### `icukit discover all` (aliases: a)
+
+**Options:**
+
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit discover api`
+
+**Options:**
+
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit discover cli` (aliases: cmds, commands)
 
 **Options:**
 
@@ -753,7 +728,7 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-## `icukit displayname`
+## `icukit displayname` (aliases: display, dn, name)
 
 Get localized display names for languages, scripts, regions, currencies,
 and locales.
@@ -804,14 +779,7 @@ Examples:
   icukit displayname locale zh_Hans_CN --display de
   # → Chinesisch (Vereinfacht, China)
 
-### `icukit displayname country` (aliases: r, reg, region)
-
-**Options:**
-
-- `code`: ISO 3166-1 alpha-2 region code (e.g., US, JP, DE)
-- `-d, --display`: Display locale (default: en_US) (default: `en_US`)
-
-### `icukit displayname currency` (aliases: c, cur, sym, symbol)
+### `icukit displayname currency` (aliases: c, cur)
 
 **Options:**
 
@@ -838,6 +806,13 @@ Examples:
 - `code`: Locale code (e.g., en_US, zh_Hans_CN)
 - `-d, --display`: Display locale (default: en_US) (default: `en_US`)
 
+### `icukit displayname region` (aliases: country, r, reg)
+
+**Options:**
+
+- `code`: ISO 3166-1 alpha-2 region code (e.g., US, JP, DE)
+- `-d, --display`: Display locale (default: en_US) (default: `en_US`)
+
 ### `icukit displayname script` (aliases: s, scr)
 
 **Options:**
@@ -845,7 +820,14 @@ Examples:
 - `code`: ISO 15924 script code (e.g., Latn, Cyrl, Hans)
 - `-d, --display`: Display locale (default: en_US) (default: `en_US`)
 
-## `icukit duration`
+### `icukit displayname symbol` (aliases: sym)
+
+**Options:**
+
+- `code`: ISO 4217 currency code (e.g., USD, EUR, JPY)
+- `-d, --display`: Display locale (default: en_US) (default: `en_US`)
+
+## `icukit duration` (aliases: dur)
 
 Format time durations with proper locale conventions.
 
@@ -921,7 +903,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
-## `icukit help`
+## `icukit help` (aliases: ?, h)
 
 Show help information for icukit commands
 
@@ -929,7 +911,61 @@ Show help information for icukit commands
 
 - `command`: Command to show help for
 
-## `icukit listfmt`
+## `icukit idna` (aliases: idn, punycode)
+
+Convert between Unicode domain names and ASCII (Punycode) encoding.
+
+Internationalized domain names (IDN) allow non-ASCII characters in
+domain names. IDNA encoding converts them to ASCII-compatible format.
+
+Examples:
+  # Encode Unicode domain to Punycode
+  icukit idna encode 'münchen.de'
+  # Output: xn--mnchen-3ya.de
+
+  # Decode Punycode to Unicode
+  icukit idna decode 'xn--mnchen-3ya.de'
+  # Output: münchen.de
+
+  # Process multiple domains
+  echo -e 'münchen.de\n例え.jp' | icukit idna encode
+
+  # Convert one label rather than a whole name, refusing any input with a dot
+  icukit idna encode --label 'münchen'
+  # Output: xn--mnchen-3ya
+
+  # Machine-readable output: always a list of {input, output}, at any size
+  echo -e 'münchen.de\n例え.jp' | icukit idna encode --json
+
+### `icukit idna decode` (aliases: d, to-unicode, unicode)
+
+**Options:**
+
+- `domain`: ASCII domain to decode (or read from stdin)
+- `--label`: Convert a single label rather than a whole domain; input with a dot is refused (default: `False`)
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+
+### `icukit idna encode` (aliases: ascii, e, to-ascii)
+
+**Options:**
+
+- `domain`: Unicode domain to encode (or read from stdin)
+- `--label`: Convert a single label rather than a whole domain; input with a dot is refused (default: `False`)
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+
+### `icukit idna help` (aliases: h)
+
+**Options:**
+
+- `help_command`: Subcommand to show help for
+
+## `icukit listfmt` (aliases: lf, listformat)
 
 Format lists of items with locale-appropriate conjunctions and separators.
 
@@ -965,7 +1001,7 @@ Examples:
 - `-l, --locale`: Locale for formatting (default: en_US) (default: `en_US`)
 - `--delimiter, -d`: Input delimiter (default: comma) (default: `,`)
 
-## `icukit locale`
+## `icukit locale` (aliases: l, loc)
 
 Parse, validate, and query locale identifiers (language + region + script).
 Format numbers, currency, and percentages according to locale conventions.
@@ -1008,7 +1044,7 @@ Examples:
   icukit locale symbols --locale de_DE
   icukit locale symbols --locale ar_SA --json
 
-### `icukit locale attributes` (aliases: a, attrs)
+### `icukit locale attrs` (aliases: a, attributes)
 
 **Options:**
 
@@ -1041,13 +1077,6 @@ Examples:
 - `-l, --locale`: Locale for comparison (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength
 
-### `icukit locale display` (aliases: n, name)
-
-**Options:**
-
-- `locale`: Locale to get display name for
-- `--in, -i`: Locale for the display name (default: en) (default: `en`)
-
 ### `icukit locale exemplars` (aliases: chars, ex)
 
 **Options:**
@@ -1059,7 +1088,7 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-### `icukit locale expand` (aliases: e, likely)
+### `icukit locale expand` (aliases: e, likely, maximize)
 
 **Options:**
 
@@ -1111,6 +1140,13 @@ Examples:
 
 - `locale`: Full locale to minimize
 
+### `icukit locale name` (aliases: display, n)
+
+**Options:**
+
+- `locale`: Locale to get display name for
+- `--in, -i`: Locale for the display name (default: en) (default: `en`)
+
 ### `icukit locale ordinal` (aliases: ord)
 
 **Options:**
@@ -1161,7 +1197,7 @@ Examples:
 
 - `locale`: Locale string to validate
 
-## `icukit measure`
+## `icukit measure` (aliases: meas, unit)
 
 Format measurements with locale-appropriate unit names.
 
@@ -1214,22 +1250,12 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
-### `icukit measure compat` (aliases: check)
+### `icukit measure check` (aliases: compat)
 
 **Options:**
 
 - `from_unit`: Source unit
 - `to_unit`: Target unit
-- `-j, --json`: Output in JSON format (default: `False`)
-
-### `icukit measure compound` (aliases: seq, sequence)
-
-**Options:**
-
-- `measures`: Comma-separated measures (e.g., '5 foot, 10 inch')
-- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
-- `-w, --width`: Width style (default: WIDE) (default: `WIDE`)
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure convert` (aliases: c, conv)
@@ -1277,6 +1303,16 @@ Examples:
 - `low`: Low value
 - `high`: High value
 - `unit`: Unit name
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `-w, --width`: Width style (default: WIDE) (default: `WIDE`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+
+### `icukit measure sequence` (aliases: compound, seq)
+
+**Options:**
+
+- `measures`: Comma-separated measures (e.g., '5 foot, 10 inch')
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Width style (default: WIDE) (default: `WIDE`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
@@ -1362,7 +1398,7 @@ Examples:
 
 - `help_command`: Subcommand to show help for
 
-## `icukit parse`
+## `icukit parse` (aliases: p)
 
 Parse locale-formatted numbers, currencies, and percentages back to values.
 
@@ -1429,7 +1465,7 @@ Examples:
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--strict`: Strict parsing (no lenient mode) (default: `False`)
 
-## `icukit plural`
+## `icukit plural` (aliases: pl, plr)
 
 Determine which plural category a number falls into for a given locale.
 
@@ -1490,68 +1526,21 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 
-### `icukit plural ordinal` (aliases: get, o, ord, s, select)
+### `icukit plural ordinal` (aliases: o, ord)
 
 **Options:**
 
 - `number`: Number to categorize
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 
-## `icukit punycode` (aliases: idn, idna)
-
-Convert between Unicode domain names and ASCII (Punycode) encoding.
-
-Internationalized domain names (IDN) allow non-ASCII characters in
-domain names. IDNA encoding converts them to ASCII-compatible format.
-
-Examples:
-  # Encode Unicode domain to Punycode
-  icukit idna encode 'münchen.de'
-  # Output: xn--mnchen-3ya.de
-
-  # Decode Punycode to Unicode
-  icukit idna decode 'xn--mnchen-3ya.de'
-  # Output: münchen.de
-
-  # Process multiple domains
-  echo -e 'münchen.de\n例え.jp' | icukit idna encode
-
-  # Convert one label rather than a whole name, refusing any input with a dot
-  icukit idna encode --label 'münchen'
-  # Output: xn--mnchen-3ya
-
-  # Machine-readable output: always a list of {input, output}, at any size
-  echo -e 'münchen.de\n例え.jp' | icukit idna encode --json
-
-### `icukit punycode help` (aliases: h)
+### `icukit plural select` (aliases: get, s)
 
 **Options:**
 
-- `help_command`: Subcommand to show help for
+- `number`: Number to categorize
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 
-### `icukit punycode to-ascii` (aliases: ascii, e, encode)
-
-**Options:**
-
-- `domain`: Unicode domain to encode (or read from stdin)
-- `--label`: Convert a single label rather than a whole domain; input with a dot is refused (default: `False`)
-- `-t, --text`: Process TEXT directly
-- `files`: Process FILE(s)
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
-- `-j, --json`: Output in JSON format (default: `False`)
-
-### `icukit punycode to-unicode` (aliases: d, decode, unicode)
-
-**Options:**
-
-- `domain`: ASCII domain to decode (or read from stdin)
-- `--label`: Convert a single label rather than a whole domain; input with a dot is refused (default: `False`)
-- `-t, --text`: Process TEXT directly
-- `files`: Process FILE(s)
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
-- `-j, --json`: Output in JSON format (default: `False`)
-
-## `icukit regex`
+## `icukit regex` (aliases: re, rx)
 
 Unicode-aware regular expressions with full Unicode support.
 
@@ -1693,7 +1682,7 @@ Common Scripts:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-## `icukit region`
+## `icukit region` (aliases: country, reg)
 
 Query countries, territories, continents, and their relationships.
 
@@ -1757,7 +1746,7 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-## `icukit script`
+## `icukit script` (aliases: sc)
 
 Detect writing systems (scripts) and query script properties.
 
@@ -1857,7 +1846,7 @@ Examples:
   # Search with French locale
   icukit search find cafe -t 'Un café au lait' -l fr_FR -s primary
 
-### `icukit search contains` (aliases: c, cnt, count, has)
+### `icukit search contains` (aliases: has)
 
 **Options:**
 
@@ -1867,7 +1856,30 @@ Examples:
 - `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength (default: tertiary/exact)
 
-### `icukit search first` (aliases: 1, all, f, find)
+### `icukit search count` (aliases: c, cnt)
+
+**Options:**
+
+- `pattern`: Pattern to search for
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
+- `--strength, -s`: Collation strength (default: tertiary/exact)
+
+### `icukit search find` (aliases: all, f)
+
+**Options:**
+
+- `pattern`: Pattern to search for
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
+- `--strength, -s`: Collation strength (default: tertiary/exact)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit search first` (aliases: 1)
 
 **Options:**
 
@@ -1928,7 +1940,65 @@ Examples:
 - `-t, --text`: Process TEXT directly
 - `files`: Files to process (default: stdin)
 
-## `icukit timezone`
+## `icukit spoof` (aliases: confusable, homoglyph)
+
+Detect visually confusable strings using ICU's SpoofChecker.
+
+Useful for security applications to detect phishing attempts where
+attackers use lookalike characters (e.g., Cyrillic 'а' vs Latin 'a').
+
+Examples:
+  # Check if two strings are confusable
+  icukit spoof compare 'paypal' 'pаypal'
+
+  # Get skeleton form (normalized for comparison)
+  icukit spoof skeleton 'pаypal'
+
+  # Check a string for suspicious characters
+  icukit spoof check 'pаypal'
+
+  # Detailed confusability info
+  icukit spoof info 'paypal' 'pаypal' --json
+
+### `icukit spoof check` (aliases: chk)
+
+**Options:**
+
+- `text`: Text to check
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit spoof compare` (aliases: c, cmp)
+
+**Options:**
+
+- `string1`: First string
+- `string2`: Second string
+
+### `icukit spoof help` (aliases: h)
+
+**Options:**
+
+- `help_command`: Subcommand to show help for
+
+### `icukit spoof info` (aliases: i)
+
+**Options:**
+
+- `string1`: First string
+- `string2`: Second string
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit spoof skeleton` (aliases: s, skel)
+
+**Options:**
+
+- `text`: Text to get skeleton for
+
+## `icukit timezone` (aliases: time, tz)
 
 Query timezone data including offsets, DST rules, and display names.
 
@@ -1945,9 +2015,10 @@ Examples:
   icukit tz info Europe/London --json
 
   # Get equivalent timezone IDs
+  icukit timezone equivalent America/New_York
   icukit tz equiv America/New_York
 
-### `icukit timezone equiv` (aliases: e, eq)
+### `icukit timezone equivalent` (aliases: e, eq, equiv)
 
 **Options:**
 
@@ -1982,7 +2053,7 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-## `icukit transliterate`
+## `icukit transliterate` (aliases: tr, trans)
 
 Transliterate text using ICU transliterators or custom rules.
 
@@ -2006,33 +2077,22 @@ Examples:
   # Remove accents using inline script
   echo 'Café' | icukit transliterate script 'NFD; [:Nonspacing Mark:] Remove; NFC'
 
-### `icukit transliterate custom` (aliases: r, rules)
+### `icukit transliterate from` (aliases: f, reverse)
 
 **Options:**
 
-- `rules_file`: File containing transliteration rules
+- `transliterators`: Transliterator name(s) for reverse
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-n, --name`: Name for custom transliterator (default: `custom`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
 ### `icukit transliterate help` (aliases: h)
 
 **Options:**
 
 - `help_command`: Subcommand to show help for
-
-### `icukit transliterate inline` (aliases: expr, s, script)
-
-**Options:**
-
-- `expression`: ICU transform expression (e.g., "NFD; [:Nonspacing Mark:] Remove; NFC")
-- `-t, --text`: Process TEXT directly
-- `files`: Process FILE(s)
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
-- `-j, --json`: Output in JSON format (default: `False`)
-- `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
 ### `icukit transliterate list` (aliases: l, ls)
 
@@ -2058,18 +2118,29 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-### `icukit transliterate reverse` (aliases: f, from)
+### `icukit transliterate rules` (aliases: custom, r)
 
 **Options:**
 
-- `transliterators`: Transliterator name(s) for reverse
+- `rules_file`: File containing transliteration rules
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-n, --name`: Name for custom transliterator (default: `custom`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+
+### `icukit transliterate script` (aliases: expr, inline, s)
+
+**Options:**
+
+- `expression`: ICU transform expression (e.g., "NFD; [:Nonspacing Mark:] Remove; NFC")
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-## `icukit unicode`
+## `icukit unicode` (aliases: char, u, uni)
 
 Normalize Unicode text and query character properties.
 
@@ -2132,30 +2203,11 @@ Examples:
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
-### `icukit unicode cat-chars` (aliases: category)
+### `icukit unicode category` (aliases: cat-chars)
 
 **Options:**
 
 - `code`: Unicode category code (e.g., 'Lu', 'Nd')
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
-- `-j, --json`: Output in JSON format (default: `False`)
-- `-H, --no-header`: Suppress header in TSV output (default: `False`)
-
-### `icukit unicode categories` (aliases: cat, cats, l, list, ls)
-
-**Options:**
-
-- `type`: What to list (default: categories) (default: `categories`)
-- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
-- `-j, --json`: Output in JSON format (default: `False`)
-- `-H, --no-header`: Suppress header in TSV output (default: `False`)
-
-### `icukit unicode charname` (aliases: char, i, info, name)
-
-**Options:**
-
-- `-t, --text`: Process TEXT directly
-- `files`: Process FILE(s)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
@@ -2168,7 +2220,7 @@ Examples:
 - `files`: Process FILE(s)
 - `-f, --form`: Normalization form to check (default: NFC) (default: `NFC`)
 
-### `icukit unicode convert` (aliases: e, enc, encode, escape)
+### `icukit unicode encode` (aliases: convert, e, enc, escape)
 
 **Options:**
 
@@ -2181,6 +2233,35 @@ Examples:
 **Options:**
 
 - `help_command`: Subcommand to show help for
+
+### `icukit unicode info` (aliases: char, i)
+
+**Options:**
+
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit unicode list` (aliases: cat, categories, cats, l, ls)
+
+**Options:**
+
+- `type`: What to list (default: categories) (default: `categories`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit unicode name` (aliases: charname)
+
+**Options:**
+
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
+- `-H, --no-header`: Suppress header in TSV output (default: `False`)
 
 ### `icukit unicode normalize` (aliases: n, norm)
 

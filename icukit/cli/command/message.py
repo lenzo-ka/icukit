@@ -18,7 +18,6 @@ class MessageCommand(SubcommandBase):
         """Add the message command with its subcommands."""
         parser = subparsers.add_parser(
             "message",
-            aliases=["msg"],
             help="Format localized messages with ICU MessageFormat",
             description="""
 Format messages using ICU MessageFormat syntax.

@@ -151,7 +151,7 @@ Examples:
                     "configure": cls._configure_parse,
                 },
                 "expand": {
-                    "aliases": ["e", "likely"],
+                    "aliases": ["e", "likely", "maximize"],
                     "help": "Add likely subtags to locale",
                     "func": cls.cmd_expand,
                     "configure": cls._configure_expand,

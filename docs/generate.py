@@ -261,6 +261,17 @@ def extract_lib_docs() -> dict[str, Any]:
     return docs
 
 
+def canonical_subcommand_name(subparser: argparse.ArgumentParser, names: list[str]) -> str:
+    """Return the name a subparser was created with, given every name it answers to.
+
+    ``add_parser`` records the canonical name in the subparser's ``prog`` and
+    registers it before any alias, so either source identifies it. Aliases are
+    never canonical, however long they are.
+    """
+    from_prog = subparser.prog.split()[-1] if subparser.prog else ""
+    return from_prog if from_prog in names else names[0]
+
+
 def extract_parser_info(parser: argparse.ArgumentParser, prefix: str = "") -> dict[str, Any]:
     """Recursively extract argparse parser information."""
     info = {
@@ -274,11 +285,16 @@ def extract_parser_info(parser: argparse.ArgumentParser, prefix: str = "") -> di
     # Extract arguments
     for action in parser._actions:
         if isinstance(action, argparse._SubParsersAction):
-            # Handle subparsers
+            # Group the names by the parser they share: one entry per command,
+            # keyed by its canonical name, carrying its aliases alongside.
+            by_parser: dict[int, tuple[argparse.ArgumentParser, list[str]]] = {}
             for name, subparser in action.choices.items():
-                # Skip aliases (they point to the same parser)
-                if hasattr(action, "_parser_class"):
-                    info["subcommands"][name] = extract_parser_info(subparser, f"{prefix}{name} ")
+                by_parser.setdefault(id(subparser), (subparser, []))[1].append(name)
+            for subparser, names in by_parser.values():
+                canonical = canonical_subcommand_name(subparser, names)
+                subinfo = extract_parser_info(subparser, f"{prefix}{canonical} ")
+                subinfo["aliases"] = sorted(name for name in names if name != canonical)
+                info["subcommands"][canonical] = subinfo
         elif isinstance(action, argparse._HelpAction):
             continue  # Skip help action
         elif isinstance(action, argparse._VersionAction):
@@ -419,38 +435,12 @@ def generate_cli_markdown(cli_docs: dict[str, Any], level: int = 1, parent_cmd: 
         if level == 1:
             lines.extend(["## Commands", ""])
 
-        # Group by description + arguments signature to identify aliases
-        # (argparse creates separate objects for aliases but they have same content)
-        def subcmd_signature(subcmd):
-            args_sig = tuple((a["name"], a["help"]) for a in subcmd.get("arguments", []))
-            return (subcmd.get("description", ""), args_sig)
-
-        sig_to_names: dict[tuple, list[str]] = {}
-        for name, subcmd in cli_docs["subcommands"].items():
-            sig = subcmd_signature(subcmd)
-            sig_to_names.setdefault(sig, []).append(name)
-
-        # Sort and process each unique command group
-        processed = []
-        seen_sigs = set()
-        for name in sorted(cli_docs["subcommands"].keys()):
-            subcmd = cli_docs["subcommands"][name]
-            sig = subcmd_signature(subcmd)
-            if sig in seen_sigs:
-                continue
-            seen_sigs.add(sig)
-
-            names = sig_to_names[sig]
-            # Primary name: longest name (descriptive), ties broken alphabetically
-            primary = sorted(names, key=lambda x: (-len(x), x))[0]
-            aliases = sorted([n for n in names if n != primary])
-            processed.append((primary, aliases, subcmd))
-
-        # Sort by primary name
-        processed.sort(key=lambda x: x[0])
-
-        for primary, aliases, subcmd in processed:
-            full_cmd = f"{parent_cmd} {primary}".strip()
+        # Each entry is already keyed by its canonical name and carries its own
+        # aliases, so no name is ever promoted over the one it aliases.
+        for canonical in sorted(cli_docs["subcommands"]):
+            subcmd = cli_docs["subcommands"][canonical]
+            aliases = subcmd.get("aliases", [])
+            full_cmd = f"{parent_cmd} {canonical}".strip()
             heading_level = "#" * (level + 1)
             heading = f"{heading_level} `icukit {full_cmd}`"
             if aliases:
