@@ -14,6 +14,23 @@
 - `print_record`, a formatter for a command that yields exactly one thing by
   nature — one unit's information, one parse result, one comparison. It renders
   a bare JSON object, or a single TSV row.
+- `icukit.datetime.list_pattern_symbols()`, the catalog of date/time pattern
+  field symbols with a name and an example for each. The catalog previously
+  lived in the `datetime patterns` command module, where nothing but that one
+  command could read it; it is library knowledge, and the command is now a
+  client of it. `PATTERNS`, already re-exported by the package, is now declared
+  in `icukit.datetime.__all__` alongside it.
+- Command-line routes for four library capabilities that had none:
+  - `collate key` emits the ICU collation sort key for each input line as
+    lowercase hex, one per line, or as a JSON list of `{text, key}` at any size.
+    Hex preserves byte order, so sorting the keys reproduces `collate sort`.
+  - `idna encode --label` and `idna decode --label` convert a single domain
+    label rather than a whole name, refusing any input containing a dot. Without
+    the option the behavior is unchanged.
+  - `measure abbrev UNIT` reports a unit's abbreviation in a locale, with no
+    value attached — `measure abbrev kilometer -l ru_RU` gives `км`.
+  - `locale format --type scientific` joins `number`, `currency`, and `percent`,
+    reaching ICU's scientific instance.
 
 ### Changed
 

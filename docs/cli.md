@@ -355,6 +355,9 @@ Examples:
   # Compare two strings
   icukit collate compare 'cafe' 'cafe'
 
+  # Emit the sort key for each line, as lowercase hex
+  echo -e 'cafe\nCafe' | icukit collate key
+
   # List collation types
   icukit collate list types
 
@@ -386,6 +389,17 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+
+### `icukit collate key` (aliases: k)
+
+**Options:**
+
+- `-l, --locale`: Locale for collation rules (default: en_US) (default: `en_US`)
+- `--strength, -s`: Collation strength (default: tertiary)
+- `-t, --text`: Process TEXT directly
+- `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit collate list` (aliases: l, ls)
 
@@ -1178,6 +1192,9 @@ Examples:
   icukit measure info kilometer
   icukit measure check km mi
 
+  # The locale's abbreviation for a unit, with no value attached
+  icukit measure abbrev kilometer --locale fr_FR
+
   # Format a range
   icukit measure range 5 10 kilometer
 
@@ -1187,6 +1204,15 @@ Examples:
 
   # Machine-readable output (every subcommand takes --json)
   icukit measure convert 10 km mi --json
+
+### `icukit measure abbrev` (aliases: a)
+
+**Options:**
+
+- `unit`: Unit name or abbreviation
+- `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure compat` (aliases: check)
 
@@ -1490,6 +1516,10 @@ Examples:
   # Process multiple domains
   echo -e 'münchen.de\n例え.jp' | icukit idna encode
 
+  # Convert one label rather than a whole name, refusing any input with a dot
+  icukit idna encode --label 'münchen'
+  # Output: xn--mnchen-3ya
+
   # Machine-readable output: always a list of {input, output}, at any size
   echo -e 'münchen.de\n例え.jp' | icukit idna encode --json
 
@@ -1504,6 +1534,7 @@ Examples:
 **Options:**
 
 - `domain`: Unicode domain to encode (or read from stdin)
+- `--label`: Convert a single label rather than a whole domain; input with a dot is refused (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
@@ -1514,6 +1545,7 @@ Examples:
 **Options:**
 
 - `domain`: ASCII domain to decode (or read from stdin)
+- `--label`: Convert a single label rather than a whole domain; input with a dot is refused (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)

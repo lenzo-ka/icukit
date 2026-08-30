@@ -129,6 +129,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`STYLE_SHORT`](#icukitdatetime) — constant, `icukit.datetime`
 - [`STYLE_NONE`](#icukitdatetime) — constant, `icukit.datetime`
 - [`PATTERNS`](#icukitdatetime) — constant, `icukit.datetime`
+- [`list_pattern_symbols`](#icukitdatetime) — function, `icukit.datetime`
 - [`WIDTH_ABBREVIATED`](#icukitdatetime) — constant, `icukit.datetime`
 - [`get_month_names`](#icukitdatetime) — function, `icukit.datetime`
 - [`get_weekday_names`](#icukitdatetime) — function, `icukit.datetime`
@@ -1677,6 +1678,12 @@ Example:
 
 ### Constants and type aliases
 
+#### `PATTERNS` (constant)
+
+`{'EU_DATE': 'dd/MM/yyyy', 'ISO_DATE': 'yyyy-MM-dd', 'ISO_DATETIME': "yyyy-MM-dd'T'HH:mm:ss", 'ISO_TIME': 'HH:mm:ss', 'LONG_DATE': 'EEEE, MMMM d, yyyy', 'TIME_12H': 'h:mm a', 'TIME_24H': 'HH:mm', 'US_DATE': 'MM/dd/yyyy'}`
+
+Common named patterns
+
 #### `SECONDS_PER_DAY` (constant)
 
 `86400`
@@ -1972,6 +1979,24 @@ Example:
     {'names': ['Sonntag', 'Montag', ...], 'first_day_index': 1, 'first_day': 'Montag'}
     >>> get_weekday_names("ja_JP", WIDTH_ABBREVIATED)
     {'names': ['日', '月', '火', ...], 'first_day_index': 0, 'first_day': '日'}
+
+### `list_pattern_symbols() -> 'list[dict[str, str]]'`
+
+List the date/time pattern symbols, with a name and an example for each.
+
+These are the field symbols accepted in a custom ``pattern`` by
+:meth:`DateTimeFormatter.format` and by the named patterns in ``PATTERNS``.
+
+Returns:
+    List of dicts with keys ``symbol``, ``name``, and ``example``, in reference
+    order. Each call returns fresh dicts, so a caller may modify the result.
+
+Example:
+    >>> symbols = list_pattern_symbols()
+    >>> symbols[0]['symbol']
+    'y'
+    >>> next(s['name'] for s in symbols if s['symbol'] == 'G')
+    'Era'
 
 ### `parse_datetime(text: 'str', locale: 'str' = 'en_US', calendar: 'str | None' = None, pattern: 'str | None' = None) -> 'datetime'`
 

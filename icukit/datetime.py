@@ -66,6 +66,9 @@ __all__ = [
     "get_era_names",
     "get_am_pm_strings",
     "get_date_symbols",
+    # Pattern catalogs
+    "PATTERNS",
+    "list_pattern_symbols",
     # Duration constants
     "SECONDS_PER_MINUTE",
     "SECONDS_PER_HOUR",
@@ -109,6 +112,52 @@ PATTERNS = {
     "TIME_12H": "h:mm a",
     "TIME_24H": "HH:mm",
 }
+
+# The pattern symbols icukit documents, in reference order: symbol -> (name, example).
+# ICU exposes no enumeration of its pattern-symbol vocabulary, so this catalog is
+# authored here, next to PATTERNS, rather than reflected out of the library.
+_PATTERN_SYMBOL_DESCRIPTIONS: dict[str, tuple[str, str]] = {
+    "y": ("Year", "yyyy=2024, yy=24"),
+    "M": ("Month", "M=1, MM=01, MMM=Jan, MMMM=January"),
+    "d": ("Day of month", "d=1, dd=01"),
+    "E": ("Day of week", "E=Mon, EEEE=Monday"),
+    "h": ("Hour (1-12)", "h=3, hh=03"),
+    "H": ("Hour (0-23)", "H=15, HH=15"),
+    "m": ("Minute", "m=5, mm=05"),
+    "s": ("Second", "s=9, ss=09"),
+    "S": ("Millisecond", "SSS=123"),
+    "a": ("AM/PM", "AM, PM"),
+    "z": ("Time zone", "z=PST, zzzz=Pacific Standard Time"),
+    "Z": ("Zone offset", "-0800"),
+    "G": ("Era", "AD, BC"),
+    "Q": ("Quarter", "Q=2, QQ=02, QQQ=Q2"),
+    "w": ("Week of year", "1-52"),
+    "D": ("Day of year", "1-366"),
+    "'": ("Literal text", "'at' -> at"),
+}
+
+
+def list_pattern_symbols() -> list[dict[str, str]]:
+    """List the date/time pattern symbols, with a name and an example for each.
+
+    These are the field symbols accepted in a custom ``pattern`` by
+    :meth:`DateTimeFormatter.format` and by the named patterns in ``PATTERNS``.
+
+    Returns:
+        List of dicts with keys ``symbol``, ``name``, and ``example``, in reference
+        order. Each call returns fresh dicts, so a caller may modify the result.
+
+    Example:
+        >>> symbols = list_pattern_symbols()
+        >>> symbols[0]['symbol']
+        'y'
+        >>> next(s['name'] for s in symbols if s['symbol'] == 'G')
+        'Era'
+    """
+    return [
+        {"symbol": symbol, "name": name, "example": example}
+        for symbol, (name, example) in _PATTERN_SYMBOL_DESCRIPTIONS.items()
+    ]
 
 
 class DateTimeFormatter:

@@ -6,7 +6,7 @@ import argparse
 
 from ...errors import IDNAError
 from ...formatters import print_output
-from ...idna import idna_decode, idna_encode
+from ...idna import idna_decode, idna_decode_label, idna_encode, idna_encode_label
 from ..subcommand_base import SubcommandBase, handles_errors
 
 
@@ -38,6 +38,10 @@ Examples:
   # Process multiple domains
   echo -e 'münchen.de\\n例え.jp' | icukit idna encode
 
+  # Convert one label rather than a whole name, refusing any input with a dot
+  icukit idna encode --label 'münchen'
+  # Output: xn--mnchen-3ya
+
   # Machine-readable output: always a list of {input, output}, at any size
   echo -e 'münchen.de\\n例え.jp' | icukit idna encode --json
 """,
@@ -66,6 +70,15 @@ Examples:
         return parser
 
     @classmethod
+    def _add_label_option(cls, parser):
+        """Add --label, which converts one label instead of a whole name."""
+        parser.add_argument(
+            "--label",
+            action="store_true",
+            help="Convert a single label rather than a whole domain; input with a dot is refused",
+        )
+
+    @classmethod
     def _configure_encode(cls, parser):
         """Configure encode subcommand."""
         parser.add_argument(
@@ -73,6 +86,7 @@ Examples:
             nargs="?",
             help="Unicode domain to encode (or read from stdin)",
         )
+        cls._add_label_option(parser)
         cls._add_input_options(parser)
         cls._add_output_options(parser, include_header=False)
 
@@ -84,6 +98,7 @@ Examples:
             nargs="?",
             help="ASCII domain to decode (or read from stdin)",
         )
+        cls._add_label_option(parser)
         cls._add_input_options(parser)
         cls._add_output_options(parser, include_header=False)
 
@@ -118,10 +133,12 @@ Examples:
     @handles_errors(IDNAError)
     def cmd_encode(cls, args):
         """Encode Unicode domain to ASCII."""
-        return cls._convert_domains(args, idna_encode)
+        label = getattr(args, "label", False)
+        return cls._convert_domains(args, idna_encode_label if label else idna_encode)
 
     @classmethod
     @handles_errors(IDNAError)
     def cmd_decode(cls, args):
         """Decode ASCII domain to Unicode."""
-        return cls._convert_domains(args, idna_decode)
+        label = getattr(args, "label", False)
+        return cls._convert_domains(args, idna_decode_label if label else idna_decode)
