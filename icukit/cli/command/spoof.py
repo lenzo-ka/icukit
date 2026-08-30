@@ -128,15 +128,18 @@ Examples:
         else:
             if result["is_suspicious"]:
                 print("suspicious")
-                issues = []
-                if result["mixed_script"]:
-                    issues.append("mixed_script")
-                if result["whole_script"]:
-                    issues.append("whole_script")
-                if result["invisible"]:
-                    issues.append("invisible")
-                if result["mixed_numbers"]:
-                    issues.append("mixed_numbers")
+                # Read off the record rather than listed by hand. The list left
+                # out `restriction_level`, which is the check that actually fires
+                # for a mixed-script identifier, so the commonest suspicious
+                # string printed "suspicious" and then named no issue at all.
+                # Deriving it also means a check added to check_string arrives
+                # here without a second edit. Every key but the raw bitmask and
+                # the summary is one named check.
+                issues = [
+                    name
+                    for name, fired in result.items()
+                    if name not in ("flags", "is_suspicious") and fired
+                ]
                 if issues:
                     print(f"issues: {', '.join(issues)}")
             else:

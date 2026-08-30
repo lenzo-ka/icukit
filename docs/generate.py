@@ -97,9 +97,17 @@ def get_source_assignments(module) -> dict[str, dict[str, str]]:
             ):
                 doc = next_node.value.value
         if not doc and node.lineno > 1:
-            previous = lines[node.lineno - 2].strip()
-            if previous.startswith("#"):
-                doc = previous.removeprefix("#").strip()
+            # The whole contiguous comment block, not just its last line. Taking
+            # one line published the tail of a sentence as though it were the
+            # documentation -- `DEFAULT_FAMILIES` was described in the reference
+            # as "inverter. Abbreviations use their typed lexicon." -- and the
+            # truncation was invisible, because a fragment still reads as prose.
+            block = []
+            cursor = node.lineno - 2
+            while cursor >= 0 and lines[cursor].strip().startswith("#"):
+                block.insert(0, lines[cursor].strip().removeprefix("#").strip())
+                cursor -= 1
+            doc = "\n".join(block).strip()
 
         annotation = node.annotation if isinstance(node, ast.AnnAssign) else None
         for name in names:

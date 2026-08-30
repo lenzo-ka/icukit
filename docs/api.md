@@ -2872,6 +2872,7 @@ expansion is intentionally not an invertible formatter operation.
 
 `(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
+note: A measure family belongs here once its ICU surfaces have an introspective
 inverter. Abbreviations use their typed lexicon.
 
 #### `RELATIVE_DATE_FAMILY` (constant)
@@ -5535,6 +5536,14 @@ This is additive: :func:`~icukit.detectors.detect` is unchanged; resolution is a
 
 `1.0`
 
+Margin below which the top two covers are reported as a contest rather than a winner.
+
+A float, and the parameters taking it are annotated float. Weights are integral, so a
+threshold that separates one margin from the next is only expressible as a fraction, and
+narrowing the signature to ``int`` would tell a caller that such a threshold is out of
+bounds when it is the only way to ask the question.
+
+
 ### class `Resolution`
 
 The weighed reading of a universe of detections.
@@ -5548,14 +5557,14 @@ refusal threshold, meaning the resolver declines to commit between them.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `resolve(detections: 'list[ValueDetection] | tuple[ValueDetection, ...]', *, n: 'int' = 8, epsilon: 'int' = 1.0) -> 'Resolution'`
+### `resolve(detections: 'list[ValueDetection] | tuple[ValueDetection, ...]', *, n: 'int' = 8, epsilon: 'float' = 1.0) -> 'Resolution'`
 
 Weigh a universe of (possibly overlapping) detections into a :class:`Resolution`.
 
 Returns the maximum-weight non-overlapping ``best`` sequence, the ``n``-best ordering of
 covers, and an ``ambiguous`` flag when the top two covers are within ``epsilon``.
 
-### `resolve_text(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]', *, n: 'int' = 8, epsilon: 'int' = 1.0) -> 'Resolution'`
+### `resolve_text(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]', *, n: 'int' = 8, epsilon: 'float' = 1.0) -> 'Resolution'`
 
 Run every detector over ``text`` and resolve the deposited universe in one call.
 
@@ -5994,6 +6003,10 @@ Check if two strings are confusable.
 
 Check string for spoofing issues.
 
+Reports the same record as :func:`check_string`, including the caveat that
+``mixed_script`` and ``whole_script`` are pairwise flags a single-string
+check does not set.
+
 #### `get_confusable_type(string1: 'str', string2: 'str') -> 'int'`
 
 Get confusability type between two strings.
@@ -6029,6 +6042,13 @@ Check a string for potential spoofing issues.
 Analyzes the string for mixed scripts, invisible characters,
 and other potential security issues.
 
+This is a check of one string on its own, which is not the same question as
+:func:`are_confusable`. The confusability flags answer "could these two be
+mistaken for each other", and ICU only sets them when it is given a pair, so
+``mixed_script`` and ``whole_script`` stay False here even for a string built
+from lookalike characters. What catches such a string is ``restriction_level``:
+ICU's default identifier profile rejects it for mixing scripts at all.
+
 Args:
     text: String to check.
 
@@ -6036,17 +6056,22 @@ Returns:
     Dict with check results:
     - 'flags': Raw check result flags
     - 'is_suspicious': True if any issues detected
-    - 'mixed_script': Contains mixed scripts
-    - 'restriction_level': Restriction level issue
+    - 'mixed_script': Confusable with another string across scripts, which a
+      single-string check does not determine; see :func:`are_confusable`
+    - 'whole_script': Whole-script confusable, likewise pairwise
+    - 'restriction_level': Fails ICU's identifier restriction level
     - 'invisible': Contains invisible characters
     - 'mixed_numbers': Contains mixed number systems
+    - 'hidden_overlay': Contains a combining mark hidden by the base character
 
 Example:
     >>> result = check_string("pаypal")  # Cyrillic 'а'
     >>> result['is_suspicious']
     True
-    >>> result['mixed_script']
+    >>> result['restriction_level']  # mixes Latin and Cyrillic
     True
+    >>> result['mixed_script']  # pairwise flag, not set by a single-string check
+    False
 
 ### `get_confusable_info(string1: 'str', string2: 'str') -> 'dict[str, Any]'`
 

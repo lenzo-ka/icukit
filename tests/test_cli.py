@@ -158,11 +158,19 @@ class TestTransliterateCommand:
         assert "HELLO" in out
 
     def test_transliterate_json_output(self):
-        """Should output JSON when requested."""
+        """A one-element listing is still a list, and its record is still a record.
+
+        ``--json`` on a listing renders an array at every length, so a filter that
+        matches one transliterator gives an array of one rather than a bare
+        object. Asserting the parsed shape rather than the presence of a brace is
+        the point: a brace appears inside an array too, so the substring test this
+        replaces would have passed whichever shape the command emitted.
+        """
         code, out, err = run_cli("transliterate", "list", "--name", "Latin-Cyrillic", "-j")
         assert code == 0
-        assert "{" in out  # JSON object (single result unwrapped from array)
-        assert "Latin-Cyrillic" in out
+        payload = json.loads(out)
+        assert isinstance(payload, list)
+        assert [record["id"] for record in payload] == ["Latin-Cyrillic"]
 
     def test_transliterate_shortcut(self):
         """Should accept transliterator ID directly without 'name' subcommand."""

@@ -167,6 +167,30 @@ def test_every_registered_alias_is_an_argparse_choice_for_its_own_command():
     assert not misrouted, "; ".join(misrouted)
 
 
+def test_every_argparse_choice_is_a_registered_command_or_one_of_its_aliases():
+    """The other direction: a name argparse answers to that the registry never heard of.
+
+    An alias spelled only at the ``add_parser`` call site resolves exactly and no
+    other way -- the prefix matcher works off the trie, so no prefix of it
+    resolves, and the capture tests above cannot see it either, because they only
+    ever look at names the trie knows. That is a public name outside every
+    invariant that governs public names, which is how the pair of tests can both
+    pass over an alias nobody vetted.
+    """
+    registered = get_all_commands()
+    known = set(registered)
+    for aliases in registered.values():
+        known.update(aliases)
+
+    parser = create_parser()
+    unregistered = sorted(set(_subparsers_action(parser).choices) - known)
+
+    assert not unregistered, (
+        "argparse answers to names the command registry never registered, so no "
+        f"prefix of them resolves and no alias invariant covers them: {unregistered}"
+    )
+
+
 def test_registered_aliases_appear_in_top_level_help():
     result = subprocess.run(
         [sys.executable, "-m", "icukit.cli", "--help"],

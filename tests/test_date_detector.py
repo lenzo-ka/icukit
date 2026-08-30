@@ -175,3 +175,19 @@ def test_standalone_weekday_pattern_is_located_and_captured():
     assert all(capture.end > capture.start for capture in captures)
     assert {capture.name for capture in captures} == {"y", "M", "d", "weekday"}
     assert tuple(name for name, _ in detections[0]["value"].fields) == ("y", "M", "d")
+
+
+def test_date_detector_refuses_a_skeleton_the_locale_cannot_express():
+    """An empty best pattern must refuse, not build a detector that matches nothing.
+
+    A skeleton the locale's generator cannot express yields an empty pattern, which
+    carries no field for the uninvertible-field check to catch. Before this refusal the
+    detector was constructed happily and then returned zero spans for every input,
+    reporting "there are no dates here" where the truth was "I cannot detect this
+    skeleton". The control below is what makes the assertion discriminating: the same
+    call with an expressible skeleton must still build.
+    """
+    with pytest.raises(ValueError, match="produces no pattern"):
+        DateDetector("en_US", "yw")
+
+    assert DateDetector("en_US", "yMMMd").pattern == "MMM d, y"

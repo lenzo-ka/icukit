@@ -446,6 +446,17 @@ class DateDetector:
         self.type = f"date:{skeleton}"
         generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
         self.pattern = generator.getBestPattern(skeleton)
+        # A skeleton this locale's generator cannot express yields an empty pattern,
+        # which carries no field for the check below to find unsupported. Left alone it
+        # builds a detector that matches nothing on every input and never says why, so
+        # "I cannot detect this skeleton" reaches the caller as "there are no dates
+        # here". Refuse it instead, naming the skeleton.
+        if not self.pattern:
+            raise ValueError(
+                f"DateDetector cannot detect skeleton {skeleton!r} in locale "
+                f"{locale!r}: the locale's pattern generator produces no pattern "
+                f"for it, so no date could ever be recognized"
+            )
         self._df = icu.SimpleDateFormat(self.pattern, icu.Locale(locale))
         self._df.setTimeZone(icu.TimeZone.getGMT())
         self._fields = _date_fields(self.pattern)

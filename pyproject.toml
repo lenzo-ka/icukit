@@ -30,6 +30,16 @@ classifiers = [
 # manylinux wheels as well as macOS wheels, so it is the single default
 # backend on every supported platform. Both it and system PyICU provide the
 # same importable `icu` module.
+#
+# The floor is deliberate and stays a floor. The detector conformance golden is
+# recorded against one exact ICU, and the temptation is to cap this dependency so
+# the recorded version can never be overtaken -- but a runtime cap would hold every
+# downstream consumer at our golden's ICU for a reason that is entirely ours, and
+# it would also stop CI from ever meeting a newer ICU, so the golden would go stale
+# with nothing to say so. The version claim is enforced in the test suite instead:
+# tests/test_conformance.py fails the build when the golden does not record the
+# running ICU. A newer ICU reaching CI is meant to turn CI red, and that red is the
+# notice to regenerate the golden.
 dependencies = [
     "icukit-pyicu>=78.3.0",
 ]

@@ -39,16 +39,25 @@ CONFUSABLE_SINGLE_SCRIPT = icu.USpoofChecks.SINGLE_SCRIPT_CONFUSABLE
 CONFUSABLE_MIXED_SCRIPT = icu.USpoofChecks.MIXED_SCRIPT_CONFUSABLE
 CONFUSABLE_WHOLE_SCRIPT = icu.USpoofChecks.WHOLE_SCRIPT_CONFUSABLE
 
-# Check result flags
-_CHECK_SINGLE_SCRIPT_CONFUSABLE = icu.USpoofChecks.SINGLE_SCRIPT_CONFUSABLE
+# Check result flags. Every bit named here is read back out of a `check()` result
+# below; a bit nobody reads is a capability this module does not have, and naming
+# it anyway suggests one it does.
 _CHECK_MIXED_SCRIPT_CONFUSABLE = icu.USpoofChecks.MIXED_SCRIPT_CONFUSABLE
 _CHECK_WHOLE_SCRIPT_CONFUSABLE = icu.USpoofChecks.WHOLE_SCRIPT_CONFUSABLE
-_CHECK_ANY_CASE = icu.USpoofChecks.ANY_CASE
 _CHECK_RESTRICTION_LEVEL = icu.USpoofChecks.RESTRICTION_LEVEL
 _CHECK_INVISIBLE = icu.USpoofChecks.INVISIBLE
-_CHECK_CHAR_LIMIT = icu.USpoofChecks.CHAR_LIMIT
 _CHECK_MIXED_NUMBERS = icu.USpoofChecks.MIXED_NUMBERS
-_CHECK_HIDDEN_OVERLAY = 256  # Not in USpoofChecks? checking...
+
+# ICU sets this bit for a hidden overlay -- a combining mark concealed by the base
+# character's own mark, as in "i" followed by U+0307 COMBINING DOT ABOVE, which
+# renders as an ordinary dotted i. ICU's default check reports it, so it already
+# reached `is_suspicious` with no field to explain which check fired.
+#
+# It is the one flag whose name PyICU's USpoofChecks does not carry, so it cannot
+# be read off the binding the way the others are. The literal is the fallback, not
+# the source, and it is held to ICU's own answer by a witness in tests/test_spoof.py
+# rather than by trust.
+_CHECK_HIDDEN_OVERLAY = getattr(icu.USpoofChecks, "HIDDEN_OVERLAY", 0x100)
 
 
 def are_confusable(string1: str, string2: str) -> bool:
@@ -140,6 +149,13 @@ def check_string(text: str) -> dict[str, Any]:
     Analyzes the string for mixed scripts, invisible characters,
     and other potential security issues.
 
+    This is a check of one string on its own, which is not the same question as
+    :func:`are_confusable`. The confusability flags answer "could these two be
+    mistaken for each other", and ICU only sets them when it is given a pair, so
+    ``mixed_script`` and ``whole_script`` stay False here even for a string built
+    from lookalike characters. What catches such a string is ``restriction_level``:
+    ICU's default identifier profile rejects it for mixing scripts at all.
+
     Args:
         text: String to check.
 
@@ -147,17 +163,22 @@ def check_string(text: str) -> dict[str, Any]:
         Dict with check results:
         - 'flags': Raw check result flags
         - 'is_suspicious': True if any issues detected
-        - 'mixed_script': Contains mixed scripts
-        - 'restriction_level': Restriction level issue
+        - 'mixed_script': Confusable with another string across scripts, which a
+          single-string check does not determine; see :func:`are_confusable`
+        - 'whole_script': Whole-script confusable, likewise pairwise
+        - 'restriction_level': Fails ICU's identifier restriction level
         - 'invisible': Contains invisible characters
         - 'mixed_numbers': Contains mixed number systems
+        - 'hidden_overlay': Contains a combining mark hidden by the base character
 
     Example:
         >>> result = check_string("pаypal")  # Cyrillic 'а'
         >>> result['is_suspicious']
         True
-        >>> result['mixed_script']
+        >>> result['restriction_level']  # mixes Latin and Cyrillic
         True
+        >>> result['mixed_script']  # pairwise flag, not set by a single-string check
+        False
     """
     try:
         checker = icu.SpoofChecker()
@@ -171,6 +192,7 @@ def check_string(text: str) -> dict[str, Any]:
             "restriction_level": bool(flags & _CHECK_RESTRICTION_LEVEL),
             "invisible": bool(flags & _CHECK_INVISIBLE),
             "mixed_numbers": bool(flags & _CHECK_MIXED_NUMBERS),
+            "hidden_overlay": bool(flags & _CHECK_HIDDEN_OVERLAY),
         }
     except icu.ICUError as e:
         raise SpoofError(f"Failed to check string: {e}") from e
@@ -267,7 +289,12 @@ class SpoofChecker:
             raise SpoofError(f"Failed to get skeleton: {e}") from e
 
     def check(self, text: str) -> dict[str, Any]:
-        """Check string for spoofing issues."""
+        """Check string for spoofing issues.
+
+        Reports the same record as :func:`check_string`, including the caveat that
+        ``mixed_script`` and ``whole_script`` are pairwise flags a single-string
+        check does not set.
+        """
         try:
             flags = self._checker.check(text)
             return {
@@ -278,6 +305,7 @@ class SpoofChecker:
                 "restriction_level": bool(flags & _CHECK_RESTRICTION_LEVEL),
                 "invisible": bool(flags & _CHECK_INVISIBLE),
                 "mixed_numbers": bool(flags & _CHECK_MIXED_NUMBERS),
+                "hidden_overlay": bool(flags & _CHECK_HIDDEN_OVERLAY),
             }
         except icu.ICUError as e:
             raise SpoofError(f"Failed to check string: {e}") from e
