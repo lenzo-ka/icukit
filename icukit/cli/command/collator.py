@@ -13,6 +13,7 @@ from ...collator import (
     STRENGTH_TERTIARY,
     compare_strings,
     get_collator_info,
+    get_sort_key,
     list_collation_types,
     sort_strings,
 )
@@ -57,6 +58,9 @@ Examples:
   # Compare two strings
   icukit collate compare 'cafe' 'cafe'
 
+  # Emit the sort key for each line, as lowercase hex
+  echo -e 'cafe\\nCafe' | icukit collate key
+
   # List collation types
   icukit collate list types
 
@@ -80,6 +84,12 @@ Examples:
                     "help": "Compare two strings",
                     "func": cls.cmd_compare,
                     "configure": cls._configure_compare,
+                },
+                "key": {
+                    "aliases": ["k"],
+                    "help": "Emit the collation sort key for each input line",
+                    "func": cls.cmd_key,
+                    "configure": cls._configure_key,
                 },
                 "info": {
                     "aliases": ["i"],
@@ -148,6 +158,19 @@ Examples:
             help="Collation strength",
         )
         cls._add_json_option(parser)
+
+    @classmethod
+    def _configure_key(cls, parser):
+        """Configure key subcommand."""
+        cls._add_locale_option(parser, help="Locale for collation rules (default: en_US)")
+        parser.add_argument(
+            "--strength",
+            "-s",
+            choices=["primary", "secondary", "tertiary", "quaternary", "identical"],
+            help="Collation strength (default: tertiary)",
+        )
+        cls._add_input_options(parser)
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_info(cls, parser):
@@ -250,6 +273,30 @@ Examples:
             else:
                 print(f'"{args.string_a}" {relation} "{args.string_b}"')
             return cls.COMPARE_STATUS[relation]
+        except CollatorError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    @classmethod
+    def cmd_key(cls, args):
+        """Emit the collation sort key for each input line."""
+        as_json = getattr(args, "json", False)
+        try:
+            lines = cls._read_lines(args)
+            records = [
+                {
+                    "text": line,
+                    "key": get_sort_key(line, args.locale, strength=args.strength).hex(),
+                }
+                for line in lines
+            ]
+
+            if as_json:
+                print_output(records, as_json=True)
+            else:
+                for record in records:
+                    print(record["key"])
+            return 0
         except CollatorError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1

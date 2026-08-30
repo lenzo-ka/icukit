@@ -349,3 +349,181 @@ def test_datetime_patterns_human_output_is_unchanged():
     assert stdout.startswith("Pattern Symbols:\n\n")
     assert "  y   Year            yyyy=2024, yy=24\n" in stdout
     assert "\nNamed Patterns:\n\n" in stdout
+
+
+# ---------------------------------------------------------------------------
+# collate key: one key per input line, so a list at every size
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("input_text", "count"),
+    [("", 0), ("cafe\n", 1), ("cafe\ncafé\nCafe\n", 3)],
+)
+def test_collate_key_json_is_a_list_at_every_size(input_text, count):
+    payload = json_stdout("collate", "key", "--json", input_text=input_text)
+    assert isinstance(payload, list)
+    assert len(payload) == count
+    for record in payload:
+        assert set(record) == {"text", "key"}
+
+
+def test_collate_key_json_records_pair_each_line_with_its_key():
+    assert json_stdout("collate", "key", "--json", "-t", "cafe") == [
+        {"text": "cafe", "key": "2f2b35330108010800"}
+    ]
+
+
+def test_collate_key_human_output_is_one_hex_key_per_line():
+    """The plain rendering is the ``key`` field of each JSON record, in order."""
+    keys = [record["key"] for record in json_stdout("collate", "key", "--json", "-t", "b\na")]
+    assert run_cli("collate", "key", "-t", "b\na").stdout == "".join(f"{key}\n" for key in keys)
+
+
+@pytest.mark.parametrize(
+    ("locale", "lines", "expected"),
+    [
+        # German files ö under o, while the UTF-8 bytes put it after z.
+        ("de_DE", "z\nö\no\n", ["o", "ö", "z"]),
+        # Collation orders a before B; the code points order B before a.
+        ("en_US", "B\na\n", ["a", "B"]),
+    ],
+)
+def test_collate_keys_sort_into_collation_order(locale, lines, expected):
+    """The key earns its name: sorting the hex reproduces ``collate sort``.
+
+    Both cases are chosen where collation order and UTF-8 byte order disagree, so
+    the assertion fails for any key that is merely an encoding of the text.
+    """
+    keys = run_cli("collate", "key", "-l", locale, input_text=lines).stdout.split()
+    ordered = [text for _, text in sorted(zip(keys, lines.split(), strict=True))]
+    assert ordered == run_cli("collate", "sort", "-l", locale, input_text=lines).stdout.split()
+    assert ordered == expected
+    assert sorted(lines.split()) != expected, "input no longer discriminates byte order"
+
+
+def test_collate_key_honors_strength():
+    """At primary strength the case and accent variants collapse to one key."""
+    payload = json_stdout(
+        "collate", "key", "--strength", "primary", "--json", "-t", "cafe\ncafé\nCAFE"
+    )
+    assert len({record["key"] for record in payload}) == 1
+    tertiary = json_stdout("collate", "key", "--json", "-t", "cafe\ncafé\nCAFE")
+    assert len({record["key"] for record in tertiary}) == 3
+
+
+# ---------------------------------------------------------------------------
+# idna --label: the same batch shape, over a stricter conversion
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("subcommand", ["encode", "decode"])
+@pytest.mark.parametrize(
+    ("input_text", "count"),
+    [("", 0), ("xn--mnchen-3ya\n", 1), ("xn--mnchen-3ya\nxn--r8jz45g\n", 2)],
+)
+def test_idna_label_json_is_a_list_at_every_size(subcommand, input_text, count):
+    payload = json_stdout("idna", subcommand, "--label", "--json", input_text=input_text)
+    assert isinstance(payload, list)
+    assert len(payload) == count
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "given", "expected"),
+    [
+        ("encode", "münchen", "xn--mnchen-3ya"),
+        ("decode", "xn--mnchen-3ya", "münchen"),
+    ],
+)
+def test_idna_label_converts_a_bare_label(subcommand, given, expected):
+    result = run_cli("idna", subcommand, "--label", given)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"{expected}\n"
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "given"),
+    [
+        ("encode", "münchen.de"),
+        ("decode", "xn--mnchen-3ya.de"),
+    ],
+)
+def test_idna_label_refuses_a_dotted_name(subcommand, given):
+    """The label route's whole point: a dot means this is not one label.
+
+    Without ``--label`` the same input converts, so the refusal is the option's
+    doing and not a property of the input.
+    """
+    refused = run_cli("idna", subcommand, "--label", given)
+    assert refused.returncode == 1
+    assert "Error:" in refused.stderr
+    assert "Traceback" not in refused.stderr
+    assert run_cli("idna", subcommand, given).returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# measure abbrev: one unit's abbreviation, so a bare object
+# ---------------------------------------------------------------------------
+
+
+def test_measure_abbrev_emits_a_bare_object():
+    assert json_stdout("measure", "abbrev", "kilometer", "--json") == {
+        "unit": "kilometer",
+        "locale": "en_US",
+        "abbreviation": "km",
+    }
+
+
+def test_measure_abbrev_is_locale_aware():
+    """The abbreviation comes from the locale's data, not from the unit name."""
+    assert json_stdout("measure", "abbrev", "kilometer", "-l", "ru_RU", "--json") == {
+        "unit": "kilometer",
+        "locale": "ru_RU",
+        "abbreviation": "км",
+    }
+
+
+def test_measure_abbrev_human_output_is_the_abbreviation_alone():
+    assert run_cli("measure", "abbrev", "km").stdout == "km\n"
+
+
+def test_measure_abbrev_refuses_an_unknown_unit():
+    result = run_cli("measure", "abbrev", "nonesuch", "--json")
+    assert result.returncode == 1
+    assert "Error:" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert result.stdout == ""
+
+
+@pytest.mark.parametrize("arguments", [(), ("kilometer", "meter")])
+def test_measure_abbrev_takes_exactly_one_unit(arguments):
+    """Why the record shape never varies: argparse admits one unit and only one,
+    so a zero-record or many-record result is unreachable from the command line."""
+    assert run_cli("measure", "abbrev", *arguments).returncode == 2
+
+
+# ---------------------------------------------------------------------------
+# locale format scientific: no --json on this command, so no shape to assert
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("locale", "expected"),
+    [("en_US", "1.23456789E6\n"), ("de_DE", "1,23456789E6\n")],
+)
+def test_locale_format_scientific_is_locale_aware(locale, expected):
+    """Routes to ICU's scientific instance, which localizes the decimal separator."""
+    result = run_cli("locale", "format", "1234567.89", "--type", "scientific", "-l", locale)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == expected
+
+
+@pytest.mark.parametrize(
+    ("fmt_type", "expected"),
+    [
+        ("number", "1,234,567.89\n"),
+        ("percent", "123,456,789%\n"),
+    ],
+)
+def test_locale_format_other_types_are_unchanged(fmt_type, expected):
+    assert run_cli("locale", "format", "1234567.89", "--type", fmt_type).stdout == expected

@@ -20,6 +20,7 @@ from ...locale import (
     format_number,
     format_ordinal,
     format_percent,
+    format_scientific,
     format_spellout,
     get_display_name,
     get_exemplar_characters,
@@ -220,7 +221,7 @@ Examples:
         parser.add_argument(
             "--type",
             "-t",
-            choices=["number", "currency", "percent"],
+            choices=["number", "currency", "percent", "scientific"],
             default="number",
             help="Format type (default: number)",
         )
@@ -370,6 +371,8 @@ Examples:
             result = format_currency(args.value, locale_str, currency)
         elif fmt_type == "percent":
             result = format_percent(args.value, locale_str)
+        elif fmt_type == "scientific":
+            result = format_scientific(args.value, locale_str)
         else:
             result = format_number(args.value, locale_str)
 

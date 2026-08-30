@@ -141,6 +141,7 @@ from .datetime import (
     get_era_names,
     get_month_names,
     get_weekday_names,
+    list_pattern_symbols,
     parse_datetime,
 )
 from .detect import Detection, collation_detect, regex_detect
@@ -551,6 +552,7 @@ __all__ = [
     "STYLE_SHORT",
     "STYLE_NONE",
     "PATTERNS",
+    "list_pattern_symbols",
     # Date/time symbols
     "WIDTH_ABBREVIATED",
     "get_month_names",

@@ -22,6 +22,7 @@ from ...datetime import (
     get_era_names,
     get_month_names,
     get_weekday_names,
+    list_pattern_symbols,
 )
 from ...errors import DateTimeError
 from ...formatters import print_output, print_record
@@ -392,25 +393,7 @@ Examples:
     @classmethod
     def cmd_patterns(cls, args):
         """List pattern symbols."""
-        symbols = [
-            ("y", "Year", "yyyy=2024, yy=24"),
-            ("M", "Month", "M=1, MM=01, MMM=Jan, MMMM=January"),
-            ("d", "Day of month", "d=1, dd=01"),
-            ("E", "Day of week", "E=Mon, EEEE=Monday"),
-            ("h", "Hour (1-12)", "h=3, hh=03"),
-            ("H", "Hour (0-23)", "H=15, HH=15"),
-            ("m", "Minute", "m=5, mm=05"),
-            ("s", "Second", "s=9, ss=09"),
-            ("S", "Millisecond", "SSS=123"),
-            ("a", "AM/PM", "AM, PM"),
-            ("z", "Time zone", "z=PST, zzzz=Pacific Standard Time"),
-            ("Z", "Zone offset", "-0800"),
-            ("G", "Era", "AD, BC"),
-            ("Q", "Quarter", "Q=2, QQ=02, QQQ=Q2"),
-            ("w", "Week of year", "1-52"),
-            ("D", "Day of year", "1-366"),
-            ("'", "Literal text", "'at' -> at"),
-        ]
+        symbols = list_pattern_symbols()
 
         now = datetime.now()
         fmt = DateTimeFormatter(args.locale)
@@ -426,10 +409,7 @@ Examples:
             # One reference document: two named collections, each a list at any size.
             print_record(
                 {
-                    "symbols": [
-                        {"symbol": sym, "name": name, "example": example}
-                        for sym, name, example in symbols
-                    ],
+                    "symbols": symbols,
                     "named_patterns": named,
                 },
                 as_json=True,
@@ -438,8 +418,8 @@ Examples:
 
         print("Pattern Symbols:")
         print()
-        for sym, name, example in symbols:
-            print(f"  {sym:<3} {name:<15} {example}")
+        for entry in symbols:
+            print(f"  {entry['symbol']:<3} {entry['name']:<15} {entry['example']}")
 
         print()
         print("Named Patterns:")

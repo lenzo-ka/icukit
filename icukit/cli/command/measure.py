@@ -13,6 +13,7 @@ from ...measure import (
     WIDTH_WIDE,
     MeasureFormatter,
     can_convert,
+    get_unit_abbreviation,
     get_unit_info,
     get_units_by_type,
     list_unit_types,
@@ -59,6 +60,9 @@ Examples:
   # Unit info and compatibility
   icukit measure info kilometer
   icukit measure check km mi
+
+  # The locale's abbreviation for a unit, with no value attached
+  icukit measure abbrev kilometer --locale fr_FR
 
   # Format a range
   icukit measure range 5 10 kilometer
@@ -123,6 +127,12 @@ Examples:
                     "help": "Get unit information",
                     "configure": cls._configure_info,
                     "func": cls.cmd_info,
+                },
+                "abbrev": {
+                    "aliases": ["a"],
+                    "help": "Get a unit's locale abbreviation, without a value",
+                    "configure": cls._configure_abbrev,
+                    "func": cls.cmd_abbrev,
                 },
                 "check": {
                     "aliases": ["compat"],
@@ -383,6 +393,13 @@ Examples:
         cls._add_output_options(parser, include_header=False)
 
     @classmethod
+    def _configure_abbrev(cls, parser):
+        """Configure the abbreviation subcommand."""
+        parser.add_argument("unit", help="Unit name or abbreviation")
+        cls._add_locale_option(parser)
+        cls._add_output_options(parser, include_header=False)
+
+    @classmethod
     def _configure_check(cls, parser):
         """Configure the unit compatibility subcommand."""
         parser.add_argument("from_unit", help="Source unit")
@@ -461,6 +478,27 @@ Examples:
             else:
                 for key, value in info.items():
                     print(f"{key}: {value}")
+            return 0
+        except MeasureError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    @classmethod
+    def cmd_abbrev(cls, args):
+        """Get a unit's locale abbreviation."""
+        try:
+            abbreviation = get_unit_abbreviation(args.unit, args.locale)
+            if args.json:
+                print_record(
+                    {
+                        "unit": args.unit,
+                        "locale": args.locale,
+                        "abbreviation": abbreviation,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(abbreviation)
             return 0
         except MeasureError as e:
             print(f"Error: {e}", file=sys.stderr)

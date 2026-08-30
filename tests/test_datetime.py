@@ -1,9 +1,12 @@
 """Tests for the datetime module."""
 
+import json
 import subprocess
 import sys
 from datetime import date, datetime, timedelta
 
+import icukit
+import icukit.datetime as datetime_module
 from icukit import (
     STYLE_LONG,
     STYLE_MEDIUM,
@@ -19,6 +22,7 @@ from icukit import (
     get_era_names,
     get_month_names,
     get_weekday_names,
+    list_pattern_symbols,
     parse_datetime,
 )
 
@@ -460,3 +464,69 @@ class TestDateSymbolsCLI:
         code, out, err = run_cli("datetime", "mon")
         assert code == 0
         assert "January" in out
+
+
+class TestPatternSymbolCatalog:
+    """The pattern-symbol catalog is library knowledge, not command knowledge."""
+
+    def test_catalog_describes_every_symbol(self):
+        """Each entry names a symbol, what it means, and an example of its use."""
+        symbols = list_pattern_symbols()
+        assert symbols
+        for entry in symbols:
+            assert set(entry) == {"symbol", "name", "example"}
+            assert entry["symbol"] and entry["name"] and entry["example"]
+
+    def test_catalog_covers_the_symbols_the_named_patterns_use(self):
+        """Every field symbol in PATTERNS is documented, so the two agree.
+
+        Quoted runs are literal text, not fields, so they are dropped before the
+        comparison: ``ISO_DATETIME`` spells its separator ``'T'``.
+        """
+        documented = {entry["symbol"] for entry in list_pattern_symbols()}
+        used = {
+            character
+            for pattern in datetime_module.PATTERNS.values()
+            for index, run in enumerate(pattern.split("'"))
+            if index % 2 == 0
+            for character in run
+            if character.isalpha()
+        }
+        assert used <= documented
+
+    def test_catalog_is_returned_in_reference_order(self):
+        """The order is part of the reference; it starts at the year field."""
+        assert list_pattern_symbols()[0]["symbol"] == "y"
+
+    def test_catalog_hands_out_fresh_records(self):
+        """A caller may edit the result without corrupting the next caller's copy."""
+        first = list_pattern_symbols()
+        first[0]["name"] = "clobbered"
+        first.clear()
+        assert list_pattern_symbols()[0]["name"] == "Year"
+
+    def test_module_declares_what_the_package_re_exports(self):
+        """``PATTERNS`` and the catalog are part of the module's public surface."""
+        assert "PATTERNS" in datetime_module.__all__
+        assert "list_pattern_symbols" in datetime_module.__all__
+        assert "list_pattern_symbols" in icukit.__all__
+
+
+class TestPatternSymbolCatalogCLI:
+    """``datetime patterns`` is a thin client over the library catalog."""
+
+    def test_json_symbols_are_the_library_catalog(self):
+        """The command reports the library's records verbatim, keeping no copy."""
+        code, out, err = run_cli("datetime", "patterns", "--json")
+        assert code == 0, err
+        assert json.loads(out)["symbols"] == list_pattern_symbols()
+
+    def test_human_output_lists_every_symbol_in_reference_order(self):
+        """Characterization of the rendered table, written without the library call."""
+        code, out, err = run_cli("datetime", "patterns")
+        assert code == 0, err
+        table = out.split("Named Patterns:")[0]
+        rows = [line.strip() for line in table.splitlines() if line.startswith("  ")]
+        assert [row.split()[0] for row in rows] == list("yMdEhHmsSazZGQwD") + ["'"]
+        assert "Year" in rows[0]
+        assert "Literal text" in rows[-1]
