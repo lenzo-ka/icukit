@@ -358,6 +358,9 @@ Examples:
   # List collation types
   icukit collate list types
 
+  # Machine-readable output (every subcommand takes --json)
+  icukit collate compare 'cafe' 'cafe' --json
+
 ### `icukit collate compare` (aliases: c, cmp)
 
 **Options:**
@@ -366,6 +369,7 @@ Examples:
 - `string_b`: Second string
 - `-l, --locale`: Locale for comparison (default: en_US) (default: `en_US`)
 - `--strength, -s`: Collation strength
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit collate help` (aliases: h)
 
@@ -403,6 +407,8 @@ Examples:
 - `--case-first`: Sort uppercase or lowercase first
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ## `icukit compact`
 
@@ -539,6 +545,7 @@ Examples:
 
   # Parse date string
   icukit datetime parse '1/15/24'
+  icukit datetime parse '1/15/24' --json
 
   # List patterns and calendars
   icukit datetime patterns
@@ -554,6 +561,10 @@ Examples:
 
 ### `icukit datetime calendars` (aliases: cal)
 
+**Options:**
+
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit datetime eras` (aliases: era)
 
@@ -577,6 +588,8 @@ Examples:
 - `--time-style`: Time style (NONE for date-only)
 - `-p, --pattern`: Custom ICU pattern (e.g., 'yyyy-MM-dd HH:mm')
 - `-c, --calendar`: Calendar system (gregorian, buddhist, hebrew, islamic, japanese, etc.)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit datetime help` (aliases: h)
 
@@ -593,6 +606,8 @@ Examples:
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-k, --skeleton`: Format skeleton (default: yMMMd) (default: `yMMMd`)
 - `-c, --calendar`: Calendar system
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit datetime months` (aliases: mon)
 
@@ -613,12 +628,16 @@ Examples:
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-p, --pattern`: Expected pattern (tries common formats if not given)
 - `-c, --calendar`: Calendar system
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit datetime patterns` (aliases: pat)
 
 **Options:**
 
 - `-l, --locale`: Locale for examples (default: en_US) (default: `en_US`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit datetime relative` (aliases: r, rel)
 
@@ -629,6 +648,8 @@ Examples:
 - `--hours`: Hour offset (default: `0`)
 - `--minutes`: Minute offset (default: `0`)
 - `--seconds`: Second offset (default: `0`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit datetime symbols` (aliases: am, ampm, sym)
 
@@ -1164,12 +1185,16 @@ Examples:
   icukit measure types
   icukit measure units --type length
 
+  # Machine-readable output (every subcommand takes --json)
+  icukit measure convert 10 km mi --json
+
 ### `icukit measure compat` (aliases: check)
 
 **Options:**
 
 - `from_unit`: Source unit
 - `to_unit`: Target unit
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure compound` (aliases: seq, sequence)
 
@@ -1178,6 +1203,8 @@ Examples:
 - `measures`: Comma-separated measures (e.g., '5 foot, 10 inch')
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Width style (default: WIDE) (default: `WIDE`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure convert` (aliases: c, conv)
 
@@ -1189,6 +1216,8 @@ Examples:
 - `-l, --locale`: Locale for formatted output (default: en_US) (default: `en_US`)
 - `-w, --width`: Width style for formatted output (default: SHORT) (default: `SHORT`)
 - `-r, --raw`: Output raw number only (no formatting) (default: `False`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure format` (aliases: f, fmt)
 
@@ -1198,6 +1227,8 @@ Examples:
 - `unit`: Unit name (e.g., kilometer, fahrenheit)
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Width style (default: WIDE) (default: `WIDE`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure help` (aliases: h)
 
@@ -1222,6 +1253,8 @@ Examples:
 - `unit`: Unit name
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Width style (default: WIDE) (default: `WIDE`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit measure types` (aliases: t)
 
@@ -1247,6 +1280,8 @@ Examples:
 - `-u, --usage`: Usage context (default, road, person-height, weather, etc.) (default: `default`)
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `-w, --width`: Width style (default: SHORT) (default: `SHORT`)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ## `icukit message` (aliases: msg)
 
@@ -1455,6 +1490,9 @@ Examples:
   # Process multiple domains
   echo -e 'münchen.de\n例え.jp' | icukit idna encode
 
+  # Machine-readable output: always a list of {input, output}, at any size
+  echo -e 'münchen.de\n例え.jp' | icukit idna encode --json
+
 ### `icukit punycode help` (aliases: h)
 
 **Options:**
@@ -1468,6 +1506,8 @@ Examples:
 - `domain`: Unicode domain to encode (or read from stdin)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ### `icukit punycode to-unicode` (aliases: d, decode, unicode)
 
@@ -1476,6 +1516,8 @@ Examples:
 - `domain`: ASCII domain to decode (or read from stdin)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
+- `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
+- `-j, --json`: Output in JSON format (default: `False`)
 
 ## `icukit regex`
 

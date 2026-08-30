@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from ...errors import MeasureError
-from ...formatters import print_output
+from ...formatters import print_output, print_record
 from ...measure import (
     WIDTH_NARROW,
     WIDTH_SHORT,
@@ -66,6 +66,9 @@ Examples:
   # List unit types and units
   icukit measure types
   icukit measure units --type length
+
+  # Machine-readable output (every subcommand takes --json)
+  icukit measure convert 10 km mi --json
 """,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -146,6 +149,7 @@ Examples:
             default=WIDTH_WIDE,
             help="Width style (default: WIDE)",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_convert(cls, parser):
@@ -167,6 +171,7 @@ Examples:
             action="store_true",
             help="Output raw number only (no formatting)",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_range(cls, parser):
@@ -182,6 +187,7 @@ Examples:
             default=WIDTH_WIDE,
             help="Width style (default: WIDE)",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_types(cls, parser):
@@ -204,7 +210,19 @@ Examples:
         try:
             fmt = MeasureFormatter(args.locale, args.width)
             result = fmt.format(args.value, args.unit)
-            print(result)
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "value": args.value,
+                        "unit": args.unit,
+                        "locale": args.locale,
+                        "width": args.width,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(result)
             return 0
         except MeasureError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -216,11 +234,24 @@ Examples:
         try:
             fmt = MeasureFormatter(args.locale, args.width)
             converted = fmt.convert(args.value, args.from_unit, args.to_unit)
+            result = fmt.format(converted, args.to_unit)
 
-            if args.raw:
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "value": args.value,
+                        "from_unit": args.from_unit,
+                        "to_unit": args.to_unit,
+                        "converted": converted,
+                        "locale": args.locale,
+                        "width": args.width,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            elif args.raw:
                 print(converted)
             else:
-                result = fmt.format(converted, args.to_unit)
                 print(result)
             return 0
         except MeasureError as e:
@@ -233,7 +264,20 @@ Examples:
         try:
             fmt = MeasureFormatter(args.locale, args.width)
             result = fmt.format_range(args.low, args.high, args.unit)
-            print(result)
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "low": args.low,
+                        "high": args.high,
+                        "unit": args.unit,
+                        "locale": args.locale,
+                        "width": args.width,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(result)
             return 0
         except MeasureError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -309,6 +353,7 @@ Examples:
             default=WIDTH_WIDE,
             help="Width style (default: WIDE)",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_usage(cls, parser):
@@ -329,6 +374,7 @@ Examples:
             default=WIDTH_SHORT,
             help="Width style (default: SHORT)",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_info(cls, parser):
@@ -341,6 +387,7 @@ Examples:
         """Configure the unit compatibility subcommand."""
         parser.add_argument("from_unit", help="Source unit")
         parser.add_argument("to_unit", help="Target unit")
+        cls._add_json_option(parser)
 
     @classmethod
     def cmd_sequence(cls, args):
@@ -362,7 +409,18 @@ Examples:
 
             fmt = MeasureFormatter(args.locale, args.width)
             result = fmt.format_sequence(measures)
-            print(result)
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "measures": [{"value": value, "unit": unit} for value, unit in measures],
+                        "locale": args.locale,
+                        "width": args.width,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(result)
             return 0
         except (ValueError, MeasureError) as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -374,7 +432,20 @@ Examples:
         try:
             fmt = MeasureFormatter(args.locale, args.width)
             result = fmt.format_for_usage(args.value, args.unit, args.usage)
-            print(result)
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "value": args.value,
+                        "unit": args.unit,
+                        "usage": args.usage,
+                        "locale": args.locale,
+                        "width": args.width,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(result)
             return 0
         except MeasureError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -386,7 +457,7 @@ Examples:
         try:
             info = get_unit_info(args.unit)
             if args.json:
-                print_output([info], columns=list(info.keys()), as_json=True)
+                print_record(info, as_json=True)
             else:
                 for key, value in info.items():
                     print(f"{key}: {value}")
@@ -400,7 +471,16 @@ Examples:
         """Check whether units have the same ICU unit type."""
         try:
             result = can_convert(args.from_unit, args.to_unit)
-            if result:
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "from_unit": args.from_unit,
+                        "to_unit": args.to_unit,
+                        "same_type": result,
+                    },
+                    as_json=True,
+                )
+            elif result:
                 print(f"Yes, {args.from_unit} and {args.to_unit} have the same unit type")
             else:
                 print(f"No, {args.from_unit} and {args.to_unit} have different unit types")

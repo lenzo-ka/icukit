@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from ...errors import TimezoneError
-from ...formatters import print_output
+from ...formatters import print_output, print_record
 from ...timezone import (
     get_equivalent_timezones,
     get_timezone_info,
@@ -134,8 +134,8 @@ Examples:
 
         as_json, headers = cls._get_output_flags(args)
 
-        print_output(
-            [info],
+        print_record(
+            info,
             as_json=as_json,
             columns=cls.INFO_COLUMNS,
             headers=headers,

@@ -7,7 +7,7 @@ import sys
 
 from ...bidi import get_bidi_info, has_bidi_controls, list_bidi_controls, strip_bidi_controls
 from ...errors import BidiError
-from ...formatters import print_output
+from ...formatters import print_output, print_record
 from ..base import open_output, process_input
 from ..subcommand_base import SubcommandBase
 
@@ -117,8 +117,8 @@ Examples:
 
             info = get_bidi_info(text)
 
-            print_output(
-                [info],
+            print_record(
+                info,
                 as_json=as_json,
                 columns=cls.INFO_COLUMNS,
                 headers=not no_header,

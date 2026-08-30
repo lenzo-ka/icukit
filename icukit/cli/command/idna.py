@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from ...errors import IDNAError
+from ...formatters import print_output
 from ...idna import idna_decode, idna_encode
 from ..subcommand_base import SubcommandBase, handles_errors
 
@@ -36,6 +37,9 @@ Examples:
 
   # Process multiple domains
   echo -e 'münchen.de\\n例え.jp' | icukit idna encode
+
+  # Machine-readable output: always a list of {input, output}, at any size
+  echo -e 'münchen.de\\n例え.jp' | icukit idna encode --json
 """,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -70,6 +74,7 @@ Examples:
             help="Unicode domain to encode (or read from stdin)",
         )
         cls._add_input_options(parser)
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_decode(cls, parser):
@@ -80,41 +85,43 @@ Examples:
             help="ASCII domain to decode (or read from stdin)",
         )
         cls._add_input_options(parser)
+        cls._add_output_options(parser, include_header=False)
+
+    @classmethod
+    def _convert_domains(cls, args, convert):
+        """Convert every non-blank input domain, in order.
+
+        The batch is a collection at every size, so JSON output is always a list of
+        ``{"input", "output"}`` records: empty input gives ``[]``, and a single domain
+        gives a one-element list, never a bare object.
+        """
+        if args.domain:
+            domains = [args.domain]
+        else:
+            text = cls._read_input(args)
+            domains = text.strip().split("\n") if text else []
+
+        records = [
+            {"input": stripped, "output": convert(stripped)}
+            for stripped in (domain.strip() for domain in domains)
+            if stripped
+        ]
+
+        if getattr(args, "json", False):
+            print_output(records, as_json=True)
+        else:
+            for record in records:
+                print(record["output"])
+        return 0
 
     @classmethod
     @handles_errors(IDNAError)
     def cmd_encode(cls, args):
         """Encode Unicode domain to ASCII."""
-        if args.domain:
-            domains = [args.domain]
-        else:
-            text = cls._read_input(args)
-            if not text:
-                return 0
-            domains = text.strip().split("\n")
-
-        for domain in domains:
-            domain = domain.strip()
-            if domain:
-                result = idna_encode(domain)
-                print(result)
-        return 0
+        return cls._convert_domains(args, idna_encode)
 
     @classmethod
     @handles_errors(IDNAError)
     def cmd_decode(cls, args):
         """Decode ASCII domain to Unicode."""
-        if args.domain:
-            domains = [args.domain]
-        else:
-            text = cls._read_input(args)
-            if not text:
-                return 0
-            domains = text.strip().split("\n")
-
-        for domain in domains:
-            domain = domain.strip()
-            if domain:
-                result = idna_decode(domain)
-                print(result)
-        return 0
+        return cls._convert_domains(args, idna_decode)

@@ -32,6 +32,7 @@ def test_api_reference_covers_formatters_module():
         "format_simple_list",
         "format_tsv",
         "print_output",
+        "print_record",
     ):
         assert f"[`{name}`](#icukitformatters)" in api
         assert f"### `{name}(" in api

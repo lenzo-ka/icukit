@@ -7,7 +7,7 @@ import sys
 
 from ...duration import WIDTH_NARROW, WIDTH_SHORT, WIDTH_WIDE, DurationFormatter, parse_iso_duration
 from ...errors import DurationError
-from ...formatters import print_output
+from ...formatters import print_record
 from ..subcommand_base import SubcommandBase
 
 
@@ -214,7 +214,7 @@ Examples:
             components = parse_iso_duration(args.duration)
 
             if args.json:
-                print_output([components], as_json=True)
+                print_record(components, as_json=True)
             else:
                 # Print non-zero components
                 parts = []

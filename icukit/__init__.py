@@ -246,6 +246,7 @@ from .formatters import (
     format_simple_list,
     format_tsv,
     print_output,
+    print_record,
 )
 from .idna import (
     IDNAConverter,
@@ -535,6 +536,7 @@ __all__ = [
     "format_simple_list",
     "format_tsv",
     "print_output",
+    "print_record",
     "get_api_exports",
     "get_api_info",
     "get_cli_commands",
