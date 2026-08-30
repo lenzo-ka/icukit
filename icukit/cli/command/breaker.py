@@ -11,8 +11,8 @@ import icu
 from ... import __version__
 from ...breaker import Breaker, RuleBreaker, default_rules
 from ...errors import BreakerError, ICUKitError
-from ...formatters import print_output
-from ..base import open_output, process_input
+from ...formatters import format_json, print_output
+from ..base import open_output
 from ..subcommand_base import SubcommandBase, _read_text_file, handles_errors
 
 
@@ -72,19 +72,16 @@ class BreakerCommand(SubcommandBase):
     def _print_json(cls, args, breaks, extra=None):
         """Print break data, optionally wrapped in a reproducibility document."""
         if not getattr(args, "provenance", False):
-            print_output(breaks, as_json=True)
+            print(format_json(breaks))
             return
 
-        # Match print_output's established single-item JSON unwrapping inside the
-        # document so that --provenance only adds the wrapper and version stamp.
-        if isinstance(breaks, (list, tuple)) and len(breaks) == 1:
-            breaks = breaks[0]
-        print_output(
-            {
-                "provenance": cls._provenance(extra),
-                "breaks": breaks,
-            },
-            as_json=True,
+        print(
+            format_json(
+                {
+                    "provenance": cls._provenance(extra),
+                    "breaks": breaks,
+                }
+            )
         )
 
     @classmethod
@@ -365,7 +362,7 @@ Examples:
             status_types[number] = name
 
         breaker = RuleBreaker(rules_text, status_types)
-        text = "\n".join(cls._read_lines(args))
+        text = cls._read_input(args, verbatim=True)
         extra = {"rules_sha256": hashlib.sha256(rules_text.encode("utf-8")).hexdigest()}
         if getattr(args, "spans", False):
             spans = breaker.spans(text)
@@ -401,7 +398,7 @@ Examples:
         as_jsonl = getattr(args, "jsonl", False)
 
         if getattr(args, "spans", False):
-            text = "\n".join(cls._read_lines(args))
+            text = cls._read_input(args, verbatim=True)
             spans = breaker.break_sentence_spans(text)
             if as_jsonl:
                 cls._print_jsonl(args, spans)
@@ -416,7 +413,7 @@ Examples:
             return 0
 
         if as_jsonl or as_json:
-            text = "\n".join(cls._read_lines(args))
+            text = cls._read_input(args, verbatim=True)
             sentences = [sentence.strip() for sentence in breaker.iter_sentences(text)]
             if as_jsonl:
                 cls._print_jsonl(args, ({"text": sentence} for sentence in sentences))
@@ -424,12 +421,11 @@ Examples:
                 cls._print_json(args, sentences)
             return 0
 
-        def processor(text):
-            for sentence in breaker.iter_sentences(text):
-                yield sentence.strip()
-
+        text = cls._read_input(args, verbatim=True)
         with open_output(getattr(args, "output", None)) as output:
-            process_input(args, processor, output, process_whole_file=True)
+            if text:
+                for sentence in breaker.iter_sentences(text):
+                    print(sentence.strip(), file=output)
         return 0
 
     @classmethod
@@ -445,7 +441,7 @@ Examples:
         as_jsonl = getattr(args, "jsonl", False)
 
         if getattr(args, "spans", False):
-            text = "\n".join(cls._read_lines(args))
+            text = cls._read_input(args, verbatim=True)
             spans = breaker.break_word_spans(text, skip_ws, skip_punct)
             if as_jsonl:
                 cls._print_jsonl(args, spans)
@@ -461,20 +457,18 @@ Examples:
 
         if as_jsonl or as_json:
             # Collect all words for JSON output
-            lines = cls._read_lines(args)
-            text = "\n".join(lines)
+            text = cls._read_input(args, verbatim=True)
             words = breaker.break_words(text, skip_ws, skip_punct)
             if as_jsonl:
                 cls._print_jsonl(args, ({"text": word} for word in words))
             else:
                 cls._print_json(args, words)
         else:
-
-            def processor(text):
-                return breaker.iter_words(text, skip_ws, skip_punct)
-
+            text = cls._read_input(args, verbatim=True)
             with open_output(getattr(args, "output", None)) as output:
-                process_input(args, processor, output, process_whole_file=True)
+                if text:
+                    for word in breaker.iter_words(text, skip_ws, skip_punct):
+                        print(word, file=output)
         return 0
 
     @classmethod
@@ -488,7 +482,7 @@ Examples:
         as_jsonl = getattr(args, "jsonl", False)
 
         if getattr(args, "spans", False):
-            text = "\n".join(cls._read_lines(args))
+            text = cls._read_input(args, verbatim=True)
             spans = breaker.break_line_spans(text)
             if as_jsonl:
                 cls._print_jsonl(args, spans)
@@ -503,20 +497,18 @@ Examples:
             return 0
 
         if as_jsonl or as_json:
-            lines = cls._read_lines(args)
-            text = "\n".join(lines)
+            text = cls._read_input(args, verbatim=True)
             segments = breaker.break_lines(text)
             if as_jsonl:
                 cls._print_jsonl(args, ({"text": segment} for segment in segments))
             else:
                 cls._print_json(args, segments)
         else:
-
-            def processor(text):
-                return breaker.iter_lines(text)
-
+            text = cls._read_input(args, verbatim=True)
             with open_output(getattr(args, "output", None)) as output:
-                process_input(args, processor, output, process_whole_file=True)
+                if text:
+                    for line in breaker.iter_lines(text):
+                        print(line, file=output)
         return 0
 
     @classmethod
@@ -530,8 +522,7 @@ Examples:
         as_jsonl = getattr(args, "jsonl", False)
         no_header = getattr(args, "no_header", False)
 
-        lines = cls._read_lines(args)
-        text = "\n".join(lines)
+        text = cls._read_input(args, verbatim=True)
         if getattr(args, "spans", False):
             spans = breaker.break_grapheme_spans(text)
             if as_jsonl:
@@ -574,8 +565,7 @@ Examples:
         as_json = getattr(args, "json", False)
         as_jsonl = getattr(args, "jsonl", False)
 
-        lines = cls._read_lines(args)
-        text = "\n".join(lines)
+        text = cls._read_input(args, verbatim=True)
         if getattr(args, "spans", False):
             tokenized = breaker.tokenize_sentence_spans(text, skip_punctuation=skip_punct)
             if as_jsonl:

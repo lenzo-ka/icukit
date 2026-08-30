@@ -144,3 +144,46 @@ def test_grapheme_spans_and_show_codepoints_are_mutually_exclusive():
     code, _out, err = run_cli("break", "graphemes", "--spans", "--show-codepoints", "-t", "AB")
     assert code == 2
     assert "not allowed with argument" in err
+
+
+def test_plain_and_json_words_match_for_file_with_exotic_separators(tmp_path):
+    path = tmp_path / "separators.txt"
+    path.write_text("one\u2028two\fthree\r\nfour\x85five", encoding="utf-8")
+
+    code, structured, err = run_cli("break", "words", "--json", "--include-whitespace", str(path))
+    assert (code, err) == (0, "")
+    tokens = json.loads(structured)
+    plain = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "icukit.cli",
+            "break",
+            "words",
+            "--include-whitespace",
+            str(path),
+        ],
+        capture_output=True,
+        text=False,
+        check=False,
+    )
+    assert (plain.returncode, plain.stderr) == (0, b"")
+    assert plain.stdout == "".join(f"{token}\n" for token in tokens).encode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("", []), ("aa", ["aa"]), ("aa bb", ["aa", "bb"])],
+)
+def test_break_json_is_always_a_list(text, expected):
+    code, out, err = run_cli("break", "words", "--json", "-t", text)
+    assert (code, err, json.loads(out)) == (0, "", expected)
+
+
+def test_single_span_json_is_a_list_of_one_object():
+    code, out, err = run_cli("break", "words", "--spans", "--json", "-t", "aa")
+    assert (code, err) == (0, "")
+    spans = json.loads(out)
+    assert isinstance(spans, list)
+    assert len(spans) == 1
+    assert spans[0]["text"] == "aa"

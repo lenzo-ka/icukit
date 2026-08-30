@@ -94,3 +94,10 @@ def test_json_without_provenance_is_unchanged():
     assert result.returncode == 0, result.stderr
     assert result.stdout == '[\n  "Hello",\n  "world"\n]\n'
     assert result.stderr == ""
+
+
+def test_single_break_in_provenance_document_remains_a_list():
+    result = run_break("words", "--json", "--provenance", "-t", "aa")
+
+    assert (result.returncode, result.stderr) == (0, "")
+    assert json.loads(result.stdout)["breaks"] == ["aa"]
