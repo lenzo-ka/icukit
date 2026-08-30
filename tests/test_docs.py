@@ -101,6 +101,48 @@ def test_cli_reference_documents_commands_under_their_canonical_names():
     assert "## `icukit punycode`" not in cli
 
 
+def test_a_constants_comment_is_documented_whole(tmp_path):
+    """A truncated comment still reads as prose, which is why nothing caught it.
+
+    The generator took only the line directly above an assignment, so a comment
+    running to two lines was published as its own last line: ``DEFAULT_FAMILIES``
+    was documented in the API reference as "inverter. Abbreviations use their
+    typed lexicon." Nothing was malformed and nothing failed -- the reference just
+    said something other than what the source said.
+    """
+    module_path = tmp_path / "_fixture.py"
+    module_path.write_text(
+        "# The first line of the reason.\n"
+        "# The second line, which is the only one that used to survive.\n"
+        "SAMPLE = 1\n",
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location("_docs_fixture", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    doc = _generator().get_source_assignments(module)["SAMPLE"]["doc"]
+
+    assert doc.splitlines() == [
+        "The first line of the reason.",
+        "The second line, which is the only one that used to survive.",
+    ]
+
+
+def test_an_assignment_docstring_still_wins_over_a_comment(tmp_path):
+    """The documented convention keeps precedence; the comment is the fallback."""
+    module_path = tmp_path / "_fixture_docstring.py"
+    module_path.write_text(
+        '# A comment that must not be preferred.\nSAMPLE = 1\n"""The docstring."""\n',
+        encoding="utf-8",
+    )
+    spec = importlib.util.spec_from_file_location("_docs_fixture_docstring", module_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert _generator().get_source_assignments(module)["SAMPLE"]["doc"] == "The docstring."
+
+
 def test_documentation_generation_is_idempotent(tmp_path):
     command = [sys.executable, str(ROOT / "docs" / "generate.py"), "--output", str(tmp_path)]
     subprocess.run(command, cwd=ROOT, check=True)

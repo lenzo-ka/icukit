@@ -21,7 +21,14 @@ from dataclasses import dataclass
 
 from .detectors import Detector, ValueDetection, detect
 
-DEFAULT_EPSILON = 1.0
+DEFAULT_EPSILON: float = 1.0
+"""Margin below which the top two covers are reported as a contest rather than a winner.
+
+A float, and the parameters taking it are annotated float. Weights are integral, so a
+threshold that separates one margin from the next is only expressible as a fraction, and
+narrowing the signature to ``int`` would tell a caller that such a threshold is out of
+bounds when it is the only way to ask the question.
+"""
 
 
 def weight(detection: ValueDetection) -> int:
@@ -108,7 +115,7 @@ def resolve(
     detections: list[ValueDetection] | tuple[ValueDetection, ...],
     *,
     n: int = 8,
-    epsilon: int = DEFAULT_EPSILON,
+    epsilon: float = DEFAULT_EPSILON,
 ) -> Resolution:
     """Weigh a universe of (possibly overlapping) detections into a :class:`Resolution`.
 
@@ -131,7 +138,7 @@ def resolve_text(
     detectors: list[Detector] | tuple[Detector, ...],
     *,
     n: int = 8,
-    epsilon: int = DEFAULT_EPSILON,
+    epsilon: float = DEFAULT_EPSILON,
 ) -> Resolution:
     """Run every detector over ``text`` and resolve the deposited universe in one call."""
     return resolve(detect(text, detectors), n=n, epsilon=epsilon)

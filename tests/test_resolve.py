@@ -65,6 +65,31 @@ def test_equal_weight_overlap_is_reported_ambiguous():
     assert len(result.best) == 1  # one of them, not both (they overlap)
 
 
+def test_epsilon_accepts_a_fractional_tolerance():
+    """The tolerance is a float, and the signatures now say so.
+
+    ``DEFAULT_EPSILON`` has always been ``1.0`` while both parameters were
+    annotated ``int``, so a caller reading the signature would have believed a
+    fractional tolerance was out of bounds. It is not, and the fraction is doing
+    work: weights are integral, so a threshold at ``2.5`` calls a margin of two
+    too close and a margin of three decisive, and no integer sits where that
+    boundary needs to be -- ``2`` admits neither and ``3`` admits both.
+    """
+    richer = _det(0, 1, "number:decimal", captures=("integer", "sign"))
+    barer = _det(0, 1, "number:percent")
+    candidates = [richer, barer]
+
+    assert resolve(candidates).margin == 2
+    assert not resolve(candidates).ambiguous  # 2 is outside the default tolerance of 1.0
+
+    inside = resolve(candidates, epsilon=2.5)
+    assert inside.ambiguous
+    assert inside.best == (richer,)
+
+    assert not resolve(candidates, epsilon=2).ambiguous  # the integer below excludes it
+    assert resolve(candidates, epsilon=3).ambiguous  # the integer above admits a margin of 3 too
+
+
 def test_content_identical_detections_do_not_manufacture_ambiguity():
     # The same detection deposited twice must not read as two competing covers.
     a = _det(0, 4, "number:decimal", captures=("integer",))

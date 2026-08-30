@@ -9,8 +9,12 @@
   `relative`, `interval`, `parse`, `patterns`, and `calendars`; `idna encode`
   and `idna decode`; and `measure format`, `convert`, `range`, `sequence`,
   `usage`, and `check`. Those four commands previously emitted only human text
-  from at least one subcommand, so no pipeline could consume them. Each of the
-  four is now uniform: every subcommand takes `--json`.
+  from at least one subcommand, so no pipeline could consume them. Each of those
+  four commands is now uniform: every one of its subcommands takes `--json`. The
+  rest of the CLI is not — forty-two leaves elsewhere still emit only human text —
+  so the claim here is about `collate`, `datetime`, `idna`, and `measure` and no
+  wider, and `tests/test_cli_registry.py` holds it to exactly that scope while
+  recording the forty-two with a reason each.
 - `print_record`, a formatter for a command that yields exactly one thing by
   nature — one unit's information, one parse result, one comparison. It renders
   a bare JSON object, or a single TSV row.
@@ -37,6 +41,30 @@
 
 ### Changed
 
+- The detector conformance gate no longer disappears when ICU moves. It compared
+  a committed inventory against the one the running ICU produces and skipped the
+  whole module when the versions differed, and the backend is declared with a
+  version floor rather than an equality, so an ordinary dependency resolve could
+  carry ICU forward and take the entire signal with it while the build stayed
+  green — including `test_inventory_cannot_pass_vacuously`, the guard that the
+  gate is measuring something, which was disabled by exactly the drift it exists
+  to survive. A mismatch now fails the build in CI and warns everywhere else, and
+  only the byte-for-byte comparison against the recorded file is conditional on
+  the ICU version; the digest, the positive controls, the anti-vacuity guard and
+  the negative mutation controls describe live ICU behavior and run on every ICU.
+  `ICUKIT_CONFORMANCE_STRICT=1` opts into the CI behavior locally. The dependency
+  floor is deliberately left a floor: a runtime cap would hold every downstream
+  consumer at this project's golden and would stop CI ever meeting a newer ICU,
+  which is the notice the gate is built to give.
+- `icukit spoof check` names the check that fired. It listed the checks by hand
+  and omitted the restriction level, which is the one ICU sets for a mixed-script
+  identifier, so `icukit spoof check 'pаypal'` reported `suspicious` and then
+  named no issue at all. The issue list is now read off the record, so a check
+  added to `check_string` reaches the human output without a second edit.
+- `check_string` and `SpoofChecker.check` report a `hidden_overlay` field. ICU's
+  default check already set the bit — for a combining mark concealed by the base
+  character's own mark, as in `i` followed by U+0307 — so it reached
+  `is_suspicious` with no field to say which check had fired.
 - Every registered command alias now reaches `icukit --help` and the generated
   CLI reference. Aliases are declared once, in the command registry, and the
   prefix matcher resolved them before argparse ever saw them; only six commands
@@ -77,6 +105,27 @@
   `bidi strip`, `discover all`/`api`/`cli`, `search count` and `search find`
   among them — were collapsed into a single entry and the rest were dropped.
   Aliases are now identified by the parser they share.
+- `check_string`'s documented example claimed `mixed_script` was `True` for a
+  string spelled with a Cyrillic `а`. It is not, and never was: the confusability
+  flags answer a pairwise question, and ICU does not set them for a check of one
+  string on its own. What fires is `restriction_level`. The docstring records the
+  distinction, and the test asserted only `is_suspicious`, which is why the
+  example could stay wrong.
+- `resolve()` and `resolve_text()` annotated `epsilon` as `int` while
+  `DEFAULT_EPSILON` is `1.0`. A fractional tolerance is meaningful — weights are
+  integral, so a threshold between two of them is only expressible as a float —
+  and the annotation told callers otherwise.
+- Four unused constants in `icukit.spoof`, among them a hard-coded
+  `_CHECK_HIDDEN_OVERLAY` carrying an unfinished investigation in its comment. In
+  an anti-spoofing module a named-but-unread check reads as a capability that was
+  intended and dropped. Three were genuinely dead and are gone; the fourth turned
+  out to name a check ICU really does report, and is now wired up and witnessed.
+- The API reference documented a constant with the last line of its comment rather
+  than the whole comment, so a two-line explanation was published as a sentence
+  fragment: `DEFAULT_FAMILIES` read "inverter. Abbreviations use their typed
+  lexicon." Nothing was malformed, which is why it stood — a fragment still reads
+  as prose. The generator now takes the contiguous comment block, and an
+  assignment docstring still takes precedence over a comment.
 
 ## [0.4.0] - 2026-08-23
 
