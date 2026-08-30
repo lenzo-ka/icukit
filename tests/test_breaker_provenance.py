@@ -85,7 +85,7 @@ def test_provenance_is_json_only(capsys):
     captured = capsys.readouterr()
     assert result == 1
     assert captured.out == ""
-    assert captured.err == "Error: --provenance requires --json\n"
+    assert captured.err == "Error: --provenance requires --json or --jsonl\n"
 
 
 def test_json_without_provenance_is_unchanged():

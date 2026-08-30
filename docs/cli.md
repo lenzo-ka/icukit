@@ -163,6 +163,9 @@ Examples:
   # Tokenize sentences (sentences then words)
   icukit break tokenize -t 'Hello world. How are you?'
 
+  # Emit one word object per line
+  icukit break words --jsonl -t 'Hello, world!'
+
 ### `icukit break graphemes` (aliases: chars, g)
 
 **Options:**
@@ -175,6 +178,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--jsonl`: One JSON object per line: one grapheme cluster per line (a full span object with --spans); takes precedence over --json (default: `False`)
 - `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break help` (aliases: h)
@@ -194,6 +198,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--jsonl`: One JSON object per line: one line segment per line (a full span object with --spans); takes precedence over --json (default: `False`)
 - `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break sentences` (aliases: s, sent)
@@ -207,6 +212,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--jsonl`: One JSON object per line: one sentence per line (a full span object with --spans); takes precedence over --json (default: `False`)
 - `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break tokenize` (aliases: t, tok)
@@ -221,6 +227,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--jsonl`: One JSON object per line: one token per line, each with a 1-based sentence number; takes precedence over --json (default: `False`)
 - `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ### `icukit break words` (aliases: w, word)
@@ -236,6 +243,7 @@ Examples:
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--jsonl`: One JSON object per line: one word per line (a full span object with --spans); takes precedence over --json (default: `False`)
 - `--provenance`: Wrap JSON output with ICU, Unicode, PyICU, and icukit versions (default: `False`)
 
 ## `icukit calendar`
