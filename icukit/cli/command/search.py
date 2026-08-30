@@ -37,7 +37,6 @@ class SearchCommand(SubcommandBase):
         """Add the search command with its subcommands."""
         parser = subparsers.add_parser(
             "search",
-            aliases=["find"],
             help="Locale-aware text search",
             description="""
 Search text using ICU's locale-aware collation rules.

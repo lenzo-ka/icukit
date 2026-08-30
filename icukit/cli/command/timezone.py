@@ -41,6 +41,7 @@ Examples:
   icukit tz info Europe/London --json
 
   # Get equivalent timezone IDs
+  icukit timezone equivalent America/New_York
   icukit tz equiv America/New_York
 """,
             formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -61,11 +62,11 @@ Examples:
                     "func": cls.cmd_info,
                     "configure": cls._configure_info,
                 },
-                "equiv": {
-                    "aliases": ["e", "eq"],
+                "equivalent": {
+                    "aliases": ["e", "eq", "equiv"],
                     "help": "Get equivalent timezone IDs",
-                    "func": cls.cmd_equiv,
-                    "configure": cls._configure_equiv,
+                    "func": cls.cmd_equivalent,
+                    "configure": cls._configure_equivalent,
                 },
             },
         )
@@ -97,8 +98,8 @@ Examples:
         cls._add_output_options(parser)
 
     @classmethod
-    def _configure_equiv(cls, parser):
-        """Configure equiv subcommand."""
+    def _configure_equivalent(cls, parser):
+        """Configure equivalent subcommand."""
         parser.add_argument("timezone", help="Timezone ID to find equivalents for")
         cls._add_output_options(parser)
 
@@ -145,7 +146,7 @@ Examples:
 
     @classmethod
     @handles_errors(TimezoneError)
-    def cmd_equiv(cls, args):
+    def cmd_equivalent(cls, args):
         """Get equivalent timezone IDs."""
         # Verify timezone exists
         info = get_timezone_info(args.timezone)

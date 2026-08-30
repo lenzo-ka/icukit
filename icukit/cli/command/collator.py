@@ -30,7 +30,6 @@ class CollatorCommand(SubcommandBase):
         """Add the collate command with its subcommands."""
         parser = subparsers.add_parser(
             "collate",
-            aliases=["col"],
             help="Locale-aware string sorting and comparison",
             description="""
 Sort and compare strings using ICU's locale-aware collation.

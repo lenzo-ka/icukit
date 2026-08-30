@@ -18,7 +18,6 @@ class SpoofCommand(SubcommandBase):
         """Add the spoof command with its subcommands."""
         parser = subparsers.add_parser(
             "spoof",
-            aliases=["confusable", "homoglyph"],
             help="Detect confusable/homoglyph strings",
             description="""
 Detect visually confusable strings using ICU's SpoofChecker.

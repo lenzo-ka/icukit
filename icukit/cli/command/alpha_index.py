@@ -18,7 +18,6 @@ class AlphaIndexCommand(SubcommandBase):
         """Add the alpha-index command with its subcommands."""
         parser = subparsers.add_parser(
             "alpha-index",
-            aliases=["index", "aindex", "ai"],
             help="Alphabetic index buckets (A-Z)",
             description="""
 Create locale-aware alphabetic index buckets for sorted lists.

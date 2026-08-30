@@ -40,7 +40,7 @@ from .command import (
     UnicodeCommand,
     add_help_subparser,
 )
-from .command_trie import register_command, resolve_command
+from .command_trie import get_command_aliases, register_command, resolve_command
 from .logging_setup import setup_logging
 
 DESCRIPTION = r"""
@@ -71,6 +71,21 @@ Examples:
 For detailed help on any command:
   icukit <command> --help
 """
+
+
+class RegisteredAliasSubParsersAction(argparse._SubParsersAction):
+    """Subparsers that answer to the aliases their command registered.
+
+    Top-level aliases are declared once, in ``register_command``. The prefix
+    trie resolves them before argparse sees the arguments, so argparse would
+    otherwise never learn they exist -- and ``icukit --help`` and the generated
+    reference would omit every alias not repeated by hand at the call site.
+    Supplying them here keeps the one declaration authoritative.
+    """
+
+    def add_parser(self, name, **kwargs):
+        kwargs.setdefault("aliases", get_command_aliases(name))
+        return super().add_parser(name, **kwargs)
 
 
 class PrefixArgumentParser(argparse.ArgumentParser):
@@ -123,6 +138,10 @@ def create_parser():
         default=0,
         help="Increase verbosity (-v for INFO, -vv for DEBUG)",
     )
+
+    # Scoped to this parser only: nested subcommand parsers keep the stock
+    # action and declare their own aliases.
+    parser.register("action", "parsers", RegisteredAliasSubParsersAction)
 
     subparsers = parser.add_subparsers(
         title="Available Commands",

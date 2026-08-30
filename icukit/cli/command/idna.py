@@ -18,7 +18,6 @@ class IDNACommand(SubcommandBase):
         """Add the idna command with its subcommands."""
         parser = subparsers.add_parser(
             "idna",
-            aliases=["punycode", "idn"],
             help="IDNA/Punycode encoding and decoding",
             description="""
 Convert between Unicode domain names and ASCII (Punycode) encoding.

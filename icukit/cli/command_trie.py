@@ -112,5 +112,10 @@ def get_all_commands() -> dict[str, list[str]]:
     return _command_trie.get_all_commands()
 
 
+def get_command_aliases(command: str) -> list[str]:
+    """Return the registered aliases for a command, or an empty list if unknown."""
+    return list(_command_trie.get_all_commands().get(command, []))
+
+
 def get_command_info(command: str) -> dict | None:
     return _command_trie.get_command_info(command)

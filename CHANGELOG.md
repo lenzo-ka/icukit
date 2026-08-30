@@ -31,8 +31,24 @@
     value attached — `measure abbrev kilometer -l ru_RU` gives `км`.
   - `locale format --type scientific` joins `number`, `currency`, and `percent`,
     reaching ICU's scientific instance.
+- `locale maximize` as a spelling of `locale expand`. The CLI already offered
+  `locale minimize`, and `maximize` is the name ICU gives its counterpart, so it
+  is the word a user reaches for after seeing one half of the pair.
 
 ### Changed
+
+- Every registered command alias now reaches `icukit --help` and the generated
+  CLI reference. Aliases are declared once, in the command registry, and the
+  prefix matcher resolved them before argparse ever saw them; only six commands
+  repeated their aliases by hand at the parser, so the other twenty-two had
+  working aliases that no help text or document mentioned. Nothing new resolves —
+  `icukit brk`, `icukit listformat`, and `icukit recognize` worked before — but
+  they are now visible where a user would look for them.
+- `timezone equiv` is now spelled `timezone equivalent`, with `equiv` kept as an
+  alias alongside `e` and `eq`. Every other subcommand in the CLI is named with a
+  whole word and abbreviates through aliases; this was the one that inverted
+  that, so typing more of the word failed. Every existing invocation, and every
+  prefix of one, still resolves to the same command.
 
 - **Breaking:** `format_output(data, as_json=True)` no longer unwraps a
   single-item sequence. It now preserves the shape it is given, so a sequence
@@ -48,6 +64,19 @@
   `calendar info`, `collate info`, `duration parse`, `measure info`,
   `parse currency`, `plural info`, `region info`, `script info`,
   `timezone info` — still emit a bare object, and their output is unchanged.
+
+### Fixed
+
+- The generated CLI reference documented each command under its longest
+  spelling rather than its own name, so `spoof` and `idna` appeared as aliases
+  of `confusable` and `punycode`. A command is now documented under the name its
+  parser was created with, whatever the length of its aliases.
+- Nine subcommands were missing from the generated CLI reference entirely. The
+  generator identified aliases by comparing descriptions and argument lists, so
+  any two genuinely distinct commands that happened to match — `bidi check` and
+  `bidi strip`, `discover all`/`api`/`cli`, `search count` and `search find`
+  among them — were collapsed into a single entry and the rest were dropped.
+  Aliases are now identified by the parser they share.
 
 ## [0.4.0] - 2026-08-23
 
