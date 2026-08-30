@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from ...errors import ParseError
-from ...formatters import print_output
+from ...formatters import print_record
 from ...parse import parse_currency, parse_number, parse_percent
 from ..subcommand_base import SubcommandBase
 
@@ -140,7 +140,7 @@ Examples:
             result = parse_currency(args.text, args.locale, lenient=not args.strict)
 
             if args.json:
-                print_output([result], as_json=True)
+                print_record(result, as_json=True)
             else:
                 value = result["value"]
                 currency = result.get("currency") or "?"

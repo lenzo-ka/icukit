@@ -24,7 +24,7 @@ from ...datetime import (
     get_weekday_names,
 )
 from ...errors import DateTimeError
-from ...formatters import print_output
+from ...formatters import print_output, print_record
 from ..subcommand_base import SubcommandBase
 
 
@@ -71,6 +71,7 @@ Examples:
 
   # Parse date string
   icukit datetime parse '1/15/24'
+  icukit datetime parse '1/15/24' --json
 
   # List patterns and calendars
   icukit datetime patterns
@@ -197,6 +198,7 @@ Examples:
             "--calendar",
             help="Calendar system (gregorian, buddhist, hebrew, islamic, japanese, etc.)",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_relative(cls, parser):
@@ -212,6 +214,7 @@ Examples:
         parser.add_argument("--hours", type=int, default=0, help="Hour offset")
         parser.add_argument("--minutes", type=int, default=0, help="Minute offset")
         parser.add_argument("--seconds", type=int, default=0, help="Second offset")
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_interval(cls, parser):
@@ -230,6 +233,7 @@ Examples:
             "--calendar",
             help="Calendar system",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_parse(cls, parser):
@@ -246,16 +250,18 @@ Examples:
             "--calendar",
             help="Calendar system",
         )
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_patterns(cls, parser):
         """Configure the patterns subcommand."""
         cls._add_locale_option(parser, help="Locale for examples (default: en_US)")
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_calendars(cls, parser):
         """Configure the calendars subcommand."""
-        pass  # No options needed
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def cmd_format(cls, args):
@@ -274,7 +280,22 @@ Examples:
                 time_style=args.time_style,
                 pattern=args.pattern,
             )
-            print(result)
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "datetime": dt.isoformat(),
+                        "locale": args.locale,
+                        "calendar": args.calendar,
+                        "style": args.style,
+                        "date_style": args.date_style,
+                        "time_style": args.time_style,
+                        "pattern": args.pattern,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(result)
             return 0
         except DateTimeError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -294,7 +315,20 @@ Examples:
                 minutes=args.minutes,
                 seconds=args.seconds,
             )
-            print(result)
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "locale": args.locale,
+                        "days": args.offset,
+                        "hours": args.hours,
+                        "minutes": args.minutes,
+                        "seconds": args.seconds,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(result)
             return 0
         except DateTimeError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -309,7 +343,20 @@ Examples:
 
             fmt = DateTimeFormatter(args.locale, calendar=args.calendar)
             result = fmt.format_interval(start, end, skeleton=args.skeleton)
-            print(result)
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "start": start.isoformat(),
+                        "end": end.isoformat(),
+                        "locale": args.locale,
+                        "calendar": args.calendar,
+                        "skeleton": args.skeleton,
+                        "formatted": result,
+                    },
+                    as_json=True,
+                )
+            else:
+                print(result)
             return 0
         except DateTimeError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -324,7 +371,19 @@ Examples:
         try:
             fmt = DateTimeFormatter(args.locale, calendar=args.calendar)
             dt = fmt.parse(args.text, pattern=args.pattern)
-            print(dt.isoformat())
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "text": args.text,
+                        "locale": args.locale,
+                        "calendar": args.calendar,
+                        "pattern": args.pattern,
+                        "parsed": dt.isoformat(),
+                    },
+                    as_json=True,
+                )
+            else:
+                print(dt.isoformat())
             return 0
         except DateTimeError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -353,6 +412,30 @@ Examples:
             ("'", "Literal text", "'at' -> at"),
         ]
 
+        now = datetime.now()
+        fmt = DateTimeFormatter(args.locale)
+        named = []
+        for name, pattern in PATTERNS.items():
+            try:
+                example = fmt.format(now, pattern=pattern)
+            except DateTimeError:
+                example = None
+            named.append({"name": name, "pattern": pattern, "example": example})
+
+        if getattr(args, "json", False):
+            # One reference document: two named collections, each a list at any size.
+            print_record(
+                {
+                    "symbols": [
+                        {"symbol": sym, "name": name, "example": example}
+                        for sym, name, example in symbols
+                    ],
+                    "named_patterns": named,
+                },
+                as_json=True,
+            )
+            return 0
+
         print("Pattern Symbols:")
         print()
         for sym, name, example in symbols:
@@ -362,23 +445,22 @@ Examples:
         print("Named Patterns:")
         print()
 
-        now = datetime.now()
-        fmt = DateTimeFormatter(args.locale)
-        for name, pattern in PATTERNS.items():
-            try:
-                example = fmt.format(now, pattern=pattern)
-                print(f"  {name:<14} {pattern:<28} {example}")
-            except DateTimeError:
-                print(f"  {name:<14} {pattern:<28} (error)")
+        for entry in named:
+            example = entry["example"] if entry["example"] is not None else "(error)"
+            print(f"  {entry['name']:<14} {entry['pattern']:<28} {example}")
 
         return 0
 
     @classmethod
     def cmd_calendars(cls, args):
         """List available calendar systems."""
+        calendars = list_calendars_info()
+        if getattr(args, "json", False):
+            print_output(calendars, as_json=True)
+            return 0
         print("Available Calendar Systems:")
         print()
-        for info in list_calendars_info():
+        for info in calendars:
             print(f"  {info['type']:<20} {info['description']}")
         return 0
 

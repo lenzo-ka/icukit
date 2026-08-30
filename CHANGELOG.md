@@ -1,5 +1,37 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `--json` on every remaining `collate`, `datetime`, `idna`, and `measure`
+  subcommand: `collate compare` and `collate sort`; `datetime format`,
+  `relative`, `interval`, `parse`, `patterns`, and `calendars`; `idna encode`
+  and `idna decode`; and `measure format`, `convert`, `range`, `sequence`,
+  `usage`, and `check`. Those four commands previously emitted only human text
+  from at least one subcommand, so no pipeline could consume them. Each of the
+  four is now uniform: every subcommand takes `--json`.
+- `print_record`, a formatter for a command that yields exactly one thing by
+  nature — one unit's information, one parse result, one comparison. It renders
+  a bare JSON object, or a single TSV row.
+
+### Changed
+
+- **Breaking:** `format_output(data, as_json=True)` no longer unwraps a
+  single-item sequence. It now preserves the shape it is given, so a sequence
+  renders as a JSON array at every length, including one and zero, and callers
+  never have to branch on cardinality. Callers that want a bare object should
+  pass the object, or use `print_record`.
+
+  This changes `--json` output for any command whose result happens to hold
+  exactly one item. `icukit plural categories -l ja --json` now emits
+  `[{"category": "other"}]` rather than `{"category": "other"}`, and
+  `icukit script detect --all --json -t abc` now emits `["Latin"]` rather than
+  `"Latin"`. Commands that return one thing by nature — `bidi detect`,
+  `calendar info`, `collate info`, `duration parse`, `measure info`,
+  `parse currency`, `plural info`, `region info`, `script info`,
+  `timezone info` — still emit a bare object, and their output is unchanged.
+
 ## [0.4.0] - 2026-08-23
 
 ### Added

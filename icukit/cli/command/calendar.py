@@ -6,7 +6,7 @@ import argparse
 
 from ...calendar import get_calendar_info, is_valid_calendar, list_calendars, list_calendars_info
 from ...errors import CalendarError
-from ...formatters import print_output
+from ...formatters import print_record
 from ..subcommand_base import SubcommandBase, handles_errors
 
 
@@ -106,8 +106,8 @@ Examples:
         info = get_calendar_info(args.calendar)
         as_json, headers = cls._get_output_flags(args)
 
-        print_output(
-            [info],
+        print_record(
+            info,
             as_json=as_json,
             columns=["type", "icu_type", "description"],
             headers=headers,

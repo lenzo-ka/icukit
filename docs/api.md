@@ -115,6 +115,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`format_simple_list`](#icukitformatters) — function, `icukit.formatters`
 - [`format_tsv`](#icukitformatters) — function, `icukit.formatters`
 - [`print_output`](#icukitformatters) — function, `icukit.formatters`
+- [`print_record`](#icukitformatters) — function, `icukit.formatters`
 - [`get_api_exports`](#icukitdiscover) — function, `icukit.discover`
 - [`get_api_info`](#icukitdiscover) — function, `icukit.discover`
 - [`get_cli_commands`](#icukitdiscover) — function, `icukit.discover`
@@ -3135,7 +3136,10 @@ Args:
         TSV, non-empty sequences of strings become newline-separated text, and
         mappings become sorted labeled sections, with a newline before each label.
         Other values fall back to JSON.
-    as_json: Render as JSON. A sequence containing one item is unwrapped first.
+    as_json: Render as JSON. The shape of *data* is preserved exactly: a sequence
+        renders as a JSON array at every length, including one and zero, so a
+        consumer never has to branch on cardinality. Use :func:`print_record` for
+        a command that yields exactly one thing by nature.
     columns: Columns to include in TSV output, in order.
     headers: Include a TSV header when more than one column is rendered.
 
@@ -3179,6 +3183,24 @@ Args:
     extended_columns: Keys from each row's ``extended`` mapping to append as TSV
         columns. Nested mapping values are rendered as comma-separated ``key=value``
         pairs. This transformation is not applied to JSON output.
+
+### `print_record(record: 'dict[str, Any]', as_json: 'bool' = False, columns: 'list[str] | None' = None, headers: 'bool' = True, file: 'TextIO | None' = None, extended_columns: 'list[str] | None' = None) -> 'None'`
+
+Render one record and write it followed by a newline.
+
+Use this where a command yields exactly one thing by nature — one unit's
+information, one parse result, one comparison — rather than a collection that
+happens to hold a single item. A collection belongs in :func:`print_output`,
+which renders it as a JSON array at every length.
+
+Args:
+    record: The single record to render.
+    as_json: Render as a bare JSON object rather than a one-row table.
+    columns: Columns to include in TSV output, in order.
+    headers: Include a TSV header when more than one column is rendered.
+    file: Text stream to write to. Defaults to standard output.
+    extended_columns: Keys from the record's ``extended`` mapping to append as TSV
+        columns. This transformation is not applied to JSON output.
 
 ## icukit.idna
 

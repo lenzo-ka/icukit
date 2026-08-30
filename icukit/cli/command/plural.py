@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from ...errors import PluralError
-from ...formatters import print_output
+from ...formatters import print_output, print_record
 from ...plural import (
     TYPE_CARDINAL,
     TYPE_ORDINAL,
@@ -184,7 +184,7 @@ Examples:
             info = get_plural_rules_info(args.locale)
 
             if args.json:
-                print_output([info], as_json=True)
+                print_record(info, as_json=True)
             else:
                 print(f"Locale: {info['locale']}")
                 print()

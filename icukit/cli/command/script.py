@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from ...errors import ScriptError
-from ...formatters import print_output
+from ...formatters import print_output, print_record
 from ...script import detect_script, detect_scripts, get_script_info, is_rtl, list_scripts_info
 from ..base import open_output, process_input
 from ..subcommand_base import SubcommandBase
@@ -162,8 +162,8 @@ Examples:
 
             as_json = getattr(args, "json", False)
             no_header = getattr(args, "no_header", False)
-            print_output(
-                [info],
+            print_record(
+                info,
                 as_json=as_json,
                 columns=cls.INFO_COLUMNS,
                 headers=not no_header,

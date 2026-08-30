@@ -9,6 +9,7 @@ FORMATTER_EXPORTS = {
     "format_simple_list",
     "format_tsv",
     "print_output",
+    "print_record",
 }
 
 

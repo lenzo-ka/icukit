@@ -169,6 +169,17 @@ class SubcommandBase:
             )
 
     @classmethod
+    def _add_json_option(cls, parser):
+        """Add -j/--json on its own, without -o/--output.
+
+        Use this for a command that reports its result through the exit status. The
+        output-file seam only commits the destination when the command exits 0, so an
+        ordinary nonzero result would silently discard the file.
+        """
+        output_group = parser.add_argument_group("output options")
+        output_group.add_argument("-j", "--json", action="store_true", help="Output in JSON format")
+
+    @classmethod
     def _add_locale_option(cls, parser, default="en_US", help=None):
         """Add the common -l/--locale option.
 

@@ -17,7 +17,7 @@ from ...collator import (
     sort_strings,
 )
 from ...errors import CollatorError
-from ...formatters import print_output
+from ...formatters import print_output, print_record
 from ..subcommand_base import SubcommandBase
 
 
@@ -59,6 +59,9 @@ Examples:
 
   # List collation types
   icukit collate list types
+
+  # Machine-readable output (every subcommand takes --json)
+  icukit collate compare 'cafe' 'cafe' --json
 """,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -124,6 +127,7 @@ Examples:
             help="Sort uppercase or lowercase first",
         )
         cls._add_input_options(parser)
+        cls._add_output_options(parser, include_header=False)
 
     @classmethod
     def _configure_compare(cls, parser):
@@ -143,6 +147,7 @@ Examples:
             choices=["primary", "secondary", "tertiary", "quaternary", "identical"],
             help="Collation strength",
         )
+        cls._add_json_option(parser)
 
     @classmethod
     def _configure_info(cls, parser):
@@ -179,9 +184,12 @@ Examples:
     @classmethod
     def cmd_sort(cls, args):
         """Sort lines using locale-aware collation."""
+        as_json = getattr(args, "json", False)
         try:
             lines = cls._read_lines(args)
             if not lines:
+                if as_json:
+                    print_output([], as_json=True)
                 return 0
 
             if args.unique:
@@ -201,12 +209,18 @@ Examples:
                 case_first=getattr(args, "case_first", None),
             )
 
-            for line in sorted_lines:
-                print(line)
+            if as_json:
+                print_output(list(sorted_lines), as_json=True)
+            else:
+                for line in sorted_lines:
+                    print(line)
             return 0
         except CollatorError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
+
+    # Exit status by relation: less-than 1, greater-than 2, equal 0.
+    COMPARE_STATUS = {"<": 1, "=": 0, ">": 2}
 
     @classmethod
     def cmd_compare(cls, args):
@@ -218,16 +232,24 @@ Examples:
                 args.locale,
                 strength=args.strength,
             )
+            order = (result > 0) - (result < 0)
+            relation = "<" if order < 0 else ">" if order > 0 else "="
 
-            if result < 0:
-                print(f'"{args.string_a}" < "{args.string_b}"')
-                return 1
-            elif result > 0:
-                print(f'"{args.string_a}" > "{args.string_b}"')
-                return 2
+            if getattr(args, "json", False):
+                print_record(
+                    {
+                        "a": args.string_a,
+                        "b": args.string_b,
+                        "locale": args.locale,
+                        "strength": args.strength,
+                        "order": order,
+                        "relation": relation,
+                    },
+                    as_json=True,
+                )
             else:
-                print(f'"{args.string_a}" = "{args.string_b}"')
-                return 0
+                print(f'"{args.string_a}" {relation} "{args.string_b}"')
+            return cls.COMPARE_STATUS[relation]
         except CollatorError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
@@ -242,8 +264,8 @@ Examples:
             as_json = getattr(args, "json", False)
             no_header = getattr(args, "no_header", False)
 
-            print_output(
-                [info],
+            print_record(
+                info,
                 as_json=as_json,
                 columns=cls.INFO_COLUMNS,
                 headers=not no_header,

@@ -30,6 +30,7 @@ __all__ = [
     "format_simple_list",
     "format_tsv",
     "print_output",
+    "print_record",
 ]
 
 
@@ -136,7 +137,10 @@ def format_output(
             TSV, non-empty sequences of strings become newline-separated text, and
             mappings become sorted labeled sections, with a newline before each label.
             Other values fall back to JSON.
-        as_json: Render as JSON. A sequence containing one item is unwrapped first.
+        as_json: Render as JSON. The shape of *data* is preserved exactly: a sequence
+            renders as a JSON array at every length, including one and zero, so a
+            consumer never has to branch on cardinality. Use :func:`print_record` for
+            a command that yields exactly one thing by nature.
         columns: Columns to include in TSV output, in order.
         headers: Include a TSV header when more than one column is rendered.
 
@@ -144,9 +148,6 @@ def format_output(
         Formatted text without a trailing newline.
     """
     if as_json:
-        # Unwrap single-item lists for cleaner JSON output
-        if isinstance(data, (list, tuple)) and len(data) == 1:
-            return format_json(data[0])
         return format_json(data)
     if isinstance(data, (list, tuple)) and data:
         if isinstance(data[0], dict):
@@ -195,6 +196,42 @@ def print_output(
 
     output = format_output(data, as_json=as_json, columns=columns, headers=headers)
     print(output, file=file or sys.stdout)
+
+
+def print_record(
+    record: dict[str, Any],
+    as_json: bool = False,
+    columns: list[str] | None = None,
+    headers: bool = True,
+    file: TextIO | None = None,
+    extended_columns: list[str] | None = None,
+) -> None:
+    """Render one record and write it followed by a newline.
+
+    Use this where a command yields exactly one thing by nature — one unit's
+    information, one parse result, one comparison — rather than a collection that
+    happens to hold a single item. A collection belongs in :func:`print_output`,
+    which renders it as a JSON array at every length.
+
+    Args:
+        record: The single record to render.
+        as_json: Render as a bare JSON object rather than a one-row table.
+        columns: Columns to include in TSV output, in order.
+        headers: Include a TSV header when more than one column is rendered.
+        file: Text stream to write to. Defaults to standard output.
+        extended_columns: Keys from the record's ``extended`` mapping to append as TSV
+            columns. This transformation is not applied to JSON output.
+    """
+    if as_json:
+        print_output(record, as_json=True, file=file)
+        return
+    print_output(
+        [record],
+        columns=columns,
+        headers=headers,
+        file=file,
+        extended_columns=extended_columns,
+    )
 
 
 def flatten_extended(
