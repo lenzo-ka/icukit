@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 import icu
 
@@ -38,6 +39,34 @@ class BreakerCommand(SubcommandBase):
         )
 
     @classmethod
+    def _add_jsonl_option(cls, parser, unit):
+        parser.add_argument(
+            "--jsonl",
+            action="store_true",
+            help=f"One JSON object per line: {unit}; takes precedence over --json",
+        )
+
+    @classmethod
+    def _provenance(cls):
+        """Return the runtime version stamp used by JSON and JSONL output."""
+        return {
+            "icu_version": icu.ICU_VERSION,
+            "unicode_version": icu.UNICODE_VERSION,
+            "pyicu_version": icu.VERSION,
+            "icukit_version": __version__,
+        }
+
+    @classmethod
+    def _print_jsonl(cls, args, records):
+        """Print one compact JSON object per line, if there are any records."""
+        provenance = cls._provenance() if getattr(args, "provenance", False) else None
+        if provenance is not None:
+            records = ({**record, "provenance": provenance} for record in records)
+        output = "\n".join(json.dumps(record, ensure_ascii=False) for record in records)
+        if output:
+            print(output)
+
+    @classmethod
     def _print_json(cls, args, breaks):
         """Print break data, optionally wrapped in a reproducibility document."""
         if not getattr(args, "provenance", False):
@@ -50,12 +79,7 @@ class BreakerCommand(SubcommandBase):
             breaks = breaks[0]
         print_output(
             {
-                "provenance": {
-                    "icu_version": icu.ICU_VERSION,
-                    "unicode_version": icu.UNICODE_VERSION,
-                    "pyicu_version": icu.VERSION,
-                    "icukit_version": __version__,
-                },
+                "provenance": cls._provenance(),
                 "breaks": breaks,
             },
             as_json=True,
@@ -63,8 +87,12 @@ class BreakerCommand(SubcommandBase):
 
     @classmethod
     def _validate_provenance(cls, args):
-        if getattr(args, "provenance", False) and not getattr(args, "json", False):
-            raise BreakerError("--provenance requires --json")
+        if (
+            getattr(args, "provenance", False)
+            and not getattr(args, "json", False)
+            and not getattr(args, "jsonl", False)
+        ):
+            raise BreakerError("--provenance requires --json or --jsonl")
 
     @classmethod
     def _add_spans_option(cls, parser, *, line_break_type=False):
@@ -110,6 +138,9 @@ Examples:
 
   # Tokenize sentences (sentences then words)
   icukit break tokenize -t 'Hello world. How are you?'
+
+  # Emit one word object per line
+  icukit break words --jsonl -t 'Hello, world!'
 """,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -160,6 +191,7 @@ Examples:
         cls._add_spans_option(parser)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
+        cls._add_jsonl_option(parser, "one sentence per line (a full span object with --spans)")
         cls._add_provenance_option(parser)
 
     @classmethod
@@ -180,6 +212,7 @@ Examples:
         )
         cls._add_input_options(parser)
         cls._add_output_options(parser)
+        cls._add_jsonl_option(parser, "one word per line (a full span object with --spans)")
         cls._add_provenance_option(parser)
 
     @classmethod
@@ -189,6 +222,7 @@ Examples:
         cls._add_spans_option(parser, line_break_type=True)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
+        cls._add_jsonl_option(parser, "one line segment per line (a full span object with --spans)")
         cls._add_provenance_option(parser)
 
     @classmethod
@@ -205,6 +239,9 @@ Examples:
         cls._add_spans_option(display_group)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
+        cls._add_jsonl_option(
+            parser, "one grapheme cluster per line (a full span object with --spans)"
+        )
         cls._add_provenance_option(parser)
 
     @classmethod
@@ -220,6 +257,7 @@ Examples:
         )
         cls._add_input_options(parser)
         cls._add_output_options(parser)
+        cls._add_jsonl_option(parser, "one token per line, each with a 1-based sentence number")
         cls._add_provenance_option(parser)
 
     @classmethod
@@ -229,11 +267,14 @@ Examples:
         breaker = Breaker(args.locale)
         cls._validate_provenance(args)
         as_json = getattr(args, "json", False)
+        as_jsonl = getattr(args, "jsonl", False)
 
         if getattr(args, "spans", False):
             text = "\n".join(cls._read_lines(args))
             spans = breaker.break_sentence_spans(text)
-            if as_json:
+            if as_jsonl:
+                cls._print_jsonl(args, spans)
+            elif as_json:
                 cls._print_json(args, spans)
             else:
                 print_output(
@@ -243,10 +284,13 @@ Examples:
                 )
             return 0
 
-        if as_json:
+        if as_jsonl or as_json:
             text = "\n".join(cls._read_lines(args))
             sentences = [sentence.strip() for sentence in breaker.iter_sentences(text)]
-            cls._print_json(args, sentences)
+            if as_jsonl:
+                cls._print_jsonl(args, ({"text": sentence} for sentence in sentences))
+            else:
+                cls._print_json(args, sentences)
             return 0
 
         def processor(text):
@@ -267,11 +311,14 @@ Examples:
         skip_ws = not getattr(args, "include_whitespace", False)
 
         as_json = getattr(args, "json", False)
+        as_jsonl = getattr(args, "jsonl", False)
 
         if getattr(args, "spans", False):
             text = "\n".join(cls._read_lines(args))
             spans = breaker.break_word_spans(text, skip_ws, skip_punct)
-            if as_json:
+            if as_jsonl:
+                cls._print_jsonl(args, spans)
+            elif as_json:
                 cls._print_json(args, spans)
             else:
                 print_output(
@@ -281,12 +328,15 @@ Examples:
                 )
             return 0
 
-        if as_json:
+        if as_jsonl or as_json:
             # Collect all words for JSON output
             lines = cls._read_lines(args)
             text = "\n".join(lines)
             words = breaker.break_words(text, skip_ws, skip_punct)
-            cls._print_json(args, words)
+            if as_jsonl:
+                cls._print_jsonl(args, ({"text": word} for word in words))
+            else:
+                cls._print_json(args, words)
         else:
 
             def processor(text):
@@ -304,11 +354,14 @@ Examples:
         cls._validate_provenance(args)
 
         as_json = getattr(args, "json", False)
+        as_jsonl = getattr(args, "jsonl", False)
 
         if getattr(args, "spans", False):
             text = "\n".join(cls._read_lines(args))
             spans = breaker.break_line_spans(text)
-            if as_json:
+            if as_jsonl:
+                cls._print_jsonl(args, spans)
+            elif as_json:
                 cls._print_json(args, spans)
             else:
                 print_output(
@@ -318,11 +371,14 @@ Examples:
                 )
             return 0
 
-        if as_json:
+        if as_jsonl or as_json:
             lines = cls._read_lines(args)
             text = "\n".join(lines)
             segments = breaker.break_lines(text)
-            cls._print_json(args, segments)
+            if as_jsonl:
+                cls._print_jsonl(args, ({"text": segment} for segment in segments))
+            else:
+                cls._print_json(args, segments)
         else:
 
             def processor(text):
@@ -340,13 +396,16 @@ Examples:
         cls._validate_provenance(args)
         show_codepoints = getattr(args, "show_codepoints", False)
         as_json = getattr(args, "json", False)
+        as_jsonl = getattr(args, "jsonl", False)
         no_header = getattr(args, "no_header", False)
 
         lines = cls._read_lines(args)
         text = "\n".join(lines)
         if getattr(args, "spans", False):
             spans = breaker.break_grapheme_spans(text)
-            if as_json:
+            if as_jsonl:
+                cls._print_jsonl(args, spans)
+            elif as_json:
                 cls._print_json(args, spans)
             else:
                 print_output(spans, columns=cls.SPAN_COLUMNS, headers=not no_header)
@@ -354,12 +413,14 @@ Examples:
 
         graphemes = breaker.break_graphemes(text)
 
-        if show_codepoints or as_json:
+        if show_codepoints or as_json or as_jsonl:
             data = []
             for g in graphemes:
                 codepoints = " ".join(f"U+{ord(c):04X}" for c in g)
                 data.append({"grapheme": g, "codepoints": codepoints, "length": len(g)})
-            if as_json:
+            if as_jsonl:
+                cls._print_jsonl(args, data)
+            elif as_json:
                 cls._print_json(args, data)
             else:
                 print_output(
@@ -380,12 +441,20 @@ Examples:
         cls._validate_provenance(args)
         skip_punct = getattr(args, "skip_punctuation", False)
         as_json = getattr(args, "json", False)
+        as_jsonl = getattr(args, "jsonl", False)
 
         lines = cls._read_lines(args)
         text = "\n".join(lines)
         if getattr(args, "spans", False):
             tokenized = breaker.tokenize_sentence_spans(text, skip_punctuation=skip_punct)
-            if as_json:
+            if as_jsonl:
+                rows = [
+                    {"sentence": sentence_number, **span}
+                    for sentence_number, sentence in enumerate(tokenized, 1)
+                    for span in sentence
+                ]
+                cls._print_jsonl(args, rows)
+            elif as_json:
                 cls._print_json(args, tokenized)
             else:
                 rows = [
@@ -402,7 +471,14 @@ Examples:
 
         tokenized = breaker.tokenize_sentences(text, skip_punctuation=skip_punct)
 
-        if as_json:
+        if as_jsonl:
+            rows = [
+                {"sentence": sentence_number, "text": token}
+                for sentence_number, sentence in enumerate(tokenized, 1)
+                for token in sentence
+            ]
+            cls._print_jsonl(args, rows)
+        elif as_json:
             cls._print_json(args, tokenized)
         else:
             for i, tokens in enumerate(tokenized, 1):
