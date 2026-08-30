@@ -206,7 +206,7 @@ def test_output_file_overwrites_existing_content(tmp_path):
     destination.write_text("stale", encoding="utf-8")
     result = run_cli("break", "words", "--json", "-t", "fresh", "-o", str(destination))
     assert (result.returncode, result.stdout, result.stderr) == (0, "", "")
-    assert json.loads(destination.read_text(encoding="utf-8")) == "fresh"
+    assert json.loads(destination.read_text(encoding="utf-8")) == ["fresh"]
 
 
 @pytest.mark.parametrize("destination_exists", [True, False])

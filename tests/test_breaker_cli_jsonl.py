@@ -30,13 +30,44 @@ def run_break(mode, *args, input_text=None):
 
 def parse_jsonl(output):
     assert output.endswith("\n")
-    records = [json.loads(line) for line in output.splitlines()]
+    records = [json.loads(line) for line in output.split("\n")[:-1]]
     assert records
     assert all(isinstance(record, dict) for record in records)
     if len(records) > 1:
         with pytest.raises(json.JSONDecodeError):
             json.loads(output)
     return records
+
+
+def assert_word_offsets(records, raw):
+    text = raw.decode("utf-8")
+    utf16 = text.encode("utf-16-le")
+    assert b"\r\n" in raw
+    assert all(separator in text for separator in ("\u2028", "\f", "\r\n", "\x85"))
+    separator_ends = [
+        text.index(separator) + len(separator) for separator in ("\u2028", "\f", "\r\n", "\x85")
+    ]
+    assert all(
+        any(record["codepoint_start"] > separator_end for record in records)
+        for separator_end in separator_ends
+    )
+    previous_ends = {"utf8": 0, "codepoint": 0, "utf16": 0}
+    for record in records:
+        token = record["text"]
+        for coordinate in previous_ends:
+            assert record[f"{coordinate}_start"] == previous_ends[coordinate], token
+            previous_ends[coordinate] = record[f"{coordinate}_end"]
+        assert raw[record["utf8_start"] : record["utf8_end"]].decode("utf-8") == token, token
+        assert text[record["codepoint_start"] : record["codepoint_end"]] == token, token
+        assert (
+            utf16[record["utf16_start"] * 2 : record["utf16_end"] * 2].decode("utf-16-le") == token
+        ), token
+    assert previous_ends == {
+        "utf8": len(raw),
+        "codepoint": len(text),
+        "utf16": len(utf16) // 2,
+    }
+    assert "".join(record["text"] for record in records) == text
 
 
 @pytest.mark.parametrize("mode", MODES)
@@ -118,6 +149,42 @@ def test_jsonl_span_offsets_round_trip_in_all_coordinate_spaces(mode):
         assert lengths == (4, 2, 1)
     else:
         assert lengths[0] > lengths[1] > lengths[2]
+
+
+def test_word_span_offsets_locate_tokens_in_file_bytes(tmp_path):
+    path = tmp_path / "separators.txt"
+    source = "before\u2028after form\ffeed crlf\r\nnext nel\x85last tail\n"
+    path.write_bytes(source.encode("utf-8"))
+
+    result = run_break("words", "--spans", "--jsonl", "--include-whitespace", str(path))
+    assert (result.returncode, result.stderr) == (0, "")
+    records = parse_jsonl(result.stdout)
+    raw = path.read_bytes()
+    assert_word_offsets(records, raw)
+
+
+def test_word_span_offsets_locate_tokens_in_stdin_bytes():
+    raw = "before\u2028after form\ffeed crlf\r\nnext nel\x85last tail\n".encode()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "icukit.cli",
+            "break",
+            "words",
+            "--spans",
+            "--jsonl",
+            "--include-whitespace",
+        ],
+        cwd=ROOT,
+        input=raw,
+        capture_output=True,
+        text=False,
+        check=False,
+    )
+    assert (result.returncode, result.stderr) == (0, b"")
+    records = parse_jsonl(result.stdout.decode("utf-8"))
+    assert_word_offsets(records, raw)
 
 
 @pytest.mark.parametrize("spans", [False, True])
