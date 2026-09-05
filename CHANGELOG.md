@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.0] - UNRELEASED
+
 ### Added
 
 - `--json` on every remaining `collate`, `datetime`, `idna`, and `measure`
@@ -38,6 +40,21 @@
 - `locale maximize` as a spelling of `locale expand`. The CLI already offered
   `locale minimize`, and `maximize` is the name ICU gives its counterpart, so it
   is the word a user reaches for after seeing one half of the pair.
+- Strict, round-tripping date and number detectors, typed value and format-spec
+  classes, candidate resolution, `detect()`, and `DetectorSet` composition.
+- Flexible recognizers for numbers, numeric and textual dates, currency symbols
+  and names, compact and scientific numbers, spellout numbers, relative dates,
+  date intervals, fractions, ordinals, times, percents, and measures.
+- A reflective detector engine with `Family`, `generated_detectors()`, detector
+  reports, and abbreviation, date/time skeleton, date interval, compact number,
+  scientific number, spellout number, and relative date family constants.
+- An abbreviation subsystem with a RELAX NG-validated XML lexicon, English
+  lexicon data, compilation and loading APIs, a sentence-break post-filter, and
+  an abbreviation detector.
+- A recall evaluation harness backed by a vendored oracle and a round-trip
+  conformance harness with a golden detector inventory.
+- Measure recognition values and format specifications, plus locale-aware unit
+  abbreviation utilities.
 
 ### Changed
 
@@ -92,6 +109,11 @@
   `calendar info`, `collate info`, `duration parse`, `measure info`,
   `parse currency`, `plural info`, `region info`, `script info`,
   `timezone info` — still emit a bare object, and their output is unchanged.
+- Export the complete recognition surface from the top-level package, including
+  flexible recognizers, detector entry points and groups, value classes, and
+  reflective families; `from icukit import *` is coherent again.
+- Document Python 3.11 as the minimum supported version, matching package
+  metadata.
 
 ### Fixed
 
@@ -126,37 +148,6 @@
   lexicon." Nothing was malformed, which is why it stood — a fragment still reads
   as prose. The generator now takes the contiguous comment block, and an
   assignment docstring still takes precedence over a comment.
-
-## [0.4.0] - 2026-08-23
-
-### Added
-
-- Strict, round-tripping date and number detectors, typed value and format-spec
-  classes, candidate resolution, `detect()`, and `DetectorSet` composition.
-- Flexible recognizers for numbers, numeric and textual dates, currency symbols
-  and names, compact and scientific numbers, spellout numbers, relative dates,
-  date intervals, fractions, ordinals, times, percents, and measures.
-- A reflective detector engine with `Family`, `generated_detectors()`, detector
-  reports, and abbreviation, date/time skeleton, date interval, compact number,
-  scientific number, spellout number, and relative date family constants.
-- An abbreviation subsystem with a RELAX NG-validated XML lexicon, English
-  lexicon data, compilation and loading APIs, a sentence-break post-filter, and
-  an abbreviation detector.
-- A recall evaluation harness backed by a vendored oracle and a round-trip
-  conformance harness with a golden detector inventory.
-- Measure recognition values and format specifications, plus locale-aware unit
-  abbreviation utilities.
-
-### Changed
-
-- Export the complete recognition surface from the top-level package, including
-  flexible recognizers, detector entry points and groups, value classes, and
-  reflective families; `from icukit import *` is coherent again.
-- Document Python 3.11 as the minimum supported version, matching package
-  metadata.
-
-### Fixed
-
 - Preserve exact `Decimal` values for large flexible compact numbers, percents,
   and fractions instead of rounding, emitting exponent notation, or raising.
 - Derive unit abbreviations from ICU's numeric field position, preserving digits
@@ -253,3 +244,6 @@
 ## 0.1.0
 
 - Initial release
+
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/lenzo-ka/icukit/compare/v0.3.0...v0.4.0
