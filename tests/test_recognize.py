@@ -551,6 +551,40 @@ def test_flexible_currency_gains_recall(surface, decimal):
     assert detection["captures"][0].name == "currency"
 
 
+@pytest.mark.parametrize(
+    "currency, surface, decimal",
+    [
+        ("USD", "$5 million", "5000000"),
+        ("USD", "$5M", "5000000"),
+        ("USD", "$1m", "1000000"),
+        ("USD", "$23k", "23000"),
+        ("GBP", "£180k", "180000"),
+        ("USD", "$1.6b", "1600000000"),
+        ("EUR", "€3.1b", "3100000000"),
+        ("USD", "$5bn", "5000000000"),
+        ("USD", "$5BN", "5000000000"),
+        ("USD", "$1bn", "1000000000"),
+        ("USD", "US$10 million", "10000000"),
+        ("AUD", "A$1 million", "1000000"),
+        ("XCD", "EC$1.3 billion", "1300000000"),
+        ("USD", "100 Million Dollar", "100000000"),
+        ("USD", "100 million dollars", "100000000"),
+        ("USD", "US$100,000", "100000"),
+    ],
+)
+def test_flexible_currency_composes_scaled_and_prefixed_amounts(currency, surface, decimal):
+    detection = FlexibleCurrencyDetector("en_US", currency).detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["type"] == f"number:currency:{currency}"
+    assert detection["value"] == NumberValue(decimal, currency)
+
+
+def test_flexible_currency_rejects_ambiguous_or_embedded_symbols():
+    assert FlexibleCurrencyDetector("en_US", "AUD").detect("$5") == []
+    assert FlexibleCurrencyDetector("en_US", "USD").detect("A$1") == []
+
+
 @pytest.mark.parametrize("surface, decimal", [("5 US dollars", "5"), ("1 US Dollar", "1")])
 def test_flexible_currency_name_gains_recall_over_strict(surface, decimal):
     assert NumberDetector("en_US", "currency", "USD").detect(surface) == []
@@ -1350,6 +1384,27 @@ def test_flexible_compact_long_is_reflective_in_a_non_english_locale():
     detection = FlexibleCompactDetector(locale, "long").detect(surface)[0]
     assert detection["text"] == surface
     assert detection["value"] == NumberValue(str(value), None)
+
+
+@pytest.mark.parametrize("surface", ["5m", "5k", "5b"])
+def test_flexible_compact_keeps_single_letter_affixes_case_sensitive(surface):
+    assert not any(
+        detection["text"] == surface
+        for detection in FlexibleCompactDetector("en_US", "short").detect(surface)
+    )
+
+
+def test_flexible_compact_accepts_case_variants_of_scale_words():
+    detection = FlexibleCompactDetector("en_US", "long").detect("5 MILLION")[0]
+
+    assert detection["value"] == NumberValue("5000000", None)
+
+
+@pytest.mark.parametrize("surface, decimal", [("5M", "5000000"), ("5K", "5000")])
+def test_flexible_compact_keeps_canonical_short_symbols(surface, decimal):
+    detection = FlexibleCompactDetector("en_US", "short").detect(surface)[0]
+
+    assert detection["value"] == NumberValue(decimal, None)
 
 
 @pytest.mark.parametrize("surface", ["1.2Million", "3Km"])

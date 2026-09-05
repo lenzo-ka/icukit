@@ -4778,7 +4778,11 @@ those candidates unchanged.
 
 Recognize a flexible number with reflectively derived ICU compact affixes.
 
-#### `FlexibleCompactDetector(locale: 'str', width: 'str') -> 'None'`
+``fold_symbol_case`` licenses case variants of single-letter compact symbols when
+enclosing context disambiguates them. It is off by default because bare lowercase
+symbols collide with unit abbreviations.
+
+#### `FlexibleCompactDetector(locale: 'str', width: 'str', *, fold_symbol_case: 'bool' = False) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4788,7 +4792,7 @@ Return greedy, non-overlapping flexible compact numbers in source order.
 
 ### class `FlexibleCurrencyDetector`
 
-Recognize a locale currency symbol before or after a flexible number.
+Recognize a reflective currency symbol or name around a scaled flexible number.
 
 #### `FlexibleCurrencyDetector(locale: 'str', currency: 'str') -> 'None'`
 
