@@ -344,6 +344,44 @@ def test_hanidec_digits_are_not_assumed_to_be_contiguous_code_points():
     }
 
 
+@pytest.mark.parametrize("surface, decimal", [("I", "1"), ("II", "2"), ("IV", "4"), ("XV", "15")])
+def test_flexible_number_recognizes_roman_cardinals(surface, decimal):
+    detection = FlexibleNumberDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["type"].startswith("number:cardinal")
+    assert detection["value"] == NumberValue(decimal, None)
+    assert detection["captures"][0].form == "roman"
+
+
+def test_flexible_number_roman_round_trip_and_single_letter_switch():
+    detector = FlexibleNumberDetector("en_US")
+
+    assert detector.detect("IIII") == []
+    assert detector.detect("IIX") == []
+    assert detector.detect("V.")[0]["text"] == "V"
+    assert FlexibleNumberDetector("en_US", accept_single_letter_roman=False).detect("I") == []
+
+
+@pytest.mark.parametrize("surface", ["cm", "mm", "mix"])
+def test_flexible_number_lowercase_roman_is_opt_in(surface):
+    assert not any(
+        detection["type"].startswith("number:cardinal")
+        for detection in FlexibleNumberDetector("en_US").detect(surface)
+    )
+    assert any(
+        detection["type"].startswith("number:cardinal")
+        for detection in FlexibleNumberDetector("en_US", accept_lowercase_roman=True).detect(
+            surface
+        )
+    )
+
+
+@pytest.mark.parametrize("surface", ["II", "XV", "XLVIII", "I"])
+def test_flexible_number_uppercase_roman_remains_enabled(surface):
+    assert FlexibleNumberDetector("en_US").detect(surface)[0]["text"] == surface
+
+
 @pytest.mark.parametrize("surface, decimal", [("1.234.567", "1234567"), ("1234,5", "1234.5")])
 def test_locale_separators(surface, decimal):
     detection = FlexibleNumberDetector("de_DE").detect(surface)[0]
@@ -428,6 +466,40 @@ def test_non_numbers_do_not_match(surface):
     assert FlexibleNumberDetector("en_US").detect(surface) == []
 
 
+@pytest.mark.parametrize("surface, decimal", [(".1", "0.1"), (".0", "0.0"), ("-.5", "-0.5")])
+def test_flexible_number_recognizes_leading_dot_decimals(surface, decimal):
+    detection = FlexibleNumberDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == NumberValue(decimal, None)
+
+
+def test_leading_dot_support_preserves_decimal_boundaries():
+    detector = FlexibleNumberDetector("en_US")
+
+    assert detector.detect("3.")[0]["text"] == "3"
+    assert detector.detect(".") == []
+    # A second decimal separator is not a boundary, so the parent behavior of reading
+    # the two integer runs remains intact.
+    assert [detection["text"] for detection in detector.detect("1..2")] == ["1", "2"]
+    assert detector.detect("1.5")[0]["value"] == NumberValue("1.5", None)
+
+
+@pytest.mark.parametrize("surface", ["..5", "v.1"])
+def test_leading_dot_decimal_rejects_a_word_or_decimal_left_neighbor(surface):
+    assert not any(
+        detection["text"].startswith(".")
+        for detection in FlexibleNumberDetector("en_US").detect(surface)
+    )
+
+
+@pytest.mark.parametrize("surface", ["(.5)", "a .5 b"])
+def test_leading_dot_decimal_accepts_a_real_left_boundary(surface):
+    assert any(
+        detection["text"] == ".5" for detection in FlexibleNumberDetector("en_US").detect(surface)
+    )
+
+
 def test_real_text_composes_with_detect_and_resolve():
     text = "the year 2026 saw 1,234 events"
     flexible = FlexibleNumberDetector("en_US")
@@ -477,6 +549,40 @@ def test_flexible_currency_gains_recall(surface, decimal):
     assert detection["value"] == NumberValue(decimal, "USD")
     assert detection["spec"] == NumberFormatSpec("en_US", "currency", currency="USD")
     assert detection["captures"][0].name == "currency"
+
+
+@pytest.mark.parametrize(
+    "currency, surface, decimal",
+    [
+        ("USD", "$5 million", "5000000"),
+        ("USD", "$5M", "5000000"),
+        ("USD", "$1m", "1000000"),
+        ("USD", "$23k", "23000"),
+        ("GBP", "£180k", "180000"),
+        ("USD", "$1.6b", "1600000000"),
+        ("EUR", "€3.1b", "3100000000"),
+        ("USD", "$5bn", "5000000000"),
+        ("USD", "$5BN", "5000000000"),
+        ("USD", "$1bn", "1000000000"),
+        ("USD", "US$10 million", "10000000"),
+        ("AUD", "A$1 million", "1000000"),
+        ("XCD", "EC$1.3 billion", "1300000000"),
+        ("USD", "100 Million Dollar", "100000000"),
+        ("USD", "100 million dollars", "100000000"),
+        ("USD", "US$100,000", "100000"),
+    ],
+)
+def test_flexible_currency_composes_scaled_and_prefixed_amounts(currency, surface, decimal):
+    detection = FlexibleCurrencyDetector("en_US", currency).detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["type"] == f"number:currency:{currency}"
+    assert detection["value"] == NumberValue(decimal, currency)
+
+
+def test_flexible_currency_rejects_ambiguous_or_embedded_symbols():
+    assert FlexibleCurrencyDetector("en_US", "AUD").detect("$5") == []
+    assert FlexibleCurrencyDetector("en_US", "USD").detect("A$1") == []
 
 
 @pytest.mark.parametrize("surface, decimal", [("5 US dollars", "5"), ("1 US Dollar", "1")])
@@ -709,6 +815,25 @@ def test_flexible_text_date_gains_recall_over_numeric(surface, fields):
     assert (month.value, month.form) == (fields[-2][1], "wide")
 
 
+@pytest.mark.parametrize(
+    "surface, fields",
+    [
+        ("25 July 2011", (("y", 2011), ("M", 7), ("d", 25))),
+        ("25 Jul 2011", (("y", 2011), ("M", 7), ("d", 25))),
+        ("August 2010", (("y", 2010), ("M", 8))),
+    ],
+)
+def test_flexible_text_date_recognizes_day_first_and_month_year(surface, fields):
+    detection = FlexibleTextDateDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == DateTimeValue(fields, "gregorian")
+
+
+def test_flexible_text_date_leaves_decades_out_of_scope():
+    assert FlexibleTextDateDetector("en_US").detect("1950s") == []
+
+
 def test_flexible_text_date_captures_short_names_and_is_case_insensitive():
     detection = FlexibleTextDateDetector("en_US").detect("wednesday, jul 25, 2012")[0]
     captures = {capture.name: capture for capture in detection["captures"]}
@@ -726,7 +851,10 @@ def test_flexible_text_date_is_reflective_for_non_english_locale():
     assert next(c for c in detection["captures"] if c.name == "month").form == "wide"
 
 
-@pytest.mark.parametrize("surface", ["February 30, 2012", "April 31, 2012"])
+@pytest.mark.parametrize(
+    "surface",
+    ["February 30, 2012", "April 31, 2012", "30 February 2012", "31 April 2012"],
+)
 def test_flexible_text_date_rejects_impossible_dates(surface):
     assert FlexibleTextDateDetector("en_US").detect(surface) == []
 
@@ -1037,6 +1165,26 @@ def test_flexible_fraction_gains_recall(surface, decimal, names):
     assert [capture.name for capture in detection["captures"]] == names
 
 
+@pytest.mark.parametrize(
+    "surface, decimal, names",
+    [
+        ("½", "0.5", ["numerator", "denominator"]),
+        ("3½", "3.5", ["whole", "numerator", "denominator"]),
+        ("4 ½", "4.5", ["whole", "numerator", "denominator"]),
+        ("-1/2", "-0.5", ["sign", "numerator", "denominator"]),
+    ],
+)
+def test_flexible_fraction_recognizes_vulgar_and_signed_forms(surface, decimal, names):
+    detection = FlexibleFractionDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == NumberValue(decimal, None)
+    assert [capture.name for capture in detection["captures"]] == names
+    assert all(
+        surface[capture.start : capture.end] == capture.text for capture in detection["captures"]
+    )
+
+
 def test_flexible_fraction_handles_large_nonterminating_value():
     surface = "99999999999999999999999999999/7"
     detection = FlexibleFractionDetector("en_US").detect(surface)[0]
@@ -1258,6 +1406,27 @@ def test_flexible_compact_long_is_reflective_in_a_non_english_locale():
     detection = FlexibleCompactDetector(locale, "long").detect(surface)[0]
     assert detection["text"] == surface
     assert detection["value"] == NumberValue(str(value), None)
+
+
+@pytest.mark.parametrize("surface", ["5m", "5k", "5b"])
+def test_flexible_compact_keeps_single_letter_affixes_case_sensitive(surface):
+    assert not any(
+        detection["text"] == surface
+        for detection in FlexibleCompactDetector("en_US", "short").detect(surface)
+    )
+
+
+def test_flexible_compact_accepts_case_variants_of_scale_words():
+    detection = FlexibleCompactDetector("en_US", "long").detect("5 MILLION")[0]
+
+    assert detection["value"] == NumberValue("5000000", None)
+
+
+@pytest.mark.parametrize("surface, decimal", [("5M", "5000000"), ("5K", "5000")])
+def test_flexible_compact_keeps_canonical_short_symbols(surface, decimal):
+    detection = FlexibleCompactDetector("en_US", "short").detect(surface)[0]
+
+    assert detection["value"] == NumberValue(decimal, None)
 
 
 @pytest.mark.parametrize("surface", ["1.2Million", "3Km"])

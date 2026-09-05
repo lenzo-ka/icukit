@@ -14,17 +14,17 @@
     },
     "decimal": {
       "total": 12,
-      "recognized_strict": 5,
+      "recognized_strict": 6,
       "recognized_lenient": 12,
-      "recall_strict": 0.4166666666666667,
+      "recall_strict": 0.5,
       "recall_lenient": 1.0
     },
     "date": {
       "total": 54,
-      "recognized_strict": 11,
-      "recognized_lenient": 14,
-      "recall_strict": 0.2037037037037037,
-      "recall_lenient": 0.25925925925925924
+      "recognized_strict": 21,
+      "recognized_lenient": 24,
+      "recall_strict": 0.3888888888888889,
+      "recall_lenient": 0.4444444444444444
     },
     "time": {
       "total": 21,
@@ -35,10 +35,10 @@
     },
     "money": {
       "total": 71,
-      "recognized_strict": 45,
-      "recognized_lenient": 57,
-      "recall_strict": 0.6338028169014085,
-      "recall_lenient": 0.8028169014084507
+      "recognized_strict": 52,
+      "recognized_lenient": 59,
+      "recall_strict": 0.7323943661971831,
+      "recall_lenient": 0.8309859154929577
     },
     "fraction": {
       "total": 16,
@@ -50,16 +50,16 @@
     "ordinal": {
       "total": 27,
       "recognized_strict": 15,
-      "recognized_lenient": 19,
+      "recognized_lenient": 15,
       "recall_strict": 0.5555555555555556,
-      "recall_lenient": 0.7037037037037037
+      "recall_lenient": 0.5555555555555556
     }
   },
   "overall": {
     "total": 219,
-    "recognized_strict": 111,
-    "recognized_lenient": 152,
-    "recall_strict": 0.5068493150684932,
-    "recall_lenient": 0.6940639269406392
+    "recognized_strict": 129,
+    "recognized_lenient": 160,
+    "recall_strict": 0.589041095890411,
+    "recall_lenient": 0.730593607305936
   }
 }

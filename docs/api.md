@@ -4778,7 +4778,11 @@ those candidates unchanged.
 
 Recognize a flexible number with reflectively derived ICU compact affixes.
 
-#### `FlexibleCompactDetector(locale: 'str', width: 'str') -> 'None'`
+``fold_symbol_case`` licenses case variants of single-letter compact symbols when
+enclosing context disambiguates them. It is off by default because bare lowercase
+symbols collide with unit abbreviations.
+
+#### `FlexibleCompactDetector(locale: 'str', width: 'str', *, fold_symbol_case: 'bool' = False) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4788,7 +4792,7 @@ Return greedy, non-overlapping flexible compact numbers in source order.
 
 ### class `FlexibleCurrencyDetector`
 
-Recognize a locale currency symbol before or after a flexible number.
+Recognize a reflective currency symbol or name around a scaled flexible number.
 
 #### `FlexibleCurrencyDetector(locale: 'str', currency: 'str') -> 'None'`
 
@@ -4840,7 +4844,7 @@ Return greedy, non-overlapping date-interval candidates in source order.
 
 ### class `FlexibleFractionDetector`
 
-Recognize ``N/D`` fractions, optionally with a leading whole part ``W N/D``.
+Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
 The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
 the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
@@ -4871,9 +4875,13 @@ Return greedy, non-overlapping flexible measure candidates in source order.
 
 ### class `FlexibleNumberDetector`
 
-Recognize flexible decimal-number spellings using locale symbols from CLDR.
+Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
-#### `FlexibleNumberDetector(locale: 'str') -> 'None'`
+``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
+cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
+unit abbreviations and common words.
+
+#### `FlexibleNumberDetector(locale: 'str', *, accept_single_letter_roman: 'bool' = True, accept_lowercase_roman: 'bool' = False) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 

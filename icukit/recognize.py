@@ -489,6 +489,19 @@ class FlexibleTextDateDetector:
                     continue
                 if {"M", "d"}.issubset(reduced_fields):
                     structures.append((reduced_fields, reduced_literals, pattern))
+        language = icu_locale.getLanguage()
+        for available in icu.Locale.getAvailableLocales().values():
+            if available.getLanguage() != language:
+                continue
+            generator = icu.DateTimePatternGenerator.createInstance(available)
+            for skeleton in ("dMMMMy", "dMMMy", "yMMMM", "yMMM"):
+                pattern = generator.getBestPattern(skeleton)
+                parsed = self._date_structure(pattern)
+                if parsed is None:
+                    continue
+                fields, literals = parsed
+                if fields in {("d", "M", "y"), ("M", "y")}:
+                    structures.append((fields, literals, pattern))
         self._structures = tuple(dict.fromkeys(structures))
         pattern = self._structures[0][2] if self._structures else ""
         self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
@@ -551,7 +564,9 @@ class FlexibleTextDateDetector:
                 return None
             literal.append(character)
             cursor += 1
-        if set(fields) - {"y", "M", "d", "E"} or not {"y", "M", "d"}.issubset(fields):
+        if set(fields) - {"y", "M", "d", "E"}:
+            return None
+        if not ({"y", "M", "d"}.issubset(fields) or set(fields) == {"M", "y"}):
             return None
         if "E" in fields and fields[0] != "E":
             return None
@@ -607,6 +622,13 @@ class FlexibleTextDateDetector:
 
     def _match_structure(self, text: str, start: int, structure):
         fields, literals, _pattern = structure
+        month_year = set(fields) == {"M", "y"}
+        if month_year and start > 0:
+            previous = start - 1
+            while previous >= 0 and text[previous] in _SPACES:
+                previous -= 1
+            if previous >= 0 and text[previous] in self._digits:
+                return None
         cursor = start
         values: dict[str, int] = {}
         captures: list[Capture] = []
@@ -649,12 +671,14 @@ class FlexibleTextDateDetector:
 
         if cursor < len(text) and text[cursor].isalnum():
             return None
+        if month_year and cursor < len(text) and text[cursor] == ",":
+            return None
         calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
         calendar.setLenient(False)
         calendar.clear()
         try:
             validation_year = values.get("y", 2000)
-            calendar.set(validation_year, values["M"] - 1, values["d"])
+            calendar.set(validation_year, values["M"] - 1, values.get("d", 1))
             calendar.getTime()
             if "y" in values and "E" in values:
                 if calendar.get(icu.Calendar.DAY_OF_WEEK) != values["E"]:
@@ -680,13 +704,26 @@ class FlexibleTextDateDetector:
 
 
 class FlexibleNumberDetector:
-    """Recognize flexible decimal-number spellings using locale symbols from CLDR."""
+    """Recognize flexible decimal spellings and Roman cardinals from ICU data.
+
+    ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
+    cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
+    unit abbreviations and common words.
+    """
 
     group = "number"
     type = "number:decimal"
 
-    def __init__(self, locale: str) -> None:
+    def __init__(
+        self,
+        locale: str,
+        *,
+        accept_single_letter_roman: bool = True,
+        accept_lowercase_roman: bool = False,
+    ) -> None:
         self.locale = locale
+        self.accept_single_letter_roman = accept_single_letter_roman
+        self.accept_lowercase_roman = accept_lowercase_roman
         self._nf = icu.NumberFormat.createInstance(icu.Locale(locale))
         symbols = self._nf.getDecimalFormatSymbols()
         symbol = icu.DecimalFormatSymbols
@@ -706,6 +743,29 @@ class FlexibleNumberDetector:
             self._secondary_grouping = secondary or primary
             grouping_sizes = (secondary, primary) if secondary else (primary,)
         self._spec = NumberFormatSpec(locale, "decimal", grouping_sizes=grouping_sizes)
+
+        self._roman = icu.RuleBasedNumberFormat(
+            icu.URBNFRuleSetTag.NUMBERING_SYSTEM, icu.Locale(locale)
+        )
+        rule_sets = tuple(
+            self._roman.getRuleSetName(index)
+            for index in range(self._roman.getNumberOfRuleSetNames())
+        )
+        self._roman_rule_sets = tuple(name for name in rule_sets if "roman" in name.casefold())
+        if not accept_lowercase_roman:
+            self._roman_rule_sets = tuple(
+                name for name in self._roman_rule_sets if "lower" not in name.casefold()
+            )
+        alphabets: dict[str, frozenset[str]] = {}
+        for rule_set in self._roman_rule_sets:
+            alphabet = frozenset(
+                character
+                for value in range(1, 4000)
+                for character in self._roman.format(value, rule_set)
+                if _is_word_character(character)
+            )
+            alphabets[rule_set] = alphabet
+        self._roman_alphabets = alphabets
 
     def _digits_ascii(self, surface: str) -> str:
         return "".join(
@@ -730,7 +790,18 @@ class FlexibleNumberDetector:
             cursor = sign_end
 
         integer_start = cursor
-        if cursor >= len(text) or text[cursor] not in self._digits:
+        leading_decimal = text.startswith(self._decimal, cursor)
+        decimal_end = cursor + len(self._decimal)
+        if leading_decimal and start > 0:
+            previous = text[start - 1]
+            if _is_word_character(previous) or previous == self._decimal:
+                return None
+        if cursor >= len(text) or (
+            text[cursor] not in self._digits
+            and not (
+                leading_decimal and decimal_end < len(text) and text[decimal_end] in self._digits
+            )
+        ):
             return None
         while cursor < len(text) and text[cursor] in self._digits:
             cursor += 1
@@ -758,7 +829,7 @@ class FlexibleNumberDetector:
 
         integer_end = cursor
         integer_text = text[integer_start:integer_end]
-        integer_ascii = self._digits_ascii(integer_text)
+        integer_ascii = self._digits_ascii(integer_text) or "0"
         captures.append(
             Capture(
                 "integer",
@@ -812,7 +883,35 @@ class FlexibleNumberDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible decimal candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        decimals = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        romans = _detect_flexible(
+            text, self.locale, "number:cardinal:roman", self._spec, self._match_roman
+        )
+        return sorted((*decimals, *romans), key=lambda item: (item["start"], item["end"]))
+
+    def _match_roman(self, text: str, start: int):
+        if start > 0 and _is_word_character(text[start - 1]):
+            return None
+        for rule_set in self._roman_rule_sets:
+            alphabet = self._roman_alphabets[rule_set]
+            cursor = start
+            while cursor < len(text) and text[cursor] in alphabet:
+                cursor += 1
+            if cursor == start or cursor - start == 1 and not self.accept_single_letter_roman:
+                continue
+            if cursor < len(text) and _is_word_character(text[cursor]):
+                continue
+            surface = text[start:cursor]
+            position = icu.ParsePosition(0)
+            parsed = self._roman.parse(surface, position)
+            if parsed is None or position.getIndex() != len(surface):
+                continue
+            value = parsed.getInt64()
+            if self._roman.format(value, rule_set) != surface:
+                continue
+            capture = Capture("integer", start, cursor, surface, str(value), "roman")
+            return cursor, (capture,), NumberValue(str(value), None)
+        return None
 
 
 _RELATIVE_NUMERIC_UNITS = (
@@ -1107,7 +1206,7 @@ class FlexiblePercentDetector:
 
 
 class FlexibleCurrencyDetector:
-    """Recognize a locale currency symbol before or after a flexible number."""
+    """Recognize a reflective currency symbol or name around a scaled flexible number."""
 
     group = "number"
 
@@ -1116,10 +1215,31 @@ class FlexibleCurrencyDetector:
         self.currency = currency
         self.type = f"number:currency:{currency}"
         self._number = FlexibleNumberDetector(locale)
+        self._compact = (
+            FlexibleCompactDetector(locale, "long"),
+            FlexibleCompactDetector(locale, "short", fold_symbol_case=True),
+        )
+        self._currency_name = FlexibleCurrencyNameDetector(locale, currency)
         number_format = icu.NumberFormat.createCurrencyInstance(icu.Locale(locale))
         number_format.setCurrency(currency)
         symbols = number_format.getDecimalFormatSymbols()
         self._currency = symbols.getSymbol(icu.DecimalFormatSymbols.kCurrencySymbol)
+        language = icu.Locale(locale).getLanguage()
+        reflected_symbols = {self._currency}
+        requested_locale = icu.Locale(locale).getName()
+        for available in icu.Locale.getAvailableLocales().values():
+            if available.getLanguage() != language:
+                continue
+            narrow = self._currency_affix(available, currency, icu.UNumberUnitWidth.NARROW)
+            short = self._currency_affix(available, currency, icu.UNumberUnitWidth.SHORT)
+            # A foreign locale's narrow symbol is locally ambiguous; only its distinct
+            # short form carries enough information to import into this locale.
+            if available.getName() == requested_locale or short != narrow:
+                reflected_symbols.add(short)
+            reflected_symbols.add(
+                self._currency_affix(available, currency, icu.UNumberUnitWidth.ISO_CODE)
+            )
+        self._currencies = tuple(sorted(reflected_symbols, key=len, reverse=True))
         self._spec = NumberFormatSpec(locale, "currency", currency=currency)
 
     @staticmethod
@@ -1128,26 +1248,95 @@ class FlexibleCurrencyDetector:
             return cursor + 1
         return cursor
 
+    @staticmethod
+    def _currency_affix(locale: icu.Locale, currency: str, width: int) -> str:
+        formatted = str(
+            icu.NumberFormatter.withLocale(locale)
+            .unit(icu.CurrencyUnit(currency))
+            .unitWidth(width)
+            .formatInt(1)
+        )
+        digits = _locale_digit_map(locale)
+        indexes = [index for index, character in enumerate(formatted) if character in digits]
+        if not indexes:
+            return ""
+        prefix = formatted[: indexes[0]].strip()
+        suffix = formatted[indexes[-1] + 1 :].strip()
+        return prefix or suffix
+
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
-        if text.startswith(self._currency, start):
-            symbol_end = start + len(self._currency)
+        if start > 0 and _is_word_character(text[start - 1]):
+            return None
+        for symbol in self._currencies:
+            if not text.startswith(symbol, start):
+                continue
+            symbol_end = start + len(symbol)
             number_start = self._space(text, symbol_end)
-            match = self._number._match(text, number_start)
+            match = self._amount(text, number_start)
             if match is not None:
                 end, captures, value = match
-                currency = Capture("currency", start, symbol_end, self._currency, None, "symbol")
+                currency = Capture("currency", start, symbol_end, symbol, self.currency, "symbol")
                 return end, (currency, *captures), NumberValue(value.decimal, self.currency)
 
-        match = self._number._match(text, start)
+        match = self._amount(text, start)
         if match is None:
             return None
         number_end, captures, value = match
         symbol_start = self._space(text, number_end)
-        if not text.startswith(self._currency, symbol_start):
+        for symbol in self._currencies:
+            if text.startswith(symbol, symbol_start):
+                end = symbol_start + len(symbol)
+                currency = Capture("currency", symbol_start, end, symbol, self.currency, "symbol")
+                return end, (*captures, currency), NumberValue(value.decimal, self.currency)
+        if symbol_start == number_end:
             return None
-        end = symbol_start + len(self._currency)
-        currency = Capture("currency", symbol_start, end, self._currency, None, "symbol")
-        return end, (*captures, currency), NumberValue(value.decimal, self.currency)
+        name_end = self._currency_name._currency_at(text, symbol_start, False)
+        # CLDR calls USD "US dollar" in English; the corpus's region-stripped bare
+        # dollar is lexical because ICU exposes no reflective region-stripping rule.
+        if name_end is None and self.locale.startswith("en") and self.currency == "USD":
+            for surface in ("dollars", "dollar"):
+                end = symbol_start + len(surface)
+                if text[symbol_start:end].casefold() == surface:
+                    name_end = end
+                    break
+        if name_end is None:
+            return None
+        currency = Capture(
+            "currency",
+            symbol_start,
+            name_end,
+            text[symbol_start:name_end],
+            self.currency,
+            "wide",
+        )
+        return name_end, (*captures, currency), NumberValue(value.decimal, self.currency)
+
+    def _amount(self, text: str, start: int):
+        matches = [self._number._match(text, start)]
+        matches.extend(detector._match(text, start) for detector in self._compact)
+        # CLDR English short compacts carry B, but not the corpus suffix bn.
+        if self.locale.startswith("en"):
+            plain = self._number._match(text, start)
+            if plain is not None:
+                end, captures, value = plain
+                for suffix, magnitude in (("bn", 9),):
+                    if text[end : end + len(suffix)].casefold() == suffix:
+                        scaled = Decimal(value.decimal) * Decimal(10) ** magnitude
+                        compact = Capture(
+                            "compact", end, end + len(suffix), suffix, magnitude, "symbol"
+                        )
+                        matches.append(
+                            (
+                                end + len(suffix),
+                                (*captures, compact),
+                                NumberValue(format(scaled, "f")),
+                            )
+                        )
+        return max(
+            (match for match in matches if match is not None),
+            key=lambda match: match[0],
+            default=None,
+        )
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible currency candidates in source order."""
@@ -1243,13 +1432,19 @@ class FlexibleMeasureDetector:
 
 
 class FlexibleCompactDetector:
-    """Recognize a flexible number with reflectively derived ICU compact affixes."""
+    """Recognize a flexible number with reflectively derived ICU compact affixes.
+
+    ``fold_symbol_case`` licenses case variants of single-letter compact symbols when
+    enclosing context disambiguates them. It is off by default because bare lowercase
+    symbols collide with unit abbreviations.
+    """
 
     group = "number"
 
-    def __init__(self, locale: str, width: str) -> None:
+    def __init__(self, locale: str, width: str, *, fold_symbol_case: bool = False) -> None:
         self.locale = locale
         self.width = width
+        self.fold_symbol_case = fold_symbol_case
         self.type = f"number:compact:{width}"
         self._number = FlexibleNumberDetector(locale)
         self._spec = CompactFormatSpec(locale, width)
@@ -1368,12 +1563,20 @@ class FlexibleCompactDetector:
                         negative = is_negative
                         cursor = sign_end
                         break
-                if not text.startswith(prefix, cursor):
+                observed = text[cursor : cursor + len(prefix)]
+                if not self._affix_equal(observed, prefix):
                     continue
                 prefix_start = cursor
                 cursor += len(prefix)
                 captures.append(
-                    Capture("compact", prefix_start, cursor, prefix, magnitude, "symbol")
+                    Capture(
+                        "compact",
+                        prefix_start,
+                        cursor,
+                        text[prefix_start:cursor],
+                        magnitude,
+                        "symbol",
+                    )
                 )
             match = self._number._match(text, cursor)
             if match is None:
@@ -1383,7 +1586,7 @@ class FlexibleCompactDetector:
             # digits ("M+1.2", or the contradictory "-M+1.2") is not a compact number.
             if prefix and any(capture.name == "sign" for capture in number_captures):
                 continue
-            if not text.startswith(suffix, number_end):
+            if not self._affix_equal(text[number_end : number_end + len(suffix)], suffix):
                 continue
             end = number_end + len(suffix)
             if self._continues_word(text, end):
@@ -1391,7 +1594,9 @@ class FlexibleCompactDetector:
 
             captures.extend(number_captures)
             if suffix:
-                captures.append(Capture("compact", number_end, end, suffix, magnitude, "symbol"))
+                captures.append(
+                    Capture("compact", number_end, end, text[number_end:end], magnitude, "symbol")
+                )
             captures.sort(key=lambda capture: (capture.start, capture.end))
             # A compact surface is a rounded display, so recover its honest nominal
             # value without inventing false precision or a range.
@@ -1402,6 +1607,12 @@ class FlexibleCompactDetector:
             decimal = format(value, "f")
             return end, tuple(captures), NumberValue(decimal, None)
         return None
+
+    def _affix_equal(self, observed: str, expected: str) -> bool:
+        letters = sum(_is_word_character(character) for character in expected)
+        if letters > 1 or self.fold_symbol_case:
+            return observed.casefold() == expected.casefold()
+        return observed == expected
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible compact numbers in source order."""
@@ -2141,7 +2352,7 @@ class FlexibleTimeDetector:
 
 
 class FlexibleFractionDetector:
-    """Recognize ``N/D`` fractions, optionally with a leading whole part ``W N/D``.
+    """Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
     The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
     the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
@@ -2158,6 +2369,10 @@ class FlexibleFractionDetector:
         self.locale = locale
         self._digits = _locale_digit_map(locale)
         self._spec = NumberFormatSpec(locale, "decimal")
+        self._nfkc = icu.Normalizer2.getNFKCInstance()
+        symbols = icu.NumberFormat.createInstance(icu.Locale(locale)).getDecimalFormatSymbols()
+        self._minus = symbols.getSymbol(icu.DecimalFormatSymbols.kMinusSignSymbol)
+        self._plus = symbols.getSymbol(icu.DecimalFormatSymbols.kPlusSignSymbol)
 
     def _digit_run(self, text: str, start: int) -> int:
         cursor = start
@@ -2195,16 +2410,78 @@ class FlexibleFractionDetector:
             rendered = rendered.rstrip("0").rstrip(".")
         return rendered
 
+    def _vulgar_parts(self, character: str) -> tuple[int, int] | None:
+        normalized = self._nfkc.normalize(character)
+        pieces = normalized.split("\N{FRACTION SLASH}")
+        if len(pieces) != 2 or not all(piece.isdecimal() for piece in pieces):
+            return None
+        return int(pieces[0]), int(pieces[1])
+
+    def _match_vulgar(self, text: str, start: int, number_start: int, negative: bool):
+        first_end = self._digit_run(text, number_start)
+        whole_end = first_end
+        vulgar_start = first_end
+        if vulgar_start < len(text) and text[vulgar_start] in _SPACES:
+            vulgar_start += 1
+        parts = self._vulgar_parts(text[vulgar_start : vulgar_start + 1])
+        if parts is None:
+            if first_end != number_start:
+                return None
+            vulgar_start = number_start
+            parts = self._vulgar_parts(text[vulgar_start : vulgar_start + 1])
+            if parts is None:
+                return None
+            whole_end = number_start
+        numerator, denominator = parts
+        if denominator == 0:
+            return None
+        end = vulgar_start + 1
+        captures: list[Capture] = []
+        if start != number_start:
+            captures.append(
+                Capture("sign", start, number_start, text[start:number_start], None, "symbol")
+            )
+        whole = 0
+        if whole_end > number_start:
+            surface = text[number_start:whole_end]
+            whole = int(self._ascii(surface))
+            captures.append(
+                Capture("whole", number_start, whole_end, surface, str(whole), "numeric")
+            )
+        surface = text[vulgar_start:end]
+        captures.extend(
+            (
+                Capture("numerator", vulgar_start, end, surface, str(numerator), "numeric"),
+                Capture("denominator", vulgar_start, end, surface, str(denominator), "numeric"),
+            )
+        )
+        decimal = self._canonical(whole, numerator, denominator)
+        if negative:
+            decimal = "-" + decimal
+        return end, tuple(captures), NumberValue(decimal, None)
+
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         if start > 0 and (text[start - 1] in self._digits or text[start - 1] in _SLASHES):
             return None
-        first_end = self._digit_run(text, start)
-        if first_end == start:
+        number_start = start
+        negative = False
+        for sign, is_negative in ((self._minus, True), (self._plus, False)):
+            if sign and text.startswith(sign, number_start):
+                number_start += len(sign)
+                negative = is_negative
+                break
+
+        vulgar = self._match_vulgar(text, start, number_start, negative)
+        if vulgar is not None:
+            return vulgar
+
+        first_end = self._digit_run(text, number_start)
+        if first_end == number_start:
             return None
 
         whole_capture: Capture | None = None
         whole_value = 0
-        numerator_start, numerator_end = start, first_end
+        numerator_start, numerator_end = number_start, first_end
         cursor = first_end
         if cursor < len(text) and text[cursor] in _SPACES:
             after_space = cursor + 1
@@ -2214,10 +2491,15 @@ class FlexibleFractionDetector:
                 and text[candidate_end : candidate_end + 1]
                 and (text[candidate_end] in _SLASHES)
             ):
-                whole_surface = text[start:first_end]
+                whole_surface = text[number_start:first_end]
                 whole_value = int(self._ascii(whole_surface))
                 whole_capture = Capture(
-                    "whole", start, first_end, whole_surface, self._ascii(whole_surface), "numeric"
+                    "whole",
+                    number_start,
+                    first_end,
+                    whole_surface,
+                    self._ascii(whole_surface),
+                    "numeric",
                 )
                 numerator_start, numerator_end = after_space, candidate_end
                 cursor = candidate_end
@@ -2245,6 +2527,10 @@ class FlexibleFractionDetector:
             return None
 
         captures: list[Capture] = []
+        if start != number_start:
+            captures.append(
+                Capture("sign", start, number_start, text[start:number_start], None, "symbol")
+            )
         if whole_capture is not None:
             captures.append(whole_capture)
         captures.append(
@@ -2268,6 +2554,8 @@ class FlexibleFractionDetector:
             )
         )
         decimal = self._canonical(whole_value, numerator, denominator)
+        if negative:
+            decimal = "-" + decimal
         return denominator_end, tuple(captures), NumberValue(decimal=decimal, currency=None)
 
     def detect(self, text: str) -> list[ValueDetection]:
