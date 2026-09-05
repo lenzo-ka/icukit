@@ -766,7 +766,18 @@ class FlexibleNumberDetector:
             cursor = sign_end
 
         integer_start = cursor
-        if cursor >= len(text) or text[cursor] not in self._digits:
+        leading_decimal = text.startswith(self._decimal, cursor)
+        decimal_end = cursor + len(self._decimal)
+        if leading_decimal and start > 0:
+            previous = text[start - 1]
+            if _is_word_character(previous) or previous == self._decimal:
+                return None
+        if cursor >= len(text) or (
+            text[cursor] not in self._digits
+            and not (
+                leading_decimal and decimal_end < len(text) and text[decimal_end] in self._digits
+            )
+        ):
             return None
         while cursor < len(text) and text[cursor] in self._digits:
             cursor += 1
@@ -794,7 +805,7 @@ class FlexibleNumberDetector:
 
         integer_end = cursor
         integer_text = text[integer_start:integer_end]
-        integer_ascii = self._digits_ascii(integer_text)
+        integer_ascii = self._digits_ascii(integer_text) or "0"
         captures.append(
             Capture(
                 "integer",

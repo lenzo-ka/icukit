@@ -466,6 +466,40 @@ def test_non_numbers_do_not_match(surface):
     assert FlexibleNumberDetector("en_US").detect(surface) == []
 
 
+@pytest.mark.parametrize("surface, decimal", [(".1", "0.1"), (".0", "0.0"), ("-.5", "-0.5")])
+def test_flexible_number_recognizes_leading_dot_decimals(surface, decimal):
+    detection = FlexibleNumberDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == NumberValue(decimal, None)
+
+
+def test_leading_dot_support_preserves_decimal_boundaries():
+    detector = FlexibleNumberDetector("en_US")
+
+    assert detector.detect("3.")[0]["text"] == "3"
+    assert detector.detect(".") == []
+    # A second decimal separator is not a boundary, so the parent behavior of reading
+    # the two integer runs remains intact.
+    assert [detection["text"] for detection in detector.detect("1..2")] == ["1", "2"]
+    assert detector.detect("1.5")[0]["value"] == NumberValue("1.5", None)
+
+
+@pytest.mark.parametrize("surface", ["..5", "v.1"])
+def test_leading_dot_decimal_rejects_a_word_or_decimal_left_neighbor(surface):
+    assert not any(
+        detection["text"].startswith(".")
+        for detection in FlexibleNumberDetector("en_US").detect(surface)
+    )
+
+
+@pytest.mark.parametrize("surface", ["(.5)", "a .5 b"])
+def test_leading_dot_decimal_accepts_a_real_left_boundary(surface):
+    assert any(
+        detection["text"] == ".5" for detection in FlexibleNumberDetector("en_US").detect(surface)
+    )
+
+
 def test_real_text_composes_with_detect_and_resolve():
     text = "the year 2026 saw 1,234 events"
     flexible = FlexibleNumberDetector("en_US")
