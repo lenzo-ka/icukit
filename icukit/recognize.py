@@ -489,6 +489,19 @@ class FlexibleTextDateDetector:
                     continue
                 if {"M", "d"}.issubset(reduced_fields):
                     structures.append((reduced_fields, reduced_literals, pattern))
+        language = icu_locale.getLanguage()
+        for available in icu.Locale.getAvailableLocales().values():
+            if available.getLanguage() != language:
+                continue
+            generator = icu.DateTimePatternGenerator.createInstance(available)
+            for skeleton in ("dMMMMy", "dMMMy", "yMMMM", "yMMM"):
+                pattern = generator.getBestPattern(skeleton)
+                parsed = self._date_structure(pattern)
+                if parsed is None:
+                    continue
+                fields, literals = parsed
+                if fields in {("d", "M", "y"), ("M", "y")}:
+                    structures.append((fields, literals, pattern))
         self._structures = tuple(dict.fromkeys(structures))
         pattern = self._structures[0][2] if self._structures else ""
         self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
@@ -551,7 +564,9 @@ class FlexibleTextDateDetector:
                 return None
             literal.append(character)
             cursor += 1
-        if set(fields) - {"y", "M", "d", "E"} or not {"y", "M", "d"}.issubset(fields):
+        if set(fields) - {"y", "M", "d", "E"}:
+            return None
+        if not ({"y", "M", "d"}.issubset(fields) or set(fields) == {"M", "y"}):
             return None
         if "E" in fields and fields[0] != "E":
             return None
@@ -607,6 +622,13 @@ class FlexibleTextDateDetector:
 
     def _match_structure(self, text: str, start: int, structure):
         fields, literals, _pattern = structure
+        month_year = set(fields) == {"M", "y"}
+        if month_year and start > 0:
+            previous = start - 1
+            while previous >= 0 and text[previous] in _SPACES:
+                previous -= 1
+            if previous >= 0 and text[previous] in self._digits:
+                return None
         cursor = start
         values: dict[str, int] = {}
         captures: list[Capture] = []
@@ -649,12 +671,14 @@ class FlexibleTextDateDetector:
 
         if cursor < len(text) and text[cursor].isalnum():
             return None
+        if month_year and cursor < len(text) and text[cursor] == ",":
+            return None
         calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
         calendar.setLenient(False)
         calendar.clear()
         try:
             validation_year = values.get("y", 2000)
-            calendar.set(validation_year, values["M"] - 1, values["d"])
+            calendar.set(validation_year, values["M"] - 1, values.get("d", 1))
             calendar.getTime()
             if "y" in values and "E" in values:
                 if calendar.get(icu.Calendar.DAY_OF_WEEK) != values["E"]:

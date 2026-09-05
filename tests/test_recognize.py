@@ -815,6 +815,25 @@ def test_flexible_text_date_gains_recall_over_numeric(surface, fields):
     assert (month.value, month.form) == (fields[-2][1], "wide")
 
 
+@pytest.mark.parametrize(
+    "surface, fields",
+    [
+        ("25 July 2011", (("y", 2011), ("M", 7), ("d", 25))),
+        ("25 Jul 2011", (("y", 2011), ("M", 7), ("d", 25))),
+        ("August 2010", (("y", 2010), ("M", 8))),
+    ],
+)
+def test_flexible_text_date_recognizes_day_first_and_month_year(surface, fields):
+    detection = FlexibleTextDateDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == DateTimeValue(fields, "gregorian")
+
+
+def test_flexible_text_date_leaves_decades_out_of_scope():
+    assert FlexibleTextDateDetector("en_US").detect("1950s") == []
+
+
 def test_flexible_text_date_captures_short_names_and_is_case_insensitive():
     detection = FlexibleTextDateDetector("en_US").detect("wednesday, jul 25, 2012")[0]
     captures = {capture.name: capture for capture in detection["captures"]}
@@ -832,7 +851,10 @@ def test_flexible_text_date_is_reflective_for_non_english_locale():
     assert next(c for c in detection["captures"] if c.name == "month").form == "wide"
 
 
-@pytest.mark.parametrize("surface", ["February 30, 2012", "April 31, 2012"])
+@pytest.mark.parametrize(
+    "surface",
+    ["February 30, 2012", "April 31, 2012", "30 February 2012", "31 April 2012"],
+)
 def test_flexible_text_date_rejects_impossible_dates(surface):
     assert FlexibleTextDateDetector("en_US").detect(surface) == []
 
