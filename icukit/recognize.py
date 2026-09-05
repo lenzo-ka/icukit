@@ -2205,7 +2205,7 @@ class FlexibleTimeDetector:
 
 
 class FlexibleFractionDetector:
-    """Recognize ``N/D`` fractions, optionally with a leading whole part ``W N/D``.
+    """Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
     The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
     the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
@@ -2222,6 +2222,10 @@ class FlexibleFractionDetector:
         self.locale = locale
         self._digits = _locale_digit_map(locale)
         self._spec = NumberFormatSpec(locale, "decimal")
+        self._nfkc = icu.Normalizer2.getNFKCInstance()
+        symbols = icu.NumberFormat.createInstance(icu.Locale(locale)).getDecimalFormatSymbols()
+        self._minus = symbols.getSymbol(icu.DecimalFormatSymbols.kMinusSignSymbol)
+        self._plus = symbols.getSymbol(icu.DecimalFormatSymbols.kPlusSignSymbol)
 
     def _digit_run(self, text: str, start: int) -> int:
         cursor = start
@@ -2259,16 +2263,78 @@ class FlexibleFractionDetector:
             rendered = rendered.rstrip("0").rstrip(".")
         return rendered
 
+    def _vulgar_parts(self, character: str) -> tuple[int, int] | None:
+        normalized = self._nfkc.normalize(character)
+        pieces = normalized.split("\N{FRACTION SLASH}")
+        if len(pieces) != 2 or not all(piece.isdecimal() for piece in pieces):
+            return None
+        return int(pieces[0]), int(pieces[1])
+
+    def _match_vulgar(self, text: str, start: int, number_start: int, negative: bool):
+        first_end = self._digit_run(text, number_start)
+        whole_end = first_end
+        vulgar_start = first_end
+        if vulgar_start < len(text) and text[vulgar_start] in _SPACES:
+            vulgar_start += 1
+        parts = self._vulgar_parts(text[vulgar_start : vulgar_start + 1])
+        if parts is None:
+            if first_end != number_start:
+                return None
+            vulgar_start = number_start
+            parts = self._vulgar_parts(text[vulgar_start : vulgar_start + 1])
+            if parts is None:
+                return None
+            whole_end = number_start
+        numerator, denominator = parts
+        if denominator == 0:
+            return None
+        end = vulgar_start + 1
+        captures: list[Capture] = []
+        if start != number_start:
+            captures.append(
+                Capture("sign", start, number_start, text[start:number_start], None, "symbol")
+            )
+        whole = 0
+        if whole_end > number_start:
+            surface = text[number_start:whole_end]
+            whole = int(self._ascii(surface))
+            captures.append(
+                Capture("whole", number_start, whole_end, surface, str(whole), "numeric")
+            )
+        surface = text[vulgar_start:end]
+        captures.extend(
+            (
+                Capture("numerator", vulgar_start, end, surface, str(numerator), "numeric"),
+                Capture("denominator", vulgar_start, end, surface, str(denominator), "numeric"),
+            )
+        )
+        decimal = self._canonical(whole, numerator, denominator)
+        if negative:
+            decimal = "-" + decimal
+        return end, tuple(captures), NumberValue(decimal, None)
+
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         if start > 0 and (text[start - 1] in self._digits or text[start - 1] in _SLASHES):
             return None
-        first_end = self._digit_run(text, start)
-        if first_end == start:
+        number_start = start
+        negative = False
+        for sign, is_negative in ((self._minus, True), (self._plus, False)):
+            if sign and text.startswith(sign, number_start):
+                number_start += len(sign)
+                negative = is_negative
+                break
+
+        vulgar = self._match_vulgar(text, start, number_start, negative)
+        if vulgar is not None:
+            return vulgar
+
+        first_end = self._digit_run(text, number_start)
+        if first_end == number_start:
             return None
 
         whole_capture: Capture | None = None
         whole_value = 0
-        numerator_start, numerator_end = start, first_end
+        numerator_start, numerator_end = number_start, first_end
         cursor = first_end
         if cursor < len(text) and text[cursor] in _SPACES:
             after_space = cursor + 1
@@ -2278,10 +2344,15 @@ class FlexibleFractionDetector:
                 and text[candidate_end : candidate_end + 1]
                 and (text[candidate_end] in _SLASHES)
             ):
-                whole_surface = text[start:first_end]
+                whole_surface = text[number_start:first_end]
                 whole_value = int(self._ascii(whole_surface))
                 whole_capture = Capture(
-                    "whole", start, first_end, whole_surface, self._ascii(whole_surface), "numeric"
+                    "whole",
+                    number_start,
+                    first_end,
+                    whole_surface,
+                    self._ascii(whole_surface),
+                    "numeric",
                 )
                 numerator_start, numerator_end = after_space, candidate_end
                 cursor = candidate_end
@@ -2309,6 +2380,10 @@ class FlexibleFractionDetector:
             return None
 
         captures: list[Capture] = []
+        if start != number_start:
+            captures.append(
+                Capture("sign", start, number_start, text[start:number_start], None, "symbol")
+            )
         if whole_capture is not None:
             captures.append(whole_capture)
         captures.append(
@@ -2332,6 +2407,8 @@ class FlexibleFractionDetector:
             )
         )
         decimal = self._canonical(whole_value, numerator, denominator)
+        if negative:
+            decimal = "-" + decimal
         return denominator_end, tuple(captures), NumberValue(decimal=decimal, currency=None)
 
     def detect(self, text: str) -> list[ValueDetection]:

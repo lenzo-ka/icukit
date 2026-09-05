@@ -1075,6 +1075,26 @@ def test_flexible_fraction_gains_recall(surface, decimal, names):
     assert [capture.name for capture in detection["captures"]] == names
 
 
+@pytest.mark.parametrize(
+    "surface, decimal, names",
+    [
+        ("½", "0.5", ["numerator", "denominator"]),
+        ("3½", "3.5", ["whole", "numerator", "denominator"]),
+        ("4 ½", "4.5", ["whole", "numerator", "denominator"]),
+        ("-1/2", "-0.5", ["sign", "numerator", "denominator"]),
+    ],
+)
+def test_flexible_fraction_recognizes_vulgar_and_signed_forms(surface, decimal, names):
+    detection = FlexibleFractionDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["value"] == NumberValue(decimal, None)
+    assert [capture.name for capture in detection["captures"]] == names
+    assert all(
+        surface[capture.start : capture.end] == capture.text for capture in detection["captures"]
+    )
+
+
 def test_flexible_fraction_handles_large_nonterminating_value():
     surface = "99999999999999999999999999999/7"
     detection = FlexibleFractionDetector("en_US").detect(surface)[0]

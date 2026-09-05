@@ -4840,7 +4840,7 @@ Return greedy, non-overlapping date-interval candidates in source order.
 
 ### class `FlexibleFractionDetector`
 
-Recognize ``N/D`` fractions, optionally with a leading whole part ``W N/D``.
+Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
 The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
 the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
