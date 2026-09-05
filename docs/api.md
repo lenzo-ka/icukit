@@ -4871,9 +4871,13 @@ Return greedy, non-overlapping flexible measure candidates in source order.
 
 ### class `FlexibleNumberDetector`
 
-Recognize flexible decimal-number spellings using locale symbols from CLDR.
+Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
-#### `FlexibleNumberDetector(locale: 'str') -> 'None'`
+``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
+cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
+unit abbreviations and common words.
+
+#### `FlexibleNumberDetector(locale: 'str', *, accept_single_letter_roman: 'bool' = True, accept_lowercase_roman: 'bool' = False) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 

@@ -680,13 +680,26 @@ class FlexibleTextDateDetector:
 
 
 class FlexibleNumberDetector:
-    """Recognize flexible decimal-number spellings using locale symbols from CLDR."""
+    """Recognize flexible decimal spellings and Roman cardinals from ICU data.
+
+    ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
+    cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
+    unit abbreviations and common words.
+    """
 
     group = "number"
     type = "number:decimal"
 
-    def __init__(self, locale: str) -> None:
+    def __init__(
+        self,
+        locale: str,
+        *,
+        accept_single_letter_roman: bool = True,
+        accept_lowercase_roman: bool = False,
+    ) -> None:
         self.locale = locale
+        self.accept_single_letter_roman = accept_single_letter_roman
+        self.accept_lowercase_roman = accept_lowercase_roman
         self._nf = icu.NumberFormat.createInstance(icu.Locale(locale))
         symbols = self._nf.getDecimalFormatSymbols()
         symbol = icu.DecimalFormatSymbols
@@ -706,6 +719,29 @@ class FlexibleNumberDetector:
             self._secondary_grouping = secondary or primary
             grouping_sizes = (secondary, primary) if secondary else (primary,)
         self._spec = NumberFormatSpec(locale, "decimal", grouping_sizes=grouping_sizes)
+
+        self._roman = icu.RuleBasedNumberFormat(
+            icu.URBNFRuleSetTag.NUMBERING_SYSTEM, icu.Locale(locale)
+        )
+        rule_sets = tuple(
+            self._roman.getRuleSetName(index)
+            for index in range(self._roman.getNumberOfRuleSetNames())
+        )
+        self._roman_rule_sets = tuple(name for name in rule_sets if "roman" in name.casefold())
+        if not accept_lowercase_roman:
+            self._roman_rule_sets = tuple(
+                name for name in self._roman_rule_sets if "lower" not in name.casefold()
+            )
+        alphabets: dict[str, frozenset[str]] = {}
+        for rule_set in self._roman_rule_sets:
+            alphabet = frozenset(
+                character
+                for value in range(1, 4000)
+                for character in self._roman.format(value, rule_set)
+                if _is_word_character(character)
+            )
+            alphabets[rule_set] = alphabet
+        self._roman_alphabets = alphabets
 
     def _digits_ascii(self, surface: str) -> str:
         return "".join(
@@ -812,7 +848,35 @@ class FlexibleNumberDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible decimal candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        decimals = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        romans = _detect_flexible(
+            text, self.locale, "number:cardinal:roman", self._spec, self._match_roman
+        )
+        return sorted((*decimals, *romans), key=lambda item: (item["start"], item["end"]))
+
+    def _match_roman(self, text: str, start: int):
+        if start > 0 and _is_word_character(text[start - 1]):
+            return None
+        for rule_set in self._roman_rule_sets:
+            alphabet = self._roman_alphabets[rule_set]
+            cursor = start
+            while cursor < len(text) and text[cursor] in alphabet:
+                cursor += 1
+            if cursor == start or cursor - start == 1 and not self.accept_single_letter_roman:
+                continue
+            if cursor < len(text) and _is_word_character(text[cursor]):
+                continue
+            surface = text[start:cursor]
+            position = icu.ParsePosition(0)
+            parsed = self._roman.parse(surface, position)
+            if parsed is None or position.getIndex() != len(surface):
+                continue
+            value = parsed.getInt64()
+            if self._roman.format(value, rule_set) != surface:
+                continue
+            capture = Capture("integer", start, cursor, surface, str(value), "roman")
+            return cursor, (capture,), NumberValue(str(value), None)
+        return None
 
 
 _RELATIVE_NUMERIC_UNITS = (

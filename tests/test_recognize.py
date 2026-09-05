@@ -344,6 +344,44 @@ def test_hanidec_digits_are_not_assumed_to_be_contiguous_code_points():
     }
 
 
+@pytest.mark.parametrize("surface, decimal", [("I", "1"), ("II", "2"), ("IV", "4"), ("XV", "15")])
+def test_flexible_number_recognizes_roman_cardinals(surface, decimal):
+    detection = FlexibleNumberDetector("en_US").detect(surface)[0]
+
+    assert (detection["start"], detection["end"]) == (0, len(surface))
+    assert detection["type"].startswith("number:cardinal")
+    assert detection["value"] == NumberValue(decimal, None)
+    assert detection["captures"][0].form == "roman"
+
+
+def test_flexible_number_roman_round_trip_and_single_letter_switch():
+    detector = FlexibleNumberDetector("en_US")
+
+    assert detector.detect("IIII") == []
+    assert detector.detect("IIX") == []
+    assert detector.detect("V.")[0]["text"] == "V"
+    assert FlexibleNumberDetector("en_US", accept_single_letter_roman=False).detect("I") == []
+
+
+@pytest.mark.parametrize("surface", ["cm", "mm", "mix"])
+def test_flexible_number_lowercase_roman_is_opt_in(surface):
+    assert not any(
+        detection["type"].startswith("number:cardinal")
+        for detection in FlexibleNumberDetector("en_US").detect(surface)
+    )
+    assert any(
+        detection["type"].startswith("number:cardinal")
+        for detection in FlexibleNumberDetector("en_US", accept_lowercase_roman=True).detect(
+            surface
+        )
+    )
+
+
+@pytest.mark.parametrize("surface", ["II", "XV", "XLVIII", "I"])
+def test_flexible_number_uppercase_roman_remains_enabled(surface):
+    assert FlexibleNumberDetector("en_US").detect(surface)[0]["text"] == surface
+
+
 @pytest.mark.parametrize("surface, decimal", [("1.234.567", "1234567"), ("1234,5", "1234.5")])
 def test_locale_separators(surface, decimal):
     detection = FlexibleNumberDetector("de_DE").detect(surface)[0]
