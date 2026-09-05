@@ -57,7 +57,7 @@ dev = [
     # against their RELAX NG grammar. The runtime loader stays lxml-free.
     "lxml>=5.0",
     # Tiergraph requires Python >= 3.12, while icukit also supports Python 3.11.
-    "tiergraph>=0.1.0; python_version >= '3.12'",
+    "tiergraph>=0.2,<0.3; python_version >= '3.12'",
 ]
 
 [project.scripts]
