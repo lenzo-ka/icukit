@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-CLASSES = ("cardinal", "decimal", "date", "time", "money", "fraction", "ordinal")
 DEFAULT_DATA_DIR = Path(__file__).parent / "data" / "nemo"
 
 
@@ -24,4 +23,4 @@ def load_table(path: Path) -> list[tuple[str, str]]:
 
 def load_oracle(data_dir: Path = DEFAULT_DATA_DIR) -> dict[str, list[tuple[str, str]]]:
     """Load every evaluation class from an oracle directory."""
-    return {name: load_table(data_dir / f"{name}.txt") for name in CLASSES}
+    return {path.stem: load_table(path) for path in sorted(data_dir.glob("*.txt"))}

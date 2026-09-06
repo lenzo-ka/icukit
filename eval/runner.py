@@ -18,8 +18,6 @@ from icukit.recognize import (
     FlexibleTimeDetector,
 )
 
-from .loader import CLASSES
-
 LOCALE = "en_US"
 DEFAULT_BASELINE = Path(__file__).parent / "baseline.json"
 
@@ -60,12 +58,15 @@ def evaluate(
     overall_strict = 0
     overall_lenient = 0
 
-    for name in CLASSES:
+    unsupported = sorted(oracle.keys() - DETECTORS.keys())
+
+    for name, pairs in oracle.items():
+        if name in unsupported:
+            continue
         detectors = [factory() for factory in DETECTORS[name]]
         expected_types = {detector.type for detector in detectors}
         strict_count = 0
         lenient_count = 0
-        pairs = oracle[name]
         for written, _spoken in pairs:
             detections = [
                 detection
@@ -93,6 +94,7 @@ def evaluate(
             "lenient": "expected-type detection occurs anywhere in the written input",
         },
         "locale": LOCALE,
+        "unsupported_classes": unsupported,
         "classes": class_reports,
         "overall": _metrics(overall_total, overall_strict, overall_lenient),
     }
@@ -114,7 +116,7 @@ def format_report(report: Mapping[str, object]) -> str:
     lines = [header, "-" * len(header)]
     classes = report["classes"]
     assert isinstance(classes, Mapping)
-    for name in (*CLASSES, "overall"):
+    for name in (*classes, "overall"):
         metrics = report["overall"] if name == "overall" else classes[name]
         assert isinstance(metrics, Mapping)
         total = metrics["total"]
@@ -125,6 +127,18 @@ def format_report(report: Mapping[str, object]) -> str:
         lines.append(
             f"{name:<10} {strict:>5}/{total:<6} {strict_recall:>7.1%} "
             f"{lenient:>5}/{total:<6} {lenient_recall:>7.1%}"
+        )
+    unsupported = report.get("unsupported_classes", [])
+    assert isinstance(unsupported, Sequence)
+    if unsupported:
+        lines.append(f"unsupported/unscored: {', '.join(unsupported)}")
+    competing = report.get("competing_readings")
+    if competing is not None:
+        assert isinstance(competing, Mapping)
+        lines.append(
+            f"competing  {competing['recognized']:>5}/{competing['total']:<6} "
+            f"{competing['recall']:>7.1%} "
+            f"({competing['characterizing_records']} characterizing)"
         )
     return "\n".join(lines)
 
