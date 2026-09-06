@@ -1,8 +1,13 @@
 # Local development Makefile - not for distribution
 
 VENV := venv
-PYTHON := $(VENV)/bin/python
 PIP := $(VENV)/bin/pip
+
+# Prefer a local virtual environment when `make venv` has created one, and fall
+# back to uv otherwise. Continuous integration and the release checklist both
+# provision the development environment through uv, so a tree that has never run
+# `make venv` still has a working interpreter here. Override PYTHON to force one.
+PYTHON ?= $(if $(wildcard $(VENV)/bin/python),$(VENV)/bin/python,uv run --extra dev python)
 
 .PHONY: venv
 venv:

@@ -22,7 +22,8 @@ Publishing is automated by `.github/workflows/publish.yml` using PyPI Trusted Pu
    uv run --extra dev ruff format --check .
    uv run --extra dev python docs/generate.py --check
    uv run --extra dev python -m pytest tests/ -q
-   uv run --extra dev --with "tiergraph==0.2.0" python -m pytest tests/test_tiergraph_text_example.py -q
+   TIERGRAPH_FLOOR=$(sed -n 's/.*"tiergraph>=\([0-9][0-9.]*\).*/\1/p' pyproject.toml | head -n 1)
+   uv run --extra dev --with "tiergraph==$TIERGRAPH_FLOOR" python -m pytest tests/test_tiergraph_text_example.py -q
    actionlint .github/workflows/*.yml
    uv run --extra dev --with build python -m build
    ls -1 dist
@@ -41,3 +42,4 @@ Publishing is automated by `.github/workflows/publish.yml` using PyPI Trusted Pu
 - PyPI files are immutable. Correct a bad build with a new version rather than attempting to replace it.
 - A published consumer should depend on a released icukit version with a compatibility bound appropriate to that consumer. A dependency on a Git branch cannot be published to PyPI.
 - The normal CI test job uses the released tiergraph constraint from the development extra. The separate tiergraph integration job checks out tiergraph's main branch as an upstream compatibility canary.
+- The candidate check pins the lowest tiergraph the development constraint admits, read out of `pyproject.toml` rather than written into this file. A version written here would go stale the moment the constraint moved, and the stale pin would still pass.
