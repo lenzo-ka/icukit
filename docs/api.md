@@ -13,6 +13,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateIntervalDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleFractionDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumberDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleOrdinalDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -5006,6 +5007,22 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible clock times in source order.
+
+### class `LetterNameDetector`
+
+Recognize an isolated ASCII Latin letter as its locale's letter name.
+
+CLDR supplies alphabet repertoires but not the spoken names of their members, so
+supported locales use a small lexical table. Unsupported locale languages produce no
+candidates.
+
+#### `LetterNameDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return isolated letter-name candidates in source order.
 
 ## icukit.regex
 

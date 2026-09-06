@@ -44,6 +44,7 @@ __all__ = [
     "FlexibleDateDetector",
     "FlexibleDateIntervalDetector",
     "FlexibleFractionDetector",
+    "LetterNameDetector",
     "FlexibleMeasureDetector",
     "FlexibleNumberDetector",
     "FlexibleOrdinalDetector",
@@ -67,6 +68,39 @@ _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
 # Defensive cross-locale bound: ICU RBNF ordinal suffixes are reliable through signed 32-bit.
 _MAX_RBNF_ORDINAL_VALUE = 2_147_483_647
 
+# CLDR identifies alphabet repertoires and character categories, but does not carry
+# pronunciations for individual letters. English takes the US "zee" variant here.
+_LETTER_NAMES = {
+    "en": (
+        "a",
+        "bee",
+        "cee",
+        "dee",
+        "e",
+        "ef",
+        "gee",
+        "aitch",
+        "i",
+        "jay",
+        "kay",
+        "el",
+        "em",
+        "en",
+        "o",
+        "pee",
+        "cue",
+        "ar",
+        "ess",
+        "tee",
+        "u",
+        "vee",
+        "double-u",
+        "ex",
+        "wye",
+        "zee",
+    )
+}
+
 
 @dataclass(frozen=True)
 class _FlexibleMatch:
@@ -83,6 +117,49 @@ def _is_word_character(character: str) -> bool:
         icu.UCharCategory.COMBINING_SPACING_MARK,
         icu.UCharCategory.ENCLOSING_MARK,
     }
+
+
+class LetterNameDetector:
+    """Recognize an isolated ASCII Latin letter as its locale's letter name.
+
+    CLDR supplies alphabet repertoires but not the spoken names of their members, so
+    supported locales use a small lexical table. Unsupported locale languages produce no
+    candidates.
+    """
+
+    group = "letter"
+    type = "letter:name"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._names = _LETTER_NAMES.get(icu.Locale(locale).getLanguage())
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return isolated letter-name candidates in source order."""
+        if self._names is None:
+            return []
+        detections = []
+        for start, letter in enumerate(text):
+            folded = letter.lower()
+            if not "a" <= folded <= "z":
+                continue
+            if start > 0 and _is_word_character(text[start - 1]):
+                continue
+            end = start + 1
+            if end < len(text) and _is_word_character(text[end]):
+                continue
+            detections.append(
+                ValueDetection(
+                    text=letter,
+                    start=start,
+                    end=end,
+                    type=self.type,
+                    value=self._names[ord(folded) - ord("a")],
+                    captures=(),
+                    spec=None,
+                )
+            )
+        return detections
 
 
 def _locale_digit_map(locale: str | icu.Locale) -> dict[str, int]:
