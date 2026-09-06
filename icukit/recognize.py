@@ -53,6 +53,8 @@ __all__ = [
     "FlexibleSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
+    "LetterNameDetector",
+    "SingleLetterWordDetector",
 ]
 
 _SPACES = {
@@ -66,6 +68,42 @@ _SLASHES = {"/", "\N{FRACTION SLASH}"}
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
 # Defensive cross-locale bound: ICU RBNF ordinal suffixes are reliable through signed 32-bit.
 _MAX_RBNF_ORDINAL_VALUE = 2_147_483_647
+
+# CLDR identifies alphabet repertoires and character categories, but does not carry
+# pronunciations for individual letters. The sole English regional divergence, Z, is
+# resolved separately because CLDR carries neither "zee" nor "zed".
+_LETTER_NAMES = {
+    "en": (
+        "a",
+        "bee",
+        "cee",
+        "dee",
+        "e",
+        "ef",
+        "gee",
+        "aitch",
+        "i",
+        "jay",
+        "kay",
+        "el",
+        "em",
+        "en",
+        "o",
+        "pee",
+        "cue",
+        "ar",
+        "ess",
+        "tee",
+        "u",
+        "vee",
+        "double-u",
+        "ex",
+        "wye",
+        "zee",
+    )
+}
+# CLDR has no locale word lists. Keep these case-sensitive lexical entries small.
+_SINGLE_LETTER_WORDS = {"en": frozenset({"I", "a", "A", "O"})}
 
 
 @dataclass(frozen=True)
@@ -83,6 +121,111 @@ def _is_word_character(character: str) -> bool:
         icu.UCharCategory.COMBINING_SPACING_MARK,
         icu.UCharCategory.ENCLOSING_MARK,
     }
+
+
+def _continues_letter_token(text: str, index: int, direction: int) -> bool:
+    """Whether the character at ``index`` joins a neighboring letter token."""
+    character = text[index]
+    if _is_word_character(character):
+        return True
+    if icu.Char.charType(character) == icu.UCharCategory.CONNECTOR_PUNCTUATION:
+        return True
+    if not icu.Char.hasBinaryProperty(character, icu.UProperty.QUOTATION_MARK):
+        return False
+    beyond = index + direction
+    return 0 <= beyond < len(text) and _is_word_character(text[beyond])
+
+
+def _is_isolated_letter(text: str, start: int) -> bool:
+    # The shared word helper stays unchanged because widening it would alter existing
+    # detector boundaries. Letter readings additionally exclude identifiers and contractions.
+    return not (
+        start > 0
+        and _continues_letter_token(text, start - 1, -1)
+        or start + 1 < len(text)
+        and _continues_letter_token(text, start + 1, 1)
+    )
+
+
+class LetterNameDetector:
+    """Recognize an isolated ASCII Latin letter as its locale's letter name.
+
+    CLDR supplies alphabet repertoires but not the spoken names of their members, so
+    supported locales use a small lexical table. Unsupported locale languages produce no
+    candidates.
+    """
+
+    group = "letter"
+    type = "letter:name"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        icu_locale = icu.Locale(locale)
+        self._names = _LETTER_NAMES.get(icu_locale.getLanguage())
+        self._z_name = "zed" if icu_locale.getCountry() not in {"", "US"} else "zee"
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return isolated letter-name candidates in source order."""
+        if self._names is None:
+            return []
+        detections = []
+        for start, letter in enumerate(text):
+            if not ("A" <= letter <= "Z" or "a" <= letter <= "z"):
+                continue
+            if not _is_isolated_letter(text, start):
+                continue
+            folded = letter.lower()
+            end = start + 1
+            value = self._z_name if folded == "z" else self._names[ord(folded) - ord("a")]
+            detections.append(
+                ValueDetection(
+                    text=letter,
+                    start=start,
+                    end=end,
+                    type=self.type,
+                    value=value,
+                    captures=(),
+                    spec=None,
+                )
+            )
+        return detections
+
+
+class SingleLetterWordDetector:
+    """Recognize an isolated letter that is a word in its locale.
+
+    CLDR does not supply word lists, so supported locales use a small case-sensitive
+    lexical set. Unsupported locale languages produce no candidates.
+    """
+
+    group = "word"
+    type = "word:single-letter"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._words = _SINGLE_LETTER_WORDS.get(icu.Locale(locale).getLanguage(), frozenset())
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return isolated one-letter word candidates in source order."""
+        detections = []
+        for start, letter in enumerate(text):
+            if letter not in self._words:
+                continue
+            end = start + 1
+            if not _is_isolated_letter(text, start):
+                continue
+            detections.append(
+                ValueDetection(
+                    text=letter,
+                    start=start,
+                    end=end,
+                    type=self.type,
+                    value=letter,
+                    captures=(),
+                    spec=None,
+                )
+            )
+        return detections
 
 
 def _locale_digit_map(locale: str | icu.Locale) -> dict[str, int]:

@@ -341,6 +341,8 @@ from .recognize import (
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
+    LetterNameDetector,
+    SingleLetterWordDetector,
 )
 from .regex import (
     CASE_INSENSITIVE,
@@ -439,6 +441,8 @@ __all__ = [
     "FlexibleSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
+    "LetterNameDetector",
+    "SingleLetterWordDetector",
     "DetectorSet",
     "ValueDetection",
     "DateTimeValue",
