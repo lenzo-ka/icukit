@@ -55,6 +55,24 @@
   conformance harness with a golden detector inventory.
 - Measure recognition values and format specifications, plus locale-aware unit
   abbreviation utilities.
+- Recognition for written shapes the flexible detectors previously passed over.
+  Roman numerals read as cardinals, through ICU's own Roman rule set with a
+  format-back check, under a `number:cardinal:roman` type and an option
+  governing whether an isolated letter counts as one. Vulgar fraction characters
+  and signed fractions, reached through the compatibility decomposition rather
+  than a character table. Decimals written with no leading digit. Amounts
+  carrying a CLDR compact scale word or symbol, alone or under a currency, with
+  `FlexibleCompactDetector` matching multi-letter scale words without regard to
+  case and single-letter symbols only when a caller asks it to fold them.
+  ISO-qualified currency symbols such as `US$` and `A$`, harvested from the
+  sibling locales of the same language, and imported only where a locale's short
+  form differs from its narrow form, which is what keeps a bare `$` meaning USD.
+  Day-first and month-year textual dates, read from those sibling locales'
+  pattern generators because the `en_US` generator returns a month-first pattern
+  for every skeleton. Two facts here are lexical because CLDR does not carry
+  them, and the code says so: the suffix `bn`, and bare English `dollar` and
+  `dollars`. Decades stay out of scope; CLDR has no pattern for them and the
+  date value has no year-range field.
 
 ### Changed
 
