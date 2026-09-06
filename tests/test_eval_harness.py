@@ -72,12 +72,12 @@ def test_vendored_competing_readings_are_all_required_on_one_span() -> None:
         "I'm",
     }
     characterized = {record["input"] for record in records if "characterizes" in record}
-    assert characterized == {"x_I", "I'm"}
+    assert characterized == set()
     assert evaluate_competing(records) == {
         "criterion": "expected spans present; forbidden spans absent; exact records have no others",
         "total": 7,
         "recognized": 7,
-        "characterizing_records": 2,
+        "characterizing_records": 0,
         "recall": 1.0,
     }
 
@@ -133,4 +133,4 @@ def test_format_report_includes_competing_readings() -> None:
     report = evaluate(load_oracle())
     report["competing_readings"] = evaluate_competing(load_competing())
 
-    assert "competing      7/7       100.0% (2 characterizing)" in format_report(report)
+    assert "competing      7/7       100.0%" in format_report(report)

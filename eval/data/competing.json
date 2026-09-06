@@ -50,23 +50,19 @@
   },
   {
     "input": "x_I",
-    "characterizes": "The Roman path reads an identifier member that the letter paths reject.",
-    "expected": [
-      {"type": "number:cardinal:roman", "start": 2, "end": 3}
-    ],
+    "expected": [],
     "forbidden": [
       {"type": "letter:name", "start": 2, "end": 3},
+      {"type": "number:cardinal:roman", "start": 2, "end": 3},
       {"type": "word:single-letter", "start": 2, "end": 3}
     ]
   },
   {
     "input": "I'm",
-    "characterizes": "The Roman path reads a contraction member that the letter paths reject.",
-    "expected": [
-      {"type": "number:cardinal:roman", "start": 0, "end": 1}
-    ],
+    "expected": [],
     "forbidden": [
       {"type": "letter:name", "start": 0, "end": 1},
+      {"type": "number:cardinal:roman", "start": 0, "end": 1},
       {"type": "word:single-letter", "start": 0, "end": 1}
     ]
   }

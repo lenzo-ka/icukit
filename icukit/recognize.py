@@ -158,6 +158,9 @@ class LetterNameDetector:
     group = "letter"
     type = "letter:name"
 
+    # A capture means both "I have structure to report" and "do not eliminate me" in
+    # resolver geometry. New competing reading types need to account for both meanings.
+
     def __init__(self, locale: str) -> None:
         self.locale = locale
         icu_locale = icu.Locale(locale)
@@ -184,7 +187,7 @@ class LetterNameDetector:
                     end=end,
                     type=self.type,
                     value=value,
-                    captures=(),
+                    captures=(Capture("letter", start, end, letter, letter),),
                     spec=None,
                 )
             )
@@ -200,6 +203,9 @@ class SingleLetterWordDetector:
 
     group = "word"
     type = "word:single-letter"
+
+    # A capture means both "I have structure to report" and "do not eliminate me" in
+    # resolver geometry. New competing reading types need to account for both meanings.
 
     def __init__(self, locale: str) -> None:
         self.locale = locale
@@ -221,7 +227,7 @@ class SingleLetterWordDetector:
                     end=end,
                     type=self.type,
                     value=letter,
-                    captures=(),
+                    captures=(Capture("letter", start, end, letter, letter),),
                     spec=None,
                 )
             )
@@ -1041,6 +1047,8 @@ class FlexibleNumberDetector:
             while cursor < len(text) and text[cursor] in alphabet:
                 cursor += 1
             if cursor == start or cursor - start == 1 and not self.accept_single_letter_roman:
+                continue
+            if cursor - start == 1 and not _is_isolated_letter(text, start):
                 continue
             if cursor < len(text) and _is_word_character(text[cursor]):
                 continue

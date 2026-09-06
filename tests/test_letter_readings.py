@@ -4,6 +4,7 @@ import pytest
 
 import icukit.recognize as recognize
 from icukit.detectors import NumberValue, detect
+from icukit.resolve import weight
 
 
 @pytest.mark.parametrize(
@@ -54,6 +55,11 @@ def test_identifier_and_contraction_letters_are_not_isolated(surface):
     assert recognize.SingleLetterWordDetector("en").detect(surface) == []
 
 
+@pytest.mark.parametrize("surface", ["x_I", "I'm", "I’m", "D'Angelo"])
+def test_identifier_and_contraction_letters_are_not_roman_cardinals(surface):
+    assert recognize.FlexibleNumberDetector("en").detect(surface) == []
+
+
 def test_hyphen_does_not_join_a_letter_token():
     # Whether hyphens should join tokens is unsettled; pin the observed behavior so a later
     # policy change is deliberate.
@@ -89,6 +95,23 @@ def test_i_has_cardinal_letter_name_and_word_candidates_on_one_span():
     assert {(detection["start"], detection["end"]) for detection in detections} == {(0, 1)}
 
 
+def test_isolated_i_readings_tie_on_capture_geometry():
+    detections = _english_letter_readings("I")
+
+    assert [
+        tuple(
+            (capture.name, capture.start, capture.end, capture.text, capture.value)
+            for capture in detection["captures"]
+        )
+        for detection in detections
+    ] == [
+        (("letter", 0, 1, "I", "I"),),
+        (("integer", 0, 1, "I", "1"),),
+        (("letter", 0, 1, "I", "I"),),
+    ]
+    assert len({weight(detection) for detection in detections}) == 1
+
+
 def test_m_has_cardinal_and_letter_name_but_no_word_candidate():
     detections = _english_letter_readings("M")
 
@@ -113,6 +136,21 @@ def test_multi_letter_roman_has_only_its_cardinal_candidate():
     assert [(detection["type"], detection["value"]) for detection in detections] == [
         ("number:cardinal:roman", NumberValue("2", None)),
     ]
+
+
+@pytest.mark.parametrize(
+    ("multi_surface", "single_surface", "start", "end"),
+    [("_MIX", "_I", 1, 4), ("O’MIX", "O’I", 2, 5)],
+)
+def test_multi_letter_roman_boundary_scope_limit(multi_surface, single_surface, start, end):
+    # This pins the accepted scope limit rather than endorsing the boundary asymmetry.
+    detections = _english_letter_readings(multi_surface)
+
+    assert [
+        (detection["type"], detection["start"], detection["end"], detection["text"])
+        for detection in detections
+    ] == [("number:cardinal:roman", start, end, "MIX")]
+    assert _english_letter_readings(single_surface) == []
 
 
 @pytest.mark.parametrize("surface", ["xI", "Ix"])
