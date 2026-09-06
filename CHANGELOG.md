@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Isolated letter-name and one-letter-word readings carry a capture over the observed letter, allowing equal-span readings with parsed structure to reach downstream ranking on equal geometry.
+
 ## [0.4.0] - UNRELEASED
 
 ### Added

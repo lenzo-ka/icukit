@@ -4,6 +4,7 @@ import pytest
 
 import icukit.recognize as recognize
 from icukit.detectors import NumberValue, detect
+from icukit.resolve import weight
 
 
 @pytest.mark.parametrize(
@@ -87,6 +88,23 @@ def test_i_has_cardinal_letter_name_and_word_candidates_on_one_span():
         ("word:single-letter", "I"),
     ]
     assert {(detection["start"], detection["end"]) for detection in detections} == {(0, 1)}
+
+
+def test_isolated_i_readings_tie_on_capture_geometry():
+    detections = _english_letter_readings("I")
+
+    assert [
+        tuple(
+            (capture.name, capture.start, capture.end, capture.text, capture.value)
+            for capture in detection["captures"]
+        )
+        for detection in detections
+    ] == [
+        (("letter", 0, 1, "I", "I"),),
+        (("integer", 0, 1, "I", "1"),),
+        (("letter", 0, 1, "I", "I"),),
+    ]
+    assert len({weight(detection) for detection in detections}) == 1
 
 
 def test_m_has_cardinal_and_letter_name_but_no_word_candidate():
