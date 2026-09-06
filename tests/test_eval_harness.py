@@ -1,14 +1,14 @@
 from pathlib import Path
 
-from eval import CLASSES, evaluate, load_oracle
+from eval import evaluate, load_oracle
 
 
 def test_vendored_oracle_report_structure() -> None:
     oracle = load_oracle()
     report = evaluate(oracle)
 
-    assert set(report["classes"]) == set(CLASSES)
-    for name in CLASSES:
+    assert list(report["classes"]) == list(oracle)
+    for name in oracle:
         metrics = report["classes"][name]
         assert metrics["total"] == len(oracle[name])
         assert metrics["total"] > 0
@@ -27,3 +27,21 @@ def test_loader_splits_only_first_tilde_and_skips_comments(tmp_path: Path) -> No
     from eval.loader import load_table
 
     assert load_table(table) == [("1", "one~variant")]
+
+
+def test_oracle_classes_come_from_table_filenames(tmp_path: Path) -> None:
+    (tmp_path / "ordinal.txt").write_text("1st~first\n", encoding="utf-8")
+    (tmp_path / "cardinal.txt").write_text("1~one\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("not an oracle table\n", encoding="utf-8")
+
+    assert load_oracle(tmp_path) == {
+        "cardinal": [("1", "one")],
+        "ordinal": [("1st", "first")],
+    }
+
+
+def test_evaluate_accepts_an_oracle_subset() -> None:
+    report = evaluate({"cardinal": [("1", "one")]})
+
+    assert list(report["classes"]) == ["cardinal"]
+    assert report["overall"]["total"] == 1

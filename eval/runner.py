@@ -18,8 +18,6 @@ from icukit.recognize import (
     FlexibleTimeDetector,
 )
 
-from .loader import CLASSES
-
 LOCALE = "en_US"
 DEFAULT_BASELINE = Path(__file__).parent / "baseline.json"
 
@@ -60,12 +58,16 @@ def evaluate(
     overall_strict = 0
     overall_lenient = 0
 
-    for name in CLASSES:
+    unsupported = oracle.keys() - DETECTORS.keys()
+    if unsupported:
+        names = ", ".join(sorted(unsupported))
+        raise ValueError(f"no detector mapping for oracle classes: {names}")
+
+    for name, pairs in oracle.items():
         detectors = [factory() for factory in DETECTORS[name]]
         expected_types = {detector.type for detector in detectors}
         strict_count = 0
         lenient_count = 0
-        pairs = oracle[name]
         for written, _spoken in pairs:
             detections = [
                 detection
@@ -114,7 +116,7 @@ def format_report(report: Mapping[str, object]) -> str:
     lines = [header, "-" * len(header)]
     classes = report["classes"]
     assert isinstance(classes, Mapping)
-    for name in (*CLASSES, "overall"):
+    for name in (*classes, "overall"):
         metrics = report["overall"] if name == "overall" else classes[name]
         assert isinstance(metrics, Mapping)
         total = metrics["total"]

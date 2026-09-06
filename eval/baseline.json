@@ -12,13 +12,6 @@
       "recall_strict": 0.9444444444444444,
       "recall_lenient": 1.0
     },
-    "decimal": {
-      "total": 12,
-      "recognized_strict": 6,
-      "recognized_lenient": 12,
-      "recall_strict": 0.5,
-      "recall_lenient": 1.0
-    },
     "date": {
       "total": 54,
       "recognized_strict": 21,
@@ -26,19 +19,12 @@
       "recall_strict": 0.3888888888888889,
       "recall_lenient": 0.4444444444444444
     },
-    "time": {
-      "total": 21,
-      "recognized_strict": 7,
-      "recognized_lenient": 17,
-      "recall_strict": 0.3333333333333333,
-      "recall_lenient": 0.8095238095238095
-    },
-    "money": {
-      "total": 71,
-      "recognized_strict": 52,
-      "recognized_lenient": 59,
-      "recall_strict": 0.7323943661971831,
-      "recall_lenient": 0.8309859154929577
+    "decimal": {
+      "total": 12,
+      "recognized_strict": 6,
+      "recognized_lenient": 12,
+      "recall_strict": 0.5,
+      "recall_lenient": 1.0
     },
     "fraction": {
       "total": 16,
@@ -47,12 +33,26 @@
       "recall_strict": 0.6875,
       "recall_lenient": 0.9375
     },
+    "money": {
+      "total": 71,
+      "recognized_strict": 52,
+      "recognized_lenient": 59,
+      "recall_strict": 0.7323943661971831,
+      "recall_lenient": 0.8309859154929577
+    },
     "ordinal": {
       "total": 27,
       "recognized_strict": 15,
       "recognized_lenient": 15,
       "recall_strict": 0.5555555555555556,
       "recall_lenient": 0.5555555555555556
+    },
+    "time": {
+      "total": 21,
+      "recognized_strict": 7,
+      "recognized_lenient": 17,
+      "recall_strict": 0.3333333333333333,
+      "recall_lenient": 0.8095238095238095
     }
   },
   "overall": {
