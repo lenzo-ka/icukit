@@ -43,6 +43,30 @@ def test_letter_names_are_inert_without_locale_lexical_data():
     assert recognize.LetterNameDetector("fr").detect("A") == []
 
 
+@pytest.mark.parametrize("surface", ["İ", "K"])
+def test_non_ascii_case_variants_are_not_ascii_letter_names(surface):
+    assert recognize.LetterNameDetector("en").detect(surface) == []
+
+
+@pytest.mark.parametrize("surface", ["x_I", "I'm", "I’m"])
+def test_identifier_and_contraction_letters_are_not_isolated(surface):
+    assert recognize.LetterNameDetector("en").detect(surface) == []
+    assert recognize.SingleLetterWordDetector("en").detect(surface) == []
+
+
+def test_hyphen_does_not_join_a_letter_token():
+    # Whether hyphens should join tokens is unsettled; pin the observed behavior so a later
+    # policy change is deliberate.
+    detection = recognize.LetterNameDetector("en").detect("A-1")[0]
+
+    assert (detection["text"], detection["start"], detection["value"]) == ("A", 0, "a")
+
+
+def test_english_z_name_follows_the_locale_region():
+    assert recognize.LetterNameDetector("en_US").detect("Z")[0]["value"] == "zee"
+    assert recognize.LetterNameDetector("en_GB").detect("Z")[0]["value"] == "zed"
+
+
 def _english_letter_readings(surface):
     return detect(
         surface,

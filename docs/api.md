@@ -13,8 +13,6 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateIntervalDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleFractionDetector`](#icukitrecognize) — class, `icukit.recognize`
-- [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
-- [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumberDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleOrdinalDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -24,6 +22,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleSpelloutDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTextDateDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
 - [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
 - [`DateTimeValue`](#icukitdetectors) — class, `icukit.detectors`

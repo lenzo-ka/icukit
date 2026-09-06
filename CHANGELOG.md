@@ -6,6 +6,10 @@
 
 ### Added
 
+- `LetterNameDetector` and `SingleLetterWordDetector`, which deposit a letter's
+  spoken name and locale word reading alongside other candidates for an isolated
+  letter. Their locale tables are lexical because CLDR carries neither letter
+  pronunciations nor word lists.
 - `--json` on every remaining `collate`, `datetime`, `idna`, and `measure`
   subcommand: `collate compare` and `collate sort`; `datetime format`,
   `relative`, `interval`, `parse`, `patterns`, and `calendars`; `idna encode`
