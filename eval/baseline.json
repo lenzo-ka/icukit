@@ -4,6 +4,7 @@
     "lenient": "expected-type detection occurs anywhere in the written input"
   },
   "locale": "en_US",
+  "unsupported_classes": [],
   "classes": {
     "cardinal": {
       "total": 18,
@@ -61,5 +62,12 @@
     "recognized_lenient": 160,
     "recall_strict": 0.589041095890411,
     "recall_lenient": 0.730593607305936
+  },
+  "competing_readings": {
+    "criterion": "expected spans present; forbidden spans absent; exact records have no others",
+    "total": 7,
+    "recognized": 7,
+    "characterizing_records": 2,
+    "recall": 1.0
   }
 }

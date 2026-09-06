@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from .competing import evaluate_competing, load_competing
 from .loader import load_oracle
 from .runner import evaluate, format_report, write_report
 
-__all__ = ["evaluate", "format_report", "load_oracle", "write_report"]
+__all__ = [
+    "evaluate",
+    "evaluate_competing",
+    "format_report",
+    "load_competing",
+    "load_oracle",
+    "write_report",
+]

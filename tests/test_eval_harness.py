@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from eval import evaluate, load_oracle
+import pytest
+
+from eval import evaluate, evaluate_competing, load_competing, load_oracle
+from eval.runner import format_report
 
 
 def test_vendored_oracle_report_structure() -> None:
@@ -45,3 +48,89 @@ def test_evaluate_accepts_an_oracle_subset() -> None:
 
     assert list(report["classes"]) == ["cardinal"]
     assert report["overall"]["total"] == 1
+
+
+def test_evaluate_reports_unsupported_classes_without_scoring_them() -> None:
+    report = evaluate({"cardinal": [("1", "one")], "telephone": [("911", "nine one one")]})
+
+    assert report["unsupported_classes"] == ["telephone"]
+    assert list(report["classes"]) == ["cardinal"]
+    assert report["overall"]["total"] == 1
+    assert "unsupported/unscored: telephone" in format_report(report)
+
+
+def test_vendored_competing_readings_are_all_required_on_one_span() -> None:
+    records = load_competing()
+
+    assert {record["input"] for record in records} == {
+        "I",
+        "M",
+        "a",
+        "II",
+        "cat",
+        "x_I",
+        "I'm",
+    }
+    characterized = {record["input"] for record in records if "characterizes" in record}
+    assert characterized == {"x_I", "I'm"}
+    assert evaluate_competing(records) == {
+        "criterion": "expected spans present; forbidden spans absent; exact records have no others",
+        "total": 7,
+        "recognized": 7,
+        "characterizing_records": 2,
+        "recall": 1.0,
+    }
+
+
+def test_competing_record_fails_when_one_expected_candidate_is_absent() -> None:
+    report = evaluate_competing(
+        [
+            {
+                "input": "M",
+                "expected": [
+                    {"type": "letter:name", "start": 0, "end": 1},
+                    {"type": "word:single-letter", "start": 0, "end": 1},
+                ],
+                "forbidden": [],
+            }
+        ]
+    )
+
+    assert report["recognized"] == 0
+
+
+def test_competing_record_fails_when_a_forbidden_candidate_is_present() -> None:
+    report = evaluate_competing(
+        [
+            {
+                "input": "I",
+                "expected": [{"type": "letter:name", "start": 0, "end": 1}],
+                "forbidden": [{"type": "number:cardinal:roman", "start": 0, "end": 1}],
+            }
+        ]
+    )
+
+    assert report["recognized"] == 0
+
+
+def test_exact_competing_record_rejects_real_extra_candidates() -> None:
+    record = {
+        "input": "I",
+        "expected": [{"type": "letter:name", "start": 0, "end": 1}],
+        "forbidden": [],
+    }
+
+    assert evaluate_competing([record])["recognized"] == 1
+    assert evaluate_competing([{**record, "exact": True}])["recognized"] == 0
+
+
+def test_competing_record_requires_an_expectation() -> None:
+    with pytest.raises(ValueError, match="no expectations"):
+        evaluate_competing([{"input": "I", "expected": [], "forbidden": []}])
+
+
+def test_format_report_includes_competing_readings() -> None:
+    report = evaluate(load_oracle())
+    report["competing_readings"] = evaluate_competing(load_competing())
+
+    assert "competing      7/7       100.0% (2 characterizing)" in format_report(report)

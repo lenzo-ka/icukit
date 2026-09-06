@@ -58,12 +58,11 @@ def evaluate(
     overall_strict = 0
     overall_lenient = 0
 
-    unsupported = oracle.keys() - DETECTORS.keys()
-    if unsupported:
-        names = ", ".join(sorted(unsupported))
-        raise ValueError(f"no detector mapping for oracle classes: {names}")
+    unsupported = sorted(oracle.keys() - DETECTORS.keys())
 
     for name, pairs in oracle.items():
+        if name in unsupported:
+            continue
         detectors = [factory() for factory in DETECTORS[name]]
         expected_types = {detector.type for detector in detectors}
         strict_count = 0
@@ -95,6 +94,7 @@ def evaluate(
             "lenient": "expected-type detection occurs anywhere in the written input",
         },
         "locale": LOCALE,
+        "unsupported_classes": unsupported,
         "classes": class_reports,
         "overall": _metrics(overall_total, overall_strict, overall_lenient),
     }
@@ -127,6 +127,18 @@ def format_report(report: Mapping[str, object]) -> str:
         lines.append(
             f"{name:<10} {strict:>5}/{total:<6} {strict_recall:>7.1%} "
             f"{lenient:>5}/{total:<6} {lenient_recall:>7.1%}"
+        )
+    unsupported = report.get("unsupported_classes", [])
+    assert isinstance(unsupported, Sequence)
+    if unsupported:
+        lines.append(f"unsupported/unscored: {', '.join(unsupported)}")
+    competing = report.get("competing_readings")
+    if competing is not None:
+        assert isinstance(competing, Mapping)
+        lines.append(
+            f"competing  {competing['recognized']:>5}/{competing['total']:<6} "
+            f"{competing['recall']:>7.1%} "
+            f"({competing['characterizing_records']} characterizing)"
         )
     return "\n".join(lines)
 
