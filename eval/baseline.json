@@ -67,7 +67,7 @@
     "criterion": "expected spans present; forbidden spans absent; exact records have no others",
     "total": 7,
     "recognized": 7,
-    "characterizing_records": 2,
+    "characterizing_records": 0,
     "recall": 1.0
   }
 }

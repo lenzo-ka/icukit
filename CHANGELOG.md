@@ -6,6 +6,10 @@
 
 - Isolated letter-name and one-letter-word readings carry a capture over the observed letter, allowing equal-span readings with parsed structure to reach downstream ranking on equal geometry.
 
+### Fixed
+
+- Single-letter Roman cardinals use the letter detectors' isolation rule, excluding identifier and contraction members while leaving multi-letter Roman runs unchanged.
+
 ## [0.4.0] - UNRELEASED
 
 ### Added

@@ -1048,6 +1048,8 @@ class FlexibleNumberDetector:
                 cursor += 1
             if cursor == start or cursor - start == 1 and not self.accept_single_letter_roman:
                 continue
+            if cursor - start == 1 and not _is_isolated_letter(text, start):
+                continue
             if cursor < len(text) and _is_word_character(text[cursor]):
                 continue
             surface = text[start:cursor]

@@ -55,6 +55,11 @@ def test_identifier_and_contraction_letters_are_not_isolated(surface):
     assert recognize.SingleLetterWordDetector("en").detect(surface) == []
 
 
+@pytest.mark.parametrize("surface", ["x_I", "I'm", "I’m", "D'Angelo"])
+def test_identifier_and_contraction_letters_are_not_roman_cardinals(surface):
+    assert recognize.FlexibleNumberDetector("en").detect(surface) == []
+
+
 def test_hyphen_does_not_join_a_letter_token():
     # Whether hyphens should join tokens is unsettled; pin the observed behavior so a later
     # policy change is deliberate.
@@ -131,6 +136,21 @@ def test_multi_letter_roman_has_only_its_cardinal_candidate():
     assert [(detection["type"], detection["value"]) for detection in detections] == [
         ("number:cardinal:roman", NumberValue("2", None)),
     ]
+
+
+@pytest.mark.parametrize(
+    ("multi_surface", "single_surface", "start", "end"),
+    [("_MIX", "_I", 1, 4), ("O’MIX", "O’I", 2, 5)],
+)
+def test_multi_letter_roman_boundary_scope_limit(multi_surface, single_surface, start, end):
+    # This pins the accepted scope limit rather than endorsing the boundary asymmetry.
+    detections = _english_letter_readings(multi_surface)
+
+    assert [
+        (detection["type"], detection["start"], detection["end"], detection["text"])
+        for detection in detections
+    ] == [("number:cardinal:roman", start, end, "MIX")]
+    assert _english_letter_readings(single_surface) == []
 
 
 @pytest.mark.parametrize("surface", ["xI", "Ix"])
