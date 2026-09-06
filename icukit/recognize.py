@@ -45,6 +45,7 @@ __all__ = [
     "FlexibleDateIntervalDetector",
     "FlexibleFractionDetector",
     "LetterNameDetector",
+    "SingleLetterWordDetector",
     "FlexibleMeasureDetector",
     "FlexibleNumberDetector",
     "FlexibleOrdinalDetector",
@@ -100,6 +101,8 @@ _LETTER_NAMES = {
         "zee",
     )
 }
+# CLDR has no locale word lists. Keep these case-sensitive lexical entries small.
+_SINGLE_LETTER_WORDS = {"en": frozenset({"I", "a", "A", "O"})}
 
 
 @dataclass(frozen=True)
@@ -155,6 +158,45 @@ class LetterNameDetector:
                     end=end,
                     type=self.type,
                     value=self._names[ord(folded) - ord("a")],
+                    captures=(),
+                    spec=None,
+                )
+            )
+        return detections
+
+
+class SingleLetterWordDetector:
+    """Recognize an isolated letter that is a word in its locale.
+
+    CLDR does not supply word lists, so supported locales use a small case-sensitive
+    lexical set. Unsupported locale languages produce no candidates.
+    """
+
+    group = "word"
+    type = "word:single-letter"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._words = _SINGLE_LETTER_WORDS.get(icu.Locale(locale).getLanguage(), frozenset())
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return isolated one-letter word candidates in source order."""
+        detections = []
+        for start, letter in enumerate(text):
+            if letter not in self._words:
+                continue
+            if start > 0 and _is_word_character(text[start - 1]):
+                continue
+            end = start + 1
+            if end < len(text) and _is_word_character(text[end]):
+                continue
+            detections.append(
+                ValueDetection(
+                    text=letter,
+                    start=start,
+                    end=end,
+                    type=self.type,
+                    value=letter,
                     captures=(),
                     spec=None,
                 )

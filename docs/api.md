@@ -14,6 +14,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleDateIntervalDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleFractionDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumberDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleOrdinalDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -5023,6 +5024,21 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return isolated letter-name candidates in source order.
+
+### class `SingleLetterWordDetector`
+
+Recognize an isolated letter that is a word in its locale.
+
+CLDR does not supply word lists, so supported locales use a small case-sensitive
+lexical set. Unsupported locale languages produce no candidates.
+
+#### `SingleLetterWordDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return isolated one-letter word candidates in source order.
 
 ## icukit.regex
 
