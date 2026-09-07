@@ -2,15 +2,7 @@
 
 ## [Unreleased]
 
-### Changed
-
-- Isolated letter-name and one-letter-word readings carry a capture over the observed letter, allowing equal-span readings with parsed structure to reach downstream ranking on equal geometry.
-
-### Fixed
-
-- Single-letter Roman cardinals use the letter detectors' isolation rule, excluding identifier and contraction members while leaving multi-letter Roman runs unchanged.
-
-## [0.4.0] - UNRELEASED
+## [0.4.0] - 2026-09-07
 
 ### Added
 
@@ -88,6 +80,7 @@
 
 ### Changed
 
+- Isolated letter-name and one-letter-word readings carry a capture over the observed letter, allowing equal-span readings with parsed structure to reach downstream ranking on equal geometry.
 - The detector conformance gate no longer disappears when ICU moves. It compared
   a committed inventory against the one the running ICU produces and skipped the
   whole module when the versions differed, and the backend is declared with a
@@ -147,6 +140,7 @@
 
 ### Fixed
 
+- Single-letter Roman cardinals use the letter detectors' isolation rule, excluding identifier and contraction members while leaving multi-letter Roman runs unchanged.
 - The generated CLI reference documented each command under its longest
   spelling rather than its own name, so `spoof` and `idna` appeared as aliases
   of `confusable` and `punycode`. A command is now documented under the name its
