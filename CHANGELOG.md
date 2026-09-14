@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The development extra's tiergraph requirement is a floor without an upper cap,
+  `tiergraph>=0.2`, so a tiergraph release that breaks the test suite shows up there
+  instead of being held back.
+
 ## [0.4.0] - 2026-09-07
 
 ### Added
