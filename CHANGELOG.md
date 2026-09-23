@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- A spell-out expansion type in the abbreviation lexicon: `<expansion type="spell-out">`
+  says the surface is spelled out, and its text lists the characters to name, separated
+  by spaces. `Expansion` and `AbbreviationExpansion` carry it as `type`, which is
+  `"expansion"` for an expansion read as words. The English lexicon uses it for `MD`,
+  spelled out "M D" as the degree, alongside Maryland as the postal code.
+
 ### Changed
 
 - The development extra's tiergraph requirement is a floor without an upper cap,

@@ -43,6 +43,22 @@ def test_token_boundaries_exclude_words_and_internal_dotted_fragments():
     assert {item["text"] for item in detections} == {"Dr."}
 
 
+@pytest.mark.parametrize("text", ["John Smith, MD, said", "Baltimore, MD 21201"])
+def test_md_carries_its_spell_out_and_maryland_readings(text):
+    detections = AbbreviationDetector("en_US").detect(text)
+
+    assert [item["text"] for item in detections] == ["MD"]
+    assert detections[0]["value"].expansions == (
+        AbbreviationExpansion("M D", "title", "follows-name", "spell-out"),
+        AbbreviationExpansion("Maryland", "region", "address"),
+    )
+
+
+@pytest.mark.parametrize("text", ["AMD", "MDMA", "MDs"])
+def test_md_is_not_read_inside_a_word(text):
+    assert AbbreviationDetector("en_US").detect(text) == []
+
+
 @pytest.mark.parametrize("surface", ["J.", "Q.Z."])
 def test_productive_patterns_deposit_bare_readings(surface):
     detections = AbbreviationDetector("en").detect(surface)

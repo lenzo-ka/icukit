@@ -306,6 +306,12 @@
   <entry break="suppress"><surface>La.</surface><expansion sense="region">Louisiana</expansion></entry>
   <entry break="suppress"><surface>Mass.</surface><expansion sense="region">Massachusetts</expansion></entry>
   <entry break="suppress"><surface>Md.</surface><expansion sense="region">Maryland</expansion></entry>
+  <entry break="suppress">
+    <!-- MD: the degree, spelled out after a name, or Maryland's postal code. -->
+    <surface>MD</surface>
+    <expansion type="spell-out" sense="title" cue="follows-name">M D</expansion>
+    <expansion sense="region" cue="address">Maryland</expansion>
+  </entry>
   <entry break="suppress"><surface>Mich.</surface><expansion sense="region">Michigan</expansion></entry>
   <entry break="suppress"><surface>Minn.</surface><expansion sense="region">Minnesota</expansion></entry>
   <entry break="suppress"><surface>Miss.</surface><expansion sense="region">Mississippi</expansion></entry>

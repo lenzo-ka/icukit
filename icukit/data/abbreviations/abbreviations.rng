@@ -21,6 +21,8 @@
   Controlled vocabularies (documented here, enforced below):
 
     @break   (entry, pattern; required)
+        It describes a trailing period; on a surface without one (MD) it has
+        no effect, and such an entry is marked suppress.
         suppress   - the surface never ends a sentence here; the trailing
                      period belongs to the abbreviation.
         ambiguous  - the surface may also be a sentence end; a downstream
@@ -47,6 +49,12 @@
         era           - calendar era (A.D. -> Anno Domini).
         phrase        - fixed Latin / editorial phrase (e.g. -> for example).
         other         - a defensible expansion outside the classes above.
+
+    @type    (expansion; optional) - how the expansion is spoken.
+        expansion  - the default: the expansion text is read as words
+                     (Dr. -> Doctor).
+        spell-out  - the surface is spelled out; the expansion text lists the
+                     characters to name, separated by spaces (MD -> M D).
 
     @cue     (expansion; optional) - a positional hint that favors this
              reading, for a later disambiguator (never a hard rule here).
@@ -125,6 +133,14 @@
       <attribute name="sense">
         <ref name="sense-values"/>
       </attribute>
+      <optional>
+        <attribute name="type">
+          <choice>
+            <value>expansion</value>
+            <value>spell-out</value>
+          </choice>
+        </attribute>
+      </optional>
       <optional>
         <attribute name="cue">
           <ref name="cue-values"/>
