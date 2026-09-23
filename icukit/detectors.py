@@ -38,7 +38,7 @@ from typing import Literal, Protocol, runtime_checkable
 import icu
 
 from ._offsets import boundary_maps, u16_boundary_to_codepoint
-from .breaker import break_grapheme_spans
+from .breaker import break_grapheme_spans, break_word_spans
 from .detect import Detection
 
 __all__ = [
@@ -840,6 +840,29 @@ def _contains_float(obj: object) -> bool:
     return False
 
 
+def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
+    """Offsets that fall between two alphanumerics inside one ICU word.
+
+    A reading may not start or end at one of these: "788" inside "2788", "29" inside
+    "29th", and "123" inside "asdf123" are fragments of a longer token, not readings of
+    it. Both conditions are required. Alphanumeric neighbors alone would also refuse
+    "3" in "我有3个", where ICU's word segmentation puts a boundary on each side of the
+    digit; ICU's word boundaries alone would also refuse "3" in "3.5", which the
+    locale's own number grammar decides.
+    """
+    word_edges = {0, len(text)}
+    for span in break_word_spans(text, locale):
+        word_edges.add(span["start"])
+        word_edges.add(span["end"])
+    return frozenset(
+        offset
+        for offset in range(1, len(text))
+        if offset not in word_edges
+        and icu.Char.isalnum(text[offset - 1])
+        and icu.Char.isalnum(text[offset])
+    )
+
+
 def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[ValueDetection]:
     """Windowed detection with reformat-equality acceptance and greedy longest-match.
 
@@ -847,20 +870,24 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
     continues (never a refusal). A successful parse whose endpoint is reversed,
     surrogate-interior, or mid-grapheme is a :class:`DetectorRefusal`. An accepted span
     must reproduce the formatter's canonical output exactly (rejecting ICU's permissive
-    coercions). After a match ``[s, e)`` the scan resumes at ``e`` so one detector never
-    self-overlaps.
+    coercions), and may neither start nor end inside a word between two alphanumerics
+    (see :func:`_word_interior_offsets`). After a match ``[s, e)`` the scan resumes at
+    ``e`` so one detector never self-overlaps.
     """
     us = icu.UnicodeString(text)
     cp_to_u16, u16_to_cp = boundary_maps(text)
     gspans = break_grapheme_spans(text, locale)
     starts = sorted({g["start"] for g in gspans})
     boundaries = {g["start"] for g in gspans} | {g["end"] for g in gspans} | {0, len(text)}
+    interior = _word_interior_offsets(text, locale)
 
     out: list[ValueDetection] = []
     cursor = 0
     for start_cp in starts:
         if start_cp < cursor:
             continue  # greedy: inside a prior match
+        if start_cp in interior:
+            continue  # a fragment of a longer token
         result = inv.parse(us, cp_to_u16[start_cp])
         if result is None:
             continue  # ordinary miss
@@ -896,6 +923,8 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
                 "mid-grapheme-endpoint",
                 "parse ended inside a grapheme cluster",
             )
+        if end_cp in interior:
+            continue  # a fragment of a longer token
         surface = text[start_cp:end_cp]
         try:
             reformatted = inv.reformat(parsed)

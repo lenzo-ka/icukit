@@ -5017,6 +5017,10 @@ CLDR supplies alphabet repertoires but not the spoken names of their members, so
 supported locales use a small lexical table. Unsupported locale languages produce no
 candidates.
 
+A letter may carry a plural or possessive suffix ("C's", "Cs"): the detection then
+spans the whole token, with the letter in the ``letter`` capture and the rest in a
+``suffix`` capture.
+
 #### `LetterNameDetector(locale: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.

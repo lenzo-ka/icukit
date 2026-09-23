@@ -35,6 +35,7 @@ from .detectors import (
     ValueDetection,
     _date_fields,
     _pattern_runs,
+    _word_interior_offsets,
 )
 
 __all__ = [
@@ -147,12 +148,43 @@ def _is_isolated_letter(text: str, start: int) -> bool:
     )
 
 
+def _ends_letter_token(text: str, end: int) -> bool:
+    return end == len(text) or not _continues_letter_token(text, end, 1)
+
+
+def _letter_suffix_end(text: str, start: int) -> int | None:
+    """The end of a letter's plural or possessive suffix: "C's", "p's", or "Cs".
+
+    A bare "s" is taken only after a capital, since "as", "is", and "us" are words.
+    Anything else that continues the token, such as the "m" of "I'm", is no suffix.
+    """
+    after = start + 1
+    if (
+        after + 1 < len(text)
+        and text[after + 1] == "s"
+        and icu.Char.hasBinaryProperty(text[after], icu.UProperty.QUOTATION_MARK)
+        and _ends_letter_token(text, after + 2)
+    ):
+        return after + 2
+    if (
+        text[start].isupper()
+        and text[after : after + 1] == "s"
+        and _ends_letter_token(text, after + 1)
+    ):
+        return after + 1
+    return None
+
+
 class LetterNameDetector:
     """Recognize an isolated ASCII Latin letter as its locale's letter name.
 
     CLDR supplies alphabet repertoires but not the spoken names of their members, so
     supported locales use a small lexical table. Unsupported locale languages produce no
     candidates.
+
+    A letter may carry a plural or possessive suffix ("C's", "Cs"): the detection then
+    spans the whole token, with the letter in the ``letter`` capture and the rest in a
+    ``suffix`` capture.
     """
 
     group = "letter"
@@ -175,19 +207,27 @@ class LetterNameDetector:
         for start, letter in enumerate(text):
             if not ("A" <= letter <= "Z" or "a" <= letter <= "z"):
                 continue
-            if not _is_isolated_letter(text, start):
+            if start > 0 and _continues_letter_token(text, start - 1, -1):
                 continue
+            if _ends_letter_token(text, start + 1):
+                end = start + 1
+            else:
+                end = _letter_suffix_end(text, start)
+                if end is None:
+                    continue
             folded = letter.lower()
-            end = start + 1
             value = self._z_name if folded == "z" else self._names[ord(folded) - ord("a")]
+            captures = [Capture("letter", start, start + 1, letter, letter)]
+            if end > start + 1:
+                captures.append(Capture("suffix", start + 1, end, text[start + 1 : end]))
             detections.append(
                 ValueDetection(
-                    text=letter,
+                    text=text[start:end],
                     start=start,
                     end=end,
                     type=self.type,
                     value=value,
-                    captures=(Capture("letter", start, end, letter, letter),),
+                    captures=tuple(captures),
                     spec=None,
                 )
             )
@@ -2846,10 +2886,11 @@ def _detect_flexible(
     match: Callable[[str, int], tuple[int, tuple[Capture, ...], object] | _FlexibleMatch | None],
 ) -> list[ValueDetection]:
     starts = sorted({span["start"] for span in break_grapheme_spans(text, locale)})
+    interior = _word_interior_offsets(text, locale)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor:
+        if start < cursor or start in interior:
             continue
         result = match(text, start)
         if result is None:
@@ -2860,6 +2901,8 @@ def _detect_flexible(
         else:
             end, captures, value = result
             match_spec = spec
+        if end in interior:
+            continue
         detections.append(
             ValueDetection(
                 text=text[start:end],

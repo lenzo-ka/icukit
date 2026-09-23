@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A number, date, or other value reading no longer starts or ends between two
+  alphanumerics inside one word: "2788" no longer yields "788", "29th" no longer
+  yields "29", "asdf123" no longer yields "123", and "2016/07/03" no longer yields
+  "6/07/03". This also refuses the bare "1.2" inside "1.2M" and the bare mantissa
+  inside "1.2345E4", which the compact and scientific readings still cover. Where ICU
+  word segmentation separates a digit from its neighbors, as in "我有3个", the digit
+  still reads.
+- `AbbreviationDetector` no longer deposits a lowercase word that matches an entry
+  only case-insensitively ("sun." against "Sun.", Sunday), and no longer starts an
+  abbreviation inside a word ("s." in "C's.").
+- `LetterNameDetector` reads a letter with a plural or possessive suffix ("C's", "i's",
+  "Cs") as the letter's name, spanning the whole token with the suffix in its own
+  `suffix` capture.
+
 ### Changed
 
 - The development extra's tiergraph requirement is a floor without an upper cap,

@@ -136,7 +136,10 @@ def _wrap(surface: str, envelope: str, locale: str) -> tuple[str, int, int] | No
         # surface's own trailing grapheme and leave nothing to detect).
         text, start = f"e\u0301 {surface}", 3
     elif envelope == "adjacent":
-        text, start = f"{surface}x", 0
+        # Flush against the following text with no space between. The neighbor is not
+        # alphanumeric: a reading may not end between two alphanumerics, so a surface
+        # pressed against a letter is correctly refused rather than recovered.
+        text, start = f"{surface})", 0
     elif envelope == "rtl_embedded":
         text, start = f"\u200f{surface}\u200f", 1
     else:

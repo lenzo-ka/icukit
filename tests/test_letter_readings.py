@@ -60,6 +60,39 @@ def test_identifier_and_contraction_letters_are_not_roman_cardinals(surface):
     assert recognize.FlexibleNumberDetector("en").detect(surface) == []
 
 
+@pytest.mark.parametrize(
+    ("text", "span", "suffix"),
+    [
+        ("C's", (0, 3), "'s"),
+        ("C’s", (0, 3), "’s"),
+        ("Cs", (0, 2), "s"),
+        ("dot your i's", (9, 12), "'s"),
+        ("my A B C's.", (7, 10), "'s"),
+    ],
+)
+def test_a_letter_takes_a_plural_or_possessive_suffix(text, span, suffix):
+    detection = recognize.LetterNameDetector("en_US").detect(text)[-1]
+    captures = {capture.name: capture for capture in detection["captures"]}
+
+    assert (detection["start"], detection["end"]) == span
+    assert (
+        detection["value"]
+        == recognize.LetterNameDetector("en_US").detect(text[span[0]])[0]["value"]
+    )
+    assert captures["letter"].end == span[0] + 1
+    assert captures["suffix"].text == suffix
+    assert text[captures["suffix"].start : captures["suffix"].end] == suffix
+
+
+@pytest.mark.parametrize("text", ["as", "is", "C'st", "Css", "C'ss"])
+def test_only_a_plural_or_possessive_s_is_a_letter_suffix(text):
+    assert recognize.LetterNameDetector("en_US").detect(text) == []
+
+
+def test_a_suffixed_letter_is_not_a_one_letter_word():
+    assert recognize.SingleLetterWordDetector("en").detect("A's") == []
+
+
 def test_hyphen_does_not_join_a_letter_token():
     # Whether hyphens should join tokens is unsettled; pin the observed behavior so a later
     # policy change is deliberate.
