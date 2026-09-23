@@ -60,6 +60,9 @@ __all__ = [
 BREAK_SUPPRESS = "suppress"
 BREAK_AMBIGUOUS = "ambiguous"
 
+EXPANSION = "expansion"
+SPELL_OUT = "spell-out"
+
 _DATA_DIR = Path(__file__).parent / "data" / "abbreviations"
 # The XML namespace URI, used when reading ``xml:lang`` off the root element.
 _XML_NS = "http://www.w3.org/XML/1998/namespace"
@@ -72,11 +75,15 @@ class Expansion:
     ``sense`` names the semantic class of the expansion (``title``, ``saint``,
     ``thoroughfare``, ...). ``cue`` is an optional positional hint that favors
     this reading (e.g. ``precedes-number``); it is advisory, never a rule.
+    ``type`` is how the expansion is spoken: ``"expansion"`` reads ``value`` as
+    words, and ``"spell-out"`` spells the surface out, with ``value`` listing
+    the characters to name, separated by spaces (``MD`` -> ``M D``).
     """
 
     value: str
     sense: str
     cue: str | None = None
+    type: str = EXPANSION
 
 
 @dataclass(frozen=True)
@@ -191,7 +198,16 @@ def _expansion_from_element(element: Element) -> Expansion:
     value = (element.text or "").strip()
     if not value:
         raise AbbreviationError(f"<expansion sense='{sense}'> has no value")
-    return Expansion(value=value, sense=sense, cue=element.get("cue"))
+    kind = element.get("type", EXPANSION)
+    if kind not in {EXPANSION, SPELL_OUT}:
+        raise AbbreviationError(f"<expansion> has an unknown type '{kind}'")
+    if kind == SPELL_OUT and not all(
+        len(character) == 1 and character.isalnum() for character in value.split()
+    ):
+        raise AbbreviationError(
+            f"<expansion type='spell-out'> must list single characters, not '{value}'"
+        )
+    return Expansion(value=value, sense=sense, cue=element.get("cue"), type=kind)
 
 
 def _entry_from_element(element: Element) -> Entry:

@@ -448,7 +448,11 @@ Scan token starts and return all co-located readings.
 
 One annotated expansion of an abbreviation surface.
 
-#### `AbbreviationExpansion(text: 'str', sense: 'str', cue: 'str | None' = None) -> None`
+``type`` is ``"expansion"`` when ``text`` is read as words, or ``"spell-out"``
+when the surface is spelled out and ``text`` lists the characters to name,
+separated by spaces (``MD`` -> ``M D``).
+
+#### `AbbreviationExpansion(text: 'str', sense: 'str', cue: 'str | None' = None, type: 'str' = 'expansion') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -562,8 +566,11 @@ One expansion reading of an abbreviation surface.
 ``sense`` names the semantic class of the expansion (``title``, ``saint``,
 ``thoroughfare``, ...). ``cue`` is an optional positional hint that favors
 this reading (e.g. ``precedes-number``); it is advisory, never a rule.
+``type`` is how the expansion is spoken: ``"expansion"`` reads ``value`` as
+words, and ``"spell-out"`` spells the surface out, with ``value`` listing
+the characters to name, separated by spaces (``MD`` -> ``M D``).
 
-#### `Expansion(value: 'str', sense: 'str', cue: 'str | None' = None) -> None`
+#### `Expansion(value: 'str', sense: 'str', cue: 'str | None' = None, type: 'str' = 'expansion') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 

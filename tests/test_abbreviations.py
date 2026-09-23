@@ -106,12 +106,25 @@ class TestGrammarValidation:
             '<abbreviations xml:lang="en"><widget/></abbreviations>',
             # Missing required xml:lang.
             '<abbreviations><entry break="suppress"><surface>Dr.</surface></entry></abbreviations>',
+            # Out-of-vocabulary expansion @type.
+            '<abbreviations xml:lang="en"><entry break="suppress"><surface>MD</surface>'
+            '<expansion sense="title" type="letters">M D</expansion></entry></abbreviations>',
         ],
     )
     def test_grammar_rejects_malformed(self, xml):
         lxml_etree, rng = _relaxng()
         doc = lxml_etree.fromstring(xml.encode("utf-8"))
         assert not rng.validate(doc), f"grammar wrongly accepted: {xml}"
+
+    def test_grammar_accepts_a_spell_out_expansion(self):
+        lxml_etree, rng = _relaxng()
+        xml = (
+            '<abbreviations xml:lang="en"><entry break="suppress"><surface>MD</surface>'
+            '<expansion type="spell-out" sense="title">M D</expansion>'
+            "</entry></abbreviations>"
+        )
+        doc = lxml_etree.fromstring(xml.encode("utf-8"))
+        assert rng.validate(doc), rng.error_log
 
     def test_grammar_accepts_typed_pattern(self):
         lxml_etree, rng = _relaxng()
@@ -154,6 +167,7 @@ class TestLoader:
             for exp in entry.expansions:
                 assert exp.sense in _SENSES
                 assert exp.cue in (None, *_CUES)
+                assert exp.type in ("expansion", "spell-out")
         for pattern in lex.patterns:
             assert pattern.kind in _KINDS
             assert pattern.break_behavior in _BREAKS
@@ -223,6 +237,38 @@ class TestLoaderErrors:
     def test_missing_file_raises(self):
         with pytest.raises(AbbreviationError):
             load_lexicon_file(Path("/nonexistent/does-not-exist.xml"))
+
+    def test_md_is_spelled_out_or_maryland(self):
+        entry = load_lexicon("en").get("MD")
+        assert entry is not None
+        assert [(exp.type, exp.value, exp.sense) for exp in entry.expansions] == [
+            ("spell-out", "M D", "title"),
+            ("expansion", "Maryland", "region"),
+        ]
+
+    def test_an_expansion_is_read_as_words_by_default(self):
+        entry = load_lexicon("en").get("Dr.")
+        assert entry is not None
+        assert {exp.type for exp in entry.expansions} == {"expansion"}
+
+    @pytest.mark.parametrize("value", ["MD", "M.D", "M DD"])
+    def test_a_spell_out_lists_single_characters(self, value):
+        xml = (
+            '<abbreviations xml:lang="en"><entry break="suppress"><surface>MD</surface>'
+            f'<expansion type="spell-out" sense="title">{value}</expansion>'
+            "</entry></abbreviations>"
+        )
+        with pytest.raises(AbbreviationError):
+            parse_lexicon(xml)
+
+    def test_an_unknown_expansion_type_raises(self):
+        xml = (
+            '<abbreviations xml:lang="en"><entry break="suppress"><surface>MD</surface>'
+            '<expansion type="letters" sense="title">M D</expansion>'
+            "</entry></abbreviations>"
+        )
+        with pytest.raises(AbbreviationError):
+            parse_lexicon(xml)
 
     def test_wrong_root_raises(self):
         with pytest.raises(AbbreviationError):
