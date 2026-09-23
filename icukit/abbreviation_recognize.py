@@ -6,8 +6,7 @@ from dataclasses import dataclass
 
 from .abbreviation_compile import CompiledLexicon, compile_lexicon
 from .abbreviations import AbbreviationLexicon
-from .breaker import break_word_spans
-from .detectors import Capture, DetectorSet, ValueDetection
+from .detectors import Capture, DetectorSet, ValueDetection, _word_edges
 
 __all__ = [
     "AbbreviationDetector",
@@ -125,7 +124,7 @@ class AbbreviationDetector:
         if self.compiled is None:
             return []
         # An abbreviation starts a word: "s." in "C's." is inside the word "C's".
-        word_starts = {span["start"] for span in break_word_spans(text, self.locale)}
+        word_starts = _word_edges(text, self.locale)
         detections: list[ValueDetection] = []
         for start in range(len(text)):
             if (

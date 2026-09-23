@@ -4,19 +4,23 @@
 
 ### Fixed
 
-- A number, date, or other value reading no longer starts or ends between two
-  alphanumerics inside one word: "2788" no longer yields "788", "29th" no longer
-  yields "29", "asdf123" no longer yields "123", and "2016/07/03" no longer yields
+- A number, date, or other value reading no longer starts or ends inside a word with
+  alphanumerics on both sides of it in that word: "2788" no longer yields "788",
+  "29th" no longer yields "29", "asdf123" no longer yields "123", "ab2,788" no longer
+  yields "788", "v2.0" no longer yields "0", and "2016/07/03" no longer yields
   "6/07/03". This also refuses the bare "1.2" inside "1.2M" and the bare mantissa
-  inside "1.2345E4", which the compact and scientific readings still cover. Where ICU
-  word segmentation separates a digit from its neighbors, as in "我有3个", the digit
-  still reads.
+  inside "1.2345E4", which the compact and scientific readings still cover, and
+  anything inside an unspaced "1,2,3". Words are ICU's, so "3" in "我有3个" still
+  reads, and a combining mark or format character is part of the word it extends. A
+  digit against a letter of a script ICU breaks between letters is a token of its own,
+  so "100" in the Thai "ราคา100บาท" still reads.
 - `AbbreviationDetector` no longer deposits a lowercase word that matches an entry
   only case-insensitively ("sun." against "Sun.", Sunday), and no longer starts an
   abbreviation inside a word ("s." in "C's.").
 - `LetterNameDetector` reads a letter with a plural or possessive suffix ("C's", "i's",
   "Cs") as the letter's name, spanning the whole token with the suffix in its own
-  `suffix` capture.
+  `suffix` capture. The suffix follows an apostrophe, or is a bare "s" after a capital
+  where the pair is not itself a word ("Is", "As", "Us", and "Ms" are not plurals).
 
 ### Changed
 

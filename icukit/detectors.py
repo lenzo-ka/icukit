@@ -840,27 +840,74 @@ def _contains_float(obj: object) -> bool:
     return False
 
 
-def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
-    """Offsets that fall between two alphanumerics inside one ICU word.
-
-    A reading may not start or end at one of these: "788" inside "2788", "29" inside
-    "29th", and "123" inside "asdf123" are fragments of a longer token, not readings of
-    it. Both conditions are required. Alphanumeric neighbors alone would also refuse
-    "3" in "我有3个", where ICU's word segmentation puts a boundary on each side of the
-    digit; ICU's word boundaries alone would also refuse "3" in "3.5", which the
-    locale's own number grammar decides.
-    """
-    word_edges = {0, len(text)}
+@functools.lru_cache(maxsize=16)
+def _word_edges(text: str, locale: str) -> frozenset[int]:
+    """ICU word-break offsets of ``text``, cached so a gang segments a text once."""
+    edges = {0, len(text)}
     for span in break_word_spans(text, locale):
-        word_edges.add(span["start"])
-        word_edges.add(span["end"])
-    return frozenset(
-        offset
-        for offset in range(1, len(text))
-        if offset not in word_edges
-        and icu.Char.isalnum(text[offset - 1])
-        and icu.Char.isalnum(text[offset])
-    )
+        edges.add(span["start"])
+        edges.add(span["end"])
+    return frozenset(edges)
+
+
+_EXTENDING_CATEGORIES = frozenset(
+    {
+        icu.UCharCategory.NON_SPACING_MARK,
+        icu.UCharCategory.COMBINING_SPACING_MARK,
+        icu.UCharCategory.ENCLOSING_MARK,
+        icu.UCharCategory.FORMAT_CHAR,
+    }
+)
+
+
+def _base_before(text: str, offset: int) -> str | None:
+    """The character before ``offset``, looking past marks and format characters."""
+    index = offset - 1
+    while index >= 0 and icu.Char.charType(text[index]) in _EXTENDING_CATEGORIES:
+        index -= 1
+    return text[index] if index >= 0 else None
+
+
+def _is_script_seam(left: str | None, right: str) -> bool:
+    """A digit against a letter of a script written without spaces between words.
+
+    ICU's dictionary segmentation of Thai, Lao, Khmer, or Myanmar can leave a digit and
+    its neighboring letters in one "word" ("ราคา100บาท"), although the digits are a
+    token of their own; ICU marks those scripts as breaking between letters.
+    """
+    if left is None:
+        return False
+    for digit, letter in ((left, right), (right, left)):
+        if (
+            icu.Char.isdigit(digit)
+            and icu.Char.isalpha(letter)
+            and icu.Script.getScript(letter).breaksBetweenLetters()
+        ):
+            return True
+    return False
+
+
+@functools.lru_cache(maxsize=16)
+def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
+    """Offsets inside one word with alphanumerics on both sides of them in that word.
+
+    A reading may not start or end at one of these: "788" inside "2788" or "ab2,788",
+    "29" inside "29th", and "123" inside "asdf123" are fragments of a longer token, not
+    readings of it. The word is ICU's, so "3" in "我有3个" is its own token, and a mark
+    or format character is part of the word it extends. A digit against a letter of a
+    script that ICU breaks between letters is a seam, not an interior ("100" in
+    "ราคา100บาท").
+    """
+    edges = sorted(_word_edges(text, locale))
+    interior: set[int] = set()
+    for word_start, word_end in zip(edges, edges[1:], strict=False):
+        alnum = [i for i in range(word_start, word_end) if icu.Char.isalnum(text[i])]
+        if len(alnum) < 2:
+            continue
+        for offset in range(alnum[0] + 1, alnum[-1] + 1):
+            if not _is_script_seam(_base_before(text, offset), text[offset]):
+                interior.add(offset)
+    return frozenset(interior)
 
 
 def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[ValueDetection]:

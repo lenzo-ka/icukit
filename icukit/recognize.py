@@ -105,6 +105,10 @@ _LETTER_NAMES = {
 }
 # CLDR has no locale word lists. Keep these case-sensitive lexical entries small.
 _SINGLE_LETTER_WORDS = {"en": frozenset({"I", "a", "A", "O"})}
+# A letter and a bare "s" that spell a word ("Is it?") are not that letter's plural.
+_LETTER_S_WORDS = {"en": frozenset({"as", "is", "us", "ms"})}
+# Apostrophes that mark a possessive or a letter's plural; other quotation marks do not.
+_APOSTROPHES = frozenset({"'", "\u2019"})
 
 
 @dataclass(frozen=True)
@@ -152,23 +156,24 @@ def _ends_letter_token(text: str, end: int) -> bool:
     return end == len(text) or not _continues_letter_token(text, end, 1)
 
 
-def _letter_suffix_end(text: str, start: int) -> int | None:
+def _letter_suffix_end(text: str, start: int, s_words: frozenset[str]) -> int | None:
     """The end of a letter's plural or possessive suffix: "C's", "p's", or "Cs".
 
-    A bare "s" is taken only after a capital, since "as", "is", and "us" are words.
-    Anything else that continues the token, such as the "m" of "I'm", is no suffix.
+    A bare "s" is taken only after a capital, and not where the pair is itself a word
+    ("As", "Is"). Anything else that continues the token, such as the "m" of "I'm", is
+    no suffix.
     """
     after = start + 1
     if (
-        after + 1 < len(text)
-        and text[after + 1] == "s"
-        and icu.Char.hasBinaryProperty(text[after], icu.UProperty.QUOTATION_MARK)
+        text[after : after + 1] in _APOSTROPHES
+        and text[after + 1 : after + 2] == "s"
         and _ends_letter_token(text, after + 2)
     ):
         return after + 2
     if (
         text[start].isupper()
         and text[after : after + 1] == "s"
+        and text[start : after + 1].lower() not in s_words
         and _ends_letter_token(text, after + 1)
     ):
         return after + 1
@@ -198,6 +203,7 @@ class LetterNameDetector:
         icu_locale = icu.Locale(locale)
         self._names = _LETTER_NAMES.get(icu_locale.getLanguage())
         self._z_name = "zed" if icu_locale.getCountry() not in {"", "US"} else "zee"
+        self._s_words = _LETTER_S_WORDS.get(icu_locale.getLanguage(), frozenset())
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return isolated letter-name candidates in source order."""
@@ -212,7 +218,7 @@ class LetterNameDetector:
             if _ends_letter_token(text, start + 1):
                 end = start + 1
             else:
-                end = _letter_suffix_end(text, start)
+                end = _letter_suffix_end(text, start, self._s_words)
                 if end is None:
                     continue
             folded = letter.lower()

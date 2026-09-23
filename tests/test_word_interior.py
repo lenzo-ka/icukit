@@ -9,6 +9,7 @@ from icukit.recognize import (
     FlexibleDateDetector,
     FlexibleFractionDetector,
     FlexibleNumberDetector,
+    FlexiblePercentDetector,
 )
 
 
@@ -63,4 +64,55 @@ def test_readings_flanked_by_non_alphanumerics_survive(detector, text, expected)
 def test_an_icu_word_boundary_between_alphanumerics_still_admits_a_reading(locale, text, expected):
     # Ideographs are alphanumeric, but ICU's word segmentation separates them from the
     # digit, so the digit is its own token rather than a fragment of one.
+    assert _spans(FlexibleNumberDetector(locale), text) == expected
+
+
+@pytest.mark.parametrize(
+    "detector, text",
+    [
+        (FlexibleNumberDetector("en_US"), "ab2,788"),
+        (NumberDetector("en_US", "decimal"), "ab2,788"),
+        (FlexibleNumberDetector("en_US"), "x1,000"),
+        (FlexibleNumberDetector("en_US"), "v2.0"),
+        (FlexibleNumberDetector("en_US"), "iOS17.2"),
+        (FlexibleNumberDetector("en_US"), "rev3.1.4"),
+        (FlexiblePercentDetector("en_US"), "x5.5%"),
+    ],
+)
+def test_the_tail_after_a_separator_inside_a_word_is_a_fragment(detector, text):
+    # Refusing the true start must not leave the scan to read the tail after "," or ".".
+    assert _spans(detector, text) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "café5",
+        "café5",  # the same word decomposed: a combining mark ends the letters
+        "abc­123",  # soft hyphen
+        "abc‍123",  # zero width joiner
+        "abc⁠123",  # word joiner
+    ],
+)
+def test_marks_and_format_characters_do_not_hide_a_word_interior(text):
+    assert _spans(FlexibleNumberDetector("en_US"), text) == []
+
+
+def test_a_vowel_sign_does_not_hide_a_word_interior():
+    assert _spans(FlexibleNumberDetector("hi"), "किताबें5") == []
+
+
+@pytest.mark.parametrize(
+    "locale, text, expected",
+    [
+        ("th", "ราคา100บาท", [(4, 7, "100")]),
+        ("th-u-nu-thai", "ราคา๑๐๐บาท", [(4, 7, "๑๐๐")]),
+        ("lo", "ລາຄາ100ກີບ", [(4, 7, "100")]),
+        ("km", "តម្លៃ100រៀល", [(5, 8, "100")]),
+        ("my", "၅ခု", [(0, 1, "၅")]),
+    ],
+)
+def test_digits_against_a_script_written_without_spaces_are_a_token(locale, text, expected):
+    # ICU's dictionary segmentation leaves these digits inside one "word" with their
+    # neighbors, but ICU marks the scripts as breaking between letters.
     assert _spans(FlexibleNumberDetector(locale), text) == expected

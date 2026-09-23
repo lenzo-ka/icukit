@@ -433,7 +433,6 @@ def test_flexible_number_refuses_a_number_ending_against_a_letter():
 @pytest.mark.parametrize(
     "locale, surface, expected",
     [
-        ("en_US", "1,2,3", "1"),
         ("en_US", "1,234", "1,234"),
         ("en_US", "1,234,567", "1,234,567"),
         ("hi_IN", "1,23,456", "1,23,456"),
@@ -443,6 +442,11 @@ def test_flexible_number_validates_locale_grouping(locale, surface, expected):
     detection = FlexibleNumberDetector(locale).detect(surface)[0]
 
     assert detection["text"] == expected
+
+
+def test_flexible_number_reads_nothing_from_a_malformed_grouping():
+    # "1,2,3" is one word; a validly grouped prefix "1" would be a fragment of it.
+    assert FlexibleNumberDetector("en_US").detect("1,2,3") == []
 
 
 def test_flexible_percent_does_not_absorb_malformed_grouping():

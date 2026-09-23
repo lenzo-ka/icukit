@@ -89,6 +89,19 @@ def test_only_a_plural_or_possessive_s_is_a_letter_suffix(text):
     assert recognize.LetterNameDetector("en_US").detect(text) == []
 
 
+@pytest.mark.parametrize("text", ["Is it?", "As", "Us too", "Ms Smith"])
+def test_a_capital_and_s_that_spell_a_word_are_not_a_letter_plural(text):
+    assert recognize.LetterNameDetector("en_US").detect(text) == []
+
+
+@pytest.mark.parametrize("text", ['"C"s', "«C»s", "‘C‘s"])
+def test_only_an_apostrophe_marks_a_letter_suffix(text):
+    assert all(
+        detection["end"] - detection["start"] == 1
+        for detection in recognize.LetterNameDetector("en_US").detect(text)
+    )
+
+
 def test_a_suffixed_letter_is_not_a_one_letter_word():
     assert recognize.SingleLetterWordDetector("en").detect("A's") == []
 
@@ -173,7 +186,7 @@ def test_multi_letter_roman_has_only_its_cardinal_candidate():
 
 @pytest.mark.parametrize(
     ("multi_surface", "single_surface", "start", "end"),
-    [("_MIX", "_I", 1, 4), ("O’MIX", "O’I", 2, 5)],
+    [("_MIX", "_I", 1, 4)],
 )
 def test_multi_letter_roman_boundary_scope_limit(multi_surface, single_surface, start, end):
     # This pins the accepted scope limit rather than endorsing the boundary asymmetry.
@@ -184,6 +197,13 @@ def test_multi_letter_roman_boundary_scope_limit(multi_surface, single_surface, 
         for detection in detections
     ] == [("number:cardinal:roman", start, end, "MIX")]
     assert _english_letter_readings(single_surface) == []
+
+
+def test_a_multi_letter_roman_after_an_apostrophe_is_inside_the_word():
+    # "O’MIX" is one word with letters on both sides of "’", so "MIX" is a fragment of it,
+    # as "I" is of "O’I".
+    assert _english_letter_readings("O’MIX") == []
+    assert _english_letter_readings("O’I") == []
 
 
 @pytest.mark.parametrize("surface", ["xI", "Ix"])
