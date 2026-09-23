@@ -9,8 +9,19 @@
   by spaces. `Expansion` and `AbbreviationExpansion` carry it as `type`, which is
   `"expansion"` for an expansion read as words. The English lexicon uses it for `MD`,
   spelled out "M D" as the degree, alongside Maryland as the postal code.
+- Regional abbreviation lexicons. A locale reads every packaged lexicon on its ICU
+  fallback chain, from the most general to the most specific, so `en_US` reads `en.xml`
+  with the new `en_US.xml` over it, and `en_GB` follows CLDR's parent through `en_001`
+  to `en`. `locale_chain`, `merge_lexicons`, and `load_locale_lexicon` expose this, and
+  `compile_lexicon` uses it.
 
 ### Changed
+
+- The traditional US state abbreviations (`Calif.`, `Md.`, `N.Y.`, and the rest) and
+  Maryland as a reading of `MD` moved from `en.xml` to the `en_US` overlay, so they are
+  read, and suppress a sentence break, in US English only. Every English locale still
+  reads `MD` spelled out as the degree, and `U.S.`, `U.K.`, and the other country
+  names. An `en_US` detection's `AbbreviationSpec.source` is now `en-US`.
 
 - The development extra's tiergraph requirement is a floor without an upper cap,
   `tiergraph>=0.2`, so a tiergraph release that breaks the test suite shows up there

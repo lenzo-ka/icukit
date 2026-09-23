@@ -15,6 +15,9 @@ from icukit.abbreviations import (
     available_locales,
     load_lexicon,
     load_lexicon_file,
+    load_locale_lexicon,
+    locale_chain,
+    merge_lexicons,
     parse_lexicon,
 )
 from icukit.errors import AbbreviationError
@@ -68,6 +71,11 @@ class TestGrammarValidation:
         lxml_etree, rng = _relaxng()
         doc = lxml_etree.parse(str(_EN_PATH))
         assert rng.validate(doc), rng.error_log
+
+    @pytest.mark.parametrize("path", sorted(_DATA_DIR.glob("*.xml")), ids=lambda path: path.name)
+    def test_every_packaged_lexicon_is_valid(self, path):
+        lxml_etree, rng = _relaxng()
+        assert rng.validate(lxml_etree.parse(str(path))), rng.error_log
 
     def test_invalid_fixture_is_rejected(self):
         # Proves the grammar constrains: a raw-regex @kind and an out-of-vocab
@@ -238,10 +246,14 @@ class TestLoaderErrors:
         with pytest.raises(AbbreviationError):
             load_lexicon_file(Path("/nonexistent/does-not-exist.xml"))
 
-    def test_md_is_spelled_out_or_maryland(self):
-        entry = load_lexicon("en").get("MD")
-        assert entry is not None
-        assert [(exp.type, exp.value, exp.sense) for exp in entry.expansions] == [
+    def test_md_is_spelled_out_in_all_english_and_maryland_in_us_english(self):
+        general = load_lexicon("en").get("MD")
+        us = load_locale_lexicon("en_US").get("MD")
+        assert general is not None and us is not None
+        assert [(exp.type, exp.value, exp.sense) for exp in general.expansions] == [
+            ("spell-out", "M D", "title"),
+        ]
+        assert [(exp.type, exp.value, exp.sense) for exp in us.expansions] == [
             ("spell-out", "M D", "title"),
             ("expansion", "Maryland", "region"),
         ]
@@ -304,3 +316,71 @@ class TestLoaderErrors:
         lex = load_lexicon_file(_INVALID_FIXTURE)
         assert lex.language == "en"
         assert lex.get("Dr.") is not None
+
+
+class TestLocaleOverlay:
+    """A regional lexicon overlays its parent along ICU's locale fallback."""
+
+    @pytest.mark.parametrize(
+        "locale, chain",
+        [
+            ("en", ("en",)),
+            ("en_US", ("en_US", "en")),
+            ("en_US_POSIX", ("en_US_POSIX", "en_US", "en")),
+            ("en_GB", ("en_GB", "en_001", "en")),
+            ("es_MX", ("es_MX", "es_419", "es")),
+            ("zh_Hant_TW", ("zh_Hant_TW", "zh_Hant")),
+        ],
+    )
+    def test_the_chain_is_icus_fallback(self, locale, chain):
+        # CLDR parents (en_GB -> en_001) are read from ICU, and a parent is honored only where
+        # the locale declares it: zh_Hant_TW inherits zh_Hant's parent, it does not have one.
+        assert locale_chain(locale) == chain
+
+    def test_us_state_abbreviations_are_us_english_only(self):
+        assert load_locale_lexicon("en_US").get("Calif.") is not None
+        assert load_locale_lexicon("en_US").get("Md.") is not None
+        for locale in ("en", "en_GB", "en_IN", "en_AU"):
+            lexicon = load_locale_lexicon(locale)
+            assert lexicon.get("Calif.") is None
+            assert lexicon.get("Md.") is None
+
+    @pytest.mark.parametrize("locale", ["en", "en_US", "en_GB"])
+    def test_what_holds_for_all_english_reaches_every_region(self, locale):
+        lexicon = load_locale_lexicon(locale)
+        assert lexicon.get("U.S.") is not None
+        assert lexicon.get("Dr.") is not None
+
+    def test_the_merged_lexicon_names_the_most_specific_source(self):
+        assert load_locale_lexicon("en_US").language == "en-US"
+        assert load_locale_lexicon("en_GB").language == "en"
+
+    def test_a_locale_with_no_lexicon_on_its_chain_raises(self):
+        with pytest.raises(AbbreviationError):
+            load_locale_lexicon("fr_FR")
+
+    def test_merge_adds_expansions_and_lets_the_region_govern(self):
+        general = parse_lexicon(
+            '<abbreviations xml:lang="en"><entry break="ambiguous" also="common-word">'
+            '<surface>X.</surface><expansion sense="other">Ex</expansion></entry>'
+            '<entry break="suppress"><surface>Y.</surface></entry>'
+            '<pattern kind="single-initial" break="ambiguous"/></abbreviations>'
+        )
+        specific = parse_lexicon(
+            '<abbreviations xml:lang="en-US"><entry break="suppress">'
+            '<surface>X.</surface><expansion sense="other">Ex</expansion>'
+            '<expansion sense="region">Xland</expansion></entry>'
+            '<entry break="suppress"><surface>Z.</surface></entry>'
+            '<pattern kind="single-initial" break="suppress"/></abbreviations>'
+        )
+        merged = merge_lexicons(general, specific)
+
+        assert merged.language == "en-US"
+        assert merged.surfaces() == ("X.", "Y.", "Z.")
+        x = merged.get("X.")
+        assert [exp.value for exp in x.expansions] == ["Ex", "Xland"]
+        assert x.break_behavior == BREAK_SUPPRESS
+        assert x.also == "common-word"
+        assert [(p.kind, p.break_behavior) for p in merged.patterns] == [
+            ("single-initial", BREAK_SUPPRESS)
+        ]
