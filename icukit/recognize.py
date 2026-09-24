@@ -741,7 +741,6 @@ class FlexibleDateIntervalDetector:
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._spec = DateIntervalSpec(locale, skeleton)
         self._dif = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
-        self._offset_maps: tuple[list[int], dict[int, int]] | None = None
 
     @property
     def has_patterns(self) -> bool:
@@ -801,10 +800,15 @@ class FlexibleDateIntervalDetector:
             calendar.set(fields[name], value)
         return calendar
 
-    def _match(self, text: str, start: int):
+    def _match(
+        self,
+        text: str,
+        start: int,
+        offset_maps: tuple[list[int], dict[int, int]] | None = None,
+    ):
         if _continues_interval_word(text, start - 1):
             return None
-        cp_to_u16, u16_to_cp = self._offset_maps
+        cp_to_u16, u16_to_cp = offset_maps if offset_maps is not None else boundary_maps(text)
         matches = []
         for formatter1, separator, formatter2, fields1, fields2 in self._matchers:
             parsed1 = self._parse_side(formatter1, fields1, text, start, cp_to_u16, u16_to_cp)
@@ -866,13 +870,15 @@ class FlexibleDateIntervalDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping date-interval candidates in source order."""
-        # Compute the code-point/UTF-16 offset maps once per scan; _match reuses them for
-        # every candidate start rather than rebuilding them (avoids O(n^2) scanning).
-        self._offset_maps = boundary_maps(text)
-        try:
-            return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
-        finally:
-            self._offset_maps = None
+        # Compute the code-point/UTF-16 offset maps once per scan and pass them to every
+        # candidate start (avoids O(n^2) scanning). They are bound to this call, never
+        # stored on the detector, so one detector can serve concurrent or nested calls.
+        offset_maps = boundary_maps(text)
+
+        def match(source: str, start: int):
+            return self._match(source, start, offset_maps)
+
+        return _detect_flexible(text, self.locale, self.type, self._spec, match)
 
 
 class FlexibleTextDateDetector:
@@ -2654,7 +2660,6 @@ class FlexibleTimeDetector:
         self._period_prefix = self._period_side == "prefix"
         self._periods = _language_day_periods(icu_locale.getLanguage())
         self._hour_units = _hour_unit_forms(locale)
-        self._read_units = False
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
@@ -2761,7 +2766,7 @@ class FlexibleTimeDetector:
         return False
 
     def _match(
-        self, text: str, start: int
+        self, text: str, start: int, read_units: bool = False
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
         if start > 0 and text[start - 1] in self._digits:
             return None
@@ -2851,7 +2856,7 @@ class FlexibleTimeDetector:
             elif self._day_period(text, cursor) is not None:
                 return None
 
-        if self._read_units and period_index is None and separator == self._separator:
+        if read_units and period_index is None and separator == self._separator:
             unit = self._hour_unit(text, cursor)
             if unit is not None:
                 captures.append(unit)
@@ -2947,13 +2952,14 @@ class FlexibleTimeDetector:
         """
         if self._inert:
             return []
-        self._read_units = False
+        # Whether to read a trailing unit is an argument of each pass, not detector state,
+        # so one detector can serve concurrent or nested calls.
         plain = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
-        self._read_units = True
-        try:
-            with_units = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
-        finally:
-            self._read_units = False
+
+        def match_with_units(source: str, start: int):
+            return self._match(source, start, read_units=True)
+
+        with_units = _detect_flexible(text, self.locale, self.type, self._spec, match_with_units)
         spans = {(d["start"], d["end"]) for d in plain}
         merged = plain + [d for d in with_units if (d["start"], d["end"]) not in spans]
         return sorted(merged, key=lambda d: (d["start"], d["end"]))
