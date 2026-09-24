@@ -156,11 +156,16 @@ def test_inventory_cannot_pass_vacuously():
     when it can only speak about the ICU the gate already agrees with. An ICU that
     made most cells unsupported would satisfy a byte-comparison against a freshly
     regenerated golden while measuring almost nothing; this fails instead.
+
+    The floor is nine in ten of the matrix's cells. The golden records every cell
+    recovered on the ICU it was made with, so a new ICU can shift a few cells without
+    tripping this, but not quietly lose most of the matrix, which the byte-comparison
+    cannot catch where it is skipped (an ICU the golden was not recorded on).
     """
     inventory = build_inventory("ci")
     total = len(iter_cells("ci"))
     failed = len(inventory["defects"]) + len(inventory["unsupported_cells"])
-    assert total - failed >= 100
+    assert (total - failed) * 10 >= total * 9
 
 
 def test_negative_mutation_controls_discriminate_value_captures_and_spec():
