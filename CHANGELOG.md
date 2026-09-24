@@ -35,6 +35,14 @@
   ordinal indicator when none of its letters is in this locale's CLDR exemplars ("1º"
   in English text). A Roman numeral and a fraction span a plural or possessive suffix
   ("II's", "3/4s").
+- `FlexibleTimeDetector` reads a time-zone abbreviation after a time ("10 PM ET",
+  "18:00 UTC", "2:00 p.m. EDT"), from ICU's zone display names for the language, beside
+  the plain time; and reads any hour-minute separator the language's CLDR patterns use,
+  so English reads "7.30pm" and "8.00 PM" (and "3.14" as a time candidate beside the
+  decimal).
+- `FlexibleOrdinalDetector` reads an uppercase Roman numeral with this locale's ordinal
+  suffix for its value ("Ist", "IInd", "XIVth") or with a punctuation-only ordinal
+  marker ICU writes in some locale ("V.", "X.", as in "Henry V.").
 
 ### Fixed
 
