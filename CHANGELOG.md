@@ -23,10 +23,14 @@
 - `FlexibleTimeDetector` reads an hour with a day period and no minutes ("5pm",
   "10 a.m."), reads ICU's day-period forms at every width for every locale of the
   language (en_US reads en_CA's "a.m."), and reads CLDR's hour symbol after a time
-  ("10:30h") or, where CLDR writes it attached, between hour and minutes (fr "10h30").
-- `FlexibleDateDetector` tries every CLDR short-date pattern of the language after the
-  locale's own, so en_US reads "31.12.2012" and ISO "2011-11-11" while "03/05/2013"
-  stays month first.
+  ("10:30h") or, where CLDR writes it attached, between hour and minutes (fr "10h30"),
+  keeping the plain time beside a trailing symbol ("10:30" and "10:30 hr"). A
+  one-letter narrow day period is read only attached and only in CLDR's case, so "5p"
+  is a time and "5A" is not.
+- `FlexibleDateDetector` reads every CLDR short-date pattern of the language, its own
+  included, and deposits each distinct valid date: en_US reads "31.12.2012" and ISO
+  "2011-11-11", and reads "03/05/2013" both month first and day first. A year written
+  first needs four digits.
 - `FlexibleOrdinalDetector` reads grouped ordinals ("1,000th") and another locale's
   ordinal indicator when none of its letters is in this locale's CLDR exemplars ("1º"
   in English text). A Roman numeral and a fraction span a plural or possessive suffix
@@ -59,6 +63,10 @@
 
 ### Changed
 
+- A locale whose short-time pattern has no day period (en_GB, de_DE) now reads one
+  written after a time as a 12-hour time: "5:30 p.m." reads as 17:30, and de_DE
+  "3:45 PM" as 15:45. Such a time was previously refused outright, which left it with
+  no reading at all.
 - The traditional US state abbreviations (`Calif.`, `Md.`, `N.Y.`, and the rest) and
   Maryland as a reading of `MD` moved from `en.xml` to the `en_US` overlay, so they are
   read, and suppress a sentence break, in US English only. Every English locale still
