@@ -86,9 +86,15 @@ def test_build_emitting_a_float_is_rejected():
 
 
 def test_greedy_resume_no_self_overlap():
-    text = "1212"  # token "12" at cp0 and cp2; greedy resume at end means both, non-overlapping
+    text = "12-12"  # token "12" at cp0 and cp3; greedy resume at end means both, non-overlapping
     out = _scan(text, "en_US", "number:decimal", _stub(text))
-    assert [(d["start"], d["end"]) for d in out] == [(0, 2), (2, 4)]
+    assert [(d["start"], d["end"]) for d in out] == [(0, 2), (3, 5)]
+
+
+def test_scan_refuses_a_token_split_between_alphanumerics():
+    text = "1212"  # "12" at cp0 ends inside the digits and "12" at cp2 starts inside them
+    out = _scan(text, "en_US", "number:decimal", _stub(text))
+    assert out == []
 
 
 def test_reversed_endpoint_refuses():

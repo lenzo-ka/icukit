@@ -22,7 +22,10 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleSpelloutDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTextDateDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
 - [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`PluralNumeralDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
 - [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
@@ -4815,6 +4818,36 @@ Recognizers are the recall-oriented counterpart to the strict detectors in
 surface to equal ICU's canonical formatting; the existing resolver can then select among
 those candidates unchanged.
 
+### class `AlphanumericRunsDetector`
+
+Read a word that mixes letters and digits as its runs.
+
+"3D" is digits "3" then letters "D", "5pm" is "5" then "pm", and "2Q22" is "2", "Q",
+"22": the path a speaker takes when a token has no reading of its own ("three d",
+"five p m"). It spans one ICU word with at least one digit and one letter, and it is
+an alternative beside any other reading of the word, never a replacement for one.
+Each run is a ``digits``, ``letters``, or ``separator`` capture in source order; a
+combining mark or format character stays in the run it extends. A word whose letters
+are in a script ICU breaks between letters (Thai, Lao, Khmer, Myanmar) has no runs
+reading, since ICU's dictionary segmentation does not separate its digits into a
+word of their own.
+
+#### `AlphanumericRunsDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return one runs reading per mixed letter-and-digit word, in source order.
+
+### class `AlphanumericRunsValue`
+
+A token read as its runs: ``(("digits", "3"), ("letters", "D"))`` for "3D".
+
+#### `AlphanumericRunsValue(runs: 'tuple[tuple[str, str], ...]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `FlexibleCompactDetector`
 
 Recognize a flexible number with reflectively derived ICU compact affixes.
@@ -4857,11 +4890,18 @@ Return greedy, non-overlapping spelled-currency candidates in source order.
 
 ### class `FlexibleDateDetector`
 
-Recognize flexible numeric dates using a locale's CLDR short-date structure.
+Recognize flexible numeric dates using CLDR short-date structures.
 
 The stable ``date:flexible`` type distinguishes recall candidates from strict,
 skeleton-specific date detections. Two-digit years retain their observed value;
 this detector deposits one maximal candidate rather than expanding a century.
+
+Every numeric short-date structure CLDR gives a locale of the same language is
+read, the locale's own included, and each distinct valid date is deposited: en_US
+reads "03/05/2013" both month first (its own pattern) and day first (en_GB's), and
+reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
+pattern it came from. A year written first must have four digits, since a leading
+two-digit year cannot be told from a day ("10-12-14").
 
 #### `FlexibleDateDetector(locale: 'str') -> 'None'`
 
@@ -4869,7 +4909,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping flexible numeric dates in source order.
+Return every structure's flexible numeric dates, distinct, in source order.
 
 ### class `FlexibleDateIntervalDetector`
 
@@ -4889,6 +4929,8 @@ Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
 The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
 the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
+A fraction made plural ("3/4s") spans its suffix, with ``suffix`` (and
+``apostrophe``) captures, as :class:`PluralNumeralDetector` reads a numeral.
 The value is a :class:`NumberValue` whose ``decimal`` is computed with ``Decimal``:
 a terminating fraction is exact (``1/2`` -> ``"0.5"``, ``3 1/2`` -> ``"3.5"``); a
 non-terminating one is quantized to twelve fractional digits (``1/3`` ->
@@ -4940,6 +4982,11 @@ public ``icu.RuleBasedNumberFormat`` ``ORDINAL`` rule set, and the prefix and su
 are the non-digit parts around each rendering. No affix is hard-coded, and no fragile
 ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
 ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+
+A grouped integer ("1,000th") is accepted when ICU renders the same surface for its
+value. An ordinal suffix ICU writes in another locale is also read when it cannot be
+mistaken for this locale's letters ("1º" in English text; see
+:func:`_foreign_ordinal_suffixes`).
 
 Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
 treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
@@ -5038,7 +5085,18 @@ without an am/pm field does not license one.
 A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
 12-hour locale); a day period is only consumed when the hour reads 1-12, and the
 reading is then converted to 24-hour ``H`` (12 AM -> 0, 12 PM -> 12). Minutes and
-seconds are exactly two digits in 0-59.
+seconds are exactly two digits in 0-59. An hour with no minutes reads only with a
+day period after it ("5pm", "10 a.m."), where the locale writes the period after
+the time, and its value then carries ``H`` alone.
+
+The day-period forms are ICU's, at every width, for every CLDR locale of the same
+language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
+
+A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
+CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
+from :func:`_hour_unit_forms`. Composing a clock time with a unit symbol this way
+is hand-rolled, as CLDR has no pattern for it; the symbol is captured as
+``hour-unit``.
 
 #### `FlexibleTimeDetector(locale: 'str') -> 'None'`
 
@@ -5046,7 +5104,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping flexible clock times in source order.
+Return flexible clock times in source order.
+
+A time followed by an hour symbol is read both with and without it ("10:30" and
+"10:30 hr"), so neither span replaces the other.
 
 ### class `LetterNameDetector`
 
@@ -5056,6 +5117,10 @@ CLDR supplies alphabet repertoires but not the spoken names of their members, so
 supported locales use a small lexical table. Unsupported locale languages produce no
 candidates.
 
+A letter may carry a plural or possessive suffix ("C's", "Cs"): the detection then
+spans the whole token, with the letter in the ``letter`` capture and the rest in a
+``suffix`` capture.
+
 #### `LetterNameDetector(locale: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -5063,6 +5128,27 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return isolated letter-name candidates in source order.
+
+### class `PluralNumeralDetector`
+
+Recognize a numeral made plural: "1990s", "1990's", "'90s", "100s", "the 20s".
+
+The value is the written number (``1990``, and ``90`` for "'90s", whose century is
+elided), never a guessed decade or century: whether "1900s" is a decade or a century,
+and whether "100s" is "hundreds" or "one hundreds", is for verbalization to offer.
+Captures: ``number``, the ``suffix``, an ``apostrophe`` before the suffix if written,
+and an ``elision`` apostrophe before the number if written. Digits are read by ICU's
+digit values, so a locale's native digits count; the suffix letters are a small
+per-language table, since CLDR has none, and a language without an entry has no
+readings.
+
+#### `PluralNumeralDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return plural-numeral readings in source order.
 
 ### class `SingleLetterWordDetector`
 

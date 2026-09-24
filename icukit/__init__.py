@@ -326,6 +326,8 @@ from .plural import (
     list_plural_categories,
 )
 from .recognize import (
+    AlphanumericRunsDetector,
+    AlphanumericRunsValue,
     FlexibleCompactDetector,
     FlexibleCurrencyDetector,
     FlexibleCurrencyNameDetector,
@@ -342,6 +344,7 @@ from .recognize import (
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
     LetterNameDetector,
+    PluralNumeralDetector,
     SingleLetterWordDetector,
 )
 from .regex import (
@@ -441,7 +444,10 @@ __all__ = [
     "FlexibleSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
+    "AlphanumericRunsDetector",
+    "AlphanumericRunsValue",
     "LetterNameDetector",
+    "PluralNumeralDetector",
     "SingleLetterWordDetector",
     "DetectorSet",
     "ValueDetection",

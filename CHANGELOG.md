@@ -14,6 +14,44 @@
   with the new `en_US.xml` over it, and `en_GB` follows CLDR's parent through `en_001`
   to `en`. `locale_chain`, `merge_lexicons`, and `load_locale_lexicon` expose this, and
   `compile_lexicon` uses it.
+- `AlphanumericRunsDetector` (`alnum:runs`): a word that mixes letters and digits reads
+  as its runs, the path a speaker takes for "3D", "5pm", or "2Q22", beside any other
+  reading of the word.
+- `PluralNumeralDetector` (`number:plural`): a numeral made plural, "1990s", "1990's",
+  "'90s", "100s", with the written number as its value and no guessed decade or
+  century. Its suffix letters are a small per-language table, since CLDR has none.
+- `FlexibleTimeDetector` reads an hour with a day period and no minutes ("5pm",
+  "10 a.m."), reads ICU's day-period forms at every width for every locale of the
+  language (en_US reads en_CA's "a.m."), and reads CLDR's hour symbol after a time
+  ("10:30h") or, where CLDR writes it attached, between hour and minutes (fr "10h30").
+- `FlexibleDateDetector` tries every CLDR short-date pattern of the language after the
+  locale's own, so en_US reads "31.12.2012" and ISO "2011-11-11" while "03/05/2013"
+  stays month first.
+- `FlexibleOrdinalDetector` reads grouped ordinals ("1,000th") and another locale's
+  ordinal indicator when none of its letters is in this locale's CLDR exemplars ("1º"
+  in English text). A Roman numeral and a fraction span a plural or possessive suffix
+  ("II's", "3/4s").
+
+### Fixed
+
+- A number, date, or other value reading no longer starts or ends inside a word with
+  alphanumerics on both sides of it in that word: "2788" no longer yields "788",
+  "29th" no longer yields "29", "asdf123" no longer yields "123", "ab2,788" no longer
+  yields "788", "v2.0" no longer yields "0", and "2016/07/03" no longer yields
+  "6/07/03". This also refuses the bare "1.2" inside "1.2M" and the bare mantissa
+  inside "1.2345E4", which the compact and scientific readings still cover, and
+  anything inside an unspaced "1,2,3". Words are ICU's, so "3" in "我有3个" still
+  reads, and a combining mark or format character is part of the word it extends. A
+  digit against a letter of a script ICU breaks between letters is a token of its own,
+  so "100" in the Thai "ราคา100บาท" still reads.
+- `AbbreviationDetector` no longer deposits a lowercase word that matches an entry
+  only case-insensitively ("sun." against "Sun.", Sunday), and no longer starts an
+  abbreviation inside a word ("s." in "C's.").
+- `LetterNameDetector` reads a letter with a plural or possessive suffix ("C's", "i's",
+  "Cs") as the letter's name, spanning the whole token with the suffix in its own
+  `suffix` capture. The suffix follows an apostrophe, a quotation mark that Unicode word
+  breaking joins, or is a bare "s" after a capital. "As" and "Is" also read as letter
+  plurals, left for a prior to rank against the word.
 
 ### Changed
 

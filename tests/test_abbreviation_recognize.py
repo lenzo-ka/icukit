@@ -43,6 +43,27 @@ def test_token_boundaries_exclude_words_and_internal_dotted_fragments():
     assert {item["text"] for item in detections} == {"Dr."}
 
 
+@pytest.mark.parametrize("text", ["deceitful sun.", "the sun. rose", "a mon. later"])
+def test_a_lowercase_word_does_not_borrow_a_capitalized_entry(text):
+    # "sun." matches the "Sun." (Sunday) entry only case-insensitively; that is no reading.
+    assert AbbreviationDetector("en_US").detect(text) == []
+
+
+def test_the_capitalized_entry_still_reads_beside_its_lowercase_lookalike():
+    detections = AbbreviationDetector("en_US").detect("the sun. Sun. Mon.")
+
+    assert [(item["start"], item["end"], item["text"]) for item in detections] == [
+        (9, 13, "Sun."),
+        (14, 18, "Mon."),
+    ]
+    assert all(item["value"].expansions for item in detections)
+
+
+@pytest.mark.parametrize("text", ["my A B C's.", "Philip's.", "PHILIP'S."])
+def test_an_abbreviation_does_not_start_inside_a_word(text):
+    assert AbbreviationDetector("en_US").detect(text) == []
+
+
 @pytest.mark.parametrize("text", ["John Smith, MD, said", "Baltimore, MD 21201"])
 def test_md_carries_its_spell_out_and_maryland_readings(text):
     detections = AbbreviationDetector("en_US").detect(text)

@@ -38,7 +38,7 @@ from typing import Literal, Protocol, runtime_checkable
 import icu
 
 from ._offsets import boundary_maps, u16_boundary_to_codepoint
-from .breaker import break_grapheme_spans
+from .breaker import break_grapheme_spans, break_word_spans
 from .detect import Detection
 
 __all__ = [
@@ -840,6 +840,76 @@ def _contains_float(obj: object) -> bool:
     return False
 
 
+@functools.lru_cache(maxsize=16)
+def _word_edges(text: str, locale: str) -> frozenset[int]:
+    """ICU word-break offsets of ``text``, cached so a gang segments a text once."""
+    edges = {0, len(text)}
+    for span in break_word_spans(text, locale):
+        edges.add(span["start"])
+        edges.add(span["end"])
+    return frozenset(edges)
+
+
+_EXTENDING_CATEGORIES = frozenset(
+    {
+        icu.UCharCategory.NON_SPACING_MARK,
+        icu.UCharCategory.COMBINING_SPACING_MARK,
+        icu.UCharCategory.ENCLOSING_MARK,
+        icu.UCharCategory.FORMAT_CHAR,
+    }
+)
+
+
+def _base_before(text: str, offset: int) -> str | None:
+    """The character before ``offset``, looking past marks and format characters."""
+    index = offset - 1
+    while index >= 0 and icu.Char.charType(text[index]) in _EXTENDING_CATEGORIES:
+        index -= 1
+    return text[index] if index >= 0 else None
+
+
+def _is_script_seam(left: str | None, right: str) -> bool:
+    """A digit against a letter of a script written without spaces between words.
+
+    ICU's dictionary segmentation of Thai, Lao, Khmer, or Myanmar can leave a digit and
+    its neighboring letters in one "word" ("ราคา100บาท"), although the digits are a
+    token of their own; ICU marks those scripts as breaking between letters.
+    """
+    if left is None:
+        return False
+    for digit, letter in ((left, right), (right, left)):
+        if (
+            icu.Char.isdigit(digit)
+            and icu.Char.isalpha(letter)
+            and icu.Script.getScript(letter).breaksBetweenLetters()
+        ):
+            return True
+    return False
+
+
+@functools.lru_cache(maxsize=16)
+def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
+    """Offsets inside one word with alphanumerics on both sides of them in that word.
+
+    A reading may not start or end at one of these: "788" inside "2788" or "ab2,788",
+    "29" inside "29th", and "123" inside "asdf123" are fragments of a longer token, not
+    readings of it. The word is ICU's, so "3" in "我有3个" is its own token, and a mark
+    or format character is part of the word it extends. A digit against a letter of a
+    script that ICU breaks between letters is a seam, not an interior ("100" in
+    "ราคา100บาท").
+    """
+    edges = sorted(_word_edges(text, locale))
+    interior: set[int] = set()
+    for word_start, word_end in zip(edges, edges[1:], strict=False):
+        alnum = [i for i in range(word_start, word_end) if icu.Char.isalnum(text[i])]
+        if len(alnum) < 2:
+            continue
+        for offset in range(alnum[0] + 1, alnum[-1] + 1):
+            if not _is_script_seam(_base_before(text, offset), text[offset]):
+                interior.add(offset)
+    return frozenset(interior)
+
+
 def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[ValueDetection]:
     """Windowed detection with reformat-equality acceptance and greedy longest-match.
 
@@ -847,20 +917,24 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
     continues (never a refusal). A successful parse whose endpoint is reversed,
     surrogate-interior, or mid-grapheme is a :class:`DetectorRefusal`. An accepted span
     must reproduce the formatter's canonical output exactly (rejecting ICU's permissive
-    coercions). After a match ``[s, e)`` the scan resumes at ``e`` so one detector never
-    self-overlaps.
+    coercions), and may neither start nor end inside a word between two alphanumerics
+    (see :func:`_word_interior_offsets`). After a match ``[s, e)`` the scan resumes at
+    ``e`` so one detector never self-overlaps.
     """
     us = icu.UnicodeString(text)
     cp_to_u16, u16_to_cp = boundary_maps(text)
     gspans = break_grapheme_spans(text, locale)
     starts = sorted({g["start"] for g in gspans})
     boundaries = {g["start"] for g in gspans} | {g["end"] for g in gspans} | {0, len(text)}
+    interior = _word_interior_offsets(text, locale)
 
     out: list[ValueDetection] = []
     cursor = 0
     for start_cp in starts:
         if start_cp < cursor:
             continue  # greedy: inside a prior match
+        if start_cp in interior:
+            continue  # a fragment of a longer token
         result = inv.parse(us, cp_to_u16[start_cp])
         if result is None:
             continue  # ordinary miss
@@ -896,6 +970,8 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
                 "mid-grapheme-endpoint",
                 "parse ended inside a grapheme cluster",
             )
+        if end_cp in interior:
+            continue  # a fragment of a longer token
         surface = text[start_cp:end_cp]
         try:
             reformatted = inv.reformat(parsed)

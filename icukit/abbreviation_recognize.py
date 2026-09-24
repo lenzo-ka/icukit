@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from .abbreviation_compile import CompiledLexicon, compile_lexicon
 from .abbreviations import AbbreviationLexicon
-from .detectors import Capture, DetectorSet, ValueDetection
+from .detectors import Capture, DetectorSet, ValueDetection, _word_edges
 
 __all__ = [
     "AbbreviationDetector",
@@ -114,13 +114,30 @@ class AbbreviationDetector:
         assert reformat_abbreviation(self.spec, value) == detection["text"]
         return detection
 
+    @staticmethod
+    def _borrows_a_literal(surface: str, provenance: str | None) -> bool:
+        """Whether a surface is classified only by matching some entry case-insensitively.
+
+        ``uncased-latin`` backs a single dotted lowercase segment with a literal entry of
+        any case. That tells the breaker how to treat the period, but it is not a
+        recognition of the entry: "sun." is not "Sun." (Sunday), and borrowing its
+        classification would deposit a reading with no expansions.
+        """
+        return provenance == "uncased-latin" and "." not in surface[:-1]
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Scan token starts and return all co-located readings."""
         if self.compiled is None:
             return []
+        # An abbreviation starts a word: "s." in "C's." is inside the word "C's".
+        word_starts = _word_edges(text, self.locale)
         detections: list[ValueDetection] = []
         for start in range(len(text)):
-            if not text[start].isalpha() or not self._left_boundary(text, start):
+            if (
+                not text[start].isalpha()
+                or start not in word_starts
+                or not self._left_boundary(text, start)
+            ):
                 continue
             literal = next(
                 (
@@ -152,6 +169,7 @@ class AbbreviationDetector:
             if (
                 behavior is None
                 or provenance in {None, "literal"}
+                or self._borrows_a_literal(surface, provenance)
                 or not self._right_boundary(text, end)
             ):
                 continue

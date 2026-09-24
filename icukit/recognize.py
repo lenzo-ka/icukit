@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
-from functools import lru_cache
+from functools import cache, lru_cache
 from math import gcd
 
 import icu
@@ -19,6 +19,7 @@ import icu
 from ._offsets import boundary_maps
 from .breaker import break_grapheme_spans
 from .detectors import (
+    _EXTENDING_CATEGORIES,
     Capture,
     CompactFormatSpec,
     DateFormatSpec,
@@ -35,9 +36,14 @@ from .detectors import (
     ValueDetection,
     _date_fields,
     _pattern_runs,
+    _word_edges,
+    _word_interior_offsets,
 )
 
 __all__ = [
+    "AlphanumericRunsDetector",
+    "AlphanumericRunsValue",
+    "PluralNumeralDetector",
     "FlexibleCompactDetector",
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
@@ -106,6 +112,19 @@ _LETTER_NAMES = {
 _SINGLE_LETTER_WORDS = {"en": frozenset({"I", "a", "A", "O"})}
 
 
+def _is_apostrophe(character: str) -> bool:
+    """A quotation mark that Unicode word breaking treats as joining a word.
+
+    Word_Break Single_Quote (U+0027) and MidNumLet among the quotation marks (U+2019,
+    U+2018) join "C's" into one word; the double quote and guillemets do not, and "."
+    is MidNumLet but no quotation mark.
+    """
+    if not character or not icu.Char.hasBinaryProperty(character, icu.UProperty.QUOTATION_MARK):
+        return False
+    value = icu.Char.getIntPropertyValue(character, icu.UProperty.WORD_BREAK)
+    return value in {icu.UWordBreakValues.SINGLE_QUOTE, icu.UWordBreakValues.MIDNUMLET}
+
+
 @dataclass(frozen=True)
 class _FlexibleMatch:
     end: int
@@ -147,12 +166,45 @@ def _is_isolated_letter(text: str, start: int) -> bool:
     )
 
 
+def _ends_letter_token(text: str, end: int) -> bool:
+    return end == len(text) or not _continues_letter_token(text, end, 1)
+
+
+def _letter_suffix_end(text: str, start: int) -> int | None:
+    """The end of a letter's plural or possessive suffix: "C's", "p's", or "Cs".
+
+    The suffix is "s" after an apostrophe (see :func:`_is_apostrophe`), or a bare "s"
+    after a capital. "As" and "Is" are words as well, but both readings are kept as
+    candidates for the prior to rank rather than excluded by a word list, which CLDR
+    does not carry. Anything else that continues the token, such as the "m" of "I'm",
+    is no suffix.
+    """
+    after = start + 1
+    if (
+        _is_apostrophe(text[after : after + 1])
+        and text[after + 1 : after + 2] == "s"
+        and _ends_letter_token(text, after + 2)
+    ):
+        return after + 2
+    if (
+        text[start].isupper()
+        and text[after : after + 1] == "s"
+        and _ends_letter_token(text, after + 1)
+    ):
+        return after + 1
+    return None
+
+
 class LetterNameDetector:
     """Recognize an isolated ASCII Latin letter as its locale's letter name.
 
     CLDR supplies alphabet repertoires but not the spoken names of their members, so
     supported locales use a small lexical table. Unsupported locale languages produce no
     candidates.
+
+    A letter may carry a plural or possessive suffix ("C's", "Cs"): the detection then
+    spans the whole token, with the letter in the ``letter`` capture and the rest in a
+    ``suffix`` capture.
     """
 
     group = "letter"
@@ -175,23 +227,193 @@ class LetterNameDetector:
         for start, letter in enumerate(text):
             if not ("A" <= letter <= "Z" or "a" <= letter <= "z"):
                 continue
-            if not _is_isolated_letter(text, start):
+            if start > 0 and _continues_letter_token(text, start - 1, -1):
                 continue
+            if _ends_letter_token(text, start + 1):
+                end = start + 1
+            else:
+                end = _letter_suffix_end(text, start)
+                if end is None:
+                    continue
             folded = letter.lower()
-            end = start + 1
             value = self._z_name if folded == "z" else self._names[ord(folded) - ord("a")]
+            captures = [Capture("letter", start, start + 1, letter, letter)]
+            if end > start + 1:
+                captures.append(Capture("suffix", start + 1, end, text[start + 1 : end]))
             detections.append(
                 ValueDetection(
-                    text=letter,
+                    text=text[start:end],
                     start=start,
                     end=end,
                     type=self.type,
                     value=value,
-                    captures=(Capture("letter", start, end, letter, letter),),
+                    captures=tuple(captures),
                     spec=None,
                 )
             )
         return detections
+
+
+@dataclass(frozen=True)
+class AlphanumericRunsValue:
+    """A token read as its runs: ``(("digits", "3"), ("letters", "D"))`` for "3D"."""
+
+    runs: tuple[tuple[str, str], ...]
+
+
+def _run_kind(character: str) -> str:
+    if icu.Char.isdigit(character):
+        return "digits"
+    if icu.Char.isalpha(character):
+        return "letters"
+    return "separator"
+
+
+class AlphanumericRunsDetector:
+    """Read a word that mixes letters and digits as its runs.
+
+    "3D" is digits "3" then letters "D", "5pm" is "5" then "pm", and "2Q22" is "2", "Q",
+    "22": the path a speaker takes when a token has no reading of its own ("three d",
+    "five p m"). It spans one ICU word with at least one digit and one letter, and it is
+    an alternative beside any other reading of the word, never a replacement for one.
+    Each run is a ``digits``, ``letters``, or ``separator`` capture in source order; a
+    combining mark or format character stays in the run it extends. A word whose letters
+    are in a script ICU breaks between letters (Thai, Lao, Khmer, Myanmar) has no runs
+    reading, since ICU's dictionary segmentation does not separate its digits into a
+    word of their own.
+    """
+
+    group = "alnum"
+    type = "alnum:runs"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return one runs reading per mixed letter-and-digit word, in source order."""
+        edges = sorted(_word_edges(text, self.locale))
+        detections = []
+        for start, end in zip(edges, edges[1:], strict=False):
+            word = text[start:end]
+            letters = [character for character in word if icu.Char.isalpha(character)]
+            if not letters or not any(icu.Char.isdigit(character) for character in word):
+                continue
+            if any(icu.Script.getScript(letter).breaksBetweenLetters() for letter in letters):
+                continue
+            runs: list[list] = []
+            for offset, character in enumerate(word, start):
+                extends = icu.Char.charType(character) in _EXTENDING_CATEGORIES
+                kind = runs[-1][0] if extends and runs else _run_kind(character)
+                if runs and runs[-1][0] == kind:
+                    runs[-1][2] = offset + 1
+                else:
+                    runs.append([kind, offset, offset + 1])
+            captures = tuple(
+                Capture(kind, run_start, run_end, text[run_start:run_end], text[run_start:run_end])
+                for kind, run_start, run_end in runs
+            )
+            value = AlphanumericRunsValue(tuple((c.name, c.text) for c in captures))
+            detections.append(
+                ValueDetection(
+                    text=word,
+                    start=start,
+                    end=end,
+                    type=self.type,
+                    value=value,
+                    captures=captures,
+                    spec=None,
+                )
+            )
+        return detections
+
+
+# Hand-rolled, as CLDR carries no plural or decade form of a numeral: the letters a
+# language writes after a numeral to make it plural ("1990s", "the 20s"), keyed by
+# language. The apostrophe variant ("1990's", "'90s") is read by _is_apostrophe.
+_PLURAL_NUMERAL_SUFFIXES = {"en": ("s",)}
+
+
+def _plural_suffix(text: str, cursor: int, locale: str) -> tuple[int, tuple[Capture, ...]] | None:
+    """A plural suffix at ``cursor`` ("s" or "'s" in English) that ends its word."""
+    suffixes = _PLURAL_NUMERAL_SUFFIXES.get(icu.Locale(locale).getLanguage(), ())
+    captures = []
+    if _is_apostrophe(text[cursor : cursor + 1]):
+        captures.append(Capture("apostrophe", cursor, cursor + 1, text[cursor]))
+        cursor += 1
+    for suffix in suffixes:
+        end = cursor + len(suffix)
+        if text.startswith(suffix, cursor) and _ends_letter_token(text, end):
+            return end, (*captures, Capture("suffix", cursor, end, suffix))
+    return None
+
+
+class PluralNumeralDetector:
+    """Recognize a numeral made plural: "1990s", "1990's", "'90s", "100s", "the 20s".
+
+    The value is the written number (``1990``, and ``90`` for "'90s", whose century is
+    elided), never a guessed decade or century: whether "1900s" is a decade or a century,
+    and whether "100s" is "hundreds" or "one hundreds", is for verbalization to offer.
+    Captures: ``number``, the ``suffix``, an ``apostrophe`` before the suffix if written,
+    and an ``elision`` apostrophe before the number if written. Digits are read by ICU's
+    digit values, so a locale's native digits count; the suffix letters are a small
+    per-language table, since CLDR has none, and a language without an entry has no
+    readings.
+    """
+
+    group = "number"
+    type = "number:plural"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._suffixes = _PLURAL_NUMERAL_SUFFIXES.get(icu.Locale(locale).getLanguage(), ())
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return plural-numeral readings in source order."""
+        if not self._suffixes:
+            return []
+        edges = _word_edges(text, self.locale)
+        detections = []
+        for start in sorted(edges):
+            if start >= len(text) or not icu.Char.isdigit(text[start]):
+                continue
+            found = self._match(text, start, edges)
+            if found is not None:
+                detections.append(found)
+        return detections
+
+    def _match(self, text: str, start: int, edges: frozenset[int]) -> ValueDetection | None:
+        cursor = start
+        while cursor < len(text) and icu.Char.isdigit(text[cursor]):
+            cursor += 1
+        number_end = cursor
+        captures = []
+        begin = start
+        if (
+            start > 0
+            and _is_apostrophe(text[start - 1])
+            and (start - 1 == 0 or not text[start - 2].isalnum())
+        ):
+            begin = start - 1
+            captures.append(Capture("elision", begin, start, text[begin:start]))
+        digits = "".join(str(icu.Char.digit(character, 10)) for character in text[start:number_end])
+        captures.append(Capture("number", start, number_end, text[start:number_end], int(digits)))
+        if cursor < len(text) and _is_apostrophe(text[cursor]):
+            captures.append(Capture("apostrophe", cursor, cursor + 1, text[cursor]))
+            cursor += 1
+        for suffix in self._suffixes:
+            if text.startswith(suffix, cursor) and cursor + len(suffix) in edges:
+                end = cursor + len(suffix)
+                captures.append(Capture("suffix", cursor, end, suffix))
+                return ValueDetection(
+                    text=text[begin:end],
+                    start=begin,
+                    end=end,
+                    type=self.type,
+                    value=NumberValue(str(int(digits)), None),
+                    captures=tuple(captures),
+                    spec=None,
+                )
+        return None
 
 
 class SingleLetterWordDetector:
@@ -252,12 +474,42 @@ def _iso_currency_codes() -> frozenset[str]:
     return frozenset(unit.getSubtype() for unit in icu.CurrencyUnit.getAvailable("currency"))
 
 
+@cache
+def _language_date_structures(
+    language: str,
+) -> tuple[tuple[tuple[str, ...], tuple[str, ...], str], ...]:
+    """The numeric short-date structures CLDR gives the locales of ``language``.
+
+    Each is ``(fields, separators, pattern)`` as :class:`FlexibleDateDetector` reads a
+    pattern, in locale order, without duplicates.
+    """
+    structures = {}
+    for name in sorted(icu.Locale.getAvailableLocales()):
+        locale = icu.Locale(name)
+        if locale.getLanguage() != language:
+            continue
+        pattern = icu.DateFormat.createDateInstance(icu.DateFormat.kShort, locale).toPattern()
+        structure = FlexibleDateDetector._date_structure(pattern)
+        if structure is not None and structure not in structures:
+            structures[structure] = pattern
+    return tuple(
+        (fields, separators, pattern) for (fields, separators), pattern in structures.items()
+    )
+
+
 class FlexibleDateDetector:
-    """Recognize flexible numeric dates using a locale's CLDR short-date structure.
+    """Recognize flexible numeric dates using CLDR short-date structures.
 
     The stable ``date:flexible`` type distinguishes recall candidates from strict,
     skeleton-specific date detections. Two-digit years retain their observed value;
     this detector deposits one maximal candidate rather than expanding a century.
+
+    Every numeric short-date structure CLDR gives a locale of the same language is
+    read, the locale's own included, and each distinct valid date is deposited: en_US
+    reads "03/05/2013" both month first (its own pattern) and day first (en_GB's), and
+    reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
+    pattern it came from. A year written first must have four digits, since a leading
+    two-digit year cannot be told from a day ("10-12-14").
     """
 
     group = "date"
@@ -272,6 +524,12 @@ class FlexibleDateDetector:
         self._inert = structure is None
         self._fields, self._separators = structure or ((), ())
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
+        self._structures = tuple(
+            dict.fromkeys(
+                ((self._fields, self._separators, self.pattern),) * (structure is not None)
+                + _language_date_structures(icu_locale.getLanguage())
+            )
+        )
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "yMd", self.pattern, self._calendar)
@@ -322,25 +580,38 @@ class FlexibleDateDetector:
             cursor += 1
         return cursor, text[start:cursor], value
 
-    def _match(
-        self, text: str, start: int
+    def _structure_matcher(self, fields, separators, pattern):
+        spec = DateFormatSpec(self.locale, "yMd", pattern, self._calendar)
+
+        def match(text: str, start: int) -> _FlexibleMatch | None:
+            found = self._match_structure(text, start, fields, separators)
+            if found is None:
+                return None
+            end, captures, value = found
+            return _FlexibleMatch(end, captures, value, spec)
+
+        return match
+
+    def _match_structure(
+        self, text: str, start: int, fields: tuple[str, ...], separators: tuple[str, ...]
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
         cursor = start
         values: dict[str, int] = {}
         captures: list[Capture] = []
-        for index, field in enumerate(self._fields):
+        for index, field in enumerate(fields):
             field_start = cursor
             cursor, surface, value = self._digit_run(text, cursor)
             width = cursor - field_start
-            valid_width = width in ({2, 4} if field == "y" else {1, 2})
+            year_widths = {4} if index == 0 else {2, 4}
+            valid_width = width in (year_widths if field == "y" else {1, 2})
             valid_range = field == "y" or field == "M" and 1 <= value <= 12
             valid_range = valid_range or field == "d" and 1 <= value <= 31
             if not valid_width or not valid_range:
                 return None
             values[field] = value
             captures.append(Capture(field, field_start, cursor, surface, value, "numeric"))
-            if index < len(self._separators):
-                separator = self._separators[index]
+            if index < len(separators):
+                separator = separators[index]
                 if not text.startswith(separator, cursor):
                     return None
                 cursor += len(separator)
@@ -358,10 +629,16 @@ class FlexibleDateDetector:
         return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
 
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping flexible numeric dates in source order."""
+        """Return every structure's flexible numeric dates, distinct, in source order."""
         if self._inert:
             return []
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        found: dict[tuple[int, int, object], ValueDetection] = {}
+        for fields, separators, pattern in self._structures:
+            matcher = self._structure_matcher(fields, separators, pattern)
+            for detection in _detect_flexible(text, self.locale, self.type, self._spec, matcher):
+                key = (detection["start"], detection["end"], detection["value"])
+                found.setdefault(key, detection)
+        return sorted(found.values(), key=lambda d: (d["start"], d["end"]))
 
 
 _INTERVAL_FIELDS = (
@@ -1053,6 +1330,9 @@ class FlexibleNumberDetector:
             if cursor < len(text) and _is_word_character(text[cursor]):
                 continue
             surface = text[start:cursor]
+            # "II's" is one word, so a Roman reading spans a possessive or plural suffix
+            # written after an apostrophe, from the language's plural table (see
+            # _plural_suffix); a language without an entry reads no suffix.
             position = icu.ParsePosition(0)
             parsed = self._roman.parse(surface, position)
             if parsed is None or position.getIndex() != len(surface):
@@ -1060,8 +1340,17 @@ class FlexibleNumberDetector:
             value = parsed.getInt64()
             if self._roman.format(value, rule_set) != surface:
                 continue
-            capture = Capture("integer", start, cursor, surface, str(value), "roman")
-            return cursor, (capture,), NumberValue(str(value), None)
+            captures = [Capture("integer", start, cursor, surface, str(value), "roman")]
+            end = cursor
+            plural = (
+                _plural_suffix(text, cursor, self.locale)
+                if _is_apostrophe(text[cursor : cursor + 1])
+                else None
+            )
+            if plural is not None:
+                end, suffix_captures = plural
+                captures.extend(suffix_captures)
+            return end, tuple(captures), NumberValue(str(value), None)
         return None
 
 
@@ -2246,6 +2535,81 @@ class FlexibleCurrencyNameDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
+@cache
+def _language_day_periods(language: str) -> tuple[tuple[str, int, bool], ...]:
+    """Every CLDR day-period form of ``language``, as ``(form, index, narrow)``.
+
+    ICU formats the am (index 0) and pm (1) day period at each width, from the
+    abbreviated (``a``) and wide (``aaaa``) to the narrow (``aaaaa``) field, for every
+    available locale of the language: regional forms are part of the language's
+    writing, so en_US reads en_CA's "a.m." and the narrow "a"/"p". ``narrow`` marks a
+    one-letter form. Longest first, so a dotted form wins over a shorter one sharing
+    its start; case-folded duplicates keep their first reading.
+    """
+    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale("en_US"))
+    instants = []
+    for hour in (1, 13):
+        calendar.clear()
+        calendar.set(2026, 0, 3, hour, 0, 0)
+        instants.append(calendar.getTime())
+    seen: dict[str, tuple[str, int, bool]] = {}
+    for name in sorted(icu.Locale.getAvailableLocales()):
+        locale = icu.Locale(name)
+        if locale.getLanguage() != language:
+            continue
+        for field in ("a", "aaaa", "aaaaa"):
+            formatter = icu.SimpleDateFormat(field, locale)
+            formatter.setTimeZone(icu.TimeZone.getGMT())
+            for index, instant in enumerate(instants):
+                form = formatter.format(instant)
+                if form:
+                    seen.setdefault(form.casefold(), (form, index, len(form) == 1))
+    return tuple(sorted(seen.values(), key=lambda form: -len(form[0])))
+
+
+def _match_period(text: str, cursor: int, period: str, *, exact: bool = False) -> int | None:
+    """Match a day-period form at ``cursor``, case-insensitively unless ``exact``.
+
+    A space inside the form (Spanish "a.\u202fm.") matches any space character, since
+    CLDR's no-break spaces are typed as ordinary ones.
+    """
+    for offset, expected in enumerate(period):
+        index = cursor + offset
+        if index >= len(text):
+            return None
+        actual = text[index]
+        if expected in _SPACES:
+            if actual not in _SPACES:
+                return None
+        elif actual != expected if exact else actual.casefold() != expected.casefold():
+            return None
+    return cursor + len(period)
+
+
+@cache
+def _hour_unit_forms(locale: str) -> tuple[tuple[str, bool], ...]:
+    """CLDR's short and narrow symbols for an hour, as ``(symbol, attached)``.
+
+    ICU formats one ten-hour measure at each width ("10h", "10\u202fh", "10 Std.")
+    and the symbol is what surrounds the number; ``attached`` is true where CLDR writes
+    it against the digits. Longest first.
+    """
+    forms: dict[str, tuple[str, bool]] = {}
+    for width in (icu.UMeasureFormatWidth.SHORT, icu.UMeasureFormatWidth.NARROW):
+        rendered = icu.MeasureFormat(icu.Locale(locale), width).formatMeasures(
+            [icu.Measure(icu.Formattable(10), icu.MeasureUnit.createHour())]
+        )
+        if not rendered.startswith("10"):
+            continue
+        rest = rendered[2:]
+        symbol = rest.lstrip("".join(_SPACES))
+        if symbol:
+            # Attached if any width writes it attached (fr: "10 h" short, "10h" narrow).
+            _known, attached = forms.get(symbol.casefold(), (symbol, False))
+            forms[symbol.casefold()] = (symbol, attached or rest == symbol)
+    return tuple(sorted(forms.values(), key=lambda form: -len(form[0])))
+
+
 class FlexibleTimeDetector:
     """Recognize clock times using a locale's CLDR short-time structure.
 
@@ -2262,7 +2626,18 @@ class FlexibleTimeDetector:
     A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
     12-hour locale); a day period is only consumed when the hour reads 1-12, and the
     reading is then converted to 24-hour ``H`` (12 AM -> 0, 12 PM -> 12). Minutes and
-    seconds are exactly two digits in 0-59.
+    seconds are exactly two digits in 0-59. An hour with no minutes reads only with a
+    day period after it ("5pm", "10 a.m."), where the locale writes the period after
+    the time, and its value then carries ``H`` alone.
+
+    The day-period forms are ICU's, at every width, for every CLDR locale of the same
+    language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
+
+    A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
+    CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
+    from :func:`_hour_unit_forms`. Composing a clock time with a unit symbol this way
+    is hand-rolled, as CLDR has no pattern for it; the symbol is captured as
+    ``hour-unit``.
     """
 
     group = "time"
@@ -2277,7 +2652,9 @@ class FlexibleTimeDetector:
         self._inert = structure is None
         self._separator, self.hour12, self._period_side = structure or ("", False, None)
         self._period_prefix = self._period_side == "prefix"
-        self._periods = tuple(icu.DateFormatSymbols(icu_locale).getAmPmStrings())
+        self._periods = _language_day_periods(icu_locale.getLanguage())
+        self._hour_units = _hour_unit_forms(locale)
+        self._read_units = False
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
@@ -2356,11 +2733,20 @@ class FlexibleTimeDetector:
 
     def _day_period(self, text: str, cursor: int) -> tuple[int, str, int] | None:
         marker_start = cursor
-        if cursor < len(text) and text[cursor] in _SPACES:
+        spaced = cursor < len(text) and text[cursor] in _SPACES
+        if spaced:
             cursor += 1
-        for index, period in enumerate(self._periods):
-            if period and text[cursor : cursor + len(period)].casefold() == period.casefold():
-                return cursor + len(period), text[marker_start : cursor + len(period)], index
+        for period, index, narrow in self._periods:
+            # Hand-rolled, as CLDR says nothing about spacing: a one-letter narrow form
+            # is read only attached to the time ("5p"), since a spaced "5 a" is far more
+            # often the article than the morning.
+            if narrow and spaced:
+                continue
+            # A narrow form matches only in the case CLDR writes it ("5p", not "5A"
+            # amperes or "Form 1A"); longer forms match in any case.
+            end = _match_period(text, cursor, period, exact=narrow)
+            if end is not None:
+                return end, text[marker_start:end], index
         return None
 
     def _period_precedes(self, text: str, start: int) -> bool:
@@ -2368,8 +2754,8 @@ class FlexibleTimeDetector:
         cursor = start
         if cursor > 0 and text[cursor - 1] in _SPACES:
             cursor -= 1
-        for period in self._periods:
-            if period and cursor - len(period) >= 0:
+        for period, _index, _narrow in self._periods:
+            if cursor - len(period) >= 0:
                 if text[cursor - len(period) : cursor].casefold() == period.casefold():
                     return True
         return False
@@ -2412,16 +2798,36 @@ class FlexibleTimeDetector:
         if period_index is not None and not 1 <= raw_hour <= 12:
             return None
 
-        if not text.startswith(self._separator, cursor):
-            return None
-        minute = self._field(text, cursor + len(self._separator), 2)
+        separator = self._separator
+        if not text.startswith(separator, cursor):
+            separator = next(
+                (
+                    symbol
+                    for symbol, attached in self._hour_units
+                    if attached
+                    and text[cursor : cursor + len(symbol)].casefold() == symbol.casefold()
+                    and self._field(text, cursor + len(symbol), 2) is not None
+                ),
+                "",
+            )
+            if not separator:
+                return self._hour_with_period(text, hour_start, hour_width, raw_hour, captures)
+            captures.append(
+                Capture(
+                    "hour-unit",
+                    cursor,
+                    cursor + len(separator),
+                    text[cursor : cursor + len(separator)],
+                )
+            )
+        minute = self._field(text, cursor + len(separator), 2)
         if minute is None or not 0 <= minute[1] <= 59:
             return None
         minute_end, minute_value = minute
 
         second_value: int | None = None
         second_end = minute_end
-        if text.startswith(self._separator, minute_end):
+        if separator == self._separator and text.startswith(self._separator, minute_end):
             second = self._field(text, minute_end + len(self._separator), 2)
             if second is not None and 0 <= second[1] <= 59:
                 second_end, second_value = second
@@ -2431,7 +2837,9 @@ class FlexibleTimeDetector:
                 return None
 
         cursor = second_end
-        if self._period_side == "suffix":
+        if not self._period_prefix:
+            # A 24-hour locale's language still writes a day period after the time
+            # (en_GB "5:30 p.m."), so every locale that does not put it first reads one.
             if 1 <= raw_hour <= 12:
                 found = self._day_period(text, cursor)
                 if found is not None:
@@ -2442,10 +2850,12 @@ class FlexibleTimeDetector:
                     cursor = marker_end
             elif self._day_period(text, cursor) is not None:
                 return None
-        elif self._period_side is None and self._day_period(text, cursor) is not None:
-            # Do not truncate a marker-bearing surface to a bare-time candidate when
-            # the locale pattern does not license a day period.
-            return None
+
+        if self._read_units and period_index is None and separator == self._separator:
+            unit = self._hour_unit(text, cursor)
+            if unit is not None:
+                captures.append(unit)
+                cursor = unit.end
 
         continuation = cursor + len(self._separator)
         if text.startswith(self._separator, cursor) and self._digit_run(text, continuation)[0] > (
@@ -2495,11 +2905,58 @@ class FlexibleTimeDetector:
         value = DateTimeValue(tuple(fields), "gregorian")
         return cursor, tuple(ordered), value
 
+    def _hour_unit(self, text: str, cursor: int) -> Capture | None:
+        """The locale's hour symbol after a time, attached or after one space."""
+        begin = cursor
+        if cursor < len(text) and text[cursor] in _SPACES:
+            cursor += 1
+        for symbol, _attached in self._hour_units:
+            end = cursor + len(symbol)
+            if text[cursor:end].casefold() == symbol.casefold() and _ends_letter_token(text, end):
+                return Capture("hour-unit", begin, end, text[begin:end])
+        return None
+
+    def _hour_with_period(
+        self,
+        text: str,
+        hour_start: int,
+        hour_width: int,
+        raw_hour: int,
+        captures: list[Capture],
+    ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
+        """An hour with no minutes, read only with a day period after it ("5pm")."""
+        if self._period_prefix or captures or not 1 <= raw_hour <= 12:
+            return None
+        cursor = hour_start + hour_width
+        found = self._day_period(text, cursor)
+        if found is None:
+            return None
+        marker_end, marker_text, period_index = found
+        hour24 = (0 if raw_hour == 12 else raw_hour) + (12 if period_index == 1 else 0)
+        ordered = (
+            Capture("H", hour_start, cursor, text[hour_start:cursor], raw_hour, "numeric"),
+            Capture("day-period", cursor, marker_end, marker_text, None, "symbol"),
+        )
+        return marker_end, ordered, DateTimeValue((("H", hour24),), "gregorian")
+
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping flexible clock times in source order."""
+        """Return flexible clock times in source order.
+
+        A time followed by an hour symbol is read both with and without it ("10:30" and
+        "10:30 hr"), so neither span replaces the other.
+        """
         if self._inert:
             return []
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        self._read_units = False
+        plain = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        self._read_units = True
+        try:
+            with_units = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        finally:
+            self._read_units = False
+        spans = {(d["start"], d["end"]) for d in plain}
+        merged = plain + [d for d in with_units if (d["start"], d["end"]) not in spans]
+        return sorted(merged, key=lambda d: (d["start"], d["end"]))
 
 
 class FlexibleFractionDetector:
@@ -2507,6 +2964,8 @@ class FlexibleFractionDetector:
 
     The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
     the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
+    A fraction made plural ("3/4s") spans its suffix, with ``suffix`` (and
+    ``apostrophe``) captures, as :class:`PluralNumeralDetector` reads a numeral.
     The value is a :class:`NumberValue` whose ``decimal`` is computed with ``Decimal``:
     a terminating fraction is exact (``1/2`` -> ``"0.5"``, ``3 1/2`` -> ``"3.5"``); a
     non-terminating one is quantized to twelve fractional digits (``1/3`` ->
@@ -2707,11 +3166,68 @@ class FlexibleFractionDetector:
         decimal = self._canonical(whole_value, numerator, denominator)
         if negative:
             decimal = "-" + decimal
-        return denominator_end, tuple(captures), NumberValue(decimal=decimal, currency=None)
+        end = denominator_end
+        plural = _plural_suffix(text, end, self.locale)
+        if plural is not None:
+            end, suffix_captures = plural
+            captures.extend(suffix_captures)
+        return end, tuple(captures), NumberValue(decimal=decimal, currency=None)
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible fractions in source order."""
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+@cache
+def _foreign_ordinal_suffixes(locale: str) -> frozenset[str]:
+    """Ordinal suffixes ICU writes in other locales that ``locale`` can read unambiguously.
+
+    Every locale's RBNF digit-ordinal rule sets are rendered for small values, and a
+    suffix is kept when it holds a letter and none of its letters is in ``locale``'s
+    CLDR exemplar letters (standard or auxiliary): Italian and Portuguese "º" and "ª",
+    Spanish ".º", but not French "e" or Catalan "a", which an English text writes as
+    letters of its own. A suffix of punctuation alone (German "1.") is not kept, nor one
+    holding a space.
+
+    Hand-rolled choices, since CLDR does not enumerate the suffixes directly: only the
+    ``%digits-ordinal`` rule sets are read (the others spell the number out), and the
+    values 1, 2, 3, 4, 11 and 21 are rendered, which reach every ordinal plural category
+    CLDR's rules distinguish for these rule sets (one, two, few, other, and the teens and
+    twenties exceptions).
+    """
+    data = icu.LocaleData(locale)
+    own = [
+        data.getExemplarSet(0, kind)
+        for kind in (
+            icu.ULocaleDataExemplarSetType.ES_STANDARD,
+            icu.ULocaleDataExemplarSetType.ES_AUXILIARY,
+        )
+    ]
+    suffixes: set[str] = set()
+    languages = {icu.Locale(name).getLanguage() for name in icu.Locale.getAvailableLocales()}
+    for language in sorted(languages):
+        try:
+            rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu.Locale(language))
+        except icu.ICUError:
+            continue
+        for index in range(rbnf.getNumberOfRuleSetNames()):
+            name = rbnf.getRuleSetName(index)
+            if "digits" not in name or name.startswith("%%"):
+                continue
+            for value in (1, 2, 3, 4, 11, 21):
+                rendered = rbnf.format(value, name)
+                digits = [i for i, character in enumerate(rendered) if character.isdigit()]
+                if not digits or digits[0] != 0:
+                    continue
+                suffix = rendered[digits[-1] + 1 :]
+                letters = [character for character in suffix if icu.Char.isalpha(character)]
+                if any(character in _SPACES or character.isspace() for character in suffix):
+                    continue
+                if letters and not any(
+                    exemplars.contains(letter.lower()) for letter in letters for exemplars in own
+                ):
+                    suffixes.add(suffix)
+    return frozenset(suffixes)
 
 
 class FlexibleOrdinalDetector:
@@ -2723,6 +3239,11 @@ class FlexibleOrdinalDetector:
     are the non-digit parts around each rendering. No affix is hard-coded, and no fragile
     ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
     ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+
+    A grouped integer ("1,000th") is accepted when ICU renders the same surface for its
+    value. An ordinal suffix ICU writes in another locale is also read when it cannot be
+    mistaken for this locale's letters ("1º" in English text; see
+    :func:`_foreign_ordinal_suffixes`).
 
     Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
     treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
@@ -2747,6 +3268,12 @@ class FlexibleOrdinalDetector:
             and not name.startswith("%%")
         )
         self._digits = _locale_digit_map(icu_locale)
+        self._grouping = icu.DecimalFormatSymbols(icu_locale).getSymbol(
+            icu.DecimalFormatSymbols.kGroupingSeparatorSymbol
+        )
+        self._foreign_suffixes = tuple(
+            sorted(_foreign_ordinal_suffixes(locale), key=len, reverse=True)
+        )
         self._spec = NumberFormatSpec(locale, "decimal")
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
@@ -2755,6 +3282,28 @@ class FlexibleOrdinalDetector:
         while cursor < len(text) and text[cursor] in self._digits:
             value = value * 10 + self._digits[text[cursor]]
             cursor += 1
+        return cursor, value
+
+    def _grouped_run(self, text: str, start: int) -> tuple[int, int]:
+        """A digit run that may hold the locale's grouping separator between digits."""
+        cursor = start
+        value = 0
+        while cursor < len(text):
+            if text[cursor] in self._digits:
+                value = value * 10 + self._digits[text[cursor]]
+                cursor += 1
+                continue
+            after = cursor + len(self._grouping)
+            if (
+                self._grouping
+                and cursor > start
+                and text.startswith(self._grouping, cursor)
+                and after < len(text)
+                and text[after] in self._digits
+            ):
+                cursor = after
+                continue
+            break
         return cursor, value
 
     def _affixes(self, value: int) -> set[tuple[str, str]]:
@@ -2786,6 +3335,11 @@ class FlexibleOrdinalDetector:
             if digit_start > 0 and text[digit_start - 1] in self._digits:
                 continue
             digit_end, value = self._digit_run(text, digit_start)
+            grouped_end, grouped_value = self._grouped_run(text, digit_start)
+            if grouped_end > digit_end and digit_start == start:
+                found = self._grouped(text, start, grouped_end, grouped_value)
+                if found is not None:
+                    return found
             if value < 1:
                 continue
             matched = None
@@ -2800,6 +3354,10 @@ class FlexibleOrdinalDetector:
                 if text[digit_end:affix_end].casefold() == suffix.casefold():
                     matched = prefix, suffix, affix_end
                     break
+            if matched is None and digit_start == start:
+                foreign = self._foreign(text, start, digit_end, value)
+                if foreign is not None:
+                    return foreign
             if matched is None:
                 continue
             prefix, suffix, affix_end = matched
@@ -2833,6 +3391,62 @@ class FlexibleOrdinalDetector:
             return affix_end, tuple(captures), NumberValue(decimal=str(value), currency=None)
         return None
 
+    def _captures(
+        self, text: str, start: int, digit_start: int, digit_end: int, end: int, value: int
+    ) -> tuple[Capture, ...]:
+        captures = []
+        if digit_start > start:
+            captures.append(
+                Capture(
+                    "ordinal-affix", start, digit_start, text[start:digit_start], None, "symbol"
+                )
+            )
+        captures.append(
+            Capture(
+                "integer",
+                digit_start,
+                digit_end,
+                text[digit_start:digit_end],
+                str(value),
+                "numeric",
+            )
+        )
+        if end > digit_end:
+            captures.append(
+                Capture("ordinal-affix", digit_end, end, text[digit_end:end], None, "symbol")
+            )
+        return tuple(captures)
+
+    def _foreign(
+        self, text: str, start: int, digit_end: int, value: int
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        """Another locale's ordinal suffix, tried after this locale's own affixes."""
+        for suffix in self._foreign_suffixes:
+            end = digit_end + len(suffix)
+            if text[digit_end:end].casefold() == suffix.casefold() and _ends_letter_token(
+                text, end
+            ):
+                captures = self._captures(text, start, start, digit_end, end, value)
+                return end, captures, NumberValue(str(value), None)
+        return None
+
+    def _grouped(
+        self, text: str, start: int, grouped_end: int, value: int
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        """A grouped ordinal, accepted only when ICU renders exactly this surface."""
+        if value < 1 or value > _MAX_RBNF_ORDINAL_VALUE:
+            return None
+        for name in self._rule_set_names or (None,):
+            try:
+                rendered = self._rbnf.format(value, name) if name else self._rbnf.format(value)
+            except (icu.ICUError, SystemError):
+                return None
+            end = start + len(rendered)
+            if end > grouped_end and text[start:end].casefold() == rendered.casefold():
+                captures = self._captures(text, start, start, grouped_end, end, value)
+                return end, captures, NumberValue(str(value), None)
+        return None
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible ordinals in source order."""
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
@@ -2846,10 +3460,11 @@ def _detect_flexible(
     match: Callable[[str, int], tuple[int, tuple[Capture, ...], object] | _FlexibleMatch | None],
 ) -> list[ValueDetection]:
     starts = sorted({span["start"] for span in break_grapheme_spans(text, locale)})
+    interior = _word_interior_offsets(text, locale)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor:
+        if start < cursor or start in interior:
             continue
         result = match(text, start)
         if result is None:
@@ -2860,6 +3475,8 @@ def _detect_flexible(
         else:
             end, captures, value = result
             match_spec = spec
+        if end in interior:
+            continue
         detections.append(
             ValueDetection(
                 text=text[start:end],

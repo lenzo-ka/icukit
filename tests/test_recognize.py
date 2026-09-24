@@ -420,16 +420,19 @@ def test_captures_use_source_code_point_offsets_with_astral_prefix():
 
 
 def test_greedy_match_does_not_overlap_and_stops_at_non_digit():
-    detections = FlexibleNumberDetector("en_US").detect("1234x")
+    detections = FlexibleNumberDetector("en_US").detect("1234-x")
 
     assert [(detection["start"], detection["end"]) for detection in detections] == [(0, 4)]
     assert detections[0]["text"] == "1234"
 
 
+def test_flexible_number_refuses_a_number_ending_against_a_letter():
+    assert FlexibleNumberDetector("en_US").detect("1234x") == []
+
+
 @pytest.mark.parametrize(
     "locale, surface, expected",
     [
-        ("en_US", "1,2,3", "1"),
         ("en_US", "1,234", "1,234"),
         ("en_US", "1,234,567", "1,234,567"),
         ("hi_IN", "1,23,456", "1,23,456"),
@@ -439,6 +442,11 @@ def test_flexible_number_validates_locale_grouping(locale, surface, expected):
     detection = FlexibleNumberDetector(locale).detect(surface)[0]
 
     assert detection["text"] == expected
+
+
+def test_flexible_number_reads_nothing_from_a_malformed_grouping():
+    # "1,2,3" is one word; a validly grouped prefix "1" would be a fragment of it.
+    assert FlexibleNumberDetector("en_US").detect("1,2,3") == []
 
 
 def test_flexible_percent_does_not_absorb_malformed_grouping():
@@ -990,7 +998,7 @@ def test_flexible_date_rejects_invalid_structure_or_ranges(surface):
 
 
 def test_flexible_date_captures_use_code_point_offsets_and_stop_greedily():
-    text = "📌 met 01/03/2026x"
+    text = "📌 met 01/03/2026-x"
     detection = FlexibleDateDetector("en_US").detect(text)[0]
     captures = {capture.name: capture for capture in detection["captures"]}
 
@@ -1008,7 +1016,8 @@ def test_flexible_dates_compose_with_detect_and_resolve():
     detections = detect(text, [FlexibleDateDetector("en_US")])
     resolution = resolve(detections)
 
-    assert [detection["text"] for detection in detections] == ["1/3/26", "12/25/2026"]
+    # "1/3/26" is read month first and day first; the resolver keeps one per span.
+    assert [detection["text"] for detection in detections] == ["1/3/26", "1/3/26", "12/25/2026"]
     assert [detection["text"] for detection in resolution.best] == [
         "1/3/26",
         "12/25/2026",
@@ -1110,8 +1119,14 @@ def test_flexible_time_reports_pattern_day_period_side(locale, side):
     assert FlexibleTimeDetector(locale)._period_side == side
 
 
-def test_flexible_time_does_not_read_a_day_period_absent_from_pattern():
-    assert FlexibleTimeDetector("de_DE").detect("3:45 PM") == []
+def test_flexible_time_reads_a_day_period_its_pattern_does_not_write():
+    # de_DE's pattern has no day period, but its language writes one after a time, and
+    # refusing the time would delete its only reading.
+    detections = FlexibleTimeDetector("de_DE").detect("3:45 PM")
+
+    assert [(d["text"], d["value"].fields) for d in detections] == [
+        ("3:45 PM", (("H", 15), ("m", 45)))
+    ]
 
 
 @pytest.mark.parametrize("surface", ["12:30:99", "12:30:4", "15:45 PM"])
@@ -1444,13 +1459,12 @@ def test_flexible_compact_derivation_and_detection_are_deterministic():
     assert first.detect("1.2M then 3K") == first.detect("1.2M then 3K")
 
 
-def test_flexible_compact_holds_the_bare_number_candidate_separately():
+def test_flexible_compact_refuses_the_bare_number_inside_it():
     compact = FlexibleCompactDetector("en_US", "short").detect("1.2M")
     decimal = FlexibleNumberDetector("en_US").detect("1.2M")
 
     assert compact[0]["value"] == NumberValue("1200000", None)
-    assert decimal[0]["text"] == "1.2"
-    assert decimal[0]["value"] == NumberValue("1.2", None)
+    assert decimal == []
 
 
 @pytest.mark.parametrize(
@@ -1469,14 +1483,13 @@ def test_flexible_scientific_gains_recall(surface, decimal):
     assert detection["value"] == NumberValue(decimal, None)
 
 
-def test_flexible_scientific_round_trips_and_holds_the_mantissa_separately():
+def test_flexible_scientific_round_trips_and_refuses_the_bare_mantissa():
     surface = "1.2345E4"
     scientific = FlexibleScientificDetector("en_US").detect(surface)[0]
-    decimal = FlexibleNumberDetector("en_US").detect(surface)[0]
+    decimal = FlexibleNumberDetector("en_US").detect(surface)
 
     assert scientific["value"] == NumberValue("12345", None)
-    assert decimal["text"] == "1.2345"
-    assert decimal["value"] == NumberValue("1.2345", None)
+    assert decimal == []
     assert icu.NumberFormat.createScientificInstance(icu.Locale("en_US")).format(12345.0) == surface
 
 
