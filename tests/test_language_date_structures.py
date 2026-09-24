@@ -12,8 +12,16 @@ def _dates(text, locale="en_US"):
     ]
 
 
-def test_the_locales_own_pattern_wins_an_ambiguous_date():
-    assert _dates("03/05/2013") == [("03/05/2013", (("y", 2013), ("M", 3), ("d", 5)), "M/d/yy")]
+def test_an_ambiguous_date_keeps_every_valid_reading():
+    assert _dates("03/05/2013") == [
+        ("03/05/2013", (("y", 2013), ("M", 3), ("d", 5)), "M/d/yy"),
+        ("03/05/2013", (("y", 2013), ("M", 5), ("d", 3)), "dd/MM/y"),
+    ]
+
+
+@pytest.mark.parametrize("text", ["10-12-14", "12-10-15"])
+def test_a_year_written_first_needs_four_digits(text):
+    assert all(pattern != "y-MM-dd" for _surface, _value, pattern in _dates(text))
 
 
 @pytest.mark.parametrize(

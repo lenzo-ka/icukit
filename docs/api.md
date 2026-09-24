@@ -4896,10 +4896,12 @@ The stable ``date:flexible`` type distinguishes recall candidates from strict,
 skeleton-specific date detections. Two-digit years retain their observed value;
 this detector deposits one maximal candidate rather than expanding a century.
 
-The locale's own short-date structure is tried first, then every other structure
-CLDR gives a locale of the same language, and the first that yields a valid date
-wins: en_US keeps reading "03/05/2013" month first, and also reads "31.12.2012"
-through en_CH's day-first dotted pattern. The spec names the pattern that matched.
+Every numeric short-date structure CLDR gives a locale of the same language is
+read, the locale's own included, and each distinct valid date is deposited: en_US
+reads "03/05/2013" both month first (its own pattern) and day first (en_GB's), and
+reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
+pattern it came from. A year written first must have four digits, since a leading
+two-digit year cannot be told from a day ("10-12-14").
 
 #### `FlexibleDateDetector(locale: 'str') -> 'None'`
 
@@ -4907,7 +4909,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping flexible numeric dates in source order.
+Return every structure's flexible numeric dates, distinct, in source order.
 
 ### class `FlexibleDateIntervalDetector`
 
@@ -5102,7 +5104,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping flexible clock times in source order.
+Return flexible clock times in source order.
+
+A time followed by an hour symbol is read both with and without it ("10:30" and
+"10:30 hr"), so neither span replaces the other.
 
 ### class `LetterNameDetector`
 

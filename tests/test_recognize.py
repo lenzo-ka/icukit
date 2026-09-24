@@ -1016,7 +1016,8 @@ def test_flexible_dates_compose_with_detect_and_resolve():
     detections = detect(text, [FlexibleDateDetector("en_US")])
     resolution = resolve(detections)
 
-    assert [detection["text"] for detection in detections] == ["1/3/26", "12/25/2026"]
+    # "1/3/26" is read month first and day first; the resolver keeps one per span.
+    assert [detection["text"] for detection in detections] == ["1/3/26", "1/3/26", "12/25/2026"]
     assert [detection["text"] for detection in resolution.best] == [
         "1/3/26",
         "12/25/2026",
@@ -1118,8 +1119,14 @@ def test_flexible_time_reports_pattern_day_period_side(locale, side):
     assert FlexibleTimeDetector(locale)._period_side == side
 
 
-def test_flexible_time_does_not_read_a_day_period_absent_from_pattern():
-    assert FlexibleTimeDetector("de_DE").detect("3:45 PM") == []
+def test_flexible_time_reads_a_day_period_its_pattern_does_not_write():
+    # de_DE's pattern has no day period, but its language writes one after a time, and
+    # refusing the time would delete its only reading.
+    detections = FlexibleTimeDetector("de_DE").detect("3:45 PM")
+
+    assert [(d["text"], d["value"].fields) for d in detections] == [
+        ("3:45 PM", (("H", 15), ("m", 45)))
+    ]
 
 
 @pytest.mark.parametrize("surface", ["12:30:99", "12:30:4", "15:45 PM"])

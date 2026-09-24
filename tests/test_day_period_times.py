@@ -39,6 +39,30 @@ def test_no_time_without_a_valid_hour_and_period(text):
     assert _times(text) == []
 
 
+@pytest.mark.parametrize(
+    "locale, text, surface",
+    [
+        ("en_GB", "at 5:30 p.m.", "5:30 p.m."),
+        ("en_IE", "at 5:30 p.m.", "5:30 p.m."),
+        ("es_ES", "a las 5:30 p. m.", "5:30 p. m."),
+        ("de_DE", "um 5:30 nachm.", "5:30 nachm."),
+        ("en_GB", "at 5pm", "5pm"),
+    ],
+)
+def test_a_24_hour_locale_reads_a_day_period_after_the_time(locale, text, surface):
+    # These locales once dropped the time when a day period followed it.
+    assert [s for s, _f, _c in _times(text, locale)] == [surface]
+
+
+def test_a_24_hour_locale_still_refuses_an_out_of_range_hour_with_a_period():
+    assert _times("15:45 pm", "en_GB") == []
+
+
+@pytest.mark.parametrize("text", ["a 5A fuse", "Form 1A"])
+def test_a_narrow_form_matches_only_in_cldrs_case(text):
+    assert _times(text) == []
+
+
 def test_the_forms_are_icus_across_the_language():
     forms = {form.casefold() for form, _index, _narrow in _language_day_periods("en")}
 

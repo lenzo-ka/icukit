@@ -49,4 +49,22 @@ def test_a_roman_numeral_spans_its_possessive(text, surface):
         if d["type"] == "number:cardinal:roman"
     ]
 
-    assert romans == [(surface, ["integer", "suffix"])]
+    assert romans == [(surface, ["integer", "apostrophe", "suffix"])]
+
+
+def test_a_roman_numeral_takes_no_suffix_in_a_language_without_a_plural_entry():
+    romans = [
+        d["text"]
+        for d in FlexibleNumberDetector("fr_FR").detect("Henri VIII's")
+        if d["type"] == "number:cardinal:roman"
+    ]
+
+    assert "VIII's" not in romans
+
+
+def test_a_foreign_ordinal_suffix_must_end_its_word():
+    assert _ordinals("1ºx") == []
+
+
+def test_no_foreign_ordinal_suffix_holds_a_space():
+    assert not any(" " in suffix for suffix in _foreign_ordinal_suffixes("ru_RU"))

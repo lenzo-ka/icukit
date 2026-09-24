@@ -504,10 +504,12 @@ class FlexibleDateDetector:
     skeleton-specific date detections. Two-digit years retain their observed value;
     this detector deposits one maximal candidate rather than expanding a century.
 
-    The locale's own short-date structure is tried first, then every other structure
-    CLDR gives a locale of the same language, and the first that yields a valid date
-    wins: en_US keeps reading "03/05/2013" month first, and also reads "31.12.2012"
-    through en_CH's day-first dotted pattern. The spec names the pattern that matched.
+    Every numeric short-date structure CLDR gives a locale of the same language is
+    read, the locale's own included, and each distinct valid date is deposited: en_US
+    reads "03/05/2013" both month first (its own pattern) and day first (en_GB's), and
+    reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
+    pattern it came from. A year written first must have four digits, since a leading
+    two-digit year cannot be told from a day ("10-12-14").
     """
 
     group = "date"
@@ -578,14 +580,17 @@ class FlexibleDateDetector:
             cursor += 1
         return cursor, text[start:cursor], value
 
-    def _match(self, text: str, start: int) -> _FlexibleMatch | None:
-        for fields, separators, pattern in self._structures:
+    def _structure_matcher(self, fields, separators, pattern):
+        spec = DateFormatSpec(self.locale, "yMd", pattern, self._calendar)
+
+        def match(text: str, start: int) -> _FlexibleMatch | None:
             found = self._match_structure(text, start, fields, separators)
-            if found is not None:
-                end, captures, value = found
-                spec = DateFormatSpec(self.locale, "yMd", pattern, self._calendar)
-                return _FlexibleMatch(end, captures, value, spec)
-        return None
+            if found is None:
+                return None
+            end, captures, value = found
+            return _FlexibleMatch(end, captures, value, spec)
+
+        return match
 
     def _match_structure(
         self, text: str, start: int, fields: tuple[str, ...], separators: tuple[str, ...]
@@ -597,7 +602,8 @@ class FlexibleDateDetector:
             field_start = cursor
             cursor, surface, value = self._digit_run(text, cursor)
             width = cursor - field_start
-            valid_width = width in ({2, 4} if field == "y" else {1, 2})
+            year_widths = {4} if index == 0 else {2, 4}
+            valid_width = width in (year_widths if field == "y" else {1, 2})
             valid_range = field == "y" or field == "M" and 1 <= value <= 12
             valid_range = valid_range or field == "d" and 1 <= value <= 31
             if not valid_width or not valid_range:
@@ -623,10 +629,16 @@ class FlexibleDateDetector:
         return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
 
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping flexible numeric dates in source order."""
+        """Return every structure's flexible numeric dates, distinct, in source order."""
         if self._inert:
             return []
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        found: dict[tuple[int, int, object], ValueDetection] = {}
+        for fields, separators, pattern in self._structures:
+            matcher = self._structure_matcher(fields, separators, pattern)
+            for detection in _detect_flexible(text, self.locale, self.type, self._spec, matcher):
+                key = (detection["start"], detection["end"], detection["value"])
+                found.setdefault(key, detection)
+        return sorted(found.values(), key=lambda d: (d["start"], d["end"]))
 
 
 _INTERVAL_FIELDS = (
@@ -1318,7 +1330,9 @@ class FlexibleNumberDetector:
             if cursor < len(text) and _is_word_character(text[cursor]):
                 continue
             surface = text[start:cursor]
-            # "II's" is one word, so a Roman reading spans its possessive or plural suffix.
+            # "II's" is one word, so a Roman reading spans a possessive or plural suffix
+            # written after an apostrophe, from the language's plural table (see
+            # _plural_suffix); a language without an entry reads no suffix.
             position = icu.ParsePosition(0)
             parsed = self._roman.parse(surface, position)
             if parsed is None or position.getIndex() != len(surface):
@@ -1328,13 +1342,14 @@ class FlexibleNumberDetector:
                 continue
             captures = [Capture("integer", start, cursor, surface, str(value), "roman")]
             end = cursor
-            if (
-                _is_apostrophe(text[cursor : cursor + 1])
-                and text[cursor + 1 : cursor + 2] == "s"
-                and _ends_letter_token(text, cursor + 2)
-            ):
-                end = cursor + 2
-                captures.append(Capture("suffix", cursor, end, text[cursor:end]))
+            plural = (
+                _plural_suffix(text, cursor, self.locale)
+                if _is_apostrophe(text[cursor : cursor + 1])
+                else None
+            )
+            if plural is not None:
+                end, suffix_captures = plural
+                captures.extend(suffix_captures)
             return end, tuple(captures), NumberValue(str(value), None)
         return None
 
@@ -2552,8 +2567,8 @@ def _language_day_periods(language: str) -> tuple[tuple[str, int, bool], ...]:
     return tuple(sorted(seen.values(), key=lambda form: -len(form[0])))
 
 
-def _match_period(text: str, cursor: int, period: str) -> int | None:
-    """Match a day-period form at ``cursor``, case-insensitively, returning its end.
+def _match_period(text: str, cursor: int, period: str, *, exact: bool = False) -> int | None:
+    """Match a day-period form at ``cursor``, case-insensitively unless ``exact``.
 
     A space inside the form (Spanish "a.\u202fm.") matches any space character, since
     CLDR's no-break spaces are typed as ordinary ones.
@@ -2566,7 +2581,7 @@ def _match_period(text: str, cursor: int, period: str) -> int | None:
         if expected in _SPACES:
             if actual not in _SPACES:
                 return None
-        elif actual.casefold() != expected.casefold():
+        elif actual != expected if exact else actual.casefold() != expected.casefold():
             return None
     return cursor + len(period)
 
@@ -2639,6 +2654,7 @@ class FlexibleTimeDetector:
         self._period_prefix = self._period_side == "prefix"
         self._periods = _language_day_periods(icu_locale.getLanguage())
         self._hour_units = _hour_unit_forms(locale)
+        self._read_units = False
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
@@ -2726,7 +2742,9 @@ class FlexibleTimeDetector:
             # often the article than the morning.
             if narrow and spaced:
                 continue
-            end = _match_period(text, cursor, period)
+            # A narrow form matches only in the case CLDR writes it ("5p", not "5A"
+            # amperes or "Form 1A"); longer forms match in any case.
+            end = _match_period(text, cursor, period, exact=narrow)
             if end is not None:
                 return end, text[marker_start:end], index
         return None
@@ -2819,7 +2837,9 @@ class FlexibleTimeDetector:
                 return None
 
         cursor = second_end
-        if self._period_side == "suffix":
+        if not self._period_prefix:
+            # A 24-hour locale's language still writes a day period after the time
+            # (en_GB "5:30 p.m."), so every locale that does not put it first reads one.
             if 1 <= raw_hour <= 12:
                 found = self._day_period(text, cursor)
                 if found is not None:
@@ -2830,12 +2850,8 @@ class FlexibleTimeDetector:
                     cursor = marker_end
             elif self._day_period(text, cursor) is not None:
                 return None
-        elif self._period_side is None and self._day_period(text, cursor) is not None:
-            # Do not truncate a marker-bearing surface to a bare-time candidate when
-            # the locale pattern does not license a day period.
-            return None
 
-        if period_index is None and separator == self._separator:
+        if self._read_units and period_index is None and separator == self._separator:
             unit = self._hour_unit(text, cursor)
             if unit is not None:
                 captures.append(unit)
@@ -2909,7 +2925,7 @@ class FlexibleTimeDetector:
         captures: list[Capture],
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
         """An hour with no minutes, read only with a day period after it ("5pm")."""
-        if self._period_side != "suffix" or captures or not 1 <= raw_hour <= 12:
+        if self._period_prefix or captures or not 1 <= raw_hour <= 12:
             return None
         cursor = hour_start + hour_width
         found = self._day_period(text, cursor)
@@ -2924,10 +2940,23 @@ class FlexibleTimeDetector:
         return marker_end, ordered, DateTimeValue((("H", hour24),), "gregorian")
 
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping flexible clock times in source order."""
+        """Return flexible clock times in source order.
+
+        A time followed by an hour symbol is read both with and without it ("10:30" and
+        "10:30 hr"), so neither span replaces the other.
+        """
         if self._inert:
             return []
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        self._read_units = False
+        plain = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        self._read_units = True
+        try:
+            with_units = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        finally:
+            self._read_units = False
+        spans = {(d["start"], d["end"]) for d in plain}
+        merged = plain + [d for d in with_units if (d["start"], d["end"]) not in spans]
+        return sorted(merged, key=lambda d: (d["start"], d["end"]))
 
 
 class FlexibleFractionDetector:
@@ -3157,7 +3186,14 @@ def _foreign_ordinal_suffixes(locale: str) -> frozenset[str]:
     suffix is kept when it holds a letter and none of its letters is in ``locale``'s
     CLDR exemplar letters (standard or auxiliary): Italian and Portuguese "º" and "ª",
     Spanish ".º", but not French "e" or Catalan "a", which an English text writes as
-    letters of its own. A suffix of punctuation alone (German "1.") is not kept.
+    letters of its own. A suffix of punctuation alone (German "1.") is not kept, nor one
+    holding a space.
+
+    Hand-rolled choices, since CLDR does not enumerate the suffixes directly: only the
+    ``%digits-ordinal`` rule sets are read (the others spell the number out), and the
+    values 1, 2, 3, 4, 11 and 21 are rendered, which reach every ordinal plural category
+    CLDR's rules distinguish for these rule sets (one, two, few, other, and the teens and
+    twenties exceptions).
     """
     data = icu.LocaleData(locale)
     own = [
@@ -3185,6 +3221,8 @@ def _foreign_ordinal_suffixes(locale: str) -> frozenset[str]:
                     continue
                 suffix = rendered[digits[-1] + 1 :]
                 letters = [character for character in suffix if icu.Char.isalpha(character)]
+                if any(character in _SPACES or character.isspace() for character in suffix):
+                    continue
                 if letters and not any(
                     exemplars.contains(letter.lower()) for letter in letters for exemplars in own
                 ):
@@ -3304,15 +3342,6 @@ class FlexibleOrdinalDetector:
                     return found
             if value < 1:
                 continue
-            if digit_start == start:
-                for suffix in self._foreign_suffixes:
-                    if text[digit_end : digit_end + len(suffix)].casefold() == suffix.casefold():
-                        end = digit_end + len(suffix)
-                        return (
-                            end,
-                            self._captures(text, start, digit_start, digit_end, end, value),
-                            NumberValue(str(value), None),
-                        )
             matched = None
             for prefix, suffix in sorted(
                 self._affixes(value), key=lambda pair: len(pair[0]) + len(pair[1]), reverse=True
@@ -3325,6 +3354,10 @@ class FlexibleOrdinalDetector:
                 if text[digit_end:affix_end].casefold() == suffix.casefold():
                     matched = prefix, suffix, affix_end
                     break
+            if matched is None and digit_start == start:
+                foreign = self._foreign(text, start, digit_end, value)
+                if foreign is not None:
+                    return foreign
             if matched is None:
                 continue
             prefix, suffix, affix_end = matched
@@ -3383,6 +3416,19 @@ class FlexibleOrdinalDetector:
                 Capture("ordinal-affix", digit_end, end, text[digit_end:end], None, "symbol")
             )
         return tuple(captures)
+
+    def _foreign(
+        self, text: str, start: int, digit_end: int, value: int
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        """Another locale's ordinal suffix, tried after this locale's own affixes."""
+        for suffix in self._foreign_suffixes:
+            end = digit_end + len(suffix)
+            if text[digit_end:end].casefold() == suffix.casefold() and _ends_letter_token(
+                text, end
+            ):
+                captures = self._captures(text, start, start, digit_end, end, value)
+                return end, captures, NumberValue(str(value), None)
+        return None
 
     def _grouped(
         self, text: str, start: int, grouped_end: int, value: int

@@ -22,12 +22,19 @@ def _times(text, locale):
     ],
 )
 def test_a_time_reads_with_cldrs_hour_symbol(locale, text, surface, captures):
-    assert _times(text, locale) == [(surface, (("H", 10), ("m", 30)), captures)]
+    assert (surface, (("H", 10), ("m", 30)), captures) in _times(text, locale)
 
 
 @pytest.mark.parametrize("locale, text", [("de_DE", "10:30hx"), ("fr_FR", "10h3")])
 def test_the_hour_symbol_must_end_the_word_or_precede_two_minute_digits(locale, text):
     assert _times(text, locale) == []
+
+
+def test_a_trailing_hour_unit_keeps_the_plain_time_too():
+    assert [(s, f) for s, f, _c in _times("10:30 hr later", "en_US")] == [
+        ("10:30", (("H", 10), ("m", 30))),
+        ("10:30 hr", (("H", 10), ("m", 30))),
+    ]
 
 
 def test_hour_forms_come_from_cldr_measure_formats():
