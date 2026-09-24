@@ -333,6 +333,20 @@ class AlphanumericRunsDetector:
 _PLURAL_NUMERAL_SUFFIXES = {"en": ("s",)}
 
 
+def _plural_suffix(text: str, cursor: int, locale: str) -> tuple[int, tuple[Capture, ...]] | None:
+    """A plural suffix at ``cursor`` ("s" or "'s" in English) that ends its word."""
+    suffixes = _PLURAL_NUMERAL_SUFFIXES.get(icu.Locale(locale).getLanguage(), ())
+    captures = []
+    if _is_apostrophe(text[cursor : cursor + 1]):
+        captures.append(Capture("apostrophe", cursor, cursor + 1, text[cursor]))
+        cursor += 1
+    for suffix in suffixes:
+        end = cursor + len(suffix)
+        if text.startswith(suffix, cursor) and _ends_letter_token(text, end):
+            return end, (*captures, Capture("suffix", cursor, end, suffix))
+    return None
+
+
 class PluralNumeralDetector:
     """Recognize a numeral made plural: "1990s", "1990's", "'90s", "100s", "the 20s".
 
@@ -2557,6 +2571,30 @@ def _match_period(text: str, cursor: int, period: str) -> int | None:
     return cursor + len(period)
 
 
+@cache
+def _hour_unit_forms(locale: str) -> tuple[tuple[str, bool], ...]:
+    """CLDR's short and narrow symbols for an hour, as ``(symbol, attached)``.
+
+    ICU formats one ten-hour measure at each width ("10h", "10\u202fh", "10 Std.")
+    and the symbol is what surrounds the number; ``attached`` is true where CLDR writes
+    it against the digits. Longest first.
+    """
+    forms: dict[str, tuple[str, bool]] = {}
+    for width in (icu.UMeasureFormatWidth.SHORT, icu.UMeasureFormatWidth.NARROW):
+        rendered = icu.MeasureFormat(icu.Locale(locale), width).formatMeasures(
+            [icu.Measure(icu.Formattable(10), icu.MeasureUnit.createHour())]
+        )
+        if not rendered.startswith("10"):
+            continue
+        rest = rendered[2:]
+        symbol = rest.lstrip("".join(_SPACES))
+        if symbol:
+            # Attached if any width writes it attached (fr: "10 h" short, "10h" narrow).
+            _known, attached = forms.get(symbol.casefold(), (symbol, False))
+            forms[symbol.casefold()] = (symbol, attached or rest == symbol)
+    return tuple(sorted(forms.values(), key=lambda form: -len(form[0])))
+
+
 class FlexibleTimeDetector:
     """Recognize clock times using a locale's CLDR short-time structure.
 
@@ -2579,6 +2617,12 @@ class FlexibleTimeDetector:
 
     The day-period forms are ICU's, at every width, for every CLDR locale of the same
     language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
+
+    A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
+    CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
+    from :func:`_hour_unit_forms`. Composing a clock time with a unit symbol this way
+    is hand-rolled, as CLDR has no pattern for it; the symbol is captured as
+    ``hour-unit``.
     """
 
     group = "time"
@@ -2594,6 +2638,7 @@ class FlexibleTimeDetector:
         self._separator, self.hour12, self._period_side = structure or ("", False, None)
         self._period_prefix = self._period_side == "prefix"
         self._periods = _language_day_periods(icu_locale.getLanguage())
+        self._hour_units = _hour_unit_forms(locale)
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
@@ -2735,16 +2780,36 @@ class FlexibleTimeDetector:
         if period_index is not None and not 1 <= raw_hour <= 12:
             return None
 
-        if not text.startswith(self._separator, cursor):
-            return self._hour_with_period(text, hour_start, hour_width, raw_hour, captures)
-        minute = self._field(text, cursor + len(self._separator), 2)
+        separator = self._separator
+        if not text.startswith(separator, cursor):
+            separator = next(
+                (
+                    symbol
+                    for symbol, attached in self._hour_units
+                    if attached
+                    and text[cursor : cursor + len(symbol)].casefold() == symbol.casefold()
+                    and self._field(text, cursor + len(symbol), 2) is not None
+                ),
+                "",
+            )
+            if not separator:
+                return self._hour_with_period(text, hour_start, hour_width, raw_hour, captures)
+            captures.append(
+                Capture(
+                    "hour-unit",
+                    cursor,
+                    cursor + len(separator),
+                    text[cursor : cursor + len(separator)],
+                )
+            )
+        minute = self._field(text, cursor + len(separator), 2)
         if minute is None or not 0 <= minute[1] <= 59:
             return None
         minute_end, minute_value = minute
 
         second_value: int | None = None
         second_end = minute_end
-        if text.startswith(self._separator, minute_end):
+        if separator == self._separator and text.startswith(self._separator, minute_end):
             second = self._field(text, minute_end + len(self._separator), 2)
             if second is not None and 0 <= second[1] <= 59:
                 second_end, second_value = second
@@ -2769,6 +2834,12 @@ class FlexibleTimeDetector:
             # Do not truncate a marker-bearing surface to a bare-time candidate when
             # the locale pattern does not license a day period.
             return None
+
+        if period_index is None and separator == self._separator:
+            unit = self._hour_unit(text, cursor)
+            if unit is not None:
+                captures.append(unit)
+                cursor = unit.end
 
         continuation = cursor + len(self._separator)
         if text.startswith(self._separator, cursor) and self._digit_run(text, continuation)[0] > (
@@ -2818,6 +2889,17 @@ class FlexibleTimeDetector:
         value = DateTimeValue(tuple(fields), "gregorian")
         return cursor, tuple(ordered), value
 
+    def _hour_unit(self, text: str, cursor: int) -> Capture | None:
+        """The locale's hour symbol after a time, attached or after one space."""
+        begin = cursor
+        if cursor < len(text) and text[cursor] in _SPACES:
+            cursor += 1
+        for symbol, _attached in self._hour_units:
+            end = cursor + len(symbol)
+            if text[cursor:end].casefold() == symbol.casefold() and _ends_letter_token(text, end):
+                return Capture("hour-unit", begin, end, text[begin:end])
+        return None
+
     def _hour_with_period(
         self,
         text: str,
@@ -2853,6 +2935,8 @@ class FlexibleFractionDetector:
 
     The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
     the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
+    A fraction made plural ("3/4s") spans its suffix, with ``suffix`` (and
+    ``apostrophe``) captures, as :class:`PluralNumeralDetector` reads a numeral.
     The value is a :class:`NumberValue` whose ``decimal`` is computed with ``Decimal``:
     a terminating fraction is exact (``1/2`` -> ``"0.5"``, ``3 1/2`` -> ``"3.5"``); a
     non-terminating one is quantized to twelve fractional digits (``1/3`` ->
@@ -3053,7 +3137,12 @@ class FlexibleFractionDetector:
         decimal = self._canonical(whole_value, numerator, denominator)
         if negative:
             decimal = "-" + decimal
-        return denominator_end, tuple(captures), NumberValue(decimal=decimal, currency=None)
+        end = denominator_end
+        plural = _plural_suffix(text, end, self.locale)
+        if plural is not None:
+            end, suffix_captures = plural
+            captures.extend(suffix_captures)
+        return end, tuple(captures), NumberValue(decimal=decimal, currency=None)
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible fractions in source order."""

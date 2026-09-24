@@ -4927,6 +4927,8 @@ Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
 The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
 the fraction slash is the mathematical solidus (``/`` or U+2044), not locale data.
+A fraction made plural ("3/4s") spans its suffix, with ``suffix`` (and
+``apostrophe``) captures, as :class:`PluralNumeralDetector` reads a numeral.
 The value is a :class:`NumberValue` whose ``decimal`` is computed with ``Decimal``:
 a terminating fraction is exact (``1/2`` -> ``"0.5"``, ``3 1/2`` -> ``"3.5"``); a
 non-terminating one is quantized to twelve fractional digits (``1/3`` ->
@@ -5087,6 +5089,12 @@ the time, and its value then carries ``H`` alone.
 
 The day-period forms are ICU's, at every width, for every CLDR locale of the same
 language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
+
+A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
+CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
+from :func:`_hour_unit_forms`. Composing a clock time with a unit symbol this way
+is hand-rolled, as CLDR has no pattern for it; the symbol is captured as
+``hour-unit``.
 
 #### `FlexibleTimeDetector(locale: 'str') -> 'None'`
 
