@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - UNRELEASED
+
 ### Added
 
 - A spell-out expansion type in the abbreviation lexicon: `<expansion type="spell-out">`
@@ -352,5 +354,6 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/lenzo-ka/icukit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lenzo-ka/icukit/compare/v0.3.0...v0.4.0
