@@ -1261,6 +1261,7 @@ class FlexibleNumberDetector:
             if cursor < len(text) and _is_word_character(text[cursor]):
                 continue
             surface = text[start:cursor]
+            # "II's" is one word, so a Roman reading spans its possessive or plural suffix.
             position = icu.ParsePosition(0)
             parsed = self._roman.parse(surface, position)
             if parsed is None or position.getIndex() != len(surface):
@@ -1268,8 +1269,16 @@ class FlexibleNumberDetector:
             value = parsed.getInt64()
             if self._roman.format(value, rule_set) != surface:
                 continue
-            capture = Capture("integer", start, cursor, surface, str(value), "roman")
-            return cursor, (capture,), NumberValue(str(value), None)
+            captures = [Capture("integer", start, cursor, surface, str(value), "roman")]
+            end = cursor
+            if (
+                _is_apostrophe(text[cursor : cursor + 1])
+                and text[cursor + 1 : cursor + 2] == "s"
+                and _ends_letter_token(text, cursor + 2)
+            ):
+                end = cursor + 2
+                captures.append(Capture("suffix", cursor, end, text[cursor:end]))
+            return end, tuple(captures), NumberValue(str(value), None)
         return None
 
 
@@ -3008,6 +3017,49 @@ class FlexibleFractionDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
+@cache
+def _foreign_ordinal_suffixes(locale: str) -> frozenset[str]:
+    """Ordinal suffixes ICU writes in other locales that ``locale`` can read unambiguously.
+
+    Every locale's RBNF digit-ordinal rule sets are rendered for small values, and a
+    suffix is kept when it holds a letter and none of its letters is in ``locale``'s
+    CLDR exemplar letters (standard or auxiliary): Italian and Portuguese "º" and "ª",
+    Spanish ".º", but not French "e" or Catalan "a", which an English text writes as
+    letters of its own. A suffix of punctuation alone (German "1.") is not kept.
+    """
+    data = icu.LocaleData(locale)
+    own = [
+        data.getExemplarSet(0, kind)
+        for kind in (
+            icu.ULocaleDataExemplarSetType.ES_STANDARD,
+            icu.ULocaleDataExemplarSetType.ES_AUXILIARY,
+        )
+    ]
+    suffixes: set[str] = set()
+    languages = {icu.Locale(name).getLanguage() for name in icu.Locale.getAvailableLocales()}
+    for language in sorted(languages):
+        try:
+            rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu.Locale(language))
+        except icu.ICUError:
+            continue
+        for index in range(rbnf.getNumberOfRuleSetNames()):
+            name = rbnf.getRuleSetName(index)
+            if "digits" not in name or name.startswith("%%"):
+                continue
+            for value in (1, 2, 3, 4, 11, 21):
+                rendered = rbnf.format(value, name)
+                digits = [i for i, character in enumerate(rendered) if character.isdigit()]
+                if not digits or digits[0] != 0:
+                    continue
+                suffix = rendered[digits[-1] + 1 :]
+                letters = [character for character in suffix if icu.Char.isalpha(character)]
+                if letters and not any(
+                    exemplars.contains(letter.lower()) for letter in letters for exemplars in own
+                ):
+                    suffixes.add(suffix)
+    return frozenset(suffixes)
+
+
 class FlexibleOrdinalDetector:
     """Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
 
@@ -3017,6 +3069,11 @@ class FlexibleOrdinalDetector:
     are the non-digit parts around each rendering. No affix is hard-coded, and no fragile
     ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
     ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
+
+    A grouped integer ("1,000th") is accepted when ICU renders the same surface for its
+    value. An ordinal suffix ICU writes in another locale is also read when it cannot be
+    mistaken for this locale's letters ("1º" in English text; see
+    :func:`_foreign_ordinal_suffixes`).
 
     Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
     treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
@@ -3041,6 +3098,12 @@ class FlexibleOrdinalDetector:
             and not name.startswith("%%")
         )
         self._digits = _locale_digit_map(icu_locale)
+        self._grouping = icu.DecimalFormatSymbols(icu_locale).getSymbol(
+            icu.DecimalFormatSymbols.kGroupingSeparatorSymbol
+        )
+        self._foreign_suffixes = tuple(
+            sorted(_foreign_ordinal_suffixes(locale), key=len, reverse=True)
+        )
         self._spec = NumberFormatSpec(locale, "decimal")
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
@@ -3049,6 +3112,28 @@ class FlexibleOrdinalDetector:
         while cursor < len(text) and text[cursor] in self._digits:
             value = value * 10 + self._digits[text[cursor]]
             cursor += 1
+        return cursor, value
+
+    def _grouped_run(self, text: str, start: int) -> tuple[int, int]:
+        """A digit run that may hold the locale's grouping separator between digits."""
+        cursor = start
+        value = 0
+        while cursor < len(text):
+            if text[cursor] in self._digits:
+                value = value * 10 + self._digits[text[cursor]]
+                cursor += 1
+                continue
+            after = cursor + len(self._grouping)
+            if (
+                self._grouping
+                and cursor > start
+                and text.startswith(self._grouping, cursor)
+                and after < len(text)
+                and text[after] in self._digits
+            ):
+                cursor = after
+                continue
+            break
         return cursor, value
 
     def _affixes(self, value: int) -> set[tuple[str, str]]:
@@ -3080,8 +3165,22 @@ class FlexibleOrdinalDetector:
             if digit_start > 0 and text[digit_start - 1] in self._digits:
                 continue
             digit_end, value = self._digit_run(text, digit_start)
+            grouped_end, grouped_value = self._grouped_run(text, digit_start)
+            if grouped_end > digit_end and digit_start == start:
+                found = self._grouped(text, start, grouped_end, grouped_value)
+                if found is not None:
+                    return found
             if value < 1:
                 continue
+            if digit_start == start:
+                for suffix in self._foreign_suffixes:
+                    if text[digit_end : digit_end + len(suffix)].casefold() == suffix.casefold():
+                        end = digit_end + len(suffix)
+                        return (
+                            end,
+                            self._captures(text, start, digit_start, digit_end, end, value),
+                            NumberValue(str(value), None),
+                        )
             matched = None
             for prefix, suffix in sorted(
                 self._affixes(value), key=lambda pair: len(pair[0]) + len(pair[1]), reverse=True
@@ -3125,6 +3224,49 @@ class FlexibleOrdinalDetector:
                     )
                 )
             return affix_end, tuple(captures), NumberValue(decimal=str(value), currency=None)
+        return None
+
+    def _captures(
+        self, text: str, start: int, digit_start: int, digit_end: int, end: int, value: int
+    ) -> tuple[Capture, ...]:
+        captures = []
+        if digit_start > start:
+            captures.append(
+                Capture(
+                    "ordinal-affix", start, digit_start, text[start:digit_start], None, "symbol"
+                )
+            )
+        captures.append(
+            Capture(
+                "integer",
+                digit_start,
+                digit_end,
+                text[digit_start:digit_end],
+                str(value),
+                "numeric",
+            )
+        )
+        if end > digit_end:
+            captures.append(
+                Capture("ordinal-affix", digit_end, end, text[digit_end:end], None, "symbol")
+            )
+        return tuple(captures)
+
+    def _grouped(
+        self, text: str, start: int, grouped_end: int, value: int
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        """A grouped ordinal, accepted only when ICU renders exactly this surface."""
+        if value < 1 or value > _MAX_RBNF_ORDINAL_VALUE:
+            return None
+        for name in self._rule_set_names or (None,):
+            try:
+                rendered = self._rbnf.format(value, name) if name else self._rbnf.format(value)
+            except (icu.ICUError, SystemError):
+                return None
+            end = start + len(rendered)
+            if end > grouped_end and text[start:end].casefold() == rendered.casefold():
+                captures = self._captures(text, start, start, grouped_end, end, value)
+                return end, captures, NumberValue(str(value), None)
         return None
 
     def detect(self, text: str) -> list[ValueDetection]:

@@ -4974,6 +4974,11 @@ are the non-digit parts around each rendering. No affix is hard-coded, and no fr
 ordinal *parse* is attempted. A surface is accepted only when its affixes match a pair
 ICU generates for the parsed value, so ``21th`` is rejected while ``21st`` is not.
 
+A grouped integer ("1,000th") is accepted when ICU renders the same surface for its
+value. An ordinal suffix ICU writes in another locale is also read when it cannot be
+mistaken for this locale's letters ("1º" in English text; see
+:func:`_foreign_ordinal_suffixes`).
+
 Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
 treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
 boundary it can return an incorrect suffix, and for very large integers it can raise
