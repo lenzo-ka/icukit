@@ -420,10 +420,12 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### `compile_lexicon(locale: 'str' = 'en') -> 'CompiledLexicon | None'`
 
-Load and compile the language lexicon, or return ``None`` when absent.
+Load and compile the locale's lexicon, or return ``None`` when absent.
 
-Locale variants use their ICU language subtag, making ``en_US`` consume
-the packaged ``en`` lexicon while unsupported languages degrade cleanly.
+The lexicon follows ICU's locale fallback (see
+:func:`~icukit.abbreviations.load_locale_lexicon`): ``en_US`` reads the
+packaged ``en`` lexicon with its ``en_US`` overlay, ``en_GB`` reads ``en``,
+and unsupported languages degrade cleanly.
 
 ## icukit.abbreviation_recognize
 
@@ -448,7 +450,11 @@ Scan token starts and return all co-located readings.
 
 One annotated expansion of an abbreviation surface.
 
-#### `AbbreviationExpansion(text: 'str', sense: 'str', cue: 'str | None' = None) -> None`
+``type`` is ``"expansion"`` when ``text`` is read as words, or ``"spell-out"``
+when the surface is spelled out and ``text`` lists the characters to name,
+separated by spaces (``MD`` -> ``M D``).
+
+#### `AbbreviationExpansion(text: 'str', sense: 'str', cue: 'str | None' = None, type: 'str' = 'expansion') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -562,8 +568,11 @@ One expansion reading of an abbreviation surface.
 ``sense`` names the semantic class of the expansion (``title``, ``saint``,
 ``thoroughfare``, ...). ``cue`` is an optional positional hint that favors
 this reading (e.g. ``precedes-number``); it is advisory, never a rule.
+``type`` is how the expansion is spoken: ``"expansion"`` reads ``value`` as
+words, and ``"spell-out"`` spells the surface out, with ``value`` listing
+the characters to name, separated by spaces (``MD`` -> ``M D``).
 
-#### `Expansion(value: 'str', sense: 'str', cue: 'str | None' = None) -> None`
+#### `Expansion(value: 'str', sense: 'str', cue: 'str | None' = None, type: 'str' = 'expansion') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -581,7 +590,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### `available_locales() -> 'tuple[str, ...]'`
 
-Return the language codes with a packaged abbreviation lexicon.
+Return the locale ids with a packaged abbreviation lexicon.
 
 ### `load_lexicon(language: 'str' = 'en') -> 'AbbreviationLexicon'`
 
@@ -593,6 +602,36 @@ for the requested language.
 ### `load_lexicon_file(path: 'str | Path') -> 'AbbreviationLexicon'`
 
 Load and parse an abbreviation lexicon from an XML file path.
+
+### `load_locale_lexicon(locale: 'str') -> 'AbbreviationLexicon'`
+
+Load the lexicon for ``locale``, overlaying each packaged regional lexicon.
+
+Every packaged lexicon on :func:`locale_chain` contributes, from the most
+general to the most specific: ``en_US`` reads ``en.xml`` with ``en_US.xml``
+over it, and ``en_GB`` reads ``en.xml`` alone unless an ``en_001.xml`` or
+``en_GB.xml`` is packaged. Raises :class:`~icukit.errors.AbbreviationError`
+when no lexicon on the chain is packaged.
+
+### `locale_chain(locale: 'str') -> 'tuple[str, ...]'`
+
+Return ``locale`` and its ICU fallback parents, most specific first, without root.
+
+The chain is ICU's own: a locale whose resource bundle names a CLDR parent
+(``en_GB`` -> ``en_001``) falls back to it, and any other drops its last
+subtag (``en_US`` -> ``en``). A parent is honored only when the locale
+declares it itself: ``zh_Hant_TW`` inherits ``zh_Hant``'s parent, which
+belongs to ``zh_Hant``.
+
+### `merge_lexicons(general: 'AbbreviationLexicon', specific: 'AbbreviationLexicon') -> 'AbbreviationLexicon'`
+
+Overlay ``specific`` (a regional lexicon) on ``general`` (its parent).
+
+An entry whose surface the parent also lists keeps the parent's expansions
+and adds the child's after them, and the child's ``break`` and ``also``
+govern. A surface only the child lists is appended. A pattern kind the child
+declares replaces the parent's. The merged lexicon reports the child's
+language.
 
 ### `parse_lexicon(xml_text: 'str') -> 'AbbreviationLexicon'`
 

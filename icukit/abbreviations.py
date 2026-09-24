@@ -41,6 +41,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from xml.etree.ElementTree import Element, TreeBuilder
 
+import icu
+
 from .errors import AbbreviationError
 
 __all__ = [
@@ -52,6 +54,9 @@ __all__ = [
     "BREAK_AMBIGUOUS",
     "load_lexicon",
     "load_lexicon_file",
+    "load_locale_lexicon",
+    "locale_chain",
+    "merge_lexicons",
     "parse_lexicon",
     "available_locales",
 ]
@@ -59,6 +64,9 @@ __all__ = [
 # ``break`` values (the attribute name is a Python keyword, hence the aliases).
 BREAK_SUPPRESS = "suppress"
 BREAK_AMBIGUOUS = "ambiguous"
+
+EXPANSION = "expansion"
+SPELL_OUT = "spell-out"
 
 _DATA_DIR = Path(__file__).parent / "data" / "abbreviations"
 # The XML namespace URI, used when reading ``xml:lang`` off the root element.
@@ -72,11 +80,15 @@ class Expansion:
     ``sense`` names the semantic class of the expansion (``title``, ``saint``,
     ``thoroughfare``, ...). ``cue`` is an optional positional hint that favors
     this reading (e.g. ``precedes-number``); it is advisory, never a rule.
+    ``type`` is how the expansion is spoken: ``"expansion"`` reads ``value`` as
+    words, and ``"spell-out"`` spells the surface out, with ``value`` listing
+    the characters to name, separated by spaces (``MD`` -> ``M D``).
     """
 
     value: str
     sense: str
     cue: str | None = None
+    type: str = EXPANSION
 
 
 @dataclass(frozen=True)
@@ -191,7 +203,16 @@ def _expansion_from_element(element: Element) -> Expansion:
     value = (element.text or "").strip()
     if not value:
         raise AbbreviationError(f"<expansion sense='{sense}'> has no value")
-    return Expansion(value=value, sense=sense, cue=element.get("cue"))
+    kind = element.get("type", EXPANSION)
+    if kind not in {EXPANSION, SPELL_OUT}:
+        raise AbbreviationError(f"<expansion> has an unknown type '{kind}'")
+    if kind == SPELL_OUT and not all(
+        len(character) == 1 and character.isalnum() for character in value.split()
+    ):
+        raise AbbreviationError(
+            f"<expansion type='spell-out'> must list single characters, not '{value}'"
+        )
+    return Expansion(value=value, sense=sense, cue=element.get("cue"), type=kind)
 
 
 def _entry_from_element(element: Element) -> Entry:
@@ -283,8 +304,91 @@ def load_lexicon(language: str = "en") -> AbbreviationLexicon:
     return load_lexicon_file(file_path)
 
 
+def locale_chain(locale: str) -> tuple[str, ...]:
+    """Return ``locale`` and its ICU fallback parents, most specific first, without root.
+
+    The chain is ICU's own: a locale whose resource bundle names a CLDR parent
+    (``en_GB`` -> ``en_001``) falls back to it, and any other drops its last
+    subtag (``en_US`` -> ``en``). A parent is honored only when the locale
+    declares it itself: ``zh_Hant_TW`` inherits ``zh_Hant``'s parent, which
+    belongs to ``zh_Hant``.
+    """
+    chain: list[str] = []
+    name = icu.Locale(locale).getName()
+    while name and name != "root" and name not in chain:
+        chain.append(name)
+        parent = None
+        try:
+            declared = icu.ResourceBundle("", icu.Locale(name)).get("%%Parent")
+            if declared.getLocale().getName() == name:
+                parent = declared.getString()
+        except icu.ICUError:
+            parent = None
+        name = parent if parent is not None else name.rpartition("_")[0]
+    return tuple(chain)
+
+
+def merge_lexicons(
+    general: AbbreviationLexicon, specific: AbbreviationLexicon
+) -> AbbreviationLexicon:
+    """Overlay ``specific`` (a regional lexicon) on ``general`` (its parent).
+
+    An entry whose surface the parent also lists keeps the parent's expansions
+    and adds the child's after them, and the child's ``break`` and ``also``
+    govern. A surface only the child lists is appended. A pattern kind the child
+    declares replaces the parent's. The merged lexicon reports the child's
+    language.
+    """
+    merged = {entry.surface: entry for entry in general.entries}
+    for entry in specific.entries:
+        base = merged.get(entry.surface)
+        if base is None:
+            merged[entry.surface] = entry
+            continue
+        expansions = base.expansions + tuple(
+            expansion for expansion in entry.expansions if expansion not in base.expansions
+        )
+        merged[entry.surface] = Entry(
+            surface=entry.surface,
+            break_behavior=entry.break_behavior,
+            expansions=expansions,
+            also=entry.also if entry.also is not None else base.also,
+        )
+    patterns = {pattern.kind: pattern for pattern in general.patterns}
+    patterns.update({pattern.kind: pattern for pattern in specific.patterns})
+    return AbbreviationLexicon(
+        language=specific.language,
+        entries=tuple(merged.values()),
+        patterns=tuple(patterns.values()),
+        status=specific.status,
+    )
+
+
+def load_locale_lexicon(locale: str) -> AbbreviationLexicon:
+    """Load the lexicon for ``locale``, overlaying each packaged regional lexicon.
+
+    Every packaged lexicon on :func:`locale_chain` contributes, from the most
+    general to the most specific: ``en_US`` reads ``en.xml`` with ``en_US.xml``
+    over it, and ``en_GB`` reads ``en.xml`` alone unless an ``en_001.xml`` or
+    ``en_GB.xml`` is packaged. Raises :class:`~icukit.errors.AbbreviationError`
+    when no lexicon on the chain is packaged.
+    """
+    names = [
+        name for name in reversed(locale_chain(locale)) if (_DATA_DIR / f"{name}.xml").is_file()
+    ]
+    if not names:
+        available = ", ".join(available_locales()) or "none"
+        raise AbbreviationError(
+            f"no abbreviation lexicon for locale '{locale}' (available: {available})"
+        )
+    lexicon = load_lexicon_file(_DATA_DIR / f"{names[0]}.xml")
+    for name in names[1:]:
+        lexicon = merge_lexicons(lexicon, load_lexicon_file(_DATA_DIR / f"{name}.xml"))
+    return lexicon
+
+
 def available_locales() -> tuple[str, ...]:
-    """Return the language codes with a packaged abbreviation lexicon."""
+    """Return the locale ids with a packaged abbreviation lexicon."""
     if not _DATA_DIR.is_dir():
         return ()
     return tuple(sorted(path.stem for path in _DATA_DIR.glob("*.xml")))

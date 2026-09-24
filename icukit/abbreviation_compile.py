@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-import icu
-
-from .abbreviations import AbbreviationLexicon, Entry, Pattern, load_lexicon
+from .abbreviations import AbbreviationLexicon, Entry, Pattern, load_locale_lexicon
 from .errors import AbbreviationError
 
 __all__ = ["CompiledLexicon", "PatternMatch", "compile_lexicon"]
@@ -105,13 +103,14 @@ class CompiledLexicon:
 
 
 def compile_lexicon(locale: str = "en") -> CompiledLexicon | None:
-    """Load and compile the language lexicon, or return ``None`` when absent.
+    """Load and compile the locale's lexicon, or return ``None`` when absent.
 
-    Locale variants use their ICU language subtag, making ``en_US`` consume
-    the packaged ``en`` lexicon while unsupported languages degrade cleanly.
+    The lexicon follows ICU's locale fallback (see
+    :func:`~icukit.abbreviations.load_locale_lexicon`): ``en_US`` reads the
+    packaged ``en`` lexicon with its ``en_US`` overlay, ``en_GB`` reads ``en``,
+    and unsupported languages degrade cleanly.
     """
-    language = icu.Locale(locale).getLanguage() or locale
     try:
-        return CompiledLexicon.from_lexicon(load_lexicon(language))
+        return CompiledLexicon.from_lexicon(load_locale_lexicon(locale))
     except AbbreviationError:
         return None

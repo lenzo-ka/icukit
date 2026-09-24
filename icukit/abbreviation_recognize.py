@@ -28,11 +28,17 @@ class AbbreviationSpec:
 
 @dataclass(frozen=True)
 class AbbreviationExpansion:
-    """One annotated expansion of an abbreviation surface."""
+    """One annotated expansion of an abbreviation surface.
+
+    ``type`` is ``"expansion"`` when ``text`` is read as words, or ``"spell-out"``
+    when the surface is spelled out and ``text`` lists the characters to name,
+    separated by spaces (``MD`` -> ``M D``).
+    """
 
     text: str
     sense: str
     cue: str | None = None
+    type: str = "expansion"
 
 
 @dataclass(frozen=True)
@@ -146,7 +152,9 @@ class AbbreviationDetector:
                 entry = self.compiled.entries[literal]
                 end = start + len(literal)
                 expansions = tuple(
-                    AbbreviationExpansion(expansion.value, expansion.sense, expansion.cue)
+                    AbbreviationExpansion(
+                        expansion.value, expansion.sense, expansion.cue, expansion.type
+                    )
                     for expansion in entry.expansions
                 )
                 detections.append(
