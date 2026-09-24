@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  US English overlay for icukit's English abbreviation lexicon.
+
+  Loaded over en.xml by ICU locale fallback (en_US, and en_US_POSIX through
+  it), never on its own. It holds what is true of US English only: the
+  traditional US state abbreviations, and Maryland as a reading of the postal
+  code MD. An entry whose surface en.xml also lists adds its expansions to
+  en.xml's. Status and review state follow en.xml.
+
+  Validated against abbreviations.rng.
+-->
+<abbreviations xml:lang="en-US" status="draft">
+  <!-- ============================ US states (traditional forms) ====== -->
+  <entry break="suppress"><surface>Ala.</surface><expansion sense="region">Alabama</expansion></entry>
+  <entry break="suppress"><surface>Ariz.</surface><expansion sense="region">Arizona</expansion></entry>
+  <entry break="suppress"><surface>Ark.</surface><expansion sense="region">Arkansas</expansion></entry>
+  <entry break="suppress"><surface>Calif.</surface><expansion sense="region">California</expansion></entry>
+  <entry break="suppress"><surface>Colo.</surface><expansion sense="region">Colorado</expansion></entry>
+  <entry break="suppress"><surface>Conn.</surface><expansion sense="region">Connecticut</expansion></entry>
+  <entry break="suppress"><surface>Del.</surface><expansion sense="region">Delaware</expansion></entry>
+  <entry break="suppress"><surface>Fla.</surface><expansion sense="region">Florida</expansion></entry>
+  <entry break="suppress"><surface>Ga.</surface><expansion sense="region">Georgia</expansion></entry>
+  <entry break="suppress"><surface>Ill.</surface><expansion sense="region">Illinois</expansion></entry>
+  <entry break="suppress"><surface>Ind.</surface><expansion sense="region">Indiana</expansion></entry>
+  <entry break="suppress"><surface>Kan.</surface><expansion sense="region">Kansas</expansion></entry>
+  <entry break="suppress"><surface>Ky.</surface><expansion sense="region">Kentucky</expansion></entry>
+  <entry break="suppress"><surface>La.</surface><expansion sense="region">Louisiana</expansion></entry>
+  <entry break="suppress"><surface>Mass.</surface><expansion sense="region">Massachusetts</expansion></entry>
+  <entry break="suppress"><surface>Md.</surface><expansion sense="region">Maryland</expansion></entry>
+  <entry break="suppress"><surface>Mich.</surface><expansion sense="region">Michigan</expansion></entry>
+  <entry break="suppress"><surface>Minn.</surface><expansion sense="region">Minnesota</expansion></entry>
+  <entry break="suppress"><surface>Miss.</surface><expansion sense="region">Mississippi</expansion></entry>
+  <entry break="suppress"><surface>Mo.</surface><expansion sense="region">Missouri</expansion></entry>
+  <entry break="suppress"><surface>Mont.</surface><expansion sense="region">Montana</expansion></entry>
+  <entry break="suppress"><surface>Neb.</surface><expansion sense="region">Nebraska</expansion></entry>
+  <entry break="suppress"><surface>Nev.</surface><expansion sense="region">Nevada</expansion></entry>
+  <entry break="suppress"><surface>Okla.</surface><expansion sense="region">Oklahoma</expansion></entry>
+  <entry break="suppress"><surface>Ore.</surface><expansion sense="region">Oregon</expansion></entry>
+  <entry break="suppress"><surface>Pa.</surface><expansion sense="region">Pennsylvania</expansion></entry>
+  <entry break="suppress"><surface>Tenn.</surface><expansion sense="region">Tennessee</expansion></entry>
+  <entry break="suppress"><surface>Tex.</surface><expansion sense="region">Texas</expansion></entry>
+  <entry break="suppress"><surface>Va.</surface><expansion sense="region">Virginia</expansion></entry>
+  <entry break="suppress"><surface>Vt.</surface><expansion sense="region">Vermont</expansion></entry>
+  <entry break="suppress"><surface>Wash.</surface><expansion sense="region">Washington</expansion></entry>
+  <entry break="suppress"><surface>Wis.</surface><expansion sense="region">Wisconsin</expansion></entry>
+  <entry break="suppress"><surface>Wyo.</surface><expansion sense="region">Wyoming</expansion></entry>
+  <entry break="suppress"><surface>N.Y.</surface><expansion sense="region">New York</expansion></entry>
+  <entry break="suppress"><surface>N.J.</surface><expansion sense="region">New Jersey</expansion></entry>
+  <entry break="suppress"><surface>N.C.</surface><expansion sense="region">North Carolina</expansion></entry>
+  <entry break="suppress"><surface>S.C.</surface><expansion sense="region">South Carolina</expansion></entry>
+  <entry break="suppress"><surface>N.H.</surface><expansion sense="region">New Hampshire</expansion></entry>
+  <entry break="suppress"><surface>N.M.</surface><expansion sense="region">New Mexico</expansion></entry>
+  <entry break="suppress"><surface>R.I.</surface><expansion sense="region">Rhode Island</expansion></entry>
+  <entry break="suppress"><surface>W.Va.</surface><expansion sense="region">West Virginia</expansion></entry>
+
+  <entry break="suppress">
+    <!-- MD: Maryland's postal code, added to en.xml's spelled-out degree. -->
+    <surface>MD</surface>
+    <expansion sense="region" cue="address">Maryland</expansion>
+  </entry>
+</abbreviations>
