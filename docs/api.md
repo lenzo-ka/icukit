@@ -22,6 +22,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleSpelloutDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTextDateDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
 - [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
@@ -4814,6 +4816,36 @@ Recognizers are the recall-oriented counterpart to the strict detectors in
 :mod:`icukit.detectors`. They deposit structurally valid candidates without requiring the
 surface to equal ICU's canonical formatting; the existing resolver can then select among
 those candidates unchanged.
+
+### class `AlphanumericRunsDetector`
+
+Read a word that mixes letters and digits as its runs.
+
+"3D" is digits "3" then letters "D", "5pm" is "5" then "pm", and "2Q22" is "2", "Q",
+"22": the path a speaker takes when a token has no reading of its own ("three d",
+"five p m"). It spans one ICU word with at least one digit and one letter, and it is
+an alternative beside any other reading of the word, never a replacement for one.
+Each run is a ``digits``, ``letters``, or ``separator`` capture in source order; a
+combining mark or format character stays in the run it extends. A word whose letters
+are in a script ICU breaks between letters (Thai, Lao, Khmer, Myanmar) has no runs
+reading, since ICU's dictionary segmentation does not separate its digits into a
+word of their own.
+
+#### `AlphanumericRunsDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return one runs reading per mixed letter-and-digit word, in source order.
+
+### class `AlphanumericRunsValue`
+
+A token read as its runs: ``(("digits", "3"), ("letters", "D"))`` for "3D".
+
+#### `AlphanumericRunsValue(runs: 'tuple[tuple[str, str], ...]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `FlexibleCompactDetector`
 
