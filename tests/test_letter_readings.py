@@ -90,16 +90,28 @@ def test_only_a_plural_or_possessive_s_is_a_letter_suffix(text):
 
 
 @pytest.mark.parametrize("text", ["Is it?", "As", "Us too", "Ms Smith"])
-def test_a_capital_and_s_that_spell_a_word_are_not_a_letter_plural(text):
-    assert recognize.LetterNameDetector("en_US").detect(text) == []
+def test_a_capital_and_s_that_spell_a_word_are_a_letter_plural_candidate(text):
+    # "As" is a word and a letter's plural ("straight As"). CLDR has no word list to
+    # exclude it by, so the letter reading is kept for the prior to rank.
+    detection = recognize.LetterNameDetector("en_US").detect(text)[0]
+
+    assert (detection["start"], detection["end"]) == (0, 2)
+    assert [capture.name for capture in detection["captures"]] == ["letter", "suffix"]
 
 
-@pytest.mark.parametrize("text", ['"C"s', "«C»s", "‘C‘s"])
+@pytest.mark.parametrize("text", ['"C"s', "«C»s"])
 def test_only_an_apostrophe_marks_a_letter_suffix(text):
     assert all(
         detection["end"] - detection["start"] == 1
         for detection in recognize.LetterNameDetector("en_US").detect(text)
     )
+
+
+def test_an_apostrophe_is_what_unicode_word_breaking_joins():
+    # U+2018 is Word_Break MidNumLet, as U+2019 is, so "C‘s" is one word with a suffix.
+    detection = recognize.LetterNameDetector("en_US").detect("C‘s")[0]
+
+    assert (detection["start"], detection["end"]) == (0, 3)
 
 
 def test_a_suffixed_letter_is_not_a_one_letter_word():

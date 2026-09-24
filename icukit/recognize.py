@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
-from functools import lru_cache
+from functools import cache, lru_cache
 from math import gcd
 
 import icu
@@ -109,10 +109,19 @@ _LETTER_NAMES = {
 }
 # CLDR has no locale word lists. Keep these case-sensitive lexical entries small.
 _SINGLE_LETTER_WORDS = {"en": frozenset({"I", "a", "A", "O"})}
-# A letter and a bare "s" that spell a word ("Is it?") are not that letter's plural.
-_LETTER_S_WORDS = {"en": frozenset({"as", "is", "us", "ms"})}
-# Apostrophes that mark a possessive or a letter's plural; other quotation marks do not.
-_APOSTROPHES = frozenset({"'", "\u2019"})
+
+
+def _is_apostrophe(character: str) -> bool:
+    """A quotation mark that Unicode word breaking treats as joining a word.
+
+    Word_Break Single_Quote (U+0027) and MidNumLet among the quotation marks (U+2019,
+    U+2018) join "C's" into one word; the double quote and guillemets do not, and "."
+    is MidNumLet but no quotation mark.
+    """
+    if not character or not icu.Char.hasBinaryProperty(character, icu.UProperty.QUOTATION_MARK):
+        return False
+    value = icu.Char.getIntPropertyValue(character, icu.UProperty.WORD_BREAK)
+    return value in {icu.UWordBreakValues.SINGLE_QUOTE, icu.UWordBreakValues.MIDNUMLET}
 
 
 @dataclass(frozen=True)
@@ -160,16 +169,18 @@ def _ends_letter_token(text: str, end: int) -> bool:
     return end == len(text) or not _continues_letter_token(text, end, 1)
 
 
-def _letter_suffix_end(text: str, start: int, s_words: frozenset[str]) -> int | None:
+def _letter_suffix_end(text: str, start: int) -> int | None:
     """The end of a letter's plural or possessive suffix: "C's", "p's", or "Cs".
 
-    A bare "s" is taken only after a capital, and not where the pair is itself a word
-    ("As", "Is"). Anything else that continues the token, such as the "m" of "I'm", is
-    no suffix.
+    The suffix is "s" after an apostrophe (see :func:`_is_apostrophe`), or a bare "s"
+    after a capital. "As" and "Is" are words as well, but both readings are kept as
+    candidates for the prior to rank rather than excluded by a word list, which CLDR
+    does not carry. Anything else that continues the token, such as the "m" of "I'm",
+    is no suffix.
     """
     after = start + 1
     if (
-        text[after : after + 1] in _APOSTROPHES
+        _is_apostrophe(text[after : after + 1])
         and text[after + 1 : after + 2] == "s"
         and _ends_letter_token(text, after + 2)
     ):
@@ -177,7 +188,6 @@ def _letter_suffix_end(text: str, start: int, s_words: frozenset[str]) -> int | 
     if (
         text[start].isupper()
         and text[after : after + 1] == "s"
-        and text[start : after + 1].lower() not in s_words
         and _ends_letter_token(text, after + 1)
     ):
         return after + 1
@@ -207,7 +217,6 @@ class LetterNameDetector:
         icu_locale = icu.Locale(locale)
         self._names = _LETTER_NAMES.get(icu_locale.getLanguage())
         self._z_name = "zed" if icu_locale.getCountry() not in {"", "US"} else "zee"
-        self._s_words = _LETTER_S_WORDS.get(icu_locale.getLanguage(), frozenset())
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return isolated letter-name candidates in source order."""
@@ -222,7 +231,7 @@ class LetterNameDetector:
             if _ends_letter_token(text, start + 1):
                 end = start + 1
             else:
-                end = _letter_suffix_end(text, start, self._s_words)
+                end = _letter_suffix_end(text, start)
                 if end is None:
                     continue
             folded = letter.lower()
@@ -2369,6 +2378,57 @@ class FlexibleCurrencyNameDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
+@cache
+def _language_day_periods(language: str) -> tuple[tuple[str, int, bool], ...]:
+    """Every CLDR day-period form of ``language``, as ``(form, index, narrow)``.
+
+    ICU formats the am (index 0) and pm (1) day period at each width, from the
+    abbreviated (``a``) and wide (``aaaa``) to the narrow (``aaaaa``) field, for every
+    available locale of the language: regional forms are part of the language's
+    writing, so en_US reads en_CA's "a.m." and the narrow "a"/"p". ``narrow`` marks a
+    one-letter form. Longest first, so a dotted form wins over a shorter one sharing
+    its start; case-folded duplicates keep their first reading.
+    """
+    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale("en_US"))
+    instants = []
+    for hour in (1, 13):
+        calendar.clear()
+        calendar.set(2026, 0, 3, hour, 0, 0)
+        instants.append(calendar.getTime())
+    seen: dict[str, tuple[str, int, bool]] = {}
+    for name in sorted(icu.Locale.getAvailableLocales()):
+        locale = icu.Locale(name)
+        if locale.getLanguage() != language:
+            continue
+        for field in ("a", "aaaa", "aaaaa"):
+            formatter = icu.SimpleDateFormat(field, locale)
+            formatter.setTimeZone(icu.TimeZone.getGMT())
+            for index, instant in enumerate(instants):
+                form = formatter.format(instant)
+                if form:
+                    seen.setdefault(form.casefold(), (form, index, len(form) == 1))
+    return tuple(sorted(seen.values(), key=lambda form: -len(form[0])))
+
+
+def _match_period(text: str, cursor: int, period: str) -> int | None:
+    """Match a day-period form at ``cursor``, case-insensitively, returning its end.
+
+    A space inside the form (Spanish "a.\u202fm.") matches any space character, since
+    CLDR's no-break spaces are typed as ordinary ones.
+    """
+    for offset, expected in enumerate(period):
+        index = cursor + offset
+        if index >= len(text):
+            return None
+        actual = text[index]
+        if expected in _SPACES:
+            if actual not in _SPACES:
+                return None
+        elif actual.casefold() != expected.casefold():
+            return None
+    return cursor + len(period)
+
+
 class FlexibleTimeDetector:
     """Recognize clock times using a locale's CLDR short-time structure.
 
@@ -2385,7 +2445,12 @@ class FlexibleTimeDetector:
     A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
     12-hour locale); a day period is only consumed when the hour reads 1-12, and the
     reading is then converted to 24-hour ``H`` (12 AM -> 0, 12 PM -> 12). Minutes and
-    seconds are exactly two digits in 0-59.
+    seconds are exactly two digits in 0-59. An hour with no minutes reads only with a
+    day period after it ("5pm", "10 a.m."), where the locale writes the period after
+    the time, and its value then carries ``H`` alone.
+
+    The day-period forms are ICU's, at every width, for every CLDR locale of the same
+    language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
     """
 
     group = "time"
@@ -2400,7 +2465,7 @@ class FlexibleTimeDetector:
         self._inert = structure is None
         self._separator, self.hour12, self._period_side = structure or ("", False, None)
         self._period_prefix = self._period_side == "prefix"
-        self._periods = tuple(icu.DateFormatSymbols(icu_locale).getAmPmStrings())
+        self._periods = _language_day_periods(icu_locale.getLanguage())
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
@@ -2479,11 +2544,18 @@ class FlexibleTimeDetector:
 
     def _day_period(self, text: str, cursor: int) -> tuple[int, str, int] | None:
         marker_start = cursor
-        if cursor < len(text) and text[cursor] in _SPACES:
+        spaced = cursor < len(text) and text[cursor] in _SPACES
+        if spaced:
             cursor += 1
-        for index, period in enumerate(self._periods):
-            if period and text[cursor : cursor + len(period)].casefold() == period.casefold():
-                return cursor + len(period), text[marker_start : cursor + len(period)], index
+        for period, index, narrow in self._periods:
+            # Hand-rolled, as CLDR says nothing about spacing: a one-letter narrow form
+            # is read only attached to the time ("5p"), since a spaced "5 a" is far more
+            # often the article than the morning.
+            if narrow and spaced:
+                continue
+            end = _match_period(text, cursor, period)
+            if end is not None:
+                return end, text[marker_start:end], index
         return None
 
     def _period_precedes(self, text: str, start: int) -> bool:
@@ -2491,8 +2563,8 @@ class FlexibleTimeDetector:
         cursor = start
         if cursor > 0 and text[cursor - 1] in _SPACES:
             cursor -= 1
-        for period in self._periods:
-            if period and cursor - len(period) >= 0:
+        for period, _index, _narrow in self._periods:
+            if cursor - len(period) >= 0:
                 if text[cursor - len(period) : cursor].casefold() == period.casefold():
                     return True
         return False
@@ -2536,7 +2608,7 @@ class FlexibleTimeDetector:
             return None
 
         if not text.startswith(self._separator, cursor):
-            return None
+            return self._hour_with_period(text, hour_start, hour_width, raw_hour, captures)
         minute = self._field(text, cursor + len(self._separator), 2)
         if minute is None or not 0 <= minute[1] <= 59:
             return None
@@ -2617,6 +2689,29 @@ class FlexibleTimeDetector:
         ordered.sort(key=lambda capture: capture.start)
         value = DateTimeValue(tuple(fields), "gregorian")
         return cursor, tuple(ordered), value
+
+    def _hour_with_period(
+        self,
+        text: str,
+        hour_start: int,
+        hour_width: int,
+        raw_hour: int,
+        captures: list[Capture],
+    ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
+        """An hour with no minutes, read only with a day period after it ("5pm")."""
+        if self._period_side != "suffix" or captures or not 1 <= raw_hour <= 12:
+            return None
+        cursor = hour_start + hour_width
+        found = self._day_period(text, cursor)
+        if found is None:
+            return None
+        marker_end, marker_text, period_index = found
+        hour24 = (0 if raw_hour == 12 else raw_hour) + (12 if period_index == 1 else 0)
+        ordered = (
+            Capture("H", hour_start, cursor, text[hour_start:cursor], raw_hour, "numeric"),
+            Capture("day-period", cursor, marker_end, marker_text, None, "symbol"),
+        )
+        return marker_end, ordered, DateTimeValue((("H", hour24),), "gregorian")
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible clock times in source order."""

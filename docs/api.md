@@ -5070,7 +5070,12 @@ without an am/pm field does not license one.
 A bare hour is read directly as a 24-hour ``H`` (so ``15:45`` is recognized in a
 12-hour locale); a day period is only consumed when the hour reads 1-12, and the
 reading is then converted to 24-hour ``H`` (12 AM -> 0, 12 PM -> 12). Minutes and
-seconds are exactly two digits in 0-59.
+seconds are exactly two digits in 0-59. An hour with no minutes reads only with a
+day period after it ("5pm", "10 a.m."), where the locale writes the period after
+the time, and its value then carries ``H`` alone.
+
+The day-period forms are ICU's, at every width, for every CLDR locale of the same
+language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
 
 #### `FlexibleTimeDetector(locale: 'str') -> 'None'`
 
