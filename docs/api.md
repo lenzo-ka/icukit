@@ -4988,6 +4988,11 @@ value. An ordinal suffix ICU writes in another locale is also read when it canno
 mistaken for this locale's letters ("1º" in English text; see
 :func:`_foreign_ordinal_suffixes`).
 
+An uppercase Roman numeral is read as an ordinal when it carries this locale's own
+ordinal suffix for its value ("Ist", "IInd", "XIVth") or a punctuation-only ordinal
+marker ICU writes in some locale ("V.", "X."; see
+:func:`_punctuation_ordinal_markers`). The integer capture's form is ``roman``.
+
 Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
 treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
 boundary it can return an incorrect suffix, and for very large integers it can raise
@@ -5002,7 +5007,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping flexible ordinals in source order.
+Return flexible ordinals in source order: digit ordinals, then Roman ones.
 
 ### class `FlexiblePercentDetector`
 
@@ -5091,6 +5096,10 @@ the time, and its value then carries ``H`` alone.
 
 The day-period forms are ICU's, at every width, for every CLDR locale of the same
 language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
+Likewise the hour-minute separator may be any the language's CLDR patterns use
+("7.30pm"; see :func:`_language_time_separators`), and a time may be followed by a
+time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
+:func:`_language_zone_abbreviations`), captured as ``time-zone``.
 
 A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
 CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
@@ -5106,8 +5115,9 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return flexible clock times in source order.
 
-A time followed by an hour symbol is read both with and without it ("10:30" and
-"10:30 hr"), so neither span replaces the other.
+A time followed by an hour symbol or a time-zone abbreviation is read both with and
+without it ("10:30" and "10:30 hr"; "10 PM" and "10 PM ET"), so neither span
+replaces the other.
 
 ### class `LetterNameDetector`
 

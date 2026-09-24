@@ -2616,6 +2616,55 @@ def _hour_unit_forms(locale: str) -> tuple[tuple[str, bool], ...]:
     return tuple(sorted(forms.values(), key=lambda form: -len(form[0])))
 
 
+@cache
+def _language_time_separators(language: str) -> tuple[str, ...]:
+    """The hour-minute separators CLDR's short-time patterns use across ``language``.
+
+    English locales write ":" and, in en_FI, en_DK and others, "." ("H.mm"), so an
+    English text is read with either.
+    """
+    separators: dict[str, None] = {}
+    for name in sorted(icu.Locale.getAvailableLocales()):
+        locale = icu.Locale(name)
+        if locale.getLanguage() != language:
+            continue
+        pattern = icu.DateFormat.createTimeInstance(icu.DateFormat.kShort, locale).toPattern()
+        structure = FlexibleTimeDetector._time_structure(pattern)
+        if structure is not None:
+            separators.setdefault(structure[0], None)
+    return tuple(separators)
+
+
+@cache
+def _language_zone_abbreviations(language: str) -> tuple[str, ...]:
+    """Time-zone abbreviations ICU writes for the locales of ``language``, longest first.
+
+    Each zone's short and short-generic display names, standard and daylight ("EST",
+    "EDT", "ET", "UTC", "CET"). Keeping only all-capital letter runs of two to five is
+    hand-rolled: it drops the offset forms ("GMT+1") and full names ICU returns when a
+    locale has no abbreviation, which are not what a clock time is followed by.
+    """
+    styles = (icu.TimeZone.SHORT, icu.TimeZone.SHORT_GENERIC)
+    forms: set[str] = set()
+    locales = [
+        icu.Locale(name)
+        for name in sorted(icu.Locale.getAvailableLocales())
+        if icu.Locale(name).getLanguage() == language
+    ]
+    for zone_id in icu.TimeZone.createEnumeration():
+        zone = icu.TimeZone.createTimeZone(zone_id)
+        for locale in locales:
+            for style in styles:
+                for daylight in (False, True):
+                    try:
+                        form = zone.getDisplayName(daylight, style, locale)
+                    except icu.ICUError:
+                        continue
+                    if 2 <= len(form) <= 5 and form.isalpha() and form.isupper():
+                        forms.add(form)
+    return tuple(sorted(forms, key=lambda form: (-len(form), form)))
+
+
 class FlexibleTimeDetector:
     """Recognize clock times using a locale's CLDR short-time structure.
 
@@ -2638,6 +2687,10 @@ class FlexibleTimeDetector:
 
     The day-period forms are ICU's, at every width, for every CLDR locale of the same
     language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m.".
+    Likewise the hour-minute separator may be any the language's CLDR patterns use
+    ("7.30pm"; see :func:`_language_time_separators`), and a time may be followed by a
+    time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
+    :func:`_language_zone_abbreviations`), captured as ``time-zone``.
 
     A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
     CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
@@ -2660,6 +2713,13 @@ class FlexibleTimeDetector:
         self._period_prefix = self._period_side == "prefix"
         self._periods = _language_day_periods(icu_locale.getLanguage())
         self._hour_units = _hour_unit_forms(locale)
+        self._separators = tuple(
+            dict.fromkeys(
+                ((self._separator,) if self._separator else ())
+                + _language_time_separators(icu_locale.getLanguage())
+            )
+        )
+        self._language = icu_locale.getLanguage()
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
@@ -2803,8 +2863,8 @@ class FlexibleTimeDetector:
         if period_index is not None and not 1 <= raw_hour <= 12:
             return None
 
-        separator = self._separator
-        if not text.startswith(separator, cursor):
+        separator = next((sep for sep in self._separators if text.startswith(sep, cursor)), "")
+        if not separator:
             separator = next(
                 (
                     symbol
@@ -2816,7 +2876,9 @@ class FlexibleTimeDetector:
                 "",
             )
             if not separator:
-                return self._hour_with_period(text, hour_start, hour_width, raw_hour, captures)
+                return self._hour_with_period(
+                    text, hour_start, hour_width, raw_hour, captures, read_units
+                )
             captures.append(
                 Capture(
                     "hour-unit",
@@ -2832,12 +2894,13 @@ class FlexibleTimeDetector:
 
         second_value: int | None = None
         second_end = minute_end
-        if separator == self._separator and text.startswith(self._separator, minute_end):
-            second = self._field(text, minute_end + len(self._separator), 2)
+        clock = separator in self._separators
+        if clock and text.startswith(separator, minute_end):
+            second = self._field(text, minute_end + len(separator), 2)
             if second is not None and 0 <= second[1] <= 59:
                 second_end, second_value = second
-            elif self._digit_run(text, minute_end + len(self._separator))[0] > (
-                minute_end + len(self._separator)
+            elif self._digit_run(text, minute_end + len(separator))[0] > (
+                minute_end + len(separator)
             ):
                 return None
 
@@ -2856,14 +2919,20 @@ class FlexibleTimeDetector:
             elif self._day_period(text, cursor) is not None:
                 return None
 
-        if read_units and period_index is None and separator == self._separator:
+        if read_units and period_index is None and clock:
             unit = self._hour_unit(text, cursor)
             if unit is not None:
                 captures.append(unit)
                 cursor = unit.end
+        if read_units:
+            zone = self._time_zone(text, cursor)
+            if zone is not None:
+                captures.append(zone)
+                cursor = zone.end
 
-        continuation = cursor + len(self._separator)
-        if text.startswith(self._separator, cursor) and self._digit_run(text, continuation)[0] > (
+        next_separator = separator if clock else self._separator
+        continuation = cursor + len(next_separator)
+        if text.startswith(next_separator, cursor) and self._digit_run(text, continuation)[0] > (
             continuation
         ):
             return None
@@ -2921,6 +2990,17 @@ class FlexibleTimeDetector:
                 return Capture("hour-unit", begin, end, text[begin:end])
         return None
 
+    def _time_zone(self, text: str, cursor: int) -> Capture | None:
+        """A time-zone abbreviation after a time, after one space ("10 PM ET")."""
+        if not (cursor < len(text) and text[cursor] in _SPACES):
+            return None
+        begin, cursor = cursor, cursor + 1
+        for form in _language_zone_abbreviations(self._language):
+            end = cursor + len(form)
+            if text[cursor:end] == form and _ends_letter_token(text, end):
+                return Capture("time-zone", begin, end, text[begin:end], form)
+        return None
+
     def _hour_with_period(
         self,
         text: str,
@@ -2928,6 +3008,7 @@ class FlexibleTimeDetector:
         hour_width: int,
         raw_hour: int,
         captures: list[Capture],
+        read_units: bool = False,
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
         """An hour with no minutes, read only with a day period after it ("5pm")."""
         if self._period_prefix or captures or not 1 <= raw_hour <= 12:
@@ -2938,17 +3019,23 @@ class FlexibleTimeDetector:
             return None
         marker_end, marker_text, period_index = found
         hour24 = (0 if raw_hour == 12 else raw_hour) + (12 if period_index == 1 else 0)
-        ordered = (
+        ordered = [
             Capture("H", hour_start, cursor, text[hour_start:cursor], raw_hour, "numeric"),
             Capture("day-period", cursor, marker_end, marker_text, None, "symbol"),
-        )
-        return marker_end, ordered, DateTimeValue((("H", hour24),), "gregorian")
+        ]
+        end = marker_end
+        zone = self._time_zone(text, end) if read_units else None
+        if zone is not None:
+            ordered.append(zone)
+            end = zone.end
+        return end, tuple(ordered), DateTimeValue((("H", hour24),), "gregorian")
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return flexible clock times in source order.
 
-        A time followed by an hour symbol is read both with and without it ("10:30" and
-        "10:30 hr"), so neither span replaces the other.
+        A time followed by an hour symbol or a time-zone abbreviation is read both with and
+        without it ("10:30" and "10:30 hr"; "10 PM" and "10 PM ET"), so neither span
+        replaces the other.
         """
         if self._inert:
             return []
@@ -3236,6 +3323,35 @@ def _foreign_ordinal_suffixes(locale: str) -> frozenset[str]:
     return frozenset(suffixes)
 
 
+@cache
+def _punctuation_ordinal_markers() -> frozenset[str]:
+    """Ordinal markers made only of punctuation that ICU writes in some locale.
+
+    German, Danish, and others write an ordinal as a number and a period ("1."), which
+    their RBNF digit-ordinal rule sets render; a Roman numeral written that way ("V.",
+    "Heinrich V.") is read as an ordinal through these markers.
+    """
+    markers: set[str] = set()
+    languages = {icu.Locale(name).getLanguage() for name in icu.Locale.getAvailableLocales()}
+    for language in sorted(languages):
+        try:
+            rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu.Locale(language))
+        except icu.ICUError:
+            continue
+        for index in range(rbnf.getNumberOfRuleSetNames()):
+            name = rbnf.getRuleSetName(index)
+            if "digits" not in name or name.startswith("%%"):
+                continue
+            rendered = rbnf.format(1, name)
+            if rendered[:1].isdigit():
+                suffix = rendered.lstrip("0123456789")
+                if suffix and not any(
+                    character.isalnum() or character.isspace() for character in suffix
+                ):
+                    markers.add(suffix)
+    return frozenset(markers)
+
+
 class FlexibleOrdinalDetector:
     """Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
 
@@ -3250,6 +3366,11 @@ class FlexibleOrdinalDetector:
     value. An ordinal suffix ICU writes in another locale is also read when it cannot be
     mistaken for this locale's letters ("1º" in English text; see
     :func:`_foreign_ordinal_suffixes`).
+
+    An uppercase Roman numeral is read as an ordinal when it carries this locale's own
+    ordinal suffix for its value ("Ist", "IInd", "XIVth") or a punctuation-only ordinal
+    marker ICU writes in some locale ("V.", "X."; see
+    :func:`_punctuation_ordinal_markers`). The integer capture's form is ``roman``.
 
     Known limitation: as a defensive cross-locale constraint, RBNF ordinal formatting is
     treated as reliable only through the signed-32-bit boundary (``2^31 - 1``). Above that
@@ -3272,6 +3393,22 @@ class FlexibleOrdinalDetector:
             for index in range(self._rbnf.getNumberOfRuleSetNames())
             if (name := self._rbnf.getRuleSetName(index)).startswith("%")
             and not name.startswith("%%")
+        )
+        self._roman = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.NUMBERING_SYSTEM, icu_locale)
+        self._roman_rule_set = next(
+            (
+                name
+                for index in range(self._roman.getNumberOfRuleSetNames())
+                if "roman-upper" in (name := self._roman.getRuleSetName(index))
+            ),
+            None,
+        )
+        self._roman_letters = frozenset(
+            character
+            for value in (1, 5, 10, 50, 100, 500, 1000)
+            for character in (
+                self._roman.format(value, self._roman_rule_set) if self._roman_rule_set else ""
+            )
         )
         self._digits = _locale_digit_map(icu_locale)
         self._grouping = icu.DecimalFormatSymbols(icu_locale).getSymbol(
@@ -3453,9 +3590,43 @@ class FlexibleOrdinalDetector:
                 return end, captures, NumberValue(str(value), None)
         return None
 
+    def _match_roman(self, text: str, start: int):
+        """A Roman numeral with an ordinal suffix or marker ("XIVth", "V.")."""
+        if self._roman_rule_set is None or (start > 0 and _is_word_character(text[start - 1])):
+            return None
+        cursor = start
+        while cursor < len(text) and text[cursor] in self._roman_letters:
+            cursor += 1
+        if cursor == start:
+            return None
+        surface = text[start:cursor]
+        position = icu.ParsePosition(0)
+        parsed = self._roman.parse(surface, position)
+        if parsed is None or position.getIndex() != len(surface):
+            return None
+        value = parsed.getInt64()
+        if value < 1 or self._roman.format(value, self._roman_rule_set) != surface:
+            return None
+        suffixes = [suffix for prefix, suffix in self._affixes(value) if not prefix and suffix]
+        suffixes += sorted(_punctuation_ordinal_markers())
+        for suffix in sorted(set(suffixes), key=len, reverse=True):
+            end = cursor + len(suffix)
+            if text[cursor:end].casefold() != suffix.casefold():
+                continue
+            if end < len(text) and _is_word_character(text[end]):
+                continue
+            captures = (
+                Capture("integer", start, cursor, surface, str(value), "roman"),
+                Capture("ordinal-affix", cursor, end, text[cursor:end], None, "symbol"),
+            )
+            return end, captures, NumberValue(str(value), None)
+        return None
+
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping flexible ordinals in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        """Return flexible ordinals in source order: digit ordinals, then Roman ones."""
+        digits = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        romans = _detect_flexible(text, self.locale, self.type, self._spec, self._match_roman)
+        return sorted((*digits, *romans), key=lambda item: (item["start"], item["end"]))
 
 
 def _detect_flexible(
