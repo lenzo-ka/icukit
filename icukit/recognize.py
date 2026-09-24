@@ -460,12 +460,40 @@ def _iso_currency_codes() -> frozenset[str]:
     return frozenset(unit.getSubtype() for unit in icu.CurrencyUnit.getAvailable("currency"))
 
 
+@cache
+def _language_date_structures(
+    language: str,
+) -> tuple[tuple[tuple[str, ...], tuple[str, ...], str], ...]:
+    """The numeric short-date structures CLDR gives the locales of ``language``.
+
+    Each is ``(fields, separators, pattern)`` as :class:`FlexibleDateDetector` reads a
+    pattern, in locale order, without duplicates.
+    """
+    structures = {}
+    for name in sorted(icu.Locale.getAvailableLocales()):
+        locale = icu.Locale(name)
+        if locale.getLanguage() != language:
+            continue
+        pattern = icu.DateFormat.createDateInstance(icu.DateFormat.kShort, locale).toPattern()
+        structure = FlexibleDateDetector._date_structure(pattern)
+        if structure is not None and structure not in structures:
+            structures[structure] = pattern
+    return tuple(
+        (fields, separators, pattern) for (fields, separators), pattern in structures.items()
+    )
+
+
 class FlexibleDateDetector:
-    """Recognize flexible numeric dates using a locale's CLDR short-date structure.
+    """Recognize flexible numeric dates using CLDR short-date structures.
 
     The stable ``date:flexible`` type distinguishes recall candidates from strict,
     skeleton-specific date detections. Two-digit years retain their observed value;
     this detector deposits one maximal candidate rather than expanding a century.
+
+    The locale's own short-date structure is tried first, then every other structure
+    CLDR gives a locale of the same language, and the first that yields a valid date
+    wins: en_US keeps reading "03/05/2013" month first, and also reads "31.12.2012"
+    through en_CH's day-first dotted pattern. The spec names the pattern that matched.
     """
 
     group = "date"
@@ -480,6 +508,12 @@ class FlexibleDateDetector:
         self._inert = structure is None
         self._fields, self._separators = structure or ((), ())
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
+        self._structures = tuple(
+            dict.fromkeys(
+                ((self._fields, self._separators, self.pattern),) * (structure is not None)
+                + _language_date_structures(icu_locale.getLanguage())
+            )
+        )
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "yMd", self.pattern, self._calendar)
@@ -530,13 +564,22 @@ class FlexibleDateDetector:
             cursor += 1
         return cursor, text[start:cursor], value
 
-    def _match(
-        self, text: str, start: int
+    def _match(self, text: str, start: int) -> _FlexibleMatch | None:
+        for fields, separators, pattern in self._structures:
+            found = self._match_structure(text, start, fields, separators)
+            if found is not None:
+                end, captures, value = found
+                spec = DateFormatSpec(self.locale, "yMd", pattern, self._calendar)
+                return _FlexibleMatch(end, captures, value, spec)
+        return None
+
+    def _match_structure(
+        self, text: str, start: int, fields: tuple[str, ...], separators: tuple[str, ...]
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
         cursor = start
         values: dict[str, int] = {}
         captures: list[Capture] = []
-        for index, field in enumerate(self._fields):
+        for index, field in enumerate(fields):
             field_start = cursor
             cursor, surface, value = self._digit_run(text, cursor)
             width = cursor - field_start
@@ -547,8 +590,8 @@ class FlexibleDateDetector:
                 return None
             values[field] = value
             captures.append(Capture(field, field_start, cursor, surface, value, "numeric"))
-            if index < len(self._separators):
-                separator = self._separators[index]
+            if index < len(separators):
+                separator = separators[index]
                 if not text.startswith(separator, cursor):
                     return None
                 cursor += len(separator)

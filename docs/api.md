@@ -4890,11 +4890,16 @@ Return greedy, non-overlapping spelled-currency candidates in source order.
 
 ### class `FlexibleDateDetector`
 
-Recognize flexible numeric dates using a locale's CLDR short-date structure.
+Recognize flexible numeric dates using CLDR short-date structures.
 
 The stable ``date:flexible`` type distinguishes recall candidates from strict,
 skeleton-specific date detections. Two-digit years retain their observed value;
 this detector deposits one maximal candidate rather than expanding a century.
+
+The locale's own short-date structure is tried first, then every other structure
+CLDR gives a locale of the same language, and the first that yields a valid date
+wins: en_US keeps reading "03/05/2013" month first, and also reads "31.12.2012"
+through en_CH's day-first dotted pattern. The spec names the pattern that matched.
 
 #### `FlexibleDateDetector(locale: 'str') -> 'None'`
 

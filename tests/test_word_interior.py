@@ -25,7 +25,8 @@ def _spans(detector, text: str) -> list[tuple[int, int, str]]:
         (DateDetector("en_US", "y"), "16", []),
         (DateDetector("en_US", "y"), "1908", [(0, 4, "1908")]),
         (all_detectors("en_US", ("y",)), "16", [(0, 2, "16")]),
-        (FlexibleDateDetector("en_US"), "2016/07/03", []),
+        # Read whole through en_ZA's y/MM/dd, never as the fragment "6/07/03".
+        (FlexibleDateDetector("en_US"), "2016/07/03", [(0, 10, "2016/07/03")]),
         # Ending before a letter.
         (NumberDetector("en_US", "decimal"), "29th", []),
         (DateDetector("en_US", "y"), "29th", []),
