@@ -117,3 +117,11 @@ def test_digits_against_a_script_written_without_spaces_are_a_token(locale, text
     # ICU's dictionary segmentation leaves these digits inside one "word" with their
     # neighbors, but ICU marks the scripts as breaking between letters.
     assert _spans(FlexibleNumberDetector(locale), text) == expected
+
+
+def test_a_leading_connector_does_not_make_a_number_a_fragment():
+    # "_2788" is one ICU word, but the guard refuses only an offset with alphanumerics on
+    # both sides, and "_" is not one; "2788" after it is a path a speaker can take, so
+    # it stays a reading. "var_2788" is refused: the offset has "r" and "2" around "_".
+    assert _spans(FlexibleNumberDetector("en_US"), "_2788") == [(1, 5, "2788")]
+    assert _spans(FlexibleNumberDetector("en_US"), "var_2788") == []

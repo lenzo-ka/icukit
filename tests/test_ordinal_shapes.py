@@ -68,3 +68,25 @@ def test_a_foreign_ordinal_suffix_must_end_its_word():
 
 def test_no_foreign_ordinal_suffix_holds_a_space():
     assert not any(" " in suffix for suffix in _foreign_ordinal_suffixes("ru_RU"))
+
+
+def test_the_ordinal_scan_does_work_linear_in_the_text(monkeypatch):
+    # Each start used to probe every later digit run in the text; the work is counted
+    # rather than timed so the test cannot flake on a slow machine.
+    detector = FlexibleOrdinalDetector("en_US")
+    probes = {"count": 0}
+    real = detector._digit_run
+
+    def counting(text, start):
+        probes["count"] += 1
+        return real(text, start)
+
+    monkeypatch.setattr(detector, "_digit_run", counting)
+    base = "On the 21st of March, 3 people saw 42 cats. "
+    counts = []
+    for repeats in (20, 40):
+        probes["count"] = 0
+        detector.detect(base * repeats)
+        counts.append(probes["count"])
+
+    assert counts[1] <= counts[0] * 2.5

@@ -24,6 +24,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleTextDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleMixedMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`PluralNumeralDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -4948,6 +4949,13 @@ Return greedy, non-overlapping flexible fractions in source order.
 
 Recognize a flexible number followed by a reflectively derived ICU unit surface.
 
+The surfaces are the unit's short, narrow, and wide forms as ICU formats them
+("5 km", "5km", "5 kilometers"), for an amount in each of the locale's plural
+categories (see :func:`_plural_samples`), each also in the spellings ICU equates with
+it (see :func:`_unit_surface_variants`: "km2", 12"). A rate ("1.0/km²", "3 per
+square kilometer") is read through CLDR's per-unit pattern, with the value's unit
+``per-<unit>``; a symbol-only per form follows the number directly.
+
 #### `FlexibleMeasureDetector(locale: 'str', unit: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -4955,6 +4963,26 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible measure candidates in source order.
+
+### class `FlexibleMixedMeasureDetector`
+
+Recognize a mixed-unit measure, such as feet and inches: "5'10"", "5 ft, 10 in".
+
+``unit`` is an ICU mixed-unit identifier (``foot-and-inch``, ``pound-and-ounce``).
+Everything is read from ICU: each component's surfaces as
+:class:`FlexibleMeasureDetector` reads a single unit, the joiner between components
+from ICU's own formatting of the mixed unit at each width ("5′ 10″", "5 ft, 10 in"),
+optional where the joiner is only a space, and the factor between the components
+from ICU (1.5 feet formats as 1 foot 6 inches). The value is the whole quantity in
+the smallest component, which is exact ("5'10"" is 70 inches).
+
+#### `FlexibleMixedMeasureDetector(locale: 'str', unit: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping mixed-unit measures in source order.
 
 ### class `FlexibleNumberDetector`
 
@@ -5013,6 +5041,9 @@ Return flexible ordinals in source order: digit ordinals, then Roman ones.
 
 Recognize flexible numbers adjacent to the locale's percent symbol.
 
+The percent may also be written as a wide name ICU gives the percent unit in any
+locale of the language ("5 percent", "5 per cent"), after the number.
+
 #### `FlexiblePercentDetector(locale: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -5065,13 +5096,28 @@ Return greedy, non-overlapping spelled-out cardinals in source order.
 
 Recognize textual-month dates licensed by CLDR date patterns and symbols.
 
+The structures are the locale's own medium, long, and full patterns (with their
+year-optional subsets), plus the day-month-year, month-year, and day-month patterns
+CLDR gives every locale of the same language, so en_US reads en_GB's "1 July" and
+"23 October 2014". An abbreviated month may carry a period where the locale's
+abbreviation lexicon lists the month that way ("Oct. 2006", "Jan. 1").
+
+A year beside an era abbreviation CLDR gives the language ("500 BC") is read as a
+year with its era, in the order the language's CLDR ``yG`` pattern writes them (year
+first in English, so "Vancouver, BC 2010" is not 2010 BC). The era names are
+Gregorian, so the value is a Gregorian year: ``G`` (0 before the epoch, 1 after, as
+ICU numbers them) and ``y``, with ``era`` and ``y`` captures.
+
 #### `FlexibleTextDateDetector(locale: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping textual-date candidates in source order.
+Return textual-date, day-month, and era-year candidates in source order.
+
+Each kind is its own pass, so their readings may overlap ("5 May 2000 AD" gives
+the date and "2000 AD"); none takes a start from another.
 
 ### class `FlexibleTimeDetector`
 
