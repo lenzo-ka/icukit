@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from functools import cache, lru_cache
+from itertools import product
 from math import gcd
 
 import icu
@@ -42,6 +43,7 @@ from .detectors import (
 
 __all__ = [
     "AlphanumericRunsDetector",
+    "FlexibleMixedMeasureDetector",
     "AlphanumericRunsValue",
     "PluralNumeralDetector",
     "FlexibleCompactDetector",
@@ -899,6 +901,40 @@ def _language_eras(language: str) -> tuple[tuple[str, int], ...]:
 
 
 @cache
+def _lexicon_month_expansions(locale: str) -> tuple[tuple[str, str], ...]:
+    """Dotted month abbreviations in the locale's lexicon, with the month each expands to."""
+    from .abbreviation_compile import compile_lexicon
+
+    compiled = compile_lexicon(locale)
+    if compiled is None:
+        return ()
+    return tuple(
+        (entry.surface, expansion.value)
+        for entry in compiled.lexicon.entries
+        if entry.surface.endswith(".")
+        for expansion in entry.expansions
+        if expansion.sense == "month"
+    )
+
+
+@cache
+def _language_era_orders(language: str) -> tuple[bool, bool]:
+    """Whether the language's CLDR ``yG`` patterns put the year first, the era first."""
+    year_first = era_first = False
+    for name in sorted(icu.Locale.getAvailableLocales()):
+        locale = icu.Locale(name)
+        if locale.getLanguage() != language:
+            continue
+        pattern = icu.DateTimePatternGenerator.createInstance(locale).getBestPattern("yG")
+        year_at, era_at = pattern.find("y"), pattern.find("G")
+        if year_at < 0 or era_at < 0:
+            continue
+        year_first |= year_at < era_at
+        era_first |= era_at < year_at
+    return year_first, era_first
+
+
+@cache
 def _lexicon_month_abbreviations(locale: str) -> frozenset[str]:
     """Month abbreviations with a period that the locale's abbreviation lexicon lists.
 
@@ -928,9 +964,11 @@ class FlexibleTextDateDetector:
     "23 October 2014". An abbreviated month may carry a period where the locale's
     abbreviation lexicon lists the month that way ("Oct. 2006", "Jan. 1").
 
-    A year beside an era abbreviation CLDR gives the language ("500 BC", "AD 2000") is
-    read as a year with its era; the value carries ``G`` (0 before the epoch, 1 after,
-    as ICU numbers eras) and ``y``, with ``era`` and ``y`` captures.
+    A year beside an era abbreviation CLDR gives the language ("500 BC") is read as a
+    year with its era, in the order the language's CLDR ``yG`` pattern writes them (year
+    first in English, so "Vancouver, BC 2010" is not 2010 BC). The era names are
+    Gregorian, so the value is a Gregorian year: ``G`` (0 before the epoch, 1 after, as
+    ICU numbers them) and ``y``, with ``era`` and ``y`` captures.
     """
 
     group = "date"
@@ -945,7 +983,22 @@ class FlexibleTextDateDetector:
         self._months = self._symbol_names(symbols, "month")
         self._weekdays = self._symbol_names(symbols, "weekday")
         self._dotted_months = _lexicon_month_abbreviations(locale)
+        self._dotted = frozenset(surface.casefold() for surface in self._dotted_months)
+        # A lexicon month form CLDR does not name ("Sept." beside CLDR's "Sep") is read as
+        # the month its expansion names.
+        month_values = {surface.casefold(): value for surface, value, _form in self._months}
+        extra = []
+        for surface, expansion in _lexicon_month_expansions(locale):
+            value = month_values.get(expansion.casefold())
+            if value is not None and surface[:-1].casefold() not in month_values:
+                extra.append((surface, value, "short"))
+        if extra:
+            self._months = tuple(
+                sorted((*self._months, *extra), key=lambda item: len(item[0]), reverse=True)
+            )
         self._eras = _language_eras(icu_locale.getLanguage())
+        self._year_first, self._era_first = _language_era_orders(icu_locale.getLanguage())
+        self._era_spec = DateFormatSpec(locale, "yG", "y G", "gregorian")
         self._digits = _locale_digit_map(icu_locale)
 
         structures: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
@@ -973,19 +1026,33 @@ class FlexibleTextDateDetector:
                 if {"M", "d"}.issubset(reduced_fields):
                     structures.append((reduced_fields, reduced_literals, pattern))
         language = icu_locale.getLanguage()
+        day_month: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
         for available in icu.Locale.getAvailableLocales().values():
             if available.getLanguage() != language:
                 continue
             generator = icu.DateTimePatternGenerator.createInstance(available)
-            for skeleton in ("dMMMMy", "dMMMy", "yMMMM", "yMMM", "dMMMM", "dMMM"):
+            for skeleton in ("dMMMMy", "dMMMy", "yMMMM", "yMMM"):
                 pattern = generator.getBestPattern(skeleton)
                 parsed = self._date_structure(pattern)
                 if parsed is None:
                     continue
                 fields, literals = parsed
-                if fields in {("d", "M", "y"), ("M", "y"), ("d", "M"), ("M", "d")}:
+                if fields in {("d", "M", "y"), ("M", "y")}:
                     structures.append((fields, literals, pattern))
+            for skeleton in ("dMMMM", "dMMM"):
+                pattern = generator.getBestPattern(skeleton)
+                parsed = self._date_structure(pattern)
+                if parsed is None:
+                    continue
+                fields, literals = parsed
+                if fields in {("d", "M"), ("M", "d")}:
+                    day_month.append((fields, literals, pattern))
         self._structures = tuple(dict.fromkeys(structures))
+        # Scanned as their own pass: sharing a start with the patterns above would let
+        # "3 May" take the start from "May 5, 2020" in "Issue 3 May 5, 2020".
+        self._day_month_structures = tuple(
+            structure for structure in dict.fromkeys(day_month) if structure not in structures
+        )
         pattern = self._structures[0][2] if self._structures else ""
         self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
         # note: Bare years and decades remain cardinal candidates for downstream reinterpretation.
@@ -1122,7 +1189,7 @@ class FlexibleTextDateDetector:
                 if named is None:
                     return None
                 cursor, value, form = named
-                if field == "M" and text[field_start : cursor + 1] in self._dotted_months:
+                if field == "M" and text[field_start : cursor + 1].casefold() in self._dotted:
                     cursor += 1
                 name = "month" if field == "M" else "weekday"
                 captures.append(
@@ -1173,15 +1240,18 @@ class FlexibleTextDateDetector:
         ordered = tuple((field, values[field]) for field in ("y", "M", "d") if field in values)
         return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
 
-    def _match(self, text: str, start: int):
+    def _match(self, text: str, start: int, structures=None):
         if start > 0 and text[start - 1].isalnum():
             return None
         matches = [
             match
-            for structure in self._structures
+            for structure in (self._structures if structures is None else structures)
             if (match := self._match_structure(text, start, structure)) is not None
         ]
         return max(matches, key=lambda match: match[0], default=None)
+
+    def _match_day_month(self, text: str, start: int):
+        return self._match(text, start, self._day_month_structures)
 
     def _era_at(self, text: str, cursor: int) -> tuple[int, int] | None:
         for form, index in self._eras:
@@ -1191,10 +1261,10 @@ class FlexibleTextDateDetector:
         return None
 
     def _match_era(self, text: str, start: int):
-        """A year and an era abbreviation, in either order ("500 BC", "AD 2000")."""
+        """A year and an era abbreviation, in the order CLDR's ``yG`` pattern writes."""
         if start > 0 and text[start - 1].isalnum():
             return None
-        era_first = self._era_at(text, start)
+        era_first = self._era_at(text, start) if self._era_first else None
         if era_first is not None:
             era_end, era = era_first
             if not (era_end < len(text) and text[era_end] in _SPACES):
@@ -1209,7 +1279,9 @@ class FlexibleTextDateDetector:
                 Capture("era", start, era_end, text[start:era_end], era, "short"),
                 Capture("y", year_start, year_end, text[year_start:year_end], year, "numeric"),
             )
-            return year_end, captures, DateTimeValue((("G", era), ("y", year)), self._calendar)
+            return year_end, captures, DateTimeValue((("G", era), ("y", year)), "gregorian")
+        if not self._year_first:
+            return None
         year_end, year = self._digit_run(text, start)
         if not 1 <= year_end - start <= 4 or year < 1:
             return None
@@ -1223,13 +1295,27 @@ class FlexibleTextDateDetector:
             Capture("y", start, year_end, text[start:year_end], year, "numeric"),
             Capture("era", year_end + 1, end, text[year_end + 1 : end], era, "short"),
         )
-        return end, captures, DateTimeValue((("G", era), ("y", year)), self._calendar)
+        return end, captures, DateTimeValue((("G", era), ("y", year)), "gregorian")
 
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return textual-date and era-year candidates in source order."""
+        """Return textual-date, day-month, and era-year candidates in source order.
+
+        Each kind is its own pass, so their readings may overlap ("5 May 2000 AD" gives
+        the date and "2000 AD"); none takes a start from another.
+        """
         dates = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
-        eras = _detect_flexible(text, self.locale, self.type, self._spec, self._match_era)
-        return sorted((*dates, *eras), key=lambda item: (item["start"], item["end"]))
+        day_month = _detect_flexible(
+            text, self.locale, self.type, self._spec, self._match_day_month
+        )
+        eras = _detect_flexible(text, self.locale, self.type, self._era_spec, self._match_era)
+        # A day-month reading inside a fuller date adds nothing ("July 25" in "July 25,
+        # 2012"); one that only overlaps a date is a different path and stays.
+        extra = [
+            d
+            for d in day_month
+            if not any(e["start"] <= d["start"] and d["end"] <= e["end"] for e in dates)
+        ]
+        return sorted((*dates, *extra, *eras), key=lambda item: (item["start"], item["end"]))
 
 
 class FlexibleNumberDetector:
@@ -1669,11 +1755,36 @@ class FlexibleRelativeDateDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
+@cache
+def _language_percent_words(language: str) -> tuple[str, ...]:
+    """The percent unit's wide names across the locales of ``language``, longest first.
+
+    English gives "percent" (en_US) and "per cent" (en_GB and others).
+    """
+    words: set[str] = set()
+    for name in sorted(icu.Locale.getAvailableLocales()):
+        locale = icu.Locale(name)
+        if locale.getLanguage() != language:
+            continue
+        wide = icu.MeasureFormat(locale, icu.UMeasureFormatWidth.WIDE)
+        number_format = icu.NumberFormat.createInstance(locale)
+        for amount in _plural_samples(name):
+            number_surface = number_format.format(amount)
+            formatted = wide.formatMeasures(
+                [icu.Measure(icu.Formattable(amount), icu.MeasureUnit.forIdentifier("percent"))]
+            )
+            if formatted.startswith(number_surface):
+                word = formatted[len(number_surface) :].strip()
+                if word and not any(character.isdigit() for character in word):
+                    words.add(word)
+    return tuple(sorted(words, key=len, reverse=True))
+
+
 class FlexiblePercentDetector:
     """Recognize flexible numbers adjacent to the locale's percent symbol.
 
-    The percent may also be written as the word ICU uses for the percent unit at its
-    wide width ("5 percent"), after the number.
+    The percent may also be written as a wide name ICU gives the percent unit in any
+    locale of the language ("5 percent", "5 per cent"), after the number.
     """
 
     group = "number"
@@ -1692,18 +1803,11 @@ class FlexiblePercentDetector:
         )
         self._prefix_first = pattern.find("%") < number_index
         self._spec = NumberFormatSpec(locale, "percent")
-        wide = icu.MeasureFormat(icu.Locale(locale), icu.UMeasureFormatWidth.WIDE)
-        words: set[str] = set()
-        for amount in (1, 12):
-            number_surface = icu.NumberFormat.createInstance(icu.Locale(locale)).format(amount)
-            formatted = wide.formatMeasures(
-                [icu.Measure(icu.Formattable(amount), icu.MeasureUnit.forIdentifier("percent"))]
-            )
-            if formatted.startswith(number_surface):
-                word = formatted[len(number_surface) :].strip()
-                if word and word != self._percent:
-                    words.add(word)
-        self._words = tuple(sorted(words, key=len, reverse=True))
+        self._words = tuple(
+            word
+            for word in _language_percent_words(icu.Locale(locale).getLanguage())
+            if word != self._percent
+        )
 
     @staticmethod
     def _space(text: str, cursor: int) -> int:
@@ -1937,6 +2041,21 @@ def _ascii_confusables(mark: str) -> tuple[str, ...]:
     )
 
 
+@cache
+def _plural_samples(locale: str) -> tuple[int | float, ...]:
+    """One amount for each plural category ICU's rules give the locale.
+
+    ICU chooses the category (``PluralRules.select``); the amounts scanned are the
+    integers 0 to 200 and one decimal (1.5), enough to reach every category CLDR
+    defines ("2 километра" is Russian's few, "5 километров" its many).
+    """
+    rules = icu.PluralRules.forLocale(icu.Locale(locale))
+    samples: dict[str, int | float] = {}
+    for amount in (*range(0, 201), 1.5):
+        samples.setdefault(rules.select(amount), amount)
+    return tuple(samples.values())
+
+
 def _unit_surface_variants(surface: str) -> tuple[str, ...]:
     """A unit surface and the spellings ICU equates with it.
 
@@ -1944,13 +2063,15 @@ def _unit_surface_variants(surface: str) -> tuple[str, ...]:
     that mark ("12″" is written 12"). Letters and digits are never swapped for
     confusables, so no letter reads as a digit.
     """
-    variants = {surface, icu.Normalizer2.getNFKCInstance().normalize(surface)}
-    for base in list(variants):
-        for index, character in enumerate(base):
-            if character.isalnum() or character.isspace():
-                continue
-            for replacement in _ascii_confusables(character):
-                variants.add(base[:index] + replacement + base[index + 1 :])
+    variants: set[str] = set()
+    for base in {surface, icu.Normalizer2.getNFKCInstance().normalize(surface)}:
+        choices = [
+            (character,)
+            if character.isalnum() or character.isspace()
+            else (character, *_ascii_confusables(character))
+            for character in base
+        ]
+        variants.update("".join(combination) for combination in product(*choices))
     return tuple(sorted(variants, key=len, reverse=True))
 
 
@@ -1958,10 +2079,11 @@ class FlexibleMeasureDetector:
     """Recognize a flexible number followed by a reflectively derived ICU unit surface.
 
     The surfaces are the unit's short, narrow, and wide forms as ICU formats them
-    ("5 km", "5km", "5 kilometers"), each also in the spellings ICU equates with it
-    (see :func:`_unit_surface_variants`: "km2", 12"). A rate ("1.0/km²", "3 per square
-    kilometer") is read through CLDR's per-unit pattern, with the value's unit
-    ``per-<unit>``.
+    ("5 km", "5km", "5 kilometers"), for an amount in each of the locale's plural
+    categories (see :func:`_plural_samples`), each also in the spellings ICU equates with
+    it (see :func:`_unit_surface_variants`: "km2", 12"). A rate ("1.0/km²", "3 per
+    square kilometer") is read through CLDR's per-unit pattern, with the value's unit
+    ``per-<unit>``; a symbol-only per form follows the number directly.
     """
 
     group = "measure"
@@ -1991,7 +2113,7 @@ class FlexibleMeasureDetector:
             (icu.UMeasureFormatWidth.WIDE, "wide"),
         ):
             formatter = icu.MeasureFormat(icu_locale, width)
-            for amount in (1, 12):
+            for amount in _plural_samples(locale):
                 number_surface = number_format.format(amount)
                 formatted = formatter.formatMeasure(icu.Measure(amount, measure_unit))
                 number_start = formatted.find(number_surface)
@@ -2011,7 +2133,9 @@ class FlexibleMeasureDetector:
                 if not per_valid:
                     continue
                 # CLDR's per pattern: the rate "12 m/km²" is the plain "12 m" followed by
-                # the per form "/km²", which follows a bare number the same way.
+                # the per form "/km²", which follows a bare number the same way. The
+                # numerator unit is only a carrier for the pattern (meter is a unit every
+                # locale formats); the reading has none, as in "1.0/km²".
                 numerator = icu.Measure(amount, icu.MeasureUnit.createMeter())
                 plain = formatter.formatMeasure(numerator)
                 rate = formatter.formatMeasurePerUnit(numerator, measure_unit)
@@ -2044,7 +2168,9 @@ class FlexibleMeasureDetector:
             icu.UCharCategory.CONNECTOR_PUNCTUATION,
         }
 
-    def _match(self, text: str, start: int) -> _FlexibleMatch | None:
+    def _match(
+        self, text: str, start: int, digit_may_follow: bool = False
+    ) -> _FlexibleMatch | None:
         match = self._number._match(text, start)
         if match is None:
             return None
@@ -2058,7 +2184,12 @@ class FlexibleMeasureDetector:
             if not text.startswith(surface, cursor):
                 continue
             end = cursor + len(surface)
-            if self._continues_word(text, end):
+            # A mixed unit's first component may run straight into the next number
+            # ("5'10\""): a mark ends the unit even with a digit after it.
+            open_mark = (
+                digit_may_follow and not surface[-1:].isalnum() and text[end : end + 1].isdigit()
+            )
+            if self._continues_word(text, end) and not open_mark:
                 continue
             unit_capture = Capture("unit", cursor, end, surface, unit, "symbol")
             spec = MeasureFormatSpec(self.locale, unit, width)
@@ -2073,6 +2204,93 @@ class FlexibleMeasureDetector:
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible measure candidates in source order."""
         return _detect_flexible(text, self.locale, self.type, None, self._match)
+
+
+class FlexibleMixedMeasureDetector:
+    """Recognize a mixed-unit measure, such as feet and inches: "5'10\"", "5 ft, 10 in".
+
+    ``unit`` is an ICU mixed-unit identifier (``foot-and-inch``, ``pound-and-ounce``).
+    Everything is read from ICU: each component's surfaces as
+    :class:`FlexibleMeasureDetector` reads a single unit, the joiner between components
+    from ICU's own formatting of the mixed unit at each width ("5′ 10″", "5 ft, 10 in"),
+    optional where the joiner is only a space, and the factor between the components
+    from ICU (1.5 feet formats as 1 foot 6 inches). The value is the whole quantity in
+    the smallest component, which is exact ("5'10\"" is 70 inches).
+    """
+
+    group = "measure"
+
+    def __init__(self, locale: str, unit: str) -> None:
+        self.locale = locale
+        self.unit = unit
+        self.type = f"measure:{unit}"
+        parts = unit.split("-and-")
+        if len(parts) != 2:
+            raise ValueError(f"expected a two-component mixed unit identifier: {unit!r}")
+        self._number = FlexibleNumberDetector(locale)
+        self._large = FlexibleMeasureDetector(locale, parts[0])
+        self._small = FlexibleMeasureDetector(locale, parts[1])
+        icu_locale = icu.Locale(locale)
+        mixed = icu.MeasureUnit.forIdentifier(unit)
+        joiners: set[str] = set()
+        factor = None
+        for width in (
+            icu.UNumberUnitWidth.NARROW,
+            icu.UNumberUnitWidth.SHORT,
+            icu.UNumberUnitWidth.FULL_NAME,
+        ):
+            formatter = icu.NumberFormatter.withLocale(icu_locale).unit(mixed).unitWidth(width)
+            rendered = str(formatter.formatDouble(1.5))
+            numbers = [(index, index + len(match)) for index, match in _digit_spans(rendered)]
+            if len(numbers) != 2:
+                continue
+            factor = int(rendered[numbers[1][0] : numbers[1][1]]) * 2
+            between = rendered[numbers[0][1] : numbers[1][0]]
+            for surface, *_rest in self._large._units:
+                if between.startswith(surface) or between.lstrip().startswith(surface):
+                    joiners.add(between.lstrip()[len(surface) :])
+                    break
+        if factor is None or not joiners:
+            raise ValueError(f"ICU formats no two-number surface for mixed unit: {unit!r}")
+        self._factor = factor
+        self._joiners = tuple(
+            sorted({*joiners, *(j.strip() for j in joiners)}, key=len, reverse=True)
+        )
+        self._spec = MeasureFormatSpec(locale, unit, "mixed")
+        self._small_unit = parts[1]
+
+    def _match(self, text: str, start: int) -> _FlexibleMatch | None:
+        large = self._large._match(text, start, digit_may_follow=True)
+        if large is None or large.value.unit != self._large.unit:
+            return None
+        for joiner in self._joiners:
+            if not text.startswith(joiner, large.end):
+                continue
+            small_start = large.end + len(joiner)
+            small = self._small._match(text, small_start)
+            if small is None or small.value.unit != self._small.unit:
+                continue
+            total = Decimal(large.value.decimal) * self._factor + Decimal(small.value.decimal)
+            value = MeasureValue(format(total, "f"), self._small_unit)
+            return _FlexibleMatch(small.end, (*large.captures, *small.captures), value, self._spec)
+        return None
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return greedy, non-overlapping mixed-unit measures in source order."""
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+
+
+def _digit_spans(text: str):
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor].isdigit():
+            end = cursor
+            while end < len(text) and text[end].isdigit():
+                end += 1
+            yield cursor, text[cursor:end]
+            cursor = end
+        else:
+            cursor += 1
 
 
 class FlexibleCompactDetector:

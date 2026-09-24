@@ -46,16 +46,23 @@
   suffix for its value ("Ist", "IInd", "XIVth") or with a punctuation-only ordinal
   marker ICU writes in some locale ("V.", "X.", as in "Henry V.").
 - `FlexibleTextDateDetector` reads a day and month without a year through every CLDR
-  day-month pattern of the language ("1 July" in en_US, from en_GB's "d MMMM"), an
-  abbreviated month with the period the abbreviation lexicon gives it ("Oct. 2006",
-  "23 Oct. 2014"), and a year beside a CLDR era abbreviation ("500 BC", "AD 2000"),
+  day-month pattern of the language ("1 July" in en_US, from en_GB's "d MMMM"), beside
+  any fuller date rather than in place of it; an abbreviated month with the period the
+  abbreviation lexicon gives it, in any case ("Oct. 2006", "Sept. 5", "OCT. 5"); and a
+  year beside a CLDR era abbreviation in the order the language's `yG` pattern writes
+  ("500 BC" in English, not "AD 2000" or "Vancouver, BC 2010"), as a Gregorian year
   with `era` and `y` captures.
 - `FlexibleMeasureDetector` reads a unit's wide names as well as its short and narrow
-  symbols ("12 kilometers"), each also in the spellings ICU equates with it: NFKC
-  ("16 km2" for km²) and the ASCII confusables of a mark (`12"` for 12″, `5'` for 5′).
+  symbols ("12 kilometers"), for an amount in each of the locale's plural categories
+  ("2 километра"), each also in the spellings ICU equates with it: NFKC ("16 km2" for
+  km²) and the ASCII confusables of its marks (`12"` and `12''` for 12″, `5'` for 5′).
   It reads a rate through CLDR's per-unit pattern ("1.0/km²", "3 per square
   kilometer"), with the value's unit `per-<unit>`.
-- `FlexiblePercentDetector` reads the percent unit's wide name ("5 percent").
+- `FlexibleMixedMeasureDetector` reads an ICU mixed unit such as `foot-and-inch` whole
+  ("5'10\"", "5 ft, 10 in"), with the value in its smallest component (70 inches); the
+  joiner and the factor between components come from ICU.
+- `FlexiblePercentDetector` reads the percent unit's wide name in any locale of the
+  language ("5 percent", "5 per cent").
 
 ### Fixed
 
