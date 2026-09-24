@@ -45,9 +45,24 @@
 - `FlexibleOrdinalDetector` reads an uppercase Roman numeral with this locale's ordinal
   suffix for its value ("Ist", "IInd", "XIVth") or with a punctuation-only ordinal
   marker ICU writes in some locale ("V.", "X.", as in "Henry V.").
+- `FlexibleTextDateDetector` reads a day and month without a year through every CLDR
+  day-month pattern of the language ("1 July" in en_US, from en_GB's "d MMMM"), an
+  abbreviated month with the period the abbreviation lexicon gives it ("Oct. 2006",
+  "23 Oct. 2014"), and a year beside a CLDR era abbreviation ("500 BC", "AD 2000"),
+  with `era` and `y` captures.
+- `FlexibleMeasureDetector` reads a unit's wide names as well as its short and narrow
+  symbols ("12 kilometers"), each also in the spellings ICU equates with it: NFKC
+  ("16 km2" for km²) and the ASCII confusables of a mark (`12"` for 12″, `5'` for 5′).
+  It reads a rate through CLDR's per-unit pattern ("1.0/km²", "3 per square
+  kilometer"), with the value's unit `per-<unit>`.
+- `FlexiblePercentDetector` reads the percent unit's wide name ("5 percent").
 
 ### Fixed
 
+- `FlexibleOrdinalDetector` no longer scans the rest of the text from every start: the
+  digit search is bounded by the longest prefix ICU writes before an ordinal, so its
+  cost is linear in the text (10 KB of mixed text took about 25 s and now takes 0.04 s)
+  with the same readings.
 - `FlexibleTimeDetector` and `FlexibleDateIntervalDetector` keep no per-call state on
   the detector, so one detector serves nested or concurrent calls: a call made inside
   another no longer drops the outer call's trailing-unit reading or clears its offset

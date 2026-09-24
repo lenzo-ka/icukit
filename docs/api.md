@@ -4948,6 +4948,12 @@ Return greedy, non-overlapping flexible fractions in source order.
 
 Recognize a flexible number followed by a reflectively derived ICU unit surface.
 
+The surfaces are the unit's short, narrow, and wide forms as ICU formats them
+("5 km", "5km", "5 kilometers"), each also in the spellings ICU equates with it
+(see :func:`_unit_surface_variants`: "km2", 12"). A rate ("1.0/km²", "3 per square
+kilometer") is read through CLDR's per-unit pattern, with the value's unit
+``per-<unit>``.
+
 #### `FlexibleMeasureDetector(locale: 'str', unit: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -5013,6 +5019,9 @@ Return flexible ordinals in source order: digit ordinals, then Roman ones.
 
 Recognize flexible numbers adjacent to the locale's percent symbol.
 
+The percent may also be written as the word ICU uses for the percent unit at its
+wide width ("5 percent"), after the number.
+
 #### `FlexiblePercentDetector(locale: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -5065,13 +5074,23 @@ Return greedy, non-overlapping spelled-out cardinals in source order.
 
 Recognize textual-month dates licensed by CLDR date patterns and symbols.
 
+The structures are the locale's own medium, long, and full patterns (with their
+year-optional subsets), plus the day-month-year, month-year, and day-month patterns
+CLDR gives every locale of the same language, so en_US reads en_GB's "1 July" and
+"23 October 2014". An abbreviated month may carry a period where the locale's
+abbreviation lexicon lists the month that way ("Oct. 2006", "Jan. 1").
+
+A year beside an era abbreviation CLDR gives the language ("500 BC", "AD 2000") is
+read as a year with its era; the value carries ``G`` (0 before the epoch, 1 after,
+as ICU numbers eras) and ``y``, with ``era`` and ``y`` captures.
+
 #### `FlexibleTextDateDetector(locale: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping textual-date candidates in source order.
+Return textual-date and era-year candidates in source order.
 
 ### class `FlexibleTimeDetector`
 
