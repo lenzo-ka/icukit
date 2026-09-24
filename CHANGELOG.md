@@ -34,6 +34,10 @@
 
 ### Fixed
 
+- `FlexibleTimeDetector` and `FlexibleDateIntervalDetector` keep no per-call state on
+  the detector, so one detector serves nested or concurrent calls: a call made inside
+  another no longer drops the outer call's trailing-unit reading or clears its offset
+  maps. No detector in icukit now writes to itself outside its constructor.
 - A number, date, or other value reading no longer starts or ends inside a word with
   alphanumerics on both sides of it in that word: "2788" no longer yields "788",
   "29th" no longer yields "29", "asdf123" no longer yields "123", "ab2,788" no longer
