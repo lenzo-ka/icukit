@@ -25,6 +25,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
 - [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`PluralNumeralDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
 - [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
@@ -5104,6 +5105,27 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return isolated letter-name candidates in source order.
+
+### class `PluralNumeralDetector`
+
+Recognize a numeral made plural: "1990s", "1990's", "'90s", "100s", "the 20s".
+
+The value is the written number (``1990``, and ``90`` for "'90s", whose century is
+elided), never a guessed decade or century: whether "1900s" is a decade or a century,
+and whether "100s" is "hundreds" or "one hundreds", is for verbalization to offer.
+Captures: ``number``, the ``suffix``, an ``apostrophe`` before the suffix if written,
+and an ``elision`` apostrophe before the number if written. Digits are read by ICU's
+digit values, so a locale's native digits count; the suffix letters are a small
+per-language table, since CLDR has none, and a language without an entry has no
+readings.
+
+#### `PluralNumeralDetector(locale: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return plural-numeral readings in source order.
 
 ### class `SingleLetterWordDetector`
 

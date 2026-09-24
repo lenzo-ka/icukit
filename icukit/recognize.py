@@ -43,6 +43,7 @@ from .detectors import (
 __all__ = [
     "AlphanumericRunsDetector",
     "AlphanumericRunsValue",
+    "PluralNumeralDetector",
     "FlexibleCompactDetector",
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
@@ -324,6 +325,81 @@ class AlphanumericRunsDetector:
                 )
             )
         return detections
+
+
+# Hand-rolled, as CLDR carries no plural or decade form of a numeral: the letters a
+# language writes after a numeral to make it plural ("1990s", "the 20s"), keyed by
+# language. The apostrophe variant ("1990's", "'90s") is read by _is_apostrophe.
+_PLURAL_NUMERAL_SUFFIXES = {"en": ("s",)}
+
+
+class PluralNumeralDetector:
+    """Recognize a numeral made plural: "1990s", "1990's", "'90s", "100s", "the 20s".
+
+    The value is the written number (``1990``, and ``90`` for "'90s", whose century is
+    elided), never a guessed decade or century: whether "1900s" is a decade or a century,
+    and whether "100s" is "hundreds" or "one hundreds", is for verbalization to offer.
+    Captures: ``number``, the ``suffix``, an ``apostrophe`` before the suffix if written,
+    and an ``elision`` apostrophe before the number if written. Digits are read by ICU's
+    digit values, so a locale's native digits count; the suffix letters are a small
+    per-language table, since CLDR has none, and a language without an entry has no
+    readings.
+    """
+
+    group = "number"
+    type = "number:plural"
+
+    def __init__(self, locale: str) -> None:
+        self.locale = locale
+        self._suffixes = _PLURAL_NUMERAL_SUFFIXES.get(icu.Locale(locale).getLanguage(), ())
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return plural-numeral readings in source order."""
+        if not self._suffixes:
+            return []
+        edges = _word_edges(text, self.locale)
+        detections = []
+        for start in sorted(edges):
+            if start >= len(text) or not icu.Char.isdigit(text[start]):
+                continue
+            found = self._match(text, start, edges)
+            if found is not None:
+                detections.append(found)
+        return detections
+
+    def _match(self, text: str, start: int, edges: frozenset[int]) -> ValueDetection | None:
+        cursor = start
+        while cursor < len(text) and icu.Char.isdigit(text[cursor]):
+            cursor += 1
+        number_end = cursor
+        captures = []
+        begin = start
+        if (
+            start > 0
+            and _is_apostrophe(text[start - 1])
+            and (start - 1 == 0 or not text[start - 2].isalnum())
+        ):
+            begin = start - 1
+            captures.append(Capture("elision", begin, start, text[begin:start]))
+        digits = "".join(str(icu.Char.digit(character, 10)) for character in text[start:number_end])
+        captures.append(Capture("number", start, number_end, text[start:number_end], int(digits)))
+        if cursor < len(text) and _is_apostrophe(text[cursor]):
+            captures.append(Capture("apostrophe", cursor, cursor + 1, text[cursor]))
+            cursor += 1
+        for suffix in self._suffixes:
+            if text.startswith(suffix, cursor) and cursor + len(suffix) in edges:
+                end = cursor + len(suffix)
+                captures.append(Capture("suffix", cursor, end, suffix))
+                return ValueDetection(
+                    text=text[begin:end],
+                    start=begin,
+                    end=end,
+                    type=self.type,
+                    value=NumberValue(str(int(digits)), None),
+                    captures=tuple(captures),
+                    spec=None,
+                )
+        return None
 
 
 class SingleLetterWordDetector:

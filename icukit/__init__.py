@@ -344,6 +344,7 @@ from .recognize import (
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
     LetterNameDetector,
+    PluralNumeralDetector,
     SingleLetterWordDetector,
 )
 from .regex import (
@@ -446,6 +447,7 @@ __all__ = [
     "AlphanumericRunsDetector",
     "AlphanumericRunsValue",
     "LetterNameDetector",
+    "PluralNumeralDetector",
     "SingleLetterWordDetector",
     "DetectorSet",
     "ValueDetection",
