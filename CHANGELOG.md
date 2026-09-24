@@ -14,6 +14,23 @@
   with the new `en_US.xml` over it, and `en_GB` follows CLDR's parent through `en_001`
   to `en`. `locale_chain`, `merge_lexicons`, and `load_locale_lexicon` expose this, and
   `compile_lexicon` uses it.
+- `AlphanumericRunsDetector` (`alnum:runs`): a word that mixes letters and digits reads
+  as its runs, the path a speaker takes for "3D", "5pm", or "2Q22", beside any other
+  reading of the word.
+- `PluralNumeralDetector` (`number:plural`): a numeral made plural, "1990s", "1990's",
+  "'90s", "100s", with the written number as its value and no guessed decade or
+  century. Its suffix letters are a small per-language table, since CLDR has none.
+- `FlexibleTimeDetector` reads an hour with a day period and no minutes ("5pm",
+  "10 a.m."), reads ICU's day-period forms at every width for every locale of the
+  language (en_US reads en_CA's "a.m."), and reads CLDR's hour symbol after a time
+  ("10:30h") or, where CLDR writes it attached, between hour and minutes (fr "10h30").
+- `FlexibleDateDetector` tries every CLDR short-date pattern of the language after the
+  locale's own, so en_US reads "31.12.2012" and ISO "2011-11-11" while "03/05/2013"
+  stays month first.
+- `FlexibleOrdinalDetector` reads grouped ordinals ("1,000th") and another locale's
+  ordinal indicator when none of its letters is in this locale's CLDR exemplars ("1º"
+  in English text). A Roman numeral and a fraction span a plural or possessive suffix
+  ("II's", "3/4s").
 
 ### Fixed
 
@@ -32,8 +49,9 @@
   abbreviation inside a word ("s." in "C's.").
 - `LetterNameDetector` reads a letter with a plural or possessive suffix ("C's", "i's",
   "Cs") as the letter's name, spanning the whole token with the suffix in its own
-  `suffix` capture. The suffix follows an apostrophe, or is a bare "s" after a capital
-  where the pair is not itself a word ("Is", "As", "Us", and "Ms" are not plurals).
+  `suffix` capture. The suffix follows an apostrophe, a quotation mark that Unicode word
+  breaking joins, or is a bare "s" after a capital. "As" and "Is" also read as letter
+  plurals, left for a prior to rank against the word.
 
 ### Changed
 
