@@ -1161,6 +1161,8 @@ class FlexibleTextDateDetector:
                 "yMMMEd",
                 "yMMMdG",
                 "yMMMMdG",
+                "GyMMM",
+                "GyMMMEd",
                 "yQQQ",
                 "yQQQQ",
             ):
@@ -1176,6 +1178,9 @@ class FlexibleTextDateDetector:
                     ("E", "M", "d", "y"),
                     ("M", "d", "y", "G"),
                     ("d", "M", "y", "G"),
+                    ("M", "y", "G"),
+                    ("E", "M", "d", "y", "G"),
+                    ("E", "d", "M", "y", "G"),
                     ("Q", "y"),
                 }:
                     structures.append((fields, literals, pattern))
@@ -4335,6 +4340,32 @@ def _language_datetime_glue(
     )
 
 
+@cache
+def _language_weekday_time_glue(
+    language: str, names: tuple[str, ...] | None = None
+) -> tuple[str, ...]:
+    """What CLDR writes between a weekday and a time, in the locales of ``language``.
+
+    From the best patterns of the weekday-and-time skeletons ("Ehm" is "EEE h:mm a" in
+    English, so " "): the literal after the weekday field and before the hour.
+    """
+    glue: dict[str, None] = {}
+    skeletons = ("Eh", "Ehm", "Ehms", "EHm", "EHms", "EBh", "EBhm", "EEEEhm", "EEEEHm")
+    for name in _language_locale_names(language, names):
+        generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(name))
+        for skeleton in skeletons:
+            pattern = generator.getBestPattern(skeleton)
+            weekday_end = pattern.rfind("E") + 1
+            hours = [pattern.find(letter, weekday_end) for letter in "hHkK"]
+            hours = [index for index in hours if index >= 0]
+            if not weekday_end or not hours or pattern.find("E") < 0:
+                continue
+            literal = pattern[weekday_end : min(hours)].replace("'", "")
+            if literal:
+                glue.setdefault(literal)
+    return tuple(sorted(glue, key=len, reverse=True))
+
+
 class FlexibleDateTimeDetector:
     """Recognize a date and a time joined as CLDR's date-time patterns join them.
 
@@ -4345,6 +4376,11 @@ class FlexibleDateTimeDetector:
     AM EDT", "3/5/24, 14:07". A space in the glue matches any space. The value holds the
     date's fields and then the time's; the spec's pattern is the glue with the date's
     pattern for ``{1}`` and the time's for ``{0}``.
+
+    A weekday alone before a time reads too, as CLDR's weekday-and-time patterns write it
+    ("Tue 2:07 PM", "Thu 10 at night"; see :func:`_language_weekday_time_glue`), with
+    the weekday's names those of :class:`FlexibleTextDateDetector`; its value is
+    ``("E", weekday)`` (ICU's number, Sunday 1) and then the time's fields.
     """
 
     group = "date"
@@ -4359,6 +4395,9 @@ class FlexibleDateTimeDetector:
         )
         self._time = FlexibleTimeDetector(locale, locales=locales)
         self._glue = _language_datetime_glue(icu.Locale(locale).getLanguage(), self.locales)
+        self._weekday_glue = _language_weekday_time_glue(
+            icu.Locale(locale).getLanguage(), self.locales
+        )
 
     @staticmethod
     def _glue_matches(between: str, literal: str) -> bool:
@@ -4417,7 +4456,56 @@ class FlexibleDateTimeDetector:
                             spec=spec,
                         ),
                     )
+        for time in times:
+            found.update(
+                (key, detection) for key, detection in self._weekday_times(text, time).items()
+            )
         return sorted(found.values(), key=lambda item: (item["start"], item["end"]))
+
+    def _weekday_times(self, text: str, time: ValueDetection) -> dict:
+        """A weekday and CLDR's glue right before ``time`` ("Tue 2:07 PM")."""
+        found = {}
+        names = self._dates[0]
+        for literal in self._weekday_glue:
+            glue_start = time["start"] - len(literal)
+            if glue_start <= 0 or not self._glue_matches(text[glue_start : time["start"]], literal):
+                continue
+            for surface, weekday, form in names._weekdays:
+                for written in (surface, surface + "."):
+                    start = glue_start - len(written)
+                    if start < 0 or text[start:glue_start].casefold() != written.casefold():
+                        continue
+                    if written.endswith(".") and written.casefold() not in names._dotted_weekdays:
+                        continue
+                    if start > 0 and _is_word_character(text[start - 1]):
+                        continue
+                    value = DateTimeValue((("E", weekday), *time["value"].fields), "gregorian")
+                    captures = (
+                        Capture(
+                            "weekday", start, glue_start, text[start:glue_start], weekday, form
+                        ),
+                        Capture(
+                            "datetime-glue", glue_start, time["start"], literal, None, "symbol"
+                        ),
+                        *time["captures"],
+                    )
+                    time_pattern = getattr(time["spec"], "pattern", "")
+                    spec = DateFormatSpec(
+                        self.locale, "weekday-time", f"EEE{literal}{time_pattern}", "gregorian"
+                    )
+                    found.setdefault(
+                        (start, time["end"], value),
+                        ValueDetection(
+                            text=text[start : time["end"]],
+                            start=start,
+                            end=time["end"],
+                            type=self.type,
+                            value=value,
+                            captures=captures,
+                            spec=spec,
+                        ),
+                    )
+        return found
 
 
 class FlexibleFractionDetector:
