@@ -3047,6 +3047,31 @@ def _negative_currency_wraps(
     return tuple(wraps)
 
 
+@lru_cache(maxsize=16)
+def _plain_number_memo(locale: str, text: str) -> dict[int, object]:
+    """Readings of ``text`` by ``FlexibleNumberDetector(locale)``, by start, filled lazily."""
+    return {}
+
+
+def _plain_number_match(number: FlexibleNumberDetector, text: str, start: int):
+    """``number._match(text, start)``, shared among readers of one locale.
+
+    ``number`` is a reader's own ``FlexibleNumberDetector(locale)``, built with no
+    options; a gang holds many currency and measure readers that each read the same
+    numbers at the same starts, so the reading is made once per text.
+    """
+    memo = _plain_number_memo(number.locale, text)
+    if start not in memo:
+        memo[start] = number._match(text, start)
+    return memo[start]
+
+
+@lru_cache(maxsize=16)
+def _currency_amount_memo(locale: str, text: str) -> dict[int, object]:
+    """Amounts of ``text`` as a currency reader of ``locale`` reads them, by start."""
+    return {}
+
+
 class FlexibleCurrencyDetector:
     """Recognize a reflective currency symbol or name around a scaled flexible number."""
 
@@ -3158,11 +3183,19 @@ class FlexibleCurrencyDetector:
         return name_end, (*captures, currency), NumberValue(value.decimal, self.currency)
 
     def _amount(self, text: str, start: int):
-        matches = [self._number._match(text, start)]
+        # An amount depends on the locale alone, not on the currency, so the readers of
+        # a gang's currencies share it.
+        memo = _currency_amount_memo(self.locale, text)
+        if start not in memo:
+            memo[start] = self._read_amount(text, start)
+        return memo[start]
+
+    def _read_amount(self, text: str, start: int):
+        matches = [_plain_number_match(self._number, text, start)]
         matches.extend(detector._match(text, start) for detector in self._compact)
         # CLDR English short compacts carry B, but not the corpus suffix bn.
         if self.locale.startswith("en"):
-            plain = self._number._match(text, start)
+            plain = _plain_number_match(self._number, text, start)
             if plain is not None:
                 end, captures, value = plain
                 for suffix, magnitude in (("bn", 9),):
@@ -3396,7 +3429,7 @@ class FlexibleMeasureDetector:
     def _match(
         self, text: str, start: int, digit_may_follow: bool = False
     ) -> _FlexibleMatch | None:
-        match = self._number._match(text, start)
+        match = _plain_number_match(self._number, text, start)
         if match is None:
             return None
         number_end, captures, value = match
@@ -4402,7 +4435,7 @@ class FlexibleCurrencyNameDetector:
         currency_end = self._currency_at(text, start, True)
         if currency_end is not None:
             number_start = self._space(text, currency_end)
-            number = self._number._match(text, number_start)
+            number = _plain_number_match(self._number, text, number_start)
             if number is not None:
                 end, captures, value = number
                 currency_capture = Capture(
@@ -4410,7 +4443,7 @@ class FlexibleCurrencyNameDetector:
                 )
                 return end, (currency_capture, *captures), NumberValue(value.decimal, self.currency)
 
-        number = self._number._match(text, start)
+        number = _plain_number_match(self._number, text, start)
         if number is None:
             return None
         number_end, captures, value = number
@@ -6004,6 +6037,12 @@ class FlexibleOrdinalDetector:
         return sorted((*digits, *romans), key=lambda item: (item["start"], item["end"]))
 
 
+@lru_cache(maxsize=16)
+def _grapheme_starts(text: str, locale: str) -> tuple[int, ...]:
+    """The grapheme-cluster starts of ``text``, cached so a gang breaks a text once."""
+    return tuple(sorted({span["start"] for span in break_grapheme_spans(text, locale)}))
+
+
 def _detect_flexible_alternatives(
     text: str,
     locale: str,
@@ -6015,7 +6054,7 @@ def _detect_flexible_alternatives(
     One pass over the text, however many alternative matchers ``match`` compiles; the
     scan resumes after the longest reading at a start.
     """
-    starts = sorted({span["start"] for span in break_grapheme_spans(text, locale)})
+    starts = _grapheme_starts(text, locale)
     interior = _word_interior_offsets(text, locale)
     detections: list[ValueDetection] = []
     cursor = 0
@@ -6052,7 +6091,7 @@ def _detect_flexible(
     spec: object | None,
     match: Callable[[str, int], tuple[int, tuple[Capture, ...], object] | _FlexibleMatch | None],
 ) -> list[ValueDetection]:
-    starts = sorted({span["start"] for span in break_grapheme_spans(text, locale)})
+    starts = _grapheme_starts(text, locale)
     interior = _word_interior_offsets(text, locale)
     detections: list[ValueDetection] = []
     cursor = 0

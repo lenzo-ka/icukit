@@ -3071,10 +3071,12 @@ A reader that takes a parameter is built for each value chosen from ICU:
   ``locale`` writes with a symbol of its own rather than its ISO code (en_US's "¥");
   pass ISO codes to choose others.
 * ``units`` -- the units CLDR's unit preferences give the world and the regions of
-  the read locales, with the composed units icukit's curated table chooses; and the
+  the read locales, every unit of ICU's ``duration`` and ``digital`` types ("3
+  weeks", "2 GB"), and the composed units icukit's curated table chooses; and the
   preferences' mixed units ("foot-and-inch") with each run of CLDR's default
-  duration order ("hour-and-minute-and-second"). Pass ICU unit identifiers, single
-  or mixed, to choose others; the full ICU inventory reads more ("900 MHz") at more
+  duration order ("hour-and-minute-and-second"). A unit no read region prefers is
+  not read (German text's "°F", "900 MHz" anywhere). Pass ICU unit identifiers,
+  single or mixed, to choose others; the full ICU inventory reads more at more
   cost.
 
 ``locales`` chooses the other locales of the language the language-wide readers
@@ -3082,6 +3084,12 @@ read, and the locales the currencies and units are chosen from (every one by
 default). ``guarded`` adds the readers of the readings the default readers refuse on
 purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
 built is left out; :func:`flexible_detectors_report` names it and why.
+
+The set is costlier than :func:`generated_detectors`: building it takes seconds (most
+in a language of many locales, where the currency and measure readers read every
+locale's forms), so build it once and reuse it; a ``detect`` costs a small multiple
+of the generated set's, since the currency and measure readers share the numbers
+they read within a text.
 
 ### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'GenerationReport'`
 

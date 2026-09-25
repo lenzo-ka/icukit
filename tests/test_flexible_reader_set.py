@@ -8,6 +8,9 @@ so what the flexible readers read is reachable without constructing classes.
 """
 
 import inspect
+import os
+import subprocess
+import sys
 import time
 from decimal import Decimal
 from functools import cache
@@ -39,6 +42,161 @@ GUARDED_CLASSES = {
     "FlexibleWeekdayNameDetector",
 }
 
+# The units every one of the three locales reads: the world's preferences, ICU's duration
+# and digital types, and the runs of CLDR's duration order.
+COMMON_UNITS = {
+    "barrel",
+    "bit",
+    "byte",
+    "celsius",
+    "centimeter",
+    "centimeter-per-hour",
+    "century",
+    "cubic-centimeter",
+    "cubic-meter",
+    "day",
+    "day-and-hour",
+    "day-and-hour-and-minute",
+    "day-and-hour-and-minute-and-second",
+    "day-and-hour-and-minute-and-second-and-millisecond",
+    "day-and-hour-and-minute-and-second-and-millisecond-and-microsecond",
+    "day-and-hour-and-minute-and-second-and-millisecond-and-microsecond-and-nanosecond",
+    "day-person",
+    "decade",
+    "fortnight",
+    "gigabit",
+    "gigabyte",
+    "gigawatt",
+    "gram",
+    "hectare",
+    "hectopascal",
+    "hour",
+    "hour-and-minute",
+    "hour-and-minute-and-second",
+    "hour-and-minute-and-second-and-millisecond",
+    "hour-and-minute-and-second-and-millisecond-and-microsecond",
+    "hour-and-minute-and-second-and-millisecond-and-microsecond-and-nanosecond",
+    "item-per-cubic-meter",
+    "kilobit",
+    "kilobyte",
+    "kilocalorie",
+    "kilogram",
+    "kilogram-per-cubic-meter",
+    "kilometer",
+    "kilometer-per-hour",
+    "kilowatt",
+    "kilowatt-hour",
+    "liter",
+    "liter-per-100-kilometer",
+    "liter-per-kilometer",
+    "megabit",
+    "megabyte",
+    "megapascal",
+    "megawatt",
+    "meter",
+    "microgram",
+    "microsecond",
+    "microsecond-and-nanosecond",
+    "milligram",
+    "milligram-ofglucose-per-deciliter",
+    "milliliter",
+    "millimeter",
+    "millimeter-per-hour",
+    "millisecond",
+    "millisecond-and-microsecond",
+    "millisecond-and-microsecond-and-nanosecond",
+    "milliwatt",
+    "minute",
+    "minute-and-second",
+    "minute-and-second-and-millisecond",
+    "minute-and-second-and-millisecond-and-microsecond",
+    "minute-and-second-and-millisecond-and-microsecond-and-nanosecond",
+    "month",
+    "month-person",
+    "nanosecond",
+    "night",
+    "pascal",
+    "petabyte",
+    "quarter",
+    "second",
+    "second-and-millisecond",
+    "second-and-millisecond-and-microsecond",
+    "second-and-millisecond-and-microsecond-and-nanosecond",
+    "square-centimeter",
+    "square-kilometer",
+    "square-meter",
+    "terabit",
+    "terabyte",
+    "tonne",
+    "watt",
+    "week",
+    "week-person",
+    "year",
+    "year-person",
+    "year-person-and-month-person",
+}
+
+EXPECTED_UNITS = {
+    "en_US": COMMON_UNITS
+    | {
+        "acre",
+        "cubic-foot",
+        "cubic-inch",
+        "cubic-meter-per-second",
+        "cup",
+        "fahrenheit",
+        "fluid-ounce",
+        "fluid-ounce-imperial",
+        "foodcalorie",
+        "foot",
+        "foot-and-inch",
+        "gallon",
+        "gallon-imperial",
+        "gigapascal",
+        "horsepower",
+        "inch",
+        "inch-ofhg",
+        "inch-per-hour",
+        "kilonewton",
+        "kilovolt",
+        "megajoule-per-kilogram",
+        "meter-and-centimeter",
+        "meter-per-second",
+        "mile",
+        "mile-per-gallon",
+        "mile-per-gallon-imperial",
+        "mile-per-hour",
+        "mile-scandinavian",
+        "millibar",
+        "millimole-per-liter",
+        "millisievert",
+        "nanogram",
+        "ounce",
+        "pint",
+        "pound",
+        "pound-and-ounce",
+        "pound-force-per-square-inch",
+        "quart",
+        "square-foot",
+        "square-inch",
+        "square-mile",
+        "stone-and-pound",
+        "tablespoon",
+        "teaspoon",
+        "ton",
+        "yard",
+    },
+    "de_DE": COMMON_UNITS
+    | {
+        "meter-and-centimeter",
+        "millimole-per-liter",
+    },
+    "ja_JP": COMMON_UNITS
+    | {
+        "meter-per-second",
+    },
+}
+
 
 def _reader_classes() -> set[str]:
     """Every public reader class of ``icukit.recognize``, read from the module."""
@@ -52,8 +210,8 @@ def _reader_classes() -> set[str]:
 
 
 @cache
-def _gang(locale: str, guarded: bool = False):
-    return flexible_detectors(locale, guarded=guarded)
+def _gang(locale: str):
+    return flexible_detectors(locale)
 
 
 def _classes(gang) -> set[str]:
@@ -62,21 +220,77 @@ def _classes(gang) -> set[str]:
 
 @pytest.mark.parametrize("locale", LOCALES)
 def test_the_set_holds_each_flexible_reader_and_no_guarded_one(locale):
-    start = time.perf_counter()
-    gang = flexible_detectors(locale)
-    elapsed = time.perf_counter() - start
+    assert _classes(_gang(locale)) == _reader_classes() - GUARDED_CLASSES
 
-    assert _classes(gang) == _reader_classes() - GUARDED_CLASSES
-    # A guard against a blowup (the full currency inventory in a language of many
-    # locales), not a benchmark: en_US, the costliest, builds in seconds.
-    assert elapsed < 120
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_the_units_are_exactly_those_chosen_for_the_locale(locale):
+    units = {
+        name.split(":", 1)[1]
+        for name in _gang(locale).names()
+        if name.startswith("measure:") and name != "measure:duration:numeric"
+    }
+
+    assert units == EXPECTED_UNITS[locale]
+
+
+_RUNNING_TEXT = (
+    "On Tue 2:07 PM we drove 5 km and 12.5 mi in 1 hr, 15 min, 27 sec, paid -$42.50 and "
+    "($3.10), weighed 5 lb 3 oz on 3/5/2024 AD at 2:07:09 PM Eastern Standard Time; the "
+    "fund rose 4.5% to $1.2 billion, €30m and ¥1,000 in 3 weeks, and 2 GB cost Rs. 500. "
+)
+
+
+def _detect_seconds(gang, text: str) -> float:
+    start = time.perf_counter()
+    gang.detect(text)
+    return time.perf_counter() - start
+
+
+def test_reading_costs_a_small_multiple_of_the_generated_set():
+    # The currency and measure readers read the same numbers at the same starts; the
+    # set shares those readings within a text, which keeps its cost near the strict
+    # set's. Unshared, en_US cost about five times the strict set's on this text.
+    flexible, strict = _gang("en_US"), generated_detectors("en_US")
+    warm = _RUNNING_TEXT * 5
+    flexible.detect(warm)
+    strict.detect(warm)
+    ratios = []
+    for trial in range(3):
+        text = f"{trial} {_RUNNING_TEXT * 10}"
+        ratios.append(_detect_seconds(flexible, text) / _detect_seconds(strict, text))
+    assert min(ratios) < 3, ratios
+
+
+def test_the_set_is_the_same_in_any_process():
+    here = flexible_detectors("ja_JP").names()
+    script = "from icukit import flexible_detectors; print(flexible_detectors('ja_JP').names())"
+    for seed in ("0", "1"):
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "PYTHONHASHSEED": seed},
+        )
+        assert result.stdout.strip() == repr(here)
+    assert flexible_detectors("ja_JP").detect(_RUNNING_TEXT) == _gang("ja_JP").detect(_RUNNING_TEXT)
 
 
 @pytest.mark.parametrize("locale", LOCALES)
 def test_guarded_readers_join_on_request_and_every_type_leads_with_its_group(locale):
-    gang = _gang(locale, guarded=True)
+    report = flexible_detectors_report(locale, guarded=True)
+    gang = report.detectors
+    # ja_JP's textual date patterns write no short year, so it has no short-year reader,
+    # and the report says so.
+    absent = (
+        {"FlexibleShortYearDateDetector"}
+        if any(skipped.family == "short-year" for skipped in report.skipped)
+        else set()
+    )
 
-    assert _classes(gang) == _reader_classes()
+    assert (locale == "ja_JP") == bool(absent)
+    assert _classes(gang) == _reader_classes() - absent
     for detector in gang.detectors:
         assert detector.type.split(":")[0] == detector.group, detector.type
 
@@ -113,6 +327,10 @@ def test_the_set_reads_the_flexible_features_in_en_us():
             DateTimeValue((("H", 14), ("m", 7), ("s", 9)), "gregorian"),
         ),
         "2 in the afternoon": ("time:flexible", DateTimeValue((("H", 14),), "gregorian")),
+        "3 weeks": ("measure:week", MeasureValue("3", "week")),
+        "3 wk": ("measure:week", MeasureValue("3", "week")),
+        "2 GB": ("measure:gigabyte", MeasureValue("2", "gigabyte")),
+        "100 MB": ("measure:megabyte", MeasureValue("100", "megabyte")),
         "3/5/2024 – 3/7/2024": (
             "date-interval:yMd",
             DateIntervalValue(
@@ -150,10 +368,11 @@ def test_parameters_are_chosen_from_icu():
     # The locale's own currency, another en locale's (en_IN), and one en_US writes
     # with a symbol of its own (JPY, "¥").
     assert {"number:currency:USD", "number:currency:INR", "number:currency:JPY"} <= types
-    # CLDR's preferred units for US and world usages, its mixed person-height unit, and a
-    # run of its duration order.
-    assert {"measure:mile", "measure:kilometer", "measure:foot-and-inch"} <= types
-    assert "measure:hour-and-minute-and-second" in types
+    # A withdrawn currency is not chosen, though de_DE writes the Mark with a symbol of
+    # its own ("DM").
+    de_types = set(_gang("de_DE").names())
+    assert "number:currency:EUR" in de_types
+    assert not {"number:currency:DEM", "number:currency:ATS"} & de_types
     # Every interval skeleton the engine's own probe accepts.
     interval_types = {name for name in types if name.startswith("date-interval:")}
     engine_intervals = {

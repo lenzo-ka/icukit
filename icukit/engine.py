@@ -571,8 +571,10 @@ def _read_regions(locale: str, locales: tuple[str, ...] | None) -> frozenset[str
 def _preferred_units(locale: str, locales: tuple[str, ...] | None) -> tuple[str, ...]:
     """The single units CLDR's unit preferences give the regions the reader reads.
 
-    The full ICU unit inventory reads more ("900 MHz") at a larger construction cost in
-    a language of many locales; a caller who wants it passes ``units=``.
+    A unit is read only where a region the reader reads prefers it: German text's "°F"
+    is not read, since no German locale's region prefers Fahrenheit, and "900 MHz" is
+    read in no locale. The full ICU unit inventory reads them at a larger cost to build
+    and to run; a caller who wants it passes ``units=``.
     """
     regions = _read_regions(locale, locales)
     found = dict.fromkeys(
@@ -621,14 +623,33 @@ def _mixed_units(locale: str, locales: tuple[str, ...] | None) -> tuple[str, ...
 _NO_CURRENCY = "XXX"
 
 
+@cache
+def _current_currencies() -> frozenset[str]:
+    """The currencies ICU gives some territory today.
+
+    PyICU exposes neither ``ucurr_isAvailable`` nor CLDR's currency map, so a currency
+    counts as current when ICU's currency formatter chooses it for a territory's locale
+    ("und_DE" is EUR); a withdrawn one (DEM, FRF) is no territory's.
+    """
+    found = set()
+    for region in icu.Region.getAvailable(icu.URegionType.TERRITORY):
+        code = icu.NumberFormat.createCurrencyInstance(icu.Locale(f"und_{region}")).getCurrency()
+        if code:
+            found.add(code)
+    found.discard(_NO_CURRENCY)
+    return frozenset(found)
+
+
 def _chosen_currencies(locale: str, locales: tuple[str, ...] | None) -> tuple[str, ...]:
     """The currencies a text in ``locale``'s language names, chosen from CLDR.
 
     Each read locale's own currency (en_IN's INR, en_GB's GBP), and each currency
     ``locale`` writes with a symbol of its own rather than its ISO code (en_US's "¥",
     ja_JP's "$"), since CLDR gives a locale a symbol for the currencies its text names.
-    The full ICU inventory costs several times as much to build; a caller who wants it
-    passes ``currencies=``.
+    Only currencies still in use are kept (see ``_current_currencies``): de_DE's own
+    symbols for the Mark and the Schilling ("DM", "öS") name currencies ICU gives no
+    territory today. The full ICU inventory costs several times as much to build and to
+    run; a caller who wants it passes ``currencies=``.
     """
     found = set()
     for name in _language_locales(locale, locales):
@@ -645,8 +666,23 @@ def _chosen_currencies(locale: str, locales: tuple[str, ...] | None) -> tuple[st
         )
         if code not in surface:
             found.add(code)
-    found.discard(_NO_CURRENCY)
-    return tuple(sorted(found))
+    return tuple(sorted(found & _current_currencies()))
+
+
+# The ICU unit types whose every unit the set reads in any locale: running text writes a
+# duration ("3 weeks", "2 fortnights") or a data size ("2 GB") whatever the region, and
+# CLDR's unit preferences name few of them (no week, no byte). Both types are small.
+_EVERY_REGION_UNIT_TYPES = ("duration", "digital")
+
+
+def _every_region_units() -> tuple[str, ...]:
+    """Every unit ICU's inventory holds of :data:`_EVERY_REGION_UNIT_TYPES`."""
+    return tuple(
+        unit.getIdentifier()
+        for unit_type in _EVERY_REGION_UNIT_TYPES
+        for unit in icu.MeasureUnit.getAvailable(unit_type)
+        if unit.getIdentifier()
+    )
 
 
 def _flexible_families(
@@ -674,7 +710,13 @@ def _flexible_families(
         # With the composed units icukit's curated table chooses ("40 MJ/kg", "5 m³/s").
         language = icu.Locale(locale).getLanguage()
         return tuple(
-            dict.fromkeys((*_preferred_units(locale, locales), *curated_composed_units(language)))
+            dict.fromkeys(
+                (
+                    *_preferred_units(locale, locales),
+                    *_every_region_units(),
+                    *curated_composed_units(language),
+                )
+            )
         )
 
     def mixed_units(locale: str) -> Iterable[Spec]:
@@ -797,10 +839,12 @@ def flexible_detectors(
       ``locale`` writes with a symbol of its own rather than its ISO code (en_US's "¥");
       pass ISO codes to choose others.
     * ``units`` -- the units CLDR's unit preferences give the world and the regions of
-      the read locales, with the composed units icukit's curated table chooses; and the
+      the read locales, every unit of ICU's ``duration`` and ``digital`` types ("3
+      weeks", "2 GB"), and the composed units icukit's curated table chooses; and the
       preferences' mixed units ("foot-and-inch") with each run of CLDR's default
-      duration order ("hour-and-minute-and-second"). Pass ICU unit identifiers, single
-      or mixed, to choose others; the full ICU inventory reads more ("900 MHz") at more
+      duration order ("hour-and-minute-and-second"). A unit no read region prefers is
+      not read (German text's "°F", "900 MHz" anywhere). Pass ICU unit identifiers,
+      single or mixed, to choose others; the full ICU inventory reads more at more
       cost.
 
     ``locales`` chooses the other locales of the language the language-wide readers
@@ -808,6 +852,12 @@ def flexible_detectors(
     default). ``guarded`` adds the readers of the readings the default readers refuse on
     purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
     built is left out; :func:`flexible_detectors_report` names it and why.
+
+    The set is costlier than :func:`generated_detectors`: building it takes seconds (most
+    in a language of many locales, where the currency and measure readers read every
+    locale's forms), so build it once and reuse it; a ``detect`` costs a small multiple
+    of the generated set's, since the currency and measure readers share the numbers
+    they read within a text.
     """
     return flexible_detectors_report(
         locale, locales=locales, currencies=currencies, units=units, guarded=guarded
