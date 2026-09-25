@@ -1055,6 +1055,21 @@ def _zone_writes(
     return False
 
 
+@cache
+def _region_order(locale: str, names: tuple[str, ...] | None = None) -> dict[str, int]:
+    """Regions by preference for ``locale``: its own, then its language's other locales'.
+
+    In :func:`_language_locales` order, so en_US prefers US, then en_001's 001, en_AG's
+    AG, and so on to en_ZW's ZW.
+    """
+    order: dict[str, int] = {}
+    for name in _language_locales(locale, names):
+        region = icu.Locale(name).getCountry()
+        if region:
+            order.setdefault(region, len(order))
+    return order
+
+
 @lru_cache(maxsize=4096)
 def _zone_writer(
     zone_text: str,
@@ -1062,6 +1077,7 @@ def _zone_writer(
     locale: str,
     names: tuple[str, ...] | None,
     days: tuple[int, ...],
+    reader: str | None = None,
 ) -> str | None:
     """The zone ``zone_text`` names when ICU parses it as ``zone_id``, or ``None``.
 
@@ -1070,21 +1086,27 @@ def _zone_writer(
     :func:`_same_rule_zone_ids`; "UTC" parses as Etc/GMT, which writes "GMT", and is
     written for Etc/UTC), or one of the same metazone that day ("MST" parses as
     America/Denver, whose July name is "MDT"; on July 5 it is America/Phoenix, which
-    writes "MST" all year, so the ID carries the offset the name means). Of several, a
-    zone of ``locale``'s region comes first, then IANA ID order; the first day that
-    has one gives it. ``None`` if no zone writes the text on any of ``days``: a lenient
-    parse also takes names ICU no longer writes (en_MO parses "MST" as Asia/Macau).
+    writes "MST" all year, so the ID carries the offset the name means). Of several,
+    a zone of the reader locale's region comes first (``reader``, else ``locale``), then
+    of the regions of the language's other locales in locale-name order, then the rest
+    in IANA ID order (see :func:`_region_order`); the first day that has one gives it.
+    ``None`` if no zone writes the text on any of ``days``: a lenient parse also takes
+    names ICU no longer writes (en_MO parses "MST" as Asia/Macau).
     """
     if any(_zone_writes(zone_text, zone_id, locale, names, day) for day in days):
         return zone_id
-    region = icu.Locale(locale).getCountry()
+    regions = _region_order(reader or locale, names)
     for day in days:
         others = dict.fromkeys(
             (*_same_rule_zone_ids(zone_id), *_metazone_zones(_zone_metazone(zone_id, day), day))
         )
         others.pop(zone_id, None)
         ordered = sorted(
-            others, key=lambda other: (str(icu.TimeZone.getRegion(other)) != region, other)
+            others,
+            key=lambda other: (
+                regions.get(str(icu.TimeZone.getRegion(other)), len(regions)),
+                other,
+            ),
         )
         for other in ordered:
             if _zone_writes(zone_text, other, locale, names, day):
@@ -1126,7 +1148,7 @@ def _zone_readings_on(
 ) -> tuple[tuple[str, str], ...]:
     found: dict[str, tuple[str, str]] = {}
     for zone_id, name in _zone_parses(zone_text, locale, names):
-        writer = _zone_writer(zone_text, zone_id, name, names, days)
+        writer = _zone_writer(zone_text, zone_id, name, names, days, locale)
         if writer is not None:
             found.setdefault(_zone_metazone(writer, days[0]), (writer, name))
     return tuple(found.values())
@@ -1644,7 +1666,7 @@ class FlexibleDateIntervalDetector:
             # locale of the language (see _zone_writer): a lenient parse also takes names
             # ICU no longer writes ("MST" as Asia/Macau), and a date-less side is parsed
             # on a stand-in dating.
-            writer = _zone_writer(written, zone_id, name, None, days)
+            writer = _zone_writer(written, zone_id, name, None, days, self.locale)
             if writer is None:
                 continue
             metazone = _zone_metazone(writer, days[0])

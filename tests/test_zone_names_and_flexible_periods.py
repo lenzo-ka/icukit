@@ -231,13 +231,30 @@ def test_a_name_icu_only_parses_leniently_is_not_a_zone():
         # the name means (UTC-7).
         ("July 5, 2026, 10:00 PM MST", [["America/Phoenix"]]),
         # No US zone writes "CST" in July; of the Central metazone's zones that do, the
-        # first by IANA ID.
-        ("July 5, 2026, 10:00 PM CST", [["America/Bahia_Banderas"]]),
+        # first of a region of English's other locales, in locale order: en_BZ's Belize
+        # comes before en_CA's Regina.
+        ("July 5, 2026, 10:00 PM CST", [["America/Belize"]]),
         ("January 5, 2026, 10:00 PM CST", [["America/Chicago"]]),
     ],
 )
 def test_a_dated_zone_is_the_zone_that_writes_the_name_that_day(text, zones):
     assert _zones_of(FlexibleDateTimeDetector("en_US").detect(text), text) == zones
+
+
+@pytest.mark.parametrize(
+    "locale, zone_id",
+    [
+        # Belize writes "CST" all year; en_BZ precedes en_CA among English's locales.
+        ("en_US", "America/Belize"),
+        # Saskatchewan writes "CST" all year, in en_CA's own region.
+        ("en_CA", "America/Regina"),
+        # A Mexican zone of the Central metazone, in es_MX's own region; the first by ID.
+        ("es_MX", "America/Bahia_Banderas"),
+    ],
+)
+def test_a_writing_zone_of_the_readers_region_comes_first(locale, zone_id):
+    july = _day_of(2026, 7, 5)
+    assert [zone for zone, _ in _zone_readings("CST", locale, days=(july,))] == [zone_id]
 
 
 @pytest.mark.parametrize(

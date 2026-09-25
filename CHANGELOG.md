@@ -154,9 +154,11 @@
 - A zone read is one ICU writes the text for: a zone a locale of the language parses
   the text as is read as the zone that writes it on the reading's day, the parsed zone
   if it does, else one of the same offset rules or the same metazone that day (a zone
-  of the locale's region first, then by IANA ID), so the ID carries the offset the name
+  of the reader locale's region first, then of the regions of the language's other
+  locales in locale-name order, then by IANA ID), so the ID carries the offset the name
   means. "July 5, 2026, 10:00 PM MST" is `America/Phoenix` (Denver writes "MDT" in
-  July), July "CST" is `America/Bahia_Banderas` (no US zone writes it then), January
+  July); July "CST", which no US zone writes, is `America/Belize` in en_US (en_BZ comes
+  before en_CA), `America/Regina` in en_CA and `America/Bahia_Banderas` in es_MX; January
   "MST" is `America/Denver`, and "UTC", which ICU parses as `Etc/GMT` but writes for
   `Etc/UTC`, is `Etc/UTC`. A name ICU only parses leniently is not a zone: "MST" is not
   also en_MO's obsolete Macau time. A name no zone writes on its date is still read, as
