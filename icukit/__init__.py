@@ -1,47 +1,34 @@
 """ICU toolkit for Python.
 
 Provides a Pythonic interface to the ICU library for Unicode and
-internationalization support.
+internationalization support. Recognition runs the other way: it reads the
+numbers, dates, times, measures, currencies, and abbreviations in running text
+by inverting ICU's own formatting (see :func:`generated_detectors` and
+:func:`flexible_detectors`).
 """
 
 from __future__ import annotations
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 
 def _check_icu_available():
-    """Check that PyICU is available, with a helpful error message if not."""
+    """Check that the ``icu`` module is importable, with a helpful error message if not."""
     try:
         import icu  # noqa: F401
     except ImportError as e:
-        import sys
-
-        if sys.platform == "darwin":
-            # Should not happen since icukit-pyicu is auto-installed on macOS
-            msg = (
-                "icukit requires PyICU but it is not installed.\n\nRun: pip install icukit[bundled]"
-            )
-        elif sys.platform == "linux":
-            # PyICU should auto-install, but may fail if system ICU is missing
-            msg = (
-                "icukit requires PyICU but it is not installed.\n\n"
-                "PyICU may have failed to build. Install system ICU libraries:\n"
-                "  Ubuntu/Debian: sudo apt install libicu-dev\n"
-                "  Fedora/RHEL:   sudo dnf install libicu-devel\n"
-                "  Arch:          sudo pacman -S icu\n\n"
-                "Then reinstall: pip install --force-reinstall icukit\n\n"
-                "Or use bundled ICU: pip install icukit[bundled]\n\n"
-                "See https://github.com/lenzo-ka/icukit/blob/main/docs/install.md"
-            )
-        else:
-            # Other platforms (Windows, BSD, etc.)
-            msg = (
-                "icukit requires PyICU but it is not installed.\n\n"
-                "Install options:\n"
-                "  pip install PyICU             # If you have system ICU libraries\n"
-                "  pip install icukit-pyicu      # Bundled ICU, no system deps needed\n\n"
-                "See https://github.com/lenzo-ka/icukit/blob/main/docs/install.md"
-            )
+        msg = (
+            "icukit requires the `icu` module, which its dependency icukit-pyicu\n"
+            "provides, but it could not be imported.\n\n"
+            "Reinstall icukit and its dependency:\n"
+            "  pip install --force-reinstall icukit\n\n"
+            "icukit-pyicu ships wheels for macOS (arm64) and Linux (x86_64, aarch64).\n"
+            "Elsewhere, install PyICU against a system ICU, then icukit without its\n"
+            "dependencies:\n"
+            "  pip install PyICU\n"
+            "  pip install --no-deps icukit\n\n"
+            "See https://github.com/lenzo-ka/icukit/blob/main/docs/install.md"
+        )
         raise ImportError(msg) from e
 
 
@@ -187,6 +174,7 @@ from .engine import (
     COMPACT_NUMBER_FAMILY,
     DATE_INTERVAL_FAMILY,
     DATE_TIME_SKELETON_FAMILY,
+    DEFAULT_FAMILIES,
     GUARDED_FAMILIES,
     LONE_SPELLOUT_NUMBER_FAMILY,
     LOWERCASE_ROMAN_FAMILY,
@@ -506,6 +494,7 @@ __all__ = [
     "COMPACT_NUMBER_FAMILY",
     "DATE_INTERVAL_FAMILY",
     "DATE_TIME_SKELETON_FAMILY",
+    "DEFAULT_FAMILIES",
     "GUARDED_FAMILIES",
     "LONE_SPELLOUT_NUMBER_FAMILY",
     "LOWERCASE_ROMAN_FAMILY",

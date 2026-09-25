@@ -1,7 +1,12 @@
-"""H1 proof of concept: text -> canonical tiergraph JSON, with one crossing detector.
+"""Proof of concept: text -> canonical tiergraph JSON, with one crossing detector.
 
 This is a development/example integration, NOT part of the installed icukit package.
 It requires tiergraph (Python >= 3.12) and is exercised only in the >= 3.12 CI job.
+
+It predates icukit's detector API and keeps its own windowed ``SimpleDateFormat``
+reader so the example stays small and self-contained. For recognition itself, use the
+readers: :func:`icukit.generated_detectors` and :func:`icukit.flexible_detectors` read
+dates (and much else) with their values, captures, and specs.
 
 What it demonstrates
 --------------------

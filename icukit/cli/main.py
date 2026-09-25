@@ -47,12 +47,21 @@ DESCRIPTION = r"""
 ICU Kit - Unicode ICU utilities for text processing
 
 A toolkit for international text processing, providing:
+  - Recognition of numbers, dates, times, measures, and currencies in text
+  - Locale-aware formatting of numbers, dates, durations, lists, and messages
+  - Locale-aware collation, search, and segmentation
   - Text transliteration between scripts
   - Unicode-aware regular expressions
   - Script detection and properties
   - Unicode normalization and character info
 
 Examples:
+  # Recognize typed values in running text
+  icukit detect --currency USD -t 'Paid $1,234.50 on March 5, 2024'
+
+  # Format a number in compact form
+  icukit compact 1234567 --locale de_DE
+
   # Transliterate to Greek
   echo 'Hello' | icukit transliterate name Latin-Greek
 

@@ -195,7 +195,21 @@ def print_output(
             columns = columns + extended_columns
 
     output = format_output(data, as_json=as_json, columns=columns, headers=headers)
-    print(output, file=file or sys.stdout)
+    print(_escape_lone_surrogates(output), file=file or sys.stdout)
+
+
+def _escape_lone_surrogates(text: str) -> str:
+    """Write each lone surrogate code point as its ``\\uXXXX`` escape.
+
+    A lone surrogate (``\\ud83d`` decoded alone, or ``U+D800``) has no UTF-8 form, so
+    writing it would raise. As an escape it prints, and in JSON output it is the JSON
+    escape for the same code point.
+    """
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return text.encode("utf-8", "backslashreplace").decode("utf-8")
+    return text
 
 
 def print_record(

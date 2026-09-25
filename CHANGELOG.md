@@ -20,6 +20,42 @@
   (`hmz`) through them, so "2:07 – 4:07 PM EDT" is now read whole, not only as
   "2:07 – 4:07 PM".
 
+## [0.7.1] - 2026-09-25
+
+### Added
+
+- `DEFAULT_FAMILIES` is exported from the top-level `icukit` package beside
+  `GUARDED_FAMILIES`, so the default and guarded readers can be built together with
+  `generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`.
+
+### Changed
+
+- The documentation matches 0.7: the README's command-line examples run as written
+  (`transliterate name`, `transliterate list`, `script detect -t`, `unicode info -t`,
+  and a `detect` example), its example outputs are the real ones, its recognition
+  section shows a detection's shape, `locales=`, `icu_abbreviations`, and how to build
+  the default and guarded readers together, and `docs/install.md` states icukit's own
+  Python range (3.11 and later; CI tests 3.11 through 3.13) beside the wheels'. The
+  command-line description names recognition and formatting, and the module
+  docstrings no longer cite internal design notes.
+
+### Fixed
+
+- `decode_unicode_escapes` (and so `icukit unicode info`, `unicode name`, and
+  `unicode encode`) no longer mangles non-ASCII input: it ran the whole text through
+  Python's `unicode_escape` codec, which reads it as Latin-1, so `unicode info -t 'α'`
+  reported U+00CE and U+00B1. Non-ASCII characters now pass through as written, and
+  ASCII escapes decode as before (`\n`, `\t`, octal, `\xNN` as U+00NN, `\uXXXX`,
+  `\UXXXXXXXX`, `\N{NAME}`, and `U+XXXX`); an escape that does not parse is left as
+  written.
+- A lone surrogate code point (`unicode info -t '\ud83d'`, `-t 'U+D800'`) is printed as
+  its `\uXXXX` escape instead of raising `UnicodeEncodeError`.
+- The error raised when the `icu` module cannot be imported no longer suggests the
+  nonexistent `icukit[bundled]` extra or a PyICU build; it names the `icukit-pyicu`
+  dependency, how to reinstall it, and how to use a system PyICU instead.
+- `icukit sort --help` spells its Swedish example with "ö" again; it had lost the
+  diacritic, so the example sorted "o" after "z".
+
 ## [0.7.0] - 2026-09-25
 
 ### Added
@@ -668,7 +704,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/lenzo-ka/icukit/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/lenzo-ka/icukit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lenzo-ka/icukit/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lenzo-ka/icukit/compare/v0.4.0...v0.5.0
