@@ -4,6 +4,11 @@
 
 ### Added
 
+- `FlexibleRelativeDateDetector` reads ICU's short and narrow relative styles beside the
+  long one ("1 hr. ago", "in 2h", "last mo."), and relative weekdays at each style ("next
+  Tuesday", "next Tue.", "last Fri."), with the weekday as the unit. Each reading is
+  checked against its own style's formatter, and a named phrase's capture form is its
+  style ("wide", "short", "narrow").
 - Curated currency surfaces in `data/unit_surfaces/en.tsv` (`curated_currency_surfaces`):
   `FlexibleCurrencyDetector` reads "Rs" and "Rs." as the Indian rupee, what English text
   means by them though ICU writes "₹", beside the five rupees ICU itself writes "Rs" for
