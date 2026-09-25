@@ -1077,6 +1077,7 @@ class FlexibleTextDateDetector:
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu_locale)
         self._months = self._language_symbol_names(icu_locale, "month")
+        self._quarters = self._quarter_names(icu_locale)
         self._weekdays = self._language_symbol_names(icu_locale, "weekday")
         self._dotted_months = _lexicon_month_abbreviations(locale)
         self._dotted = frozenset(surface.casefold() for surface in self._dotted_months)
@@ -1151,7 +1152,18 @@ class FlexibleTextDateDetector:
             generator = icu.DateTimePatternGenerator.createInstance(available)
             # A weekday reads only with its year, which checks it ("Thursday, 2 May 2013",
             # en_GB; "Saturday 3 January 1891", en_AU and en_IE).
-            for skeleton in ("dMMMMy", "dMMMy", "yMMMM", "yMMM", "yMMMMEEEEd", "yMMMEd"):
+            for skeleton in (
+                "dMMMMy",
+                "dMMMy",
+                "yMMMM",
+                "yMMM",
+                "yMMMMEEEEd",
+                "yMMMEd",
+                "yMMMdG",
+                "yMMMMdG",
+                "yQQQ",
+                "yQQQQ",
+            ):
                 pattern = generator.getBestPattern(skeleton)
                 parsed = self._date_structure(pattern)
                 if parsed is None:
@@ -1162,6 +1174,9 @@ class FlexibleTextDateDetector:
                     ("M", "y"),
                     ("E", "d", "M", "y"),
                     ("E", "M", "d", "y"),
+                    ("M", "d", "y", "G"),
+                    ("d", "M", "y", "G"),
+                    ("Q", "y"),
                 }:
                     structures.append((fields, literals, pattern))
             for skeleton in ("dMMMM", "dMMM"):
@@ -1181,6 +1196,26 @@ class FlexibleTextDateDetector:
         pattern = self._structures[0][2] if self._structures else ""
         self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
         # note: Bare years and decades remain cardinal candidates for downstream reinterpretation.
+
+    def _quarter_names(self, icu_locale: icu.Locale):
+        """The quarter names ICU writes in the language ("Q1", "1st quarter"), longest first.
+
+        From ICU's own QQQ and QQQQ formatting of a date in each quarter, in every locale
+        of the language.
+        """
+        found: dict[str, tuple[str, int, str]] = {}
+        calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu_locale)
+        for name in _language_locales(icu_locale.getName(), self.locales):
+            for field, form in (("QQQQ", "wide"), ("QQQ", "short")):
+                formatter = icu.SimpleDateFormat(field, icu.Locale(name))
+                formatter.setTimeZone(icu.TimeZone.getGMT())
+                for quarter in range(4):
+                    calendar.clear()
+                    calendar.set(2026, quarter * 3, 15)
+                    surface = formatter.format(calendar.getTime())
+                    if surface:
+                        found.setdefault(surface.casefold(), (surface, quarter + 1, form))
+        return tuple(sorted(found.values(), key=lambda item: len(item[0]), reverse=True))
 
     def _language_symbol_names(self, icu_locale: icu.Locale, field: str):
         """The month or weekday names of the locale, then of its language's other locales.
@@ -1242,11 +1277,13 @@ class FlexibleTextDateDetector:
                 quoted = not quoted
                 cursor += 1
                 continue
-            if not quoted and character in {"y", "M", "L", "d", "E"}:
+            if not quoted and character in {"y", "M", "L", "d", "E", "G", "Q", "q"}:
                 run_end = cursor + 1
                 while run_end < len(pattern) and pattern[run_end] == character:
                     run_end += 1
-                normalized = "M" if character == "L" else character
+                normalized = {"L": "M", "q": "Q"}.get(character, character)
+                if normalized == "Q" and run_end - cursor < 3:
+                    return None
                 if normalized == "M" and run_end - cursor < 3:
                     return None
                 if fields:
@@ -1259,9 +1296,12 @@ class FlexibleTextDateDetector:
                 return None
             literal.append(character)
             cursor += 1
-        if set(fields) - {"y", "M", "d", "E"}:
+        if set(fields) - {"y", "M", "d", "E", "G", "Q"}:
             return None
-        if not ({"y", "M", "d"}.issubset(fields) or set(fields) in ({"M", "y"}, {"M", "d"})):
+        date = set(fields) - {"E", "G"}
+        if not ({"y", "M", "d"}.issubset(date) or date in ({"M", "y"}, {"M", "d"}, {"Q", "y"})):
+            return None
+        if "G" in fields and "y" not in fields:
             return None
         if "E" in fields and fields[0] != "E":
             return None
@@ -1329,8 +1369,19 @@ class FlexibleTextDateDetector:
         captures: list[Capture] = []
         for index, field in enumerate(fields):
             field_start = cursor
-            if field in {"M", "E"}:
-                named = self._name(text, cursor, self._months if field == "M" else self._weekdays)
+            if field == "G":
+                found = self._era_at(text, cursor)
+                if found is None:
+                    return None
+                era_end, era, width = found
+                captures.append(
+                    Capture("era", field_start, era_end, text[field_start:era_end], era, width)
+                )
+                values["G"] = era
+                cursor = era_end
+            elif field in {"M", "E", "Q"}:
+                table = {"M": self._months, "E": self._weekdays, "Q": self._quarters}[field]
+                named = self._name(text, cursor, table)
                 if named is None:
                     return None
                 cursor, value, form = named
@@ -1341,7 +1392,7 @@ class FlexibleTextDateDetector:
                     and text[field_start : cursor + 1].casefold() in self._dotted_weekdays
                 ):
                     cursor += 1
-                name = "month" if field == "M" else "weekday"
+                name = {"M": "month", "E": "weekday", "Q": "quarter"}[field]
                 captures.append(
                     Capture(name, field_start, cursor, text[field_start:cursor], value, form)
                 )
@@ -1384,14 +1435,16 @@ class FlexibleTextDateDetector:
         calendar.clear()
         try:
             validation_year = values.get("y", 2000)
-            calendar.set(validation_year, values["M"] - 1, values.get("d", 1))
+            calendar.set(validation_year, values.get("M", 1) - 1, values.get("d", 1))
             calendar.getTime()
             if "y" in values and "E" in values:
                 if calendar.get(icu.Calendar.DAY_OF_WEEK) != values["E"]:
                     return None
         except icu.ICUError:
             return None
-        ordered = tuple((field, values[field]) for field in ("y", "M", "d") if field in values)
+        ordered = tuple(
+            (field, values[field]) for field in ("G", "y", "Q", "M", "d") if field in values
+        )
         return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
 
     def _match(self, text: str, start: int, structures=None):

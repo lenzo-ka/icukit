@@ -4,6 +4,10 @@
 
 ### Added
 
+- `FlexibleTextDateDetector` reads an era on a full date and quarters, from CLDR's
+  `yMMMdG`, `yMMMMdG`, `yQQQ`, and `yQQQQ` patterns in each locale of the language: "Mar
+  5, 2024 AD" (`G` 1), "5 March 44 BC", "Q1 2024", "3rd quarter 1999" (`Q` 3). Quarter
+  names are ICU's own formatting.
 - `FlexibleTimeDetector` reads ICU's long zone names after a time ("2:07:09 PM Eastern
   Standard Time", "10:30 Central European Time") and its generic location names ("00:05
   New York Time"), beside the abbreviations; and ICU's flexible day periods (pattern
