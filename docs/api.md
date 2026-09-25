@@ -34,6 +34,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
 - [`DateTimeValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`MeasureValue`](#icukitdetectors) — class, `icukit.detectors`
+- [`UnitValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`NumberValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`RelativeDateValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`detect`](#icukitdetectors) — function, `icukit.detectors`
@@ -2390,6 +2391,17 @@ Initialize self.  See help(type(self)) for accurate signature.
 The locale and ICU rule set used for a spelled-out cardinal candidate.
 
 #### `SpelloutFormatSpec(locale: 'str', ruleset: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `UnitValue`
+
+A unit written without an amount, such as a rate's per form ("/s").
+
+``unit`` is the canonical ICU identifier (``per-second``). There is no amount, so
+none is recorded.
+
+#### `UnitValue(unit: 'str') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4974,7 +4986,9 @@ each of that locale's plural categories (see :func:`_plural_samples`), each also
 the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
-number directly.
+number directly. A per form written without an amount ("/s", "per second") reads as
+a :class:`~icukit.detectors.UnitValue` of the rate's unit, where no digit is
+written right before it.
 
 #### `FlexibleMeasureDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
@@ -4982,7 +4996,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping flexible measure candidates in source order.
+Return flexible measure candidates in source order, a bare per form beside them.
 
 ### class `FlexibleMixedMeasureDetector`
 
