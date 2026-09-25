@@ -3695,6 +3695,69 @@ def _iso_utc_designator() -> str:
     return formatter.format(0.0)
 
 
+@cache
+def _language_zone_names(language: str, names: tuple[str, ...] | None = None) -> tuple[str, ...]:
+    """The long zone names ICU writes for the locales of ``language``, longest first.
+
+    Each zone's long and long generic names, standard and daylight ("Eastern Standard
+    Time", "Eastern Time"), and its generic location name, ICU's ``VVVV`` ("New York
+    Time"). Offset forms ("GMT-05:00") are left out: they are not names.
+    """
+    forms: set[str] = set()
+    locales = [icu.Locale(name) for name in _language_locale_names(language, names)]
+    styles = (icu.TimeZone.LONG, icu.TimeZone.LONG_GENERIC)
+    location = {
+        name: icu.SimpleDateFormat("VVVV", icu.Locale(name))
+        for name in _language_locale_names(language, names)
+    }
+    for zone_id in icu.TimeZone.createEnumeration():
+        zone = icu.TimeZone.createTimeZone(zone_id)
+        for icu_locale in locales:
+            for style in styles:
+                for daylight in (False, True):
+                    try:
+                        forms.add(zone.getDisplayName(daylight, style, icu_locale))
+                    except icu.ICUError:
+                        continue
+        for formatter in location.values():
+            formatter.setTimeZone(zone)
+            forms.add(formatter.format(0.0))
+    return tuple(
+        sorted(
+            (form for form in forms if " " in form and not any(c.isdigit() for c in form)),
+            key=lambda form: (-len(form), form),
+        )
+    )
+
+
+@cache
+def _language_flexible_periods(
+    language: str, names: tuple[str, ...] | None = None
+) -> tuple[tuple[str, frozenset[int]], ...]:
+    """The flexible day periods ICU's ``B`` writes, each with the hours it covers.
+
+    English: "in the morning" (6-11), "noon" (12), "in the afternoon" (12-17), "in the
+    evening" (18-20), "at night" (21-5), "midnight" (0). Longest first.
+    """
+    hours: dict[str, set[int]] = {}
+    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale("en_US"))
+    for name in _language_locale_names(language, names):
+        for field in ("B", "BBBB", "BBBBB"):
+            formatter = icu.SimpleDateFormat(field, icu.Locale(name))
+            formatter.setTimeZone(icu.TimeZone.getGMT())
+            for hour in range(24):
+                for minute in (0, 30):
+                    calendar.clear()
+                    calendar.set(2026, 0, 3, hour, minute, 0)
+                    form = formatter.format(calendar.getTime())
+                    if form and any(character.isalpha() for character in form):
+                        hours.setdefault(form, set()).add(hour)
+    return tuple(
+        (form, frozenset(covered))
+        for form, covered in sorted(hours.items(), key=lambda item: -len(item[0]))
+    )
+
+
 class FlexibleTimeDetector:
     """Recognize clock times using a locale's CLDR short-time structure.
 
@@ -3744,6 +3807,7 @@ class FlexibleTimeDetector:
         self._separator, self.hour12, self._period_side = structure or ("", False, None)
         self._period_prefix = self._period_side == "prefix"
         self._periods = _language_day_periods(icu_locale.getLanguage(), self.locales)
+        self._flexible_periods = _language_flexible_periods(icu_locale.getLanguage(), self.locales)
         self._hour_units = _hour_unit_forms(locale)
         self._separators = tuple(
             dict.fromkeys(
@@ -3844,6 +3908,26 @@ class FlexibleTimeDetector:
             end = _match_period(text, cursor, period, exact=narrow)
             if end is not None:
                 return end, text[marker_start:end], index
+        return None
+
+    def _flexible_period(self, text: str, cursor: int, raw_hour: int):
+        """A flexible day period after one space, with the 24-hour hour it makes.
+
+        "2 in the afternoon" is 14:00: of 2 and 14, the hour the period covers.
+        """
+        if not (1 <= raw_hour <= 12 and cursor < len(text) and text[cursor] in _SPACES):
+            return None
+        for form, covered in self._flexible_periods:
+            # As for "a"/"p", a one-letter narrow form is not read after a space ("12 n"),
+            # a hand-rolled rule.
+            if len(form) == 1:
+                continue
+            end = _match_period(text, cursor + 1, form)
+            if end is None or (end < len(text) and text[end].isalnum()):
+                continue
+            candidates = [h for h in (raw_hour % 12, raw_hour % 12 + 12) if h in covered]
+            if candidates:
+                return end, text[cursor:end], candidates[0]
         return None
 
     def _period_precedes(self, text: str, start: int) -> bool:
@@ -3948,6 +4032,16 @@ class FlexibleTimeDetector:
                         Capture("day-period", cursor, marker_end, marker_text, None, "symbol")
                     )
                     cursor = marker_end
+                else:
+                    flexible = self._flexible_period(text, cursor, raw_hour)
+                    if flexible is not None:
+                        marker_end, marker_text, flexible_hour = flexible
+                        captures.append(
+                            Capture("day-period", cursor, marker_end, marker_text, None, "flexible")
+                        )
+                        cursor = marker_end
+                        raw_hour = flexible_hour
+                        period_index = -1
             elif self._day_period(text, cursor) is not None:
                 return None
 
@@ -3969,7 +4063,8 @@ class FlexibleTimeDetector:
         ):
             return None
 
-        if period_index is None:
+        if period_index is None or period_index == -1:
+            # -1: a flexible day period already gave the 24-hour hour.
             if not 0 <= raw_hour <= 23:
                 return None
             hour24 = raw_hour
@@ -4035,6 +4130,10 @@ class FlexibleTimeDetector:
         if not (cursor < len(text) and text[cursor] in _SPACES):
             return None
         begin, cursor = cursor, cursor + 1
+        for form in _language_zone_names(self._language, self.locales):
+            end = _match_period(text, cursor, form, exact=True)
+            if end is not None and _ends_letter_token(text, end):
+                return Capture("time-zone", begin, end, text[begin:end], form)
         for form in _language_zone_abbreviations(self._language, self.locales):
             end = cursor + len(form)
             if text[cursor:end] == form and _ends_letter_token(text, end):
@@ -4056,7 +4155,15 @@ class FlexibleTimeDetector:
         cursor = hour_start + hour_width
         found = self._day_period(text, cursor)
         if found is None:
-            return None
+            flexible = self._flexible_period(text, cursor, raw_hour)
+            if flexible is None:
+                return None
+            marker_end, marker_text, hour24 = flexible
+            ordered = [
+                Capture("H", hour_start, cursor, text[hour_start:cursor], raw_hour, "numeric"),
+                Capture("day-period", cursor, marker_end, marker_text, None, "flexible"),
+            ]
+            return marker_end, tuple(ordered), DateTimeValue((("H", hour24),), "gregorian")
         marker_end, marker_text, period_index = found
         hour24 = (0 if raw_hour == 12 else raw_hour) + (12 if period_index == 1 else 0)
         ordered = [
