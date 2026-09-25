@@ -4,6 +4,12 @@
 
 ### Added
 
+- `FlexibleSpelloutDetector` takes a `ruleset` among the locale's RBNF spell-out rule
+  sets, and the engine generates a reader for each cardinal, ordinal, and year one:
+  "twenty-first" (`number:spellout:ordinal`, 21), "nineteen ninety-nine"
+  (`number:spellout:numbering-year`, 1999), "one hundred and one"
+  (`number:spellout:cardinal-verbose`, 101). The default stays the cardinal
+  `number:spellout`; a lone "first" is not read, as a lone "one" is not.
 - `FlexibleCurrencyDetector` reads a negative amount as ICU's standard and accounting
   forms write one: "-$42.50" and "($42.50)" are -42.50, "-€42" is -42. The wrapping is
   what ICU's negative form adds around the positive one, in each locale of the language.

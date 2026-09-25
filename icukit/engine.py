@@ -23,6 +23,9 @@ from .recognize import (
     FlexibleSpelloutDetector,
     _spellout_formatter_and_ruleset,
 )
+from .recognize import (
+    _spellout_rulesets as _spellout_rulesets_of,
+)
 
 __all__ = [
     "ABBREVIATION_FAMILY",
@@ -238,10 +241,11 @@ SCIENTIFIC_NUMBER_FAMILY = Family(
 
 def _spellout_rulesets(locale: str) -> Iterable[Spec]:
     try:
-        _, ruleset = _spellout_formatter_and_ruleset(locale)
+        _, default = _spellout_formatter_and_ruleset(locale)
+        rulesets = _spellout_rulesets_of(locale)
     except (icu.ICUError, ValueError):
         return ()
-    return (ruleset,)
+    return (default, *(ruleset for ruleset in rulesets if ruleset != default))
 
 
 def _spellout_invert(spec: Spec, locale: str) -> Detector | None:
@@ -250,11 +254,11 @@ def _spellout_invert(spec: Spec, locale: str) -> Detector | None:
 
 def _spellout_probe(spec: Spec, locale: str) -> _Probe:
     try:
-        detector = FlexibleSpelloutDetector(locale)
+        detector = FlexibleSpelloutDetector(locale, ruleset=str(spec))
     except (icu.ICUError, ValueError) as error:
         return _Probe(None, str(error))
     if detector._ruleset != str(spec):
-        return _Probe(None, "ICU selected a different cardinal spellout rule set")
+        return _Probe(None, "ICU selected a different spellout rule set")
     return _Probe(detector)
 
 
