@@ -1,0 +1,26 @@
+# Curated unit surfaces for English: hand-rolled, where ICU and CLDR have nothing.
+#
+# "surface" rows: a unit surface English writes that ICU writes in no English locale,
+# mapped to the ICU unit it names. Only the mapping is curated: the unit, the value,
+# and every expansion ("cubic centimeters") are ICU's. Each was measured in the
+# en_with_types census (agents register, coverage/icu_forms_check.py).
+#
+# "compose" rows: units ICU composes from an SI prefix that are worth building. ICU
+# composes any prefix onto any unit, and some compositions are false readings (its
+# centicentury is written "cc", its decibyte "dB"), so which to build is a choice.
+#
+# kind	surface	unit	note
+surface	cc	cubic-centimeter	engine displacement; ICU writes "cm³"
+surface	lbs	pound	plural; ICU writes "lb" for every amount
+surface	rpm	revolution-per-minute	ICU writes "rev/min"
+surface	KB	kilobyte	capitalized; ICU writes "kB"
+surface	yds	yard	plural; ICU writes "yd"
+surface	sq km	square-kilometer	ICU writes "km²"
+surface	per km²	per-square-kilometer	"per" before the short symbol; ICU writes "/km²" or "per square kilometer"
+surface	/year	per-year	ICU writes "/y"
+surface	/day	per-day	ICU writes "/d"
+compose		kilovolt	"25 kV"
+compose		kilonewton	"3 kN"
+compose		gigapascal	"70 GPa"
+compose		nanogram	"5 ng"
+compose		millisievert	"20 mSv"

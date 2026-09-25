@@ -3356,7 +3356,7 @@ Example:
 
 One short form ICU writes, with the long forms ICU gives the same thing.
 
-#### `IcuAbbreviation(surface: 'str', kind: 'str', key: 'str', width: 'str', expansions: 'tuple[str, ...]') -> None`
+#### `IcuAbbreviation(surface: 'str', kind: 'str', key: 'str', width: 'str', expansions: 'tuple[str, ...]', source: 'str' = 'icu') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -6996,6 +6996,30 @@ Example:
     'fi'
     >>> normalize('①', 'NFKC')  # circled digit
     '1'
+
+## icukit.unit_surfaces
+
+Curated unit surfaces: the unit forms a language writes that ICU does not.
+
+ICU and CLDR give the unit forms the measure reader inverts, and
+:func:`~icukit.icu_abbreviations` lists. A few forms English writes appear in no
+English locale's ICU output ("500cc", "185 lbs", "78 rpm"); this module reads a small,
+hand-rolled table (``data/unit_surfaces/<language>.tsv``) mapping each to the ICU unit
+it names. Only the mapping is curated: the unit, the value, and the expansions stay
+ICU's. The same table names the units ICU composes from an SI prefix that are worth
+building ("kilovolt"), since ICU composes any prefix onto any unit and some
+compositions are false readings ("cc" is ICU's centicentury).
+
+### `curated_composed_units(language: 'str') -> 'tuple[str, ...]'`
+
+The ICU units composed from an SI prefix that ``language``'s table chooses.
+
+### `curated_unit_surfaces(language: 'str') -> 'tuple[tuple[str, str], ...]'`
+
+``(surface, ICU unit)`` for the curated unit surfaces of ``language``.
+
+A rate's per form maps to ``per-<unit>`` ("per km²": ``per-square-kilometer``).
+Empty for a language with no table.
 
 ## icukit.errors
 

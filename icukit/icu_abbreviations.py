@@ -54,6 +54,7 @@ from .recognize import (
     _locale_selection,
     _plural_samples,
 )
+from .unit_surfaces import curated_composed_units, curated_unit_surfaces
 
 __all__ = ["IcuAbbreviation", "ABBREVIATION_KINDS", "icu_abbreviations"]
 
@@ -82,26 +83,41 @@ class IcuAbbreviation:
     key: str
     width: str
     expansions: tuple[str, ...]
+    source: str = "icu"
 
 
 class _Table:
     """Entries keyed by ``(surface, kind, key)``; the first width seen is kept."""
 
     def __init__(self) -> None:
-        self._entries: dict[tuple[str, str, str], tuple[str, list[str]]] = {}
+        self._entries: dict[tuple[str, str, str], tuple[str, list[str], str]] = {}
 
-    def add(self, surface: str, kind: str, key: str, width: str, expansions: Iterable[str]):
+    def add(
+        self,
+        surface: str,
+        kind: str,
+        key: str,
+        width: str,
+        expansions: Iterable[str],
+        source: str = "icu",
+    ):
         if not surface:
             return
-        entry = self._entries.setdefault((surface, kind, key), (width, []))
+        entry = self._entries.setdefault((surface, kind, key), (width, [], source))
         for expansion in expansions:
             if expansion and expansion != surface and expansion not in entry[1]:
                 entry[1].append(expansion)
 
+    def expansions_of(self, key: str) -> list[str]:
+        for (_surface, _kind, entry_key), (_width, expansions, _source) in self._entries.items():
+            if entry_key == key and expansions:
+                return list(expansions)
+        return []
+
     def rows(self) -> tuple[IcuAbbreviation, ...]:
         return tuple(
-            IcuAbbreviation(surface, kind, key, width, tuple(expansions))
-            for (surface, kind, key), (width, expansions) in self._entries.items()
+            IcuAbbreviation(surface, kind, key, width, tuple(expansions), source)
+            for (surface, kind, key), (width, expansions, source) in self._entries.items()
         )
 
 
@@ -135,21 +151,24 @@ def _currency_name(text: str, number: str, marks: set[str]) -> str:
     return " ".join(word for word in words if word not in marks)
 
 
-def _units_available():
-    return [
+def _units_available(language: str):
+    """ICU's unit inventory, and the composed units the language's table chooses."""
+    units = [
         unit
         for unit_type in icu.MeasureUnit.getAvailableTypes()
         if unit_type != "currency"
         for unit in icu.MeasureUnit.getAvailable(unit_type)
         if unit.getIdentifier()
     ]
+    return units + [icu.MeasureUnit.forIdentifier(u) for u in curated_composed_units(language)]
 
 
 @cache
 def _unit_rows(locale: str, names: tuple[str, ...] | None) -> tuple[IcuAbbreviation, ...]:
     table = _Table()
     per = _Table()
-    units = _units_available()
+    language = icu.Locale(locale).getLanguage()
+    units = _units_available(language)
     widths = ((icu.UNumberUnitWidth.SHORT, "short"), (icu.UNumberUnitWidth.NARROW, "narrow"))
     wide = icu.UNumberUnitWidth.FULL_NAME
     for name in _language_locales(locale, names):
@@ -198,7 +217,38 @@ def _unit_rows(locale: str, names: tuple[str, ...] | None) -> tuple[IcuAbbreviat
                             width_name,
                             per_expansions,
                         )
+    # The curated surfaces ICU does not write, with the expansions ICU gives their
+    # unit (see icukit.unit_surfaces).
+    for surface, target in curated_unit_surfaces(language):
+        kind, rows = ("per-unit", per) if target.startswith("per-") else ("unit", table)
+        expansions = rows.expansions_of(target) or _wide_names(locale, target)
+        rows.add(surface, kind, target, "curated", expansions, "curated")
     return table.rows() + per.rows()
+
+
+def _wide_names(locale: str, target: str) -> list[str]:
+    """ICU's wide names for a unit outside its inventory ("revolutions per minute")."""
+    icu_locale = icu.Locale(locale)
+    numbers = icu.NumberFormat.createInstance(icu_locale)
+    base = icu.NumberFormatter.withLocale(icu_locale).unitWidth(icu.UNumberUnitWidth.FULL_NAME)
+    names = []
+    for amount in _plural_samples(locale):
+        number = numbers.format(amount)
+        try:
+            if target.startswith("per-"):
+                meter = icu.MeasureUnit.createMeter()
+                unit = icu.MeasureUnit.forIdentifier(target.removeprefix("per-"))
+                plain = str(base.unit(meter).formatDouble(amount))
+                rate = str(base.unit(meter).perUnit(unit).formatDouble(amount))
+                name = rate[len(plain) :].strip() if rate.startswith(plain) else ""
+            else:
+                unit = icu.MeasureUnit.forIdentifier(target)
+                name = _without_number(str(base.unit(unit).formatDouble(amount)), number)
+        except icu.ICUError:
+            continue
+        if name and name not in names:
+            names.append(name)
+    return names
 
 
 @cache

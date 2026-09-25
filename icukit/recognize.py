@@ -41,6 +41,7 @@ from .detectors import (
     _word_edges,
     _word_interior_offsets,
 )
+from .unit_surfaces import curated_unit_surfaces
 
 __all__ = [
     "AlphanumericRunsDetector",
@@ -2321,6 +2322,15 @@ def _measure_surfaces(
                     tail = rate[len(plain) :]
                     for variant in _unit_surface_variants(tail.strip()):
                         rates.setdefault((variant, width_name, tail != tail.lstrip(), per_unit))
+    # The language's curated surfaces ICU does not write ("500cc", "185 lbs"; see
+    # icukit.unit_surfaces): the unit and its value stay ICU's.
+    for surface, target in curated_unit_surfaces(icu.Locale(locale).getLanguage()):
+        if target == unit:
+            for variant in _unit_surface_variants(surface):
+                surfaces.setdefault((variant, "curated", True, unit))
+        elif per_valid and target == per_unit:
+            for variant in _unit_surface_variants(surface):
+                rates.setdefault((variant, "curated", True, per_unit))
     return list(surfaces), list(rates)
 
 

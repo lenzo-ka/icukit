@@ -79,6 +79,7 @@ icukit = [
     "data/abbreviations/*.xml",
     "data/abbreviations/*.rng",
     "data/exceptions/*.json",
+    "data/unit_surfaces/*.tsv",
 ]
 
 [tool.pytest.ini_options]
