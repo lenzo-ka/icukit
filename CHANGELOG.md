@@ -4,6 +4,10 @@
 
 ### Added
 
+- `FlexibleTextDateDetector` reads CLDR's variant and wide era names beside the
+  abbreviated ones: "300 BCE", "200 CE", "300 Before Christ", "44 Before Common Era".
+  The era capture's form is "short" or "wide" and the spec's pattern `y G` or `y GGGG`
+  accordingly; `_language_eras` gives each name with its era index and width.
 - `FlexibleMeasureDetector` reads a unit as every locale of the language formats it,
   so en_US text reads en_GB's "12 kilometres", "2 litres", and "5 per square
   kilometre".
