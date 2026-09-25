@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `FlexibleDateIntervalDetector` reads an interval with no time zone the same whatever
+  the process time zone is. It parsed and checked the wall-clock times in the process
+  default zone, so a time inside a daylight-saving gap there was moved to another hour
+  and the reading dropped: "3/10/2024, 02:30 – 02:45" read under `TZ=UTC` and not under
+  `TZ=America/New_York`. Such an interval is now parsed and checked in GMT, which has no
+  gap. A zoned interval reads as before.
+
 ## [0.7.0] - 2026-09-25
 
 ### Added

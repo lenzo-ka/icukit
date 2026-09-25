@@ -1185,8 +1185,13 @@ class FlexibleDateIntervalDetector:
         """Whether ICU yielded at least one modeled, splittable interval recipe."""
         return bool(self._matchers)
 
-    def _parse_side(self, formatter, fields, has_zone, text, start, cp_to_u16, u16_to_cp, dating):
-        calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+    def _parse_side(
+        self, formatter, fields, has_zone, text, start, cp_to_u16, u16_to_cp, dating, wall_zone
+    ):
+        if wall_zone is None:
+            calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+        else:
+            calendar = icu.Calendar.createInstance(wall_zone, icu.Locale(self.locale))
         calendar.clear()
         for name, value in dating.items():
             calendar.set(_INTERVAL_DATING_FIELDS[name], value)
@@ -1258,8 +1263,9 @@ class FlexibleDateIntervalDetector:
     def _zoned_reformat(self, interval, zone, zone_run, start_values, end_values) -> str:
         """ICU's rendering of the interval with its zone text written for ``zone``.
 
-        hand-rolled: PyICU's DateIntervalFormat exposes no ``setTimeZone`` and no
-        calendar-taking ``format``, so it writes only in the default zone. The wall-clock
+        hand-rolled: PyICU's DateIntervalFormat exposes no ``setTimeZone`` (only its
+        calendar-taking ``formatToValue``, which a plain interval's gate uses, writes in
+        another zone), so this path writes in the default zone. The wall-clock
         fields render the same in any zone, so the reformat is taken in the default zone
         and each zone field ICU reports (by ``formatToValue`` position) is replaced with
         ``SimpleDateFormat``'s rendering of ``zone`` at that endpoint's wall-clock time,
@@ -1350,8 +1356,14 @@ class FlexibleDateIntervalDetector:
         """One matcher's reading at ``start`` with its sides parsed on ``dating``."""
         formatter1, separator, formatter2, fields1, fields2, patterns, zone_run = matcher[:7]
         has_zone1, has_zone2 = matcher[7]
+        # A recipe with no zone field writes wall-clock time in no particular zone, so it
+        # is parsed and gated in GMT, which has no DST gap or overlap. In the process
+        # default zone a wall time inside a spring-forward gap ("3/10/2024, 02:30" in
+        # America/New_York) would be normalized by the lenient Calendar to another hour,
+        # and the reading would depend on the process time zone.
+        wall_zone = icu.TimeZone.getGMT() if zone_run is None else None
         parsed1 = self._parse_side(
-            formatter1, fields1, has_zone1, text, start, cp_to_u16, u16_to_cp, dating
+            formatter1, fields1, has_zone1, text, start, cp_to_u16, u16_to_cp, dating, wall_zone
         )
         if parsed1 is None:
             return None
@@ -1360,7 +1372,15 @@ class FlexibleDateIntervalDetector:
         if separator_end is None:
             return None
         parsed2 = self._parse_side(
-            formatter2, fields2, has_zone2, text, separator_end, cp_to_u16, u16_to_cp, dating
+            formatter2,
+            fields2,
+            has_zone2,
+            text,
+            separator_end,
+            cp_to_u16,
+            u16_to_cp,
+            dating,
+            wall_zone,
         )
         if parsed2 is None:
             return None
@@ -1383,16 +1403,27 @@ class FlexibleDateIntervalDetector:
         dated_start = {**dating, **start_values}
         dated_end = {**dating, **end_values}
         try:
-            start_calendar = self._calendar_from(dated_start)
-            end_calendar = self._calendar_from(dated_end)
-            interval = icu.DateInterval(start_calendar.getTime(), end_calendar.getTime())
-            # ICU's own text in its zone stands as is ("GMT+0" parses to a zone that
-            # writes "GMT"); otherwise the zone text must be the parsed zone's.
-            dif_zone = self._dif.getDateFormat().getTimeZone()
-            candidates = [(str(self._dif.format(interval)), dif_zone)]
-            if zone is not None:
-                reformatted = self._zoned_reformat(interval, zone, zone_run, dated_start, dated_end)
-                candidates.append((reformatted, zone))
+            if wall_zone is not None:
+                # DateIntervalFormat's calendar-taking formatToValue writes each endpoint
+                # in its calendar's zone (PyICU exposes no setTimeZone), so the gate
+                # renders in the same gapless zone the sides were parsed in.
+                start_calendar = self._calendar_from(dated_start, wall_zone)
+                end_calendar = self._calendar_from(dated_end, wall_zone)
+                rendered = str(self._dif.formatToValue(start_calendar, end_calendar))
+                candidates = [(rendered, wall_zone)]
+            else:
+                start_calendar = self._calendar_from(dated_start)
+                end_calendar = self._calendar_from(dated_end)
+                interval = icu.DateInterval(start_calendar.getTime(), end_calendar.getTime())
+                # ICU's own text in its zone stands as is ("GMT+0" parses to a zone that
+                # writes "GMT"); otherwise the zone text must be the parsed zone's.
+                dif_zone = self._dif.getDateFormat().getTimeZone()
+                candidates = [(str(self._dif.format(interval)), dif_zone)]
+                if zone is not None:
+                    reformatted = self._zoned_reformat(
+                        interval, zone, zone_run, dated_start, dated_end
+                    )
+                    candidates.append((reformatted, zone))
         except icu.ICUError:
             return None
         # note: The reformat guard is the correctness gate for every deposited value.
