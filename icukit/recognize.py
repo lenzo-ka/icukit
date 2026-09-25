@@ -2280,15 +2280,19 @@ def _measure_surfaces(
     for name in _language_locales(locale, names):
         icu_locale = icu.Locale(name)
         number_format = icu.NumberFormat.createInstance(icu_locale)
+        base = icu.NumberFormatter.withLocale(icu_locale)
         for width, width_name in (
-            (icu.UMeasureFormatWidth.SHORT, "short"),
-            (icu.UMeasureFormatWidth.NARROW, "narrow"),
-            (icu.UMeasureFormatWidth.WIDE, "wide"),
+            (icu.UNumberUnitWidth.SHORT, "short"),
+            (icu.UNumberUnitWidth.NARROW, "narrow"),
+            (icu.UNumberUnitWidth.FULL_NAME, "wide"),
         ):
-            formatter = icu.MeasureFormat(icu_locale, width)
+            # NumberFormatter, not MeasureFormat: it also formats a unit ICU composes from
+            # an SI prefix or a product ("kilovolt", "kilonewton"), as CLDR writes it.
+            formatter = base.unit(measure_unit).unitWidth(width)
+            carrier = base.unit(icu.MeasureUnit.createMeter()).unitWidth(width)
             for amount in _plural_samples(name):
                 number_surface = number_format.format(amount)
-                formatted = formatter.formatMeasure(icu.Measure(amount, measure_unit))
+                formatted = str(formatter.formatDouble(amount))
                 number_start = formatted.find(number_surface)
                 if number_start < 0:
                     continue
@@ -2307,9 +2311,12 @@ def _measure_surfaces(
                 # the per form "/km²", which follows a bare number the same way. The
                 # numerator unit is only a carrier for the pattern (meter is a unit every
                 # locale formats); the reading has none, as in "1.0/km²".
-                numerator = icu.Measure(amount, icu.MeasureUnit.createMeter())
-                plain = formatter.formatMeasure(numerator)
-                rate = formatter.formatMeasurePerUnit(numerator, measure_unit)
+                plain = str(carrier.formatDouble(amount))
+                try:
+                    rate = str(carrier.perUnit(measure_unit).formatDouble(amount))
+                except icu.ICUError:
+                    # ICU formats no per form for some composed units ("/kV").
+                    continue
                 if rate.startswith(plain) and len(rate) > len(plain):
                     tail = rate[len(plain) :]
                     for variant in _unit_surface_variants(tail.strip()):
@@ -2372,11 +2379,13 @@ class FlexibleMeasureDetector:
             return False
         character = text[cursor]
         category = icu.Char.charType(character)
+        # A superscript digit continues a unit symbol ("km²" is not "km").
         return icu.Char.isalnum(character) or category in {
             icu.UCharCategory.NON_SPACING_MARK,
             icu.UCharCategory.COMBINING_SPACING_MARK,
             icu.UCharCategory.ENCLOSING_MARK,
             icu.UCharCategory.CONNECTOR_PUNCTUATION,
+            icu.UCharCategory.OTHER_NUMBER,
         }
 
     def _match(
