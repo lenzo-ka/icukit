@@ -3281,6 +3281,24 @@ class FlexibleScientificDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
+def _spellout_rulesets(locale: str) -> tuple[str, ...]:
+    """The locale's public RBNF spell-out rule sets a reader inverts.
+
+    The cardinal, ordinal, and year ones, plain and verbose ("%spellout-ordinal",
+    "%spellout-numbering-year", "%spellout-cardinal-verbose"); the plain "numbering"
+    sets write what the cardinal ones do.
+    """
+    formatter = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.SPELLOUT, icu.Locale(locale))
+    names = tuple(
+        formatter.getRuleSetName(index) for index in range(formatter.getNumberOfRuleSetNames())
+    )
+    return tuple(
+        name
+        for name in names
+        if any(kind in name.casefold() for kind in ("cardinal", "ordinal", "year"))
+    )
+
+
 def _spellout_formatter_and_ruleset(
     locale: str,
 ) -> tuple[icu.RuleBasedNumberFormat, str]:
@@ -3303,19 +3321,31 @@ def _spellout_formatter_and_ruleset(
 
 
 class FlexibleSpelloutDetector:
-    """Recognize canonical ICU spelled-out cardinals derived from locale RBNF data.
+    """Recognize canonical ICU spelled-out numbers derived from locale RBNF data.
+
+    The cardinal rule set by default; ``ruleset`` chooses another the locale has (see
+    :func:`_spellout_rulesets`): "%spellout-ordinal" ("twenty-first"),
+    "%spellout-numbering-year" ("nineteen ninety-nine"), "%spellout-cardinal-verbose"
+    ("one hundred and one"). The type is ``number:spellout`` for the default and
+    ``number:spellout:<rule set>`` otherwise ("number:spellout:ordinal").
 
     A lone token is suppressed only when it is one of the ambiguous unit words obtained
-    by formatting 0 through 9. Larger lone magnitudes and every multi-token canonical
-    surface remain eligible for deposit-and-hold alongside other detector candidates.
+    by formatting 0 through 9 ("one", "first"). Larger lone magnitudes and every
+    multi-token canonical surface remain eligible for deposit-and-hold alongside other
+    detector candidates.
     """
 
     group = "number"
     type = "number:spellout"
 
-    def __init__(self, locale: str) -> None:
+    def __init__(self, locale: str, *, ruleset: str | None = None) -> None:
         self.locale = locale
         self._rbnf, self._ruleset = _spellout_formatter_and_ruleset(locale)
+        if ruleset is not None and ruleset != self._ruleset:
+            if ruleset not in _spellout_rulesets(locale):
+                raise ValueError(f"no spellout rule set {ruleset!r} in {locale!r}")
+            self._ruleset = ruleset
+            self.type = "number:spellout:" + ruleset.lstrip("%").removeprefix("spellout-")
         self._spec = SpelloutFormatSpec(locale, self._ruleset)
         values = (
             *range(1001),
