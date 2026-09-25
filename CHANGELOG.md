@@ -4,6 +4,10 @@
 
 ### Added
 
+- The US English abbreviation lexicon adds the USPS two-letter codes for the states,
+  DC and the inhabited territories ("NY": New York, sense `region`, cue `address`),
+  curated since ICU and CLDR have none; a code that is also a word is marked so ("IN",
+  "OR"), and one the English lexicon also lists keeps both readings ("MP").
 - `FlexibleDateDetector` reads a numeric date with its era, as CLDR's `GyMd` patterns
   write it for the language ("3/5/2024 AD", "15/03/44 BC", Japanese "西暦2024/3/5"),
   with the value led by `("G", era)`; the date is checked in its era (2/29/45 BC
