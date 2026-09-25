@@ -6,6 +6,17 @@
 
 ### Added
 
+- The readings the default readers refuse on purpose are read, each under a type of its
+  own, by opt-in readers: `FlexibleLoneSpelloutDetector` reads a lone unit word the
+  spell-out reader withholds ("one", `number:spellout-lone`, 1; "first",
+  `number:spellout-lone:ordinal`, 1), `FlexibleLowercaseRomanDetector` a lowercase
+  Roman numeral ("xii", `number:cardinal:roman-lower`, 12),
+  `FlexibleMonthNameDetector` and `FlexibleWeekdayNameDetector` a name outside a text
+  date ("May", `date:month-name`, `("M", 5)`; "Tues.", `date:weekday-name`,
+  `("E", 3)`), and `FlexibleBareHourDetector` a lone number as an hour of the locale's
+  hour cycle ("at 3", `time:bare-hour`, `("h", 3)` in en_US and `("H", 3)` in en_GB).
+  The engine generates them from `GUARDED_FAMILIES`, which `DEFAULT_FAMILIES` does not
+  include, so a consumer opts in by type; every existing type reads what it read.
 - `FlexibleDateIntervalDetector` reads the interval forms ICU's `DateIntervalFormat`
   writes where CLDR lists no interval pattern, recovering each pattern from ICU's own
   output and field positions: width-adjusted skeletons ("March 5 – 7, 2024" for `yMMMMd`,

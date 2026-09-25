@@ -22,6 +22,11 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleSpelloutDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleTextDateDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleBareHourDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleLoneSpelloutDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleLowercaseRomanDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleMonthNameDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleWeekdayNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -50,12 +55,18 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`detection_to_dict`](#icukitserialize) — function, `icukit.serialize`
 - [`detections_to_json`](#icukitserialize) — function, `icukit.serialize`
 - [`ABBREVIATION_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`BARE_HOUR_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`COMPACT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DATE_INTERVAL_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DATE_TIME_SKELETON_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`GUARDED_FAMILIES`](#icukitengine) — constant, `icukit.engine`
+- [`LONE_SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`LOWERCASE_ROMAN_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`MONTH_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`WEEKDAY_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`Family`](#icukitengine) — class, `icukit.engine`
 - [`DateIntervalSpec`](#icukitdetectors) — class, `icukit.detectors`
 - [`DateIntervalValue`](#icukitdetectors) — class, `icukit.detectors`
@@ -2929,9 +2940,21 @@ observable in the generation report, rather than making generation fail or silen
 narrowing the enumerated surface. The abbreviation family is inventory-driven because
 expansion is intentionally not an invertible formatter operation.
 
+:data:`DEFAULT_FAMILIES` is the default gang. :data:`GUARDED_FAMILIES` generates the
+readers of the readings the default readers refuse on purpose -- a lone "one" or
+"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour -- each
+under its own type, so a consumer that wants every path (a lattice for forced
+alignment) opts in with ``generated_detectors(locale, (*DEFAULT_FAMILIES,
+*GUARDED_FAMILIES))`` or adds one reader to a gang with ``DetectorSet.with_``, and one
+that does not leaves them out.
+
 ### Constants and type aliases
 
 #### `ABBREVIATION_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `BARE_HOUR_FAMILY` (constant)
 
 `<icukit.engine.Family>`
 
@@ -2954,6 +2977,25 @@ expansion is intentionally not an invertible formatter operation.
 note: A measure family belongs here once its ICU surfaces have an introspective
 inverter. Abbreviations use their typed lexicon.
 
+#### `GUARDED_FAMILIES` (constant)
+
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+
+The readings the default readers refuse on purpose, each under its own type; not in
+DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
+
+#### `LONE_SPELLOUT_NUMBER_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `LOWERCASE_ROMAN_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `MONTH_NAME_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
 #### `RELATIVE_DATE_FAMILY` (constant)
 
 `<icukit.engine.Family>`
@@ -2963,6 +3005,10 @@ inverter. Abbreviations use their typed lexicon.
 `<icukit.engine.Family>`
 
 #### `SPELLOUT_NUMBER_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `WEEKDAY_NAME_FAMILY` (constant)
 
 `<icukit.engine.Family>`
 
@@ -5114,7 +5160,8 @@ locale's own styles do not already read the text: "1,5" reads 1.5 and "1.234,56"
 
 ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
 cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
-unit abbreviations and common words.
+unit abbreviations and common words; :class:`FlexibleLowercaseRomanDetector` reads
+them as their own type, ``number:cardinal:roman-lower``.
 
 #### `FlexibleNumberDetector(locale: 'str', *, accept_single_letter_roman: 'bool' = True, accept_lowercase_roman: 'bool' = False, locales: 'Iterable[str] | None' = None) -> 'None'`
 
