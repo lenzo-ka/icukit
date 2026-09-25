@@ -54,7 +54,11 @@ from .recognize import (
     _locale_selection,
     _plural_samples,
 )
-from .unit_surfaces import curated_composed_units, curated_unit_surfaces
+from .unit_surfaces import (
+    curated_composed_units,
+    curated_currency_surfaces,
+    curated_unit_surfaces,
+)
 
 __all__ = ["IcuAbbreviation", "ABBREVIATION_KINDS", "icu_abbreviations"]
 
@@ -378,7 +382,26 @@ def _currency_rows(locale: str, names: tuple[str, ...] | None) -> tuple[IcuAbbre
                     table.add(surface, "currency", code, width_name, expansions)
             except icu.ICUError:
                 continue
+    # The curated surfaces ICU does not write for the currency ("Rs" for INR); those that
+    # are ICU's own elsewhere in the language ("Rs" for PKR) are already listed as ICU's.
+    language = icu.Locale(locale).getLanguage()
+    for surface, code in curated_currency_surfaces(language):
+        if any(r.surface == surface and r.key == code for r in table.rows()):
+            continue
+        table.add(surface, "currency", code, "curated", _currency_names(locale, code), "curated")
     return table.rows()
+
+
+def _currency_names(locale: str, code: str) -> list[str]:
+    """ICU's names for a currency, singular and plural ("Indian rupee", "Indian rupees")."""
+    icu_locale = icu.Locale(locale)
+    numbers = icu.NumberFormat.createInstance(icu_locale)
+    base = icu.NumberFormatter.withLocale(icu_locale).precision(icu.Precision.integer())
+    full = base.unit(icu.CurrencyUnit(code)).unitWidth(icu.UNumberUnitWidth.FULL_NAME)
+    return [
+        _currency_name(str(full.formatDouble(amount)), numbers.format(amount), {code})
+        for amount in (1, 2)
+    ]
 
 
 @cache

@@ -41,7 +41,7 @@ from .detectors import (
     _word_edges,
     _word_interior_offsets,
 )
-from .unit_surfaces import curated_unit_surfaces
+from .unit_surfaces import curated_currency_surfaces, curated_unit_surfaces
 
 __all__ = [
     "AlphanumericRunsDetector",
@@ -2220,6 +2220,11 @@ class FlexibleCurrencyDetector:
             reflected_symbols.add(
                 self._currency_affix(available, currency, icu.UNumberUnitWidth.ISO_CODE)
             )
+        # The language's curated surfaces for this currency ("Rs" for INR; see
+        # icukit.unit_surfaces).
+        reflected_symbols.update(
+            surface for surface, code in curated_currency_surfaces(language) if code == currency
+        )
         self._currencies = tuple(sorted(reflected_symbols, key=len, reverse=True))
         self._spec = NumberFormatSpec(locale, "currency", currency=currency)
 
