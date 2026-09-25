@@ -6,6 +6,22 @@
 
 ### Added
 
+- `flexible_detectors(locale)` assembles the flexible readers of `icukit.recognize` for a
+  locale, so what they read is reachable without constructing classes; the existing
+  sets held few of them. A reader that takes a parameter is built for values chosen
+  from ICU: each compact width, spell-out rule set, and interval skeleton the engine
+  probes; the currencies of the language's locales and those the locale writes with a
+  symbol of its own, less those ICU gives no territory today (de_DE's "DM"); every unit
+  of ICU's duration and digital types ("3 weeks", "2 GB"), and the units CLDR's unit
+  preferences give the world and the locales' regions, with the mixed ones
+  ("foot-and-inch") and the runs of CLDR's duration order ("hour-and-minute-and-second");
+  a unit no region of the language prefers is not read (German "°F"). The currency and
+  measure readers share the numbers they read within a text, so a set reads at a small
+  multiple of `generated_detectors`' cost. `currencies=` and `units=` choose others, `locales=`
+  chooses the language's locales as the readers' own option does, and `guarded=True`
+  adds the guarded readers. `flexible_detectors_report` names each member that could
+  not be built and why. The existing sets are unchanged.
+
 - The readings the default readers refuse on purpose are read, each under a type of its
   own, by opt-in readers: `FlexibleLoneSpelloutDetector` reads a lone unit word the
   spell-out reader withholds ("one", `number:spellout-lone`, 1; "first",
