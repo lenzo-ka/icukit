@@ -628,12 +628,18 @@ def _current_currencies() -> frozenset[str]:
     """The currencies ICU gives some territory today.
 
     PyICU exposes neither ``ucurr_isAvailable`` nor CLDR's currency map, so a currency
-    counts as current when ICU's currency formatter chooses it for a territory's locale
-    ("und_DE" is EUR); a withdrawn one (DEM, FRF) is no territory's.
+    counts as current when ICU's currency formatter chooses it for a territory's
+    locale: "und_<territory>" ("und_DE" is EUR) or any available locale of the
+    territory. A withdrawn one (DEM, FRF) is no territory's. The formatter chooses one
+    currency a territory, so a second currency in use beside it is not counted: the
+    loti (LSL) beside the rand in Lesotho, whose locales ICU all gives ZAR, is a known
+    gap, and a caller who wants it passes ``currencies=``.
     """
+    names = [f"und_{region}" for region in icu.Region.getAvailable(icu.URegionType.TERRITORY)]
+    names += [name for name in icu.Locale.getAvailableLocales() if icu.Locale(name).getCountry()]
     found = set()
-    for region in icu.Region.getAvailable(icu.URegionType.TERRITORY):
-        code = icu.NumberFormat.createCurrencyInstance(icu.Locale(f"und_{region}")).getCurrency()
+    for name in names:
+        code = icu.NumberFormat.createCurrencyInstance(icu.Locale(name)).getCurrency()
         if code:
             found.add(code)
     found.discard(_NO_CURRENCY)
@@ -672,16 +678,20 @@ def _chosen_currencies(locale: str, locales: tuple[str, ...] | None) -> tuple[st
 # The ICU unit types whose every unit the set reads in any locale: running text writes a
 # duration ("3 weeks", "2 fortnights") or a data size ("2 GB") whatever the region, and
 # CLDR's unit preferences name few of them (no week, no byte). Both types are small.
+# The "-person" durations (week-person, year-person) are left out: ICU writes them as it
+# writes week and year, so each duration would read twice. They come in where CLDR's
+# preferences name them (person-age's year-person-and-month-person).
 _EVERY_REGION_UNIT_TYPES = ("duration", "digital")
 
 
 def _every_region_units() -> tuple[str, ...]:
-    """Every unit ICU's inventory holds of :data:`_EVERY_REGION_UNIT_TYPES`."""
+    """Every unit ICU's inventory holds of :data:`_EVERY_REGION_UNIT_TYPES`, less the
+    "-person" durations."""
     return tuple(
         unit.getIdentifier()
         for unit_type in _EVERY_REGION_UNIT_TYPES
         for unit in icu.MeasureUnit.getAvailable(unit_type)
-        if unit.getIdentifier()
+        if unit.getIdentifier() and not unit.getIdentifier().endswith("-person")
     )
 
 
@@ -857,7 +867,8 @@ def flexible_detectors(
     in a language of many locales, where the currency and measure readers read every
     locale's forms), so build it once and reuse it; a ``detect`` costs a small multiple
     of the generated set's, since the currency and measure readers share the numbers
-    they read within a text.
+    they read within a text. The shared readings are kept for the 16 texts read last
+    (about 110 bytes per character each for en_US).
     """
     return flexible_detectors_report(
         locale, locales=locales, currencies=currencies, units=units, guarded=guarded

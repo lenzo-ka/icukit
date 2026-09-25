@@ -3047,28 +3047,46 @@ def _negative_currency_wraps(
     return tuple(wraps)
 
 
+def _number_reader_key(number: FlexibleNumberDetector) -> tuple:
+    """Everything a number reader's readings depend on: its locale and its options.
+
+    Two readers with one key read every text alike, so they may share readings.
+    """
+    return (
+        number.locale,
+        number.locales,
+        number.accept_single_letter_roman,
+        number.accept_lowercase_roman,
+        number._roman_rule_sets,
+    )
+
+
+# Each memo keeps its 16 most recent (reader key, text) entries, across all keys; an
+# entry holds a reading or None for each start tried. With the grapheme starts, the
+# memos hold about 110 bytes per character of a text an en_US flexible set has read.
 @lru_cache(maxsize=16)
-def _plain_number_memo(locale: str, text: str) -> dict[int, object]:
-    """Readings of ``text`` by ``FlexibleNumberDetector(locale)``, by start, filled lazily."""
+def _number_memo(key: tuple, text: str) -> dict[int, object]:
+    """Readings of ``text`` by the number readers of ``key``, by start, filled lazily."""
     return {}
 
 
 def _plain_number_match(number: FlexibleNumberDetector, text: str, start: int):
-    """``number._match(text, start)``, shared among readers of one locale.
+    """``number._match(text, start)``, shared among the readers with ``number``'s key.
 
-    ``number`` is a reader's own ``FlexibleNumberDetector(locale)``, built with no
-    options; a gang holds many currency and measure readers that each read the same
-    numbers at the same starts, so the reading is made once per text.
+    A gang holds many currency and measure readers, each with its own number reader
+    built alike, that read the same numbers at the same starts; the reading is made
+    once per text. The key holds the reader's options, so a reader built otherwise
+    never shares another's readings.
     """
-    memo = _plain_number_memo(number.locale, text)
+    memo = _number_memo(_number_reader_key(number), text)
     if start not in memo:
         memo[start] = number._match(text, start)
     return memo[start]
 
 
 @lru_cache(maxsize=16)
-def _currency_amount_memo(locale: str, text: str) -> dict[int, object]:
-    """Amounts of ``text`` as a currency reader of ``locale`` reads them, by start."""
+def _currency_amount_memo(key: tuple, text: str) -> dict[int, object]:
+    """Amounts of ``text`` as the currency readers of ``key`` read them, by start."""
     return {}
 
 
@@ -3183,9 +3201,13 @@ class FlexibleCurrencyDetector:
         return name_end, (*captures, currency), NumberValue(value.decimal, self.currency)
 
     def _amount(self, text: str, start: int):
-        # An amount depends on the locale alone, not on the currency, so the readers of
-        # a gang's currencies share it.
-        memo = _currency_amount_memo(self.locale, text)
+        # An amount depends on the number and compact readers, not on the currency, so
+        # the readers of a gang's currencies share it.
+        key = (
+            _number_reader_key(self._number),
+            tuple((c.locale, c.width, c.fold_symbol_case) for c in self._compact),
+        )
+        memo = _currency_amount_memo(key, text)
         if start not in memo:
             memo[start] = self._read_amount(text, start)
         return memo[start]

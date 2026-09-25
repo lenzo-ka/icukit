@@ -3089,7 +3089,8 @@ The set is costlier than :func:`generated_detectors`: building it takes seconds 
 in a language of many locales, where the currency and measure readers read every
 locale's forms), so build it once and reuse it; a ``detect`` costs a small multiple
 of the generated set's, since the currency and measure readers share the numbers
-they read within a text.
+they read within a text. The shared readings are kept for the 16 texts read last
+(about 110 bytes per character each for en_US).
 
 ### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'GenerationReport'`
 

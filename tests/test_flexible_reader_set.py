@@ -15,6 +15,7 @@ import time
 from decimal import Decimal
 from functools import cache
 
+import icu
 import pytest
 
 import icukit.recognize as recognize
@@ -29,7 +30,7 @@ from icukit.detectors import (
     date_detectors,
     number_detectors,
 )
-from icukit.engine import generated_detectors
+from icukit.engine import _current_currencies, generated_detectors
 
 LOCALES = ("en_US", "de_DE", "ja_JP")
 
@@ -61,7 +62,6 @@ COMMON_UNITS = {
     "day-and-hour-and-minute-and-second-and-millisecond",
     "day-and-hour-and-minute-and-second-and-millisecond-and-microsecond",
     "day-and-hour-and-minute-and-second-and-millisecond-and-microsecond-and-nanosecond",
-    "day-person",
     "decade",
     "fortnight",
     "gigabit",
@@ -130,7 +130,6 @@ COMMON_UNITS = {
     "tonne",
     "watt",
     "week",
-    "week-person",
     "year",
     "year-person",
     "year-person-and-month-person",
@@ -414,6 +413,29 @@ def test_an_unbuildable_member_is_reported_not_raised():
         "currency",
         "currency-name",
     }
+
+
+def test_a_currency_counts_as_current_where_any_locale_of_a_territory_uses_it():
+    current = _current_currencies()
+
+    for name in icu.Locale.getAvailableLocales():
+        if icu.Locale(name).getCountry():
+            code = icu.NumberFormat.createCurrencyInstance(icu.Locale(name)).getCurrency()
+            assert code in current or code == "XXX", (name, code)
+    assert {"EUR", "USD", "ZAR", "NAD"} <= current
+    assert not {"DEM", "FRF", "ATS"} & current
+    # A known gap: ICU gives every locale of Lesotho the rand, so the loti in use beside
+    # it is never chosen; a caller passes currencies=["LSL"] for it.
+    assert "LSL" not in current
+
+
+def test_person_durations_come_only_from_the_preferences():
+    types = set(_gang("ja_JP").names())
+
+    assert "measure:week" in types
+    assert not {"measure:week-person", "measure:day-person"} & types
+    # person-age's preference names these.
+    assert {"measure:year-person", "measure:year-person-and-month-person"} <= types
 
 
 def test_the_existing_sets_are_unchanged():
