@@ -6,10 +6,12 @@ import argparse
 import json
 import sys
 
+import icu
+
 from ...detectors import date_detectors, number_detectors
 from ...engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, flexible_detectors, generated_detectors
 from ...formatters import format_json, format_tsv
-from ...recognize import FlexibleMeasureDetector
+from ...recognize import FlexibleMeasureDetector, _iso_currency_codes
 from ...serialize import detection_to_dict, detections_to_json
 from ..subcommand_base import SubcommandBase
 
@@ -50,10 +52,11 @@ Examples:
   icukit detect --flexible --locale de_DE -t '3,5 kg'
 
   # Only en_US's own forms (no en_GB "kilometres")
-  icukit detect --flexible --locales -t '12 kilometres'
+  icukit detect --flexible --locales '' -t '12 kilometres'
 
   # en_US and en_GB forms only
   icukit detect --flexible --locales en_GB -t '12 kilometres'
+  icukit detect --flexible --locales en_GB,en_IN notes.txt
 
   # The flexible readers of chosen currencies and units only
   icukit detect --flexible --currency EUR --measure kilogram -t '-€5 for 3 kg'
@@ -70,8 +73,8 @@ Examples:
             action="append",
             default=[],
             metavar="CODE",
-            help="Add an ISO currency (with --flexible, the flexible currency readers read "
-            "only the currencies given)",
+            help="Add an ISO 4217 currency, in either case (with --flexible, the flexible "
+            "currency readers read only the currencies given)",
         )
         parser.add_argument(
             "--measure",
@@ -93,11 +96,10 @@ Examples:
         )
         parser.add_argument(
             "--locales",
-            nargs="*",
             default=None,
-            metavar="LOC",
-            help="With --flexible, the other locales of the language to read (default: "
-            "every one; none given: the locale alone)",
+            metavar="LOC[,LOC...]",
+            help="With --flexible, the other locales of the language to read, comma-separated "
+            '(default: every one; "" reads the locale alone)',
         )
         parser.add_argument(
             "--skeleton", action="append", default=[], metavar="SKEL", help="Add a date skeleton"
@@ -111,11 +113,50 @@ Examples:
         parser.set_defaults(func=cls.run)
         return parser
 
+    @staticmethod
+    def _checked_choices(args):
+        """The chosen locales, currencies, and units, checked against ICU.
+
+        Raises ValueError, with a message for the user, for a choice ICU does not know.
+        """
+        locales = None
+        if args.locales is not None:
+            if not args.flexible:
+                raise ValueError("--locales requires --flexible")
+            locales = tuple(name.strip() for name in args.locales.split(",") if name.strip())
+            available = set(icu.Locale.getAvailableLocales())
+            language = icu.Locale(args.locale).getLanguage()
+            for name in locales:
+                if icu.Locale(name).getName() not in available:
+                    raise ValueError(f"unknown locale {name!r} in --locales")
+                if icu.Locale(name).getLanguage() != language:
+                    raise ValueError(
+                        f"--locales {name!r} is not a locale of {args.locale!r}'s language"
+                    )
+        currencies = []
+        known = _iso_currency_codes()
+        for code in args.currency:
+            if code.upper() not in known:
+                raise ValueError(f"unknown ISO 4217 currency {code!r}")
+            currencies.append(code.upper())
+        units = []
+        for unit in args.measure:
+            try:
+                identifier = icu.MeasureUnit.forIdentifier(unit).getIdentifier() if unit else ""
+            except icu.ICUError:
+                identifier = ""
+            if not identifier:
+                raise ValueError(f"unknown ICU measure unit {unit!r}")
+            units.append(identifier)
+        return locales, currencies, units
+
     @classmethod
     def run(cls, args):
         """Recognize and render typed candidates."""
-        if args.locales is not None and not args.flexible:
-            print("icukit detect: --locales requires --flexible", file=sys.stderr)
+        try:
+            locales, currencies, units = cls._checked_choices(args)
+        except ValueError as error:
+            print(f"icukit detect: {error}", file=sys.stderr)
             return 2
         # Honor an explicit --text "" (distinct from an omitted option, which reads stdin).
         if getattr(args, "text", None) is not None:
@@ -124,25 +165,34 @@ Examples:
             text = cls._read_input(args)
         families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if args.guarded else DEFAULT_FAMILIES
         detectors = generated_detectors(args.locale, families)
+        # The strict readers: a currency's strict reading stands beside the flexible set's
+        # (the "$12.50" inside "($12.50)"), while the flexible set's decimal and percent
+        # readers read every number the strict ones would, so under --flexible those
+        # would only repeat a reading.
+        plain = not args.flexible
+        numbers = number_detectors(args.locale, decimal=plain, percent=plain, currencies=currencies)
+        detectors = detectors.with_(*numbers.detectors)
         if args.flexible:
-            # The flexible set reads decimals, percents, and the currencies and units asked
-            # for (or ICU's choice) itself, so the strict number readers and the
+            if locales is None:
+                language = icu.Locale(args.locale).getLanguage()
+                print(
+                    f"icukit detect: building the flexible readers for every locale of "
+                    f"{language!r}; pass --locales to narrow",
+                    file=sys.stderr,
+                )
+            # The flexible set reads the units asked for (or ICU's choice) itself, so the
             # per-unit measure readers below would only repeat its readings.
             flexible = flexible_detectors(
                 args.locale,
-                locales=args.locales,
-                currencies=args.currency or None,
-                units=args.measure or None,
+                locales=locales,
+                currencies=currencies or None,
+                units=units or None,
                 guarded=args.guarded,
             )
             detectors = detectors.with_(*flexible.detectors)
         else:
-            numbers = number_detectors(
-                args.locale, decimal=True, percent=True, currencies=args.currency
-            )
-            detectors = detectors.with_(*numbers.detectors)
             detectors = detectors.with_(
-                *(FlexibleMeasureDetector(args.locale, unit) for unit in args.measure)
+                *(FlexibleMeasureDetector(args.locale, unit) for unit in units)
             )
         if args.skeleton:
             detectors = detectors.with_(*date_detectors(args.locale, args.skeleton).detectors)

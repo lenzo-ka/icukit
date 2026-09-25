@@ -86,48 +86,85 @@ class TestDetectCommand:
         assert json.loads(out) == []
 
     @staticmethod
-    def _rows(*args):
+    def _run(*args):
         code, out, err = run_cli("detect", "-H", *args)
         assert code == 0, err
-        return {tuple(line.split("\t")[2:]) for line in out.splitlines()}
+        return {tuple(line.split("\t")[2:]) for line in out.splitlines()}, err
+
+    @classmethod
+    def _rows(cls, *args):
+        return cls._run(*args)[0]
 
     def test_flexible_reads_accounting_and_negative_currency_mixed_measures_and_zones(self):
         text = "Paid ($12.50), then -$5, for 5 ft 3 in, 2:07 – 4:07 PM EDT"
-        rows = self._rows("--flexible", "--locales", "-t", text)
+        rows, err = self._run("--flexible", "--locales", "", "--currency", "USD", "-t", text)
         assert {
             ("number:currency:USD", "($12.50)"),
+            # The strict reader's reading inside the accounting form stays beside it.
+            ("number:currency:USD", "$12.50"),
             ("number:currency:USD", "-$5"),
             ("measure:foot-and-inch", "5 ft 3 in"),
             ("date-interval:hmz", "2:07 – 4:07 PM EDT"),
         } <= rows
-        # Without --flexible, the currencies and the mixed measure are not read.
+        assert "every locale" not in err
+        # Without --flexible, the accounting and negative forms and the mixed measure are
+        # not read.
         assert not {
             ("number:currency:USD", "($12.50)"),
             ("number:currency:USD", "-$5"),
             ("measure:foot-and-inch", "5 ft 3 in"),
-        } & self._rows("-t", text)
+        } & self._rows("--currency", "USD", "-t", text)
 
     def test_flexible_reads_a_comma_decimal_measure_in_german(self):
-        rows = self._rows("--flexible", "--locale", "de_DE", "-t", "3,5 kg")
+        rows, err = self._run("--flexible", "--locale", "de_DE", "-t", "3,5 kg")
         assert rows == {("measure:kilogram", "3,5 kg"), ("number:decimal", "3,5")}
+        # The language-wide set is the default, and says so.
+        assert "building the flexible readers for every locale of 'de'" in err
 
     def test_locales_chooses_the_locales_of_the_language_read(self):
         text = "12 kilometres"
         assert ("measure:kilometer", text) in self._rows(
-            "--flexible", "--locales", "en_GB", "-t", text
+            "--flexible", "--locales", "en_GB,en_IN", "-t", text
         )
         # An empty selection reads the locale alone, and en_US writes "kilometers".
-        assert ("measure:kilometer", text) not in self._rows("--flexible", "--locales", "-t", text)
+        assert ("measure:kilometer", text) not in self._rows(
+            "--flexible", "--locales", "", "-t", text
+        )
 
-    def test_locales_requires_flexible(self):
-        code, out, err = run_cli("detect", "--locales", "en_GB", "-t", "one")
+    def test_locales_leaves_the_input_file_to_be_read(self, tmp_path):
+        path = tmp_path / "text.txt"
+        path.write_text("12 kilometres", encoding="utf-8")
+        rows = self._rows("--flexible", "--locales", "en_GB", str(path))
+        assert ("measure:kilometer", "12 kilometres") in rows
+
+    @pytest.mark.parametrize(
+        ("args", "message"),
+        [
+            (("--locales", "en_GB", "-t", "one"), "--locales requires --flexible"),
+            (("--flexible", "--locales", "fr_FR", "-t", "12 km"), "not a locale of"),
+            (("--flexible", "--locales", "xx_YY", "-t", "12 km"), "unknown locale 'xx_YY'"),
+            (("--currency", "XYZ", "-t", "5"), "unknown ISO 4217 currency 'XYZ'"),
+            (("--flexible", "--locales", "", "--currency", "XYZ", "-t", "5"), "'XYZ'"),
+            (("--measure", "furlongz", "-t", "5"), "unknown ICU measure unit 'furlongz'"),
+            (("--flexible", "--locales", "", "--measure", "furlongz", "-t", "5"), "'furlongz'"),
+        ],
+    )
+    def test_a_choice_icu_does_not_know_is_refused(self, args, message):
+        code, out, err = run_cli("detect", *args)
         assert code == 2
-        assert "--locales requires --flexible" in err
+        assert message in err
+        assert "Traceback" not in err
+
+    def test_a_lowercase_currency_code_is_read_as_the_iso_code(self):
+        assert ("number:currency:USD", "$5.00") in self._rows("--currency", "usd", "-t", "$5.00")
+        rows = self._rows("--flexible", "--locales", "", "--currency", "usd", "--text=-$5")
+        assert ("number:currency:USD", "-$5") in rows
 
     def test_flexible_reads_only_the_currencies_and_units_given(self):
         rows = self._rows(
             "--flexible",
             "--locales",
+            "",
             "--currency",
             "EUR",
             "--measure",

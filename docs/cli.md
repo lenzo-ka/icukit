@@ -682,10 +682,11 @@ Examples:
   icukit detect --flexible --locale de_DE -t '3,5 kg'
 
   # Only en_US's own forms (no en_GB "kilometres")
-  icukit detect --flexible --locales -t '12 kilometres'
+  icukit detect --flexible --locales '' -t '12 kilometres'
 
   # en_US and en_GB forms only
   icukit detect --flexible --locales en_GB -t '12 kilometres'
+  icukit detect --flexible --locales en_GB,en_IN notes.txt
 
   # The flexible readers of chosen currencies and units only
   icukit detect --flexible --currency EUR --measure kilogram -t '-€5 for 3 kg'
@@ -698,11 +699,11 @@ Examples:
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
-- `--currency`: Add an ISO currency (with --flexible, the flexible currency readers read only the currencies given) (default: `[]`)
+- `--currency`: Add an ISO 4217 currency, in either case (with --flexible, the flexible currency readers read only the currencies given) (default: `[]`)
 - `--measure`: Add an ICU measure unit, single or mixed (with --flexible, the measure readers read only the units given) (default: `[]`)
 - `--flexible`: Add the flexible readers (seconds to build) (default: `False`)
 - `--guarded`: Add the readings the default readers refuse on purpose (default: `False`)
-- `--locales`: With --flexible, the other locales of the language to read (default: every one; none given: the locale alone)
+- `--locales`: With --flexible, the other locales of the language to read, comma-separated (default: every one; "" reads the locale alone)
 - `--skeleton`: Add a date skeleton (default: `[]`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)

@@ -147,8 +147,8 @@ ik transliterate list --name "Russian-.*"
 # Recognize typed values in running text
 ik detect --currency USD -t 'Paid $1,234.50 on March 5, 2024'
 
-# Add the flexible readers (accounting currency, mixed measures); --locales alone reads en_US only
-ik detect --flexible --locales -t 'Paid ($12.50) for 5 ft 3 in'
+# Add the flexible readers (accounting currency, mixed measures); --locales '' reads en_US alone
+ik detect --flexible --locales '' -t 'Paid ($12.50) for 5 ft 3 in'
 
 # Format numbers
 ik locale format 1234567.89 --locale de_DE

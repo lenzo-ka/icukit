@@ -1140,8 +1140,9 @@ class DetectorSet:
     registry; selection and grouping are expressed by composing gangs with
     :meth:`with_` / :meth:`without`.
 
-    A member is identified by its type, its locale, and the locales it reads (see
-    :func:`detector_key`), so an en_US and an en_GB detector of one type share a gang.
+    A member is identified by its type, its reader class, its locale, and the locales it
+    reads (see :func:`detector_key`), so an en_US and an en_GB detector of one type share
+    a gang, as do a strict and a flexible reader of one type.
     """
 
     detectors: tuple[Detector, ...]
@@ -1180,17 +1181,40 @@ class DetectorSet:
         )
 
 
-def detector_key(detector: Detector) -> tuple[str, str | None, tuple[str, ...] | None]:
-    """A detector's identity in a gang: its type, locale, and chosen locales.
+def detector_key(
+    detector: Detector,
+) -> tuple[str, str, str | None, tuple[str, ...] | None]:
+    """A detector's identity in a gang: its type, reader class, locale, and the locales it reads.
 
-    ``locale`` and ``locales`` are read where a detector has them; a detector without a
-    locale is identified by its type alone.
+    The locales are the ones the reader actually reads: a reader with no choice of
+    locales reads its own locale alone, and a language-wide reader left at its default
+    (``locales=None``) reads every ICU locale of the language, spelled out. So two
+    readers share a key only when they are the same kind of reader reading the same
+    locales -- a strict currency reader and a flexible one of the same type and locale
+    are two members, not one replacing the other -- while a reader built twice, or once
+    with ``locales=None`` and once with every locale named, is one member.
     """
+    reader = type(detector)
     return (
         detector.type,
+        f"{reader.__module__}.{reader.__qualname__}",
         getattr(detector, "locale", None),
-        getattr(detector, "locales", None),
+        _read_locales(detector),
     )
+
+
+def _read_locales(detector: Detector) -> tuple[str, ...] | None:
+    locale = getattr(detector, "locale", None)
+    if locale is None:
+        return None
+    base = icu.Locale(locale)
+    if not hasattr(detector, "locales"):
+        return (base.getName(),)
+    if detector.locales is not None:
+        return tuple(detector.locales)
+    from .recognize import _language_locale_names
+
+    return tuple(sorted({base.getName(), *_language_locale_names(base.getLanguage())}))
 
 
 # --------------------------------------------------------------------------- groups
