@@ -23,14 +23,14 @@ class SortCommand(SubcommandBase):
 Sort lines using ICU's locale-aware collation.
 
 Different languages have different sorting rules. For example, Swedish
-sorts 'o' after 'z', while German sorts 'o' with 'o'.
+sorts 'ö' after 'z', while German sorts 'ö' with 'o'.
 
 Examples:
   # Sort lines from stdin
-  echo -e 'cafe\\ncafe\\nCafe' | icukit sort
+  printf 'café\\ncafe\\nCafe\\n' | icukit sort
 
-  # Sort with Swedish rules (o after z)
-  echo -e 'o\\no\\nz' | icukit sort --locale sv_SE
+  # Sort with Swedish rules (ö after z)
+  printf 'ö\\no\\nz\\n' | icukit sort --locale sv_SE
 
   # Sort ignoring accents
   icukit sort --strength primary < words.txt

@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import codecs
 import re
+import warnings
 from typing import Any
 
 import icu
@@ -107,24 +108,40 @@ _NORMALIZERS = {
 }
 
 
+# Each escape sequence Python's ``unicode_escape`` codec knows, matched one at a time so
+# that the characters around it -- non-ASCII text above all -- are never passed through
+# the codec, which reads its input as Latin-1.
+_ESCAPE_RE = re.compile(
+    r"\\(?:N\{[^}]*\}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|x[0-9A-Fa-f]{2}|[0-7]{1,3}"
+    r"|[\\'\"abfnrtv\n])"
+    r"|U\+([0-9A-Fa-f]{4,6})"
+)
+
+
+def _decode_escape(match: re.Match[str]) -> str:
+    if match.group(1) is not None:
+        codepoint = int(match.group(1), 16)
+        return chr(codepoint) if codepoint <= 0x10FFFF else match.group(0)
+    try:
+        # An octal escape above \377 decodes, with a DeprecationWarning of its own.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return codecs.decode(match.group(0), "unicode_escape")
+    except (UnicodeDecodeError, ValueError):
+        return match.group(0)
+
+
 def decode_unicode_escapes(text: str) -> str:
     """Decode Unicode escape sequences in text.
 
-    Recognizes ``\\uXXXX``, ``\\UXXXXXXXX``, ``\\xXX``, and ``U+XXXX`` through
-    ``U+XXXXXX`` notation. Invalid Python-style escapes leave the post-``U+``
-    conversion text unchanged.
+    Each escape Python's ``unicode_escape`` codec knows decodes as it does there
+    (``\\uXXXX``, ``\\UXXXXXXXX``, ``\\xXX`` as code point ``U+00XX``, octal,
+    ``\\N{NAME}``, and ``\\n``, ``\\t``, ``\\\\`` and the other single-character
+    escapes), and ``U+XXXX`` through ``U+XXXXXX`` is the character it names. Every
+    other character, including non-ASCII text and an escape that does not parse, is
+    left as written.
     """
-
-    def replace_uplus(match):
-        codepoint = int(match.group(1), 16)
-        return chr(codepoint)
-
-    text = re.sub(r"U\+([0-9A-Fa-f]{4,6})", replace_uplus, text)
-    try:
-        text = codecs.decode(text, "unicode_escape")
-    except (UnicodeDecodeError, ValueError):
-        pass
-    return text
+    return _ESCAPE_RE.sub(_decode_escape, text)
 
 
 def encode_unicode_escapes(text: str, format: str = "uplus") -> str:

@@ -346,7 +346,7 @@ def _number_captures(formatter, surface: str, kind: str, value: float) -> tuple[
                 integer_end = end
             elif name == "fraction":
                 fraction_begin = begin
-    # The decimal separator is part of the coarse capture set (§12.2); it sits between the
+    # The decimal separator is part of the coarse capture set; it sits between the
     # integer and fraction fields, exactly where the detector locates it.
     if integer_end is not None and fraction_begin is not None:
         separator = symbols.getSymbol(symbol_type.kDecimalSeparatorSymbol)

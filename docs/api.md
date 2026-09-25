@@ -62,6 +62,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`COMPACT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DATE_INTERVAL_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DATE_TIME_SKELETON_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`DEFAULT_FAMILIES`](#icukitengine) — constant, `icukit.engine`
 - [`GUARDED_FAMILIES`](#icukitengine) — constant, `icukit.engine`
 - [`LONE_SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`LOWERCASE_ROMAN_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -2153,16 +2154,23 @@ Raises:
 
 ## icukit.detectors
 
-D1 detectors: invert ICU formatters to find typed values in running text.
+Detectors: find typed values in running text by inverting ICU's formatting.
 
-A *detector* here wraps the invertible class -- the value kinds where an ICU parser
-inverts the formatter (dates, times, datetimes, decimal numbers, currency, percent).
-Each accepted match is a :class:`ValueDetection` that carries the full generative
-structure of the parse::
+This module holds what every reader shares -- the value and spec records, the
+:class:`ValueDetection` shape, the :class:`Detector` protocol, and the
+:class:`DetectorSet` gang -- and the strict readers, :class:`DateDetector` and
+:class:`NumberDetector`, where an ICU parser inverts the formatter (dates, times,
+datetimes, decimal numbers, currency, percent). The flexible readers, which read the
+forms text writes beyond ICU's own, are in :mod:`icukit.recognize`; the assembled sets
+are :func:`~icukit.engine.generated_detectors` (a reader for each canonical ICU form)
+and :func:`~icukit.engine.flexible_detectors`.
+
+Each accepted match is a :class:`ValueDetection` that carries the structure of the
+parse::
 
     surface  <->  (spec, value, captures)
 
-governed by the invariant ``reformat(spec, value) == surface`` -- which is also the
+For the strict readers the invariant ``reformat(spec, value) == surface`` is also the
 acceptance test, so a permissive ICU spelling that would not reproduce its own surface
 is rejected rather than accepted.
 
@@ -2275,7 +2283,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `Detector`
 
-A runnable D1 detector.
+A runnable detector.
 
 ``type`` is the stable label carried on its detections (``date:yMMMd``,
 ``number:currency:USD``); ``group`` is its coarse family (``date``, ``number``) and
@@ -2469,14 +2477,12 @@ Run every detector over ``text`` and return the merged detections.
 
 Detections are returned in a fully deterministic order (start ascending, longer
 extent first, then type, then value key) independent of ``detectors`` order.
-Detections from different detectors may overlap -- H3 deposits them; resolving
-overlap is H4.
+Detections from different detectors may overlap: recognition keeps every
+candidate, and choosing among overlapping readings is left to the consumer.
 
-Each detector runs its own scan here (multi-pass), so a gang trivially equals the
-merge of its members. The single-pass variant §12.5 describes -- one shared scan
-with per-member resume cursors and a freshly cleared calendar per (member, start)
-attempt -- is a deferred efficiency optimization, not yet built; its equivalence
-to this merge is the invariant that variant must preserve.
+Each detector runs its own scan, so a gang's result equals the merge of running its
+members alone. A single shared scan would be faster; any such scan must give this
+same merge.
 
 ### `detector_key(detector: 'Detector') -> 'tuple[str, str | None, tuple[str, ...] | None]'`
 
@@ -6007,7 +6013,7 @@ Example:
 
 Resolve a universe of overlapping detections into a best non-overlapping sequence.
 
-See ``design/H4-resolution/design.md``. The detectors DEPOSIT every candidate they find --
+The detectors DEPOSIT every candidate they find --
 running them on ``1/3/2026`` yields a ``date:yMd`` over the whole span alongside the digit
 fragments ``1``, ``3``, ``26``. This module weighs that universe into the maximum-weight
 non-overlapping cover (1-best), or an ordering of covers that collapses to 1-best.
@@ -6967,9 +6973,12 @@ Normalization form constants
 
 Decode Unicode escape sequences in text.
 
-Recognizes ``\uXXXX``, ``\UXXXXXXXX``, ``\xXX``, and ``U+XXXX`` through
-``U+XXXXXX`` notation. Invalid Python-style escapes leave the post-``U+``
-conversion text unchanged.
+Each escape Python's ``unicode_escape`` codec knows decodes as it does there
+(``\uXXXX``, ``\UXXXXXXXX``, ``\xXX`` as code point ``U+00XX``, octal,
+``\N{NAME}``, and ``\n``, ``\t``, ``\\`` and the other single-character
+escapes), and ``U+XXXX`` through ``U+XXXXXX`` is the character it names. Every
+other character, including non-ASCII text and an escape that does not parse, is
+left as written.
 
 ### `encode_unicode_escapes(text: 'str', format: 'str' = 'uplus') -> 'str'`
 

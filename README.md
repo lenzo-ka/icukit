@@ -30,7 +30,7 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 - **Value readings**: Find numbers, dates, times, measures, currencies, ordinals, and abbreviations in text by inverting ICU's own formatting, keeping every plausible reading of a span
 - **Language-wide forms**: Read the forms every locale of a language writes (en_US text reads en_GB's "12 kilometres"), or only the locales a caller chooses
 
-Readers come assembled in sets. `generated_detectors(locale)` holds the readers that invert ICU's canonical formatting (each date skeleton, each interval, compact, spelled-out, and relative form); `flexible_detectors(locale)` holds the flexible readers, which read the forms text writes beyond ICU's own (negative and accounting currency, dates with eras, mixed measures, other decimal styles, times with zone names), each reader that takes a currency or unit built for those it chooses from ICU. A unit is read where CLDR's unit preferences give it to a region of the language, and every duration and data-size unit everywhere, so German text's "°F" is not read unless you pass `units=`. The flexible set costs more than the generated one: on the order of 5 to 10 seconds to build for en_US (a few for a language of few locales), so build it once and reuse it, and each `detect` a small multiple of the generated set's (the readers share the numbers they read, kept for the 16 texts read last, about 110 bytes per character each for en_US). For every reading, use both: `generated_detectors(locale).with_(*flexible_detectors(locale).detectors)`. Pass `guarded=True` to `flexible_detectors`, or `GUARDED_FAMILIES` to `generated_detectors`, to add the readings the default readers refuse on purpose ("May" alone as a month).
+Readers come assembled in sets. `generated_detectors(locale)` holds the readers that invert ICU's canonical formatting (each date skeleton, each interval, compact, spelled-out, and relative form); `flexible_detectors(locale)` holds the flexible readers, which read the forms text writes beyond ICU's own (negative and accounting currency, dates with eras, mixed measures, other decimal styles, times with zone names), each reader that takes a currency or unit built for those it chooses from ICU. A unit is read where CLDR's unit preferences give it to a region of the language, and every duration and data-size unit everywhere, so German text's "°F" is not read unless you pass `units=`. The flexible set costs more than the generated one: on the order of 5 to 10 seconds to build for en_US (a few for a language of few locales), so build it once and reuse it, and each `detect` a small multiple of the generated set's (the readers share the numbers they read, kept for the 16 texts read last, about 110 bytes per character each for en_US). For every reading, use both: `generated_detectors(locale).with_(*flexible_detectors(locale).detectors)`. Pass `guarded=True` to `flexible_detectors`, or build `generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))` (`GUARDED_FAMILIES` alone builds only the guarded readers), to add the readings the default readers refuse on purpose ("May" alone as a month).
 
 Recognition reads plain text strings. Markdown, rich text, HTML, XML, and other markup must be turned into text before icukit reads it, by the caller or on the client; icukit has no mode for them. It also has no URL or email detector, so readings can fall inside a URL ("2004" in a path).
 
@@ -78,8 +78,8 @@ transliterate("Привет мир", "Russian-Latin/BGN")  # "Privet mir"
 transliterate("hello", "Latin-Cyrillic")  # "хелло"
 
 # Sort strings with locale-aware collation
-sort_strings(["cafe", "café", "CAFE"], "en_US")  # ['cafe', 'café', 'CAFE']
-sort_strings(["Öl", "Ol", "öl"], "de_DE")  # ['Ol', 'Öl', 'öl']
+sort_strings(["cafe", "café", "CAFE"], "en_US")  # ['cafe', 'CAFE', 'café']
+sort_strings(["Öl", "Ol", "öl"], "de_DE")  # ['Ol', 'öl', 'Öl']
 
 # Format numbers for different locales
 format_number(1234567.89, "en_US")  # "1,234,567.89"
@@ -100,8 +100,37 @@ get_plural_category(2, "ru")  # "few"
 get_plural_category(5, "ru")  # "many"
 
 # Break text into words
-break_words("Hello, world!")  # ["Hello", ",", " ", "world", "!"]
+break_words("Hello, world!")  # ['Hello', ',', 'world', '!']
 ```
+
+### Recognition
+
+```python
+from icukit import flexible_detectors, generated_detectors, icu_abbreviations
+
+readers = generated_detectors("en_US")
+for d in readers.detect("Due March 5, 2024."):
+    print(d["start"], d["end"], d["type"], d["text"])
+# 4 17 date:yMMMMd March 5, 2024
+# 4 11 date:MMMMd March 5
+
+d = readers.detect("Due March 5, 2024.")[0]
+# The value: DateTimeValue(fields=(('y', 2024), ('M', 3), ('d', 5)), calendar='gregorian')
+d["value"]
+# Each part with its own span: (Capture(name='y', start=13, end=17, text='2024', ...), ...)
+d["captures"]
+# How to write it again: DateFormatSpec(locale='en_US', skeleton='yMMMMd', pattern='MMMM d, y', ...)
+d["spec"]
+
+# Every locale of the language by default; `locales=` chooses them, and () is the locale alone
+flexible_detectors("en_US").detect("12 kilometres")  # measure:kilometer and number:decimal
+flexible_detectors("en_US", locales=()).detect("12 kilometres")  # number:decimal only
+
+# The short forms ICU writes, with their expansions
+icu_abbreviations("en_US", kinds=("unit",))  # (..., IcuAbbreviation(surface='m/s²', ...), ...)
+```
+
+Offsets are code points. `date_detectors(locale, skeletons)` and `number_detectors(locale, currencies=...)` build smaller sets by hand.
 
 ### Command-Line Interface
 
@@ -109,27 +138,32 @@ icukit includes a full-featured CLI accessible via `icukit` or `ik`:
 
 ```bash
 # Transliterate text
-ik transliterate "Москва" Russian-Latin/BGN
+ik transliterate name Russian-Latin/BGN -t "Москва"
 # Output: Moskva
 
+# List transliterators
+ik transliterate list --name "Russian-.*"
+
+# Recognize typed values in running text
+ik detect --currency USD -t 'Paid $1,234.50 on March 5, 2024'
+
 # Format numbers
-ik number 1234567.89 --locale de_DE
+ik locale format 1234567.89 --locale de_DE
 # Output: 1.234.567,89
+ik compact 1234567 --locale de_DE
+# Output: 1,2 Mio.
 
 # Get locale information
 ik locale info en_US
 
-# List available transliterators
-ik transliterate --list
-
 # Sort lines with locale collation
 cat names.txt | ik sort --locale sv_SE
 
-# Detect scripts in text
-ik script detect "Hello Мир 世界"
+# Detect the scripts in text
+ik script detect --all -t "Hello Мир 世界"
 
 # Get Unicode character information
-ik unicode info "A"
+ik unicode info -t "Aé"
 ```
 
 Run `ik help` or `ik <command> --help` for detailed usage information.

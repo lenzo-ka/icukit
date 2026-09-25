@@ -1,13 +1,20 @@
-"""D1 detectors: invert ICU formatters to find typed values in running text.
+"""Detectors: find typed values in running text by inverting ICU's formatting.
 
-A *detector* here wraps the invertible class -- the value kinds where an ICU parser
-inverts the formatter (dates, times, datetimes, decimal numbers, currency, percent).
-Each accepted match is a :class:`ValueDetection` that carries the full generative
-structure of the parse::
+This module holds what every reader shares -- the value and spec records, the
+:class:`ValueDetection` shape, the :class:`Detector` protocol, and the
+:class:`DetectorSet` gang -- and the strict readers, :class:`DateDetector` and
+:class:`NumberDetector`, where an ICU parser inverts the formatter (dates, times,
+datetimes, decimal numbers, currency, percent). The flexible readers, which read the
+forms text writes beyond ICU's own, are in :mod:`icukit.recognize`; the assembled sets
+are :func:`~icukit.engine.generated_detectors` (a reader for each canonical ICU form)
+and :func:`~icukit.engine.flexible_detectors`.
+
+Each accepted match is a :class:`ValueDetection` that carries the structure of the
+parse::
 
     surface  <->  (spec, value, captures)
 
-governed by the invariant ``reformat(spec, value) == surface`` -- which is also the
+For the strict readers the invariant ``reformat(spec, value) == surface`` is also the
 acceptance test, so a permissive ICU spelling that would not reproduce its own surface
 is rejected rather than accepted.
 
@@ -311,7 +318,7 @@ class DetectorRefusal(Exception):
 
 @runtime_checkable
 class Detector(Protocol):
-    """A runnable D1 detector.
+    """A runnable detector.
 
     ``type`` is the stable label carried on its detections (``date:yMMMd``,
     ``number:currency:USD``); ``group`` is its coarse family (``date``, ``number``) and
@@ -886,7 +893,7 @@ class _Inverter:
 def _contains_float(obj: object) -> bool:
     """True if a ``float`` lurks anywhere in a value/spec record (recursively).
 
-    §12.1: a detection's value is surface-derived, never a binary ``float`` (ICU's
+    A detection's value is surface-derived, never a binary ``float`` (ICU's
     ``Formattable`` has no decimal accessor, so ``7%`` would arrive as ``0.07``). This
     guards the acceptance seam so a mis-built detector cannot smuggle a float into a
     record before it is hashed or emitted. ``bool`` is an ``int`` subclass and is fine.
@@ -1070,7 +1077,7 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
         value, captures, spec = built
         if _contains_float(value) or _contains_float(spec) or _contains_float(captures):
             raise ValueError(
-                f"{type_label}: build() produced a float in a record (§12.1: values are "
+                f"{type_label}: build() produced a float in a record (values are "
                 f"surface-derived, never a float) at [{start_cp}, {end_cp})"
             )
         out.append(
@@ -1110,14 +1117,12 @@ def detect(text: str, detectors: list[Detector] | tuple[Detector, ...]) -> list[
 
     Detections are returned in a fully deterministic order (start ascending, longer
     extent first, then type, then value key) independent of ``detectors`` order.
-    Detections from different detectors may overlap -- H3 deposits them; resolving
-    overlap is H4.
+    Detections from different detectors may overlap: recognition keeps every
+    candidate, and choosing among overlapping readings is left to the consumer.
 
-    Each detector runs its own scan here (multi-pass), so a gang trivially equals the
-    merge of its members. The single-pass variant §12.5 describes -- one shared scan
-    with per-member resume cursors and a freshly cleared calendar per (member, start)
-    attempt -- is a deferred efficiency optimization, not yet built; its equivalence
-    to this merge is the invariant that variant must preserve.
+    Each detector runs its own scan, so a gang's result equals the merge of running its
+    members alone. A single shared scan would be faster; any such scan must give this
+    same merge.
     """
     found: list[ValueDetection] = []
     for det in detectors:

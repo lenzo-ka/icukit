@@ -19,6 +19,9 @@ pip install icukit
 for CPython 3.9 through 3.14. No system ICU packages, compilers, or headers are
 required.
 
+icukit itself requires Python 3.11 or later, and its CI tests Python 3.11 through
+3.13, so the `icukit-pyicu` wheels cover more versions than icukit uses.
+
 ## Verifying Installation
 
 After installation, verify everything works:

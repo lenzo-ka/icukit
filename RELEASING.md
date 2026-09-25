@@ -4,10 +4,12 @@
 
 Publishing is automated by `.github/workflows/publish.yml` using PyPI Trusted Publishing. Publishing a GitHub Release builds and uploads the distribution without an API token.
 
-## One-time setup
+## One-time setup (done)
 
-- On PyPI, update the `icukit` trusted publisher to owner `lenzo-ka`, repository `icukit`, workflow `publish.yml`, and environment `pypi`. The existing publisher names `ci.yml` and will not authorize the new workflow.
-- In the GitHub repository, create the `pypi` environment if it does not already exist. The publish job references it, and the OIDC identity is scoped to it.
+This setup is complete, and releases publish through `publish.yml`. It is kept for reference, should the publisher or the environment need to be recreated.
+
+- On PyPI, the `icukit` trusted publisher names owner `lenzo-ka`, repository `icukit`, workflow `publish.yml`, and environment `pypi`. (It once named `ci.yml`, which does not authorize `publish.yml`.)
+- In the GitHub repository, the `pypi` environment exists. The publish job references it, and the OIDC identity is scoped to it.
 
 ## Cutting a release
 

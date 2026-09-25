@@ -3,12 +3,21 @@
 ICU Kit - Unicode ICU utilities for text processing
 
 A toolkit for international text processing, providing:
+  - Recognition of numbers, dates, times, measures, and currencies in text
+  - Locale-aware formatting of numbers, dates, durations, lists, and messages
+  - Locale-aware collation, search, and segmentation
   - Text transliteration between scripts
   - Unicode-aware regular expressions
   - Script detection and properties
   - Unicode normalization and character info
 
 Examples:
+  # Recognize typed values in running text
+  icukit detect --currency USD -t 'Paid $1,234.50 on March 5, 2024'
+
+  # Format a number in compact form
+  icukit compact 1234567 --locale de_DE
+
   # Transliterate to Greek
   echo 'Hello' | icukit transliterate name Latin-Greek
 
@@ -1915,14 +1924,14 @@ Examples:
 Sort lines using ICU's locale-aware collation.
 
 Different languages have different sorting rules. For example, Swedish
-sorts 'o' after 'z', while German sorts 'o' with 'o'.
+sorts 'ö' after 'z', while German sorts 'ö' with 'o'.
 
 Examples:
   # Sort lines from stdin
-  echo -e 'cafe\ncafe\nCafe' | icukit sort
+  printf 'café\ncafe\nCafe\n' | icukit sort
 
-  # Sort with Swedish rules (o after z)
-  echo -e 'o\no\nz' | icukit sort --locale sv_SE
+  # Sort with Swedish rules (ö after z)
+  printf 'ö\no\nz\n' | icukit sort --locale sv_SE
 
   # Sort ignoring accents
   icukit sort --strength primary < words.txt
