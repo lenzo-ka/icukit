@@ -157,6 +157,7 @@ from .detectors import (
     all_detectors,
     date_detectors,
     detect,
+    detector_key,
     number_detectors,
 )
 from .discover import (
@@ -337,6 +338,7 @@ from .recognize import (
     FlexibleMeasureDetector,
     FlexibleMixedMeasureDetector,
     FlexibleNumberDetector,
+    FlexibleNumericDurationDetector,
     FlexibleOrdinalDetector,
     FlexiblePercentDetector,
     FlexibleRelativeDateDetector,
@@ -448,10 +450,12 @@ __all__ = [
     "AlphanumericRunsDetector",
     "AlphanumericRunsValue",
     "FlexibleMixedMeasureDetector",
+    "FlexibleNumericDurationDetector",
     "LetterNameDetector",
     "PluralNumeralDetector",
     "SingleLetterWordDetector",
     "DetectorSet",
+    "detector_key",
     "ValueDetection",
     "DateTimeValue",
     "MeasureValue",
