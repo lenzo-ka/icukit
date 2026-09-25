@@ -5055,8 +5055,9 @@ class FlexibleBareHourDetector:
     ratio or time ("3:30", "3/4"), a range ("3-4"), a percentage ("3%"; the locale's
     percent and per-mille signs), a signed number ("-3"; its minus and plus signs), and
     a number in a word ("3D") are not read. A number inside one of the time reader's
-    readings ("3 pm", "3 in the afternoon") is left to it, so this reader deposits only
-    the numbers that reader refuses.
+    readings ("3 pm", "3 in the afternoon") is left to it, and one inside a text or
+    numeric date's reading ("May 5, 2020", "Jan 3", "3/5/2024") to the date, so this
+    reader deposits only the numbers those readers leave.
     """
 
     group = "time"
@@ -5094,6 +5095,8 @@ class FlexibleBareHourDetector:
             )
         )
         self._time = FlexibleTimeDetector(locale, locales=locales)
+        self._text_dates = FlexibleTextDateDetector(locale, locales=locales)
+        self._numeric_dates = FlexibleDateDetector(locale, locales=locales)
         self._spec = DateFormatSpec(locale, "j", self.pattern, "gregorian")
 
     def _opens(self, character: str) -> bool:
@@ -5129,16 +5132,20 @@ class FlexibleBareHourDetector:
         return end, (capture,), DateTimeValue(((self.letter, hour),), "gregorian")
 
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return lone clock hours in source order, outside the time reader's readings."""
+        """Return lone clock hours in source order, outside the time and date readings."""
         found = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
         if not found:
             return []
-        times = self._time.detect(text)
+        taken = [
+            *self._time.detect(text),
+            *self._text_dates.detect(text),
+            *self._numeric_dates.detect(text),
+        ]
         return [
             hour
             for hour in found
             if not any(
-                time["start"] < hour["end"] and hour["start"] < time["end"] for time in times
+                other["start"] < hour["end"] and hour["start"] < other["end"] for other in taken
             )
         ]
 

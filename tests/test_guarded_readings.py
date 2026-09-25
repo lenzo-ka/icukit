@@ -194,6 +194,20 @@ def test_bare_hour_reads_no_number_that_does_not_stand_alone(text):
     assert FlexibleBareHourDetector("en_US").detect(text) == []
 
 
+@pytest.mark.parametrize(
+    "locale, text, hours",
+    [
+        ("en_US", "On May 5, 2020 we left at 3", [26]),
+        ("en_US", "Jan 3 at 4", [9]),
+        ("en_US", "on 3/5/2024 at 4", [15]),
+        ("de_DE", "am 3. Mai 2020 um 3", [18]),
+    ],
+)
+def test_bare_hour_leaves_a_day_inside_a_date_to_the_date(locale, text, hours):
+    found = FlexibleBareHourDetector(locale).detect(text)
+    assert [d["start"] for d in found] == hours
+
+
 # ------------------------------------------------------------------- default gang
 
 
