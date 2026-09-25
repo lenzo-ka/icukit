@@ -391,3 +391,25 @@ def test_each_zone_reading_is_gated_in_its_own_zone():
         [c.value for c in d["captures"] if c.name == "time-zone"] for d in detector.detect(july)
     ]
     assert zones == [["Europe/Dublin", "Europe/Dublin"], ["Asia/Kolkata", "Asia/Kolkata"]]
+
+
+@pytest.mark.parametrize(
+    "skeleton, surface, zone_ids",
+    [
+        ("MMMdhmz", f"Jul 5, 2:07{DASH}4:07{NNBSP}PM IST", ["Europe/Dublin", "Asia/Kolkata"]),
+        ("MMMdhmz", f"Jan 5, 2:07{DASH}4:07{NNBSP}PM IST", ["Asia/Kolkata"]),
+        ("Mdhmz", f"7/5, 2:07{DASH}4:07{NNBSP}PM IST", ["Europe/Dublin", "Asia/Kolkata"]),
+        ("Mdhmz", f"1/5, 2:07{DASH}4:07{NNBSP}PM IST", ["Asia/Kolkata"]),
+        # en_MO's lenient parse of "MST" as Macau time is not a zone ICU writes it for.
+        ("MMMdhmz", f"Jan 5, 2:07{DASH}4:07{NNBSP}PM MST", ["America/Denver"]),
+        ("hmz", f"2:07{DASH}4:07{NNBSP}PM MST", ["America/Denver"]),
+    ],
+)
+def test_a_dated_interval_reads_its_zones_on_its_date(skeleton, surface, zone_ids):
+    # The side with no date is parsed on the date the other shows, so Irish summer time
+    # reads on July 5 and not on January 5.
+    detections = FlexibleDateIntervalDetector("en_US", skeleton).detect(surface)
+    assert [d["text"] for d in detections] == [surface] * len(zone_ids)
+    assert [[c.value for c in d["captures"] if c.name == "time-zone"] for d in detections] == [
+        [zone_id] for zone_id in zone_ids
+    ]

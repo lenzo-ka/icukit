@@ -125,16 +125,29 @@
   follows), "Central European Time" and "CET" are `Europe/Paris`, and "UTC", "GMT" and
   "Z" are `Etc/GMT`, whatever the process time zone. The capture's text is still the
   zone as written.
-- Zone text that the locales of the language parse as different zones is read once per
+- Zone text that names different zones in the locales of the language is read once per
   zone, by `FlexibleTimeDetector`, `FlexibleDateIntervalDetector` and
   `FlexibleDateTimeDetector`: the same span and value, one `time-zone` capture each,
   the locale's own zone first and then the others in locale-name order. "10 PM IST" is
-  `Europe/Dublin` (en_IE's Irish time) and `Asia/Kolkata` (en_IN's India time) in en_US,
-  where it was one reading; en_IN reads Kolkata first. Zones of one ICU metazone are one
-  zone ("EST" is `America/New_York` in en_US, not also en_CA's `America/Toronto`). The
-  interval reader now also reads zone names only another locale of the language writes
-  ("2:07 – 4:07 PM IST" in en_US), each reading checked in its own zone, so a January
-  "IST" is India time alone. The resolver keeps each zone's reading.
+  `Europe/Dublin` (en_IE's Irish summer time) and `Asia/Kolkata` (en_IN's India time)
+  in en_US, where it was one reading; en_IN reads Kolkata first. A zone is one ICU
+  parses the text as in a locale of the language and writes the text for (or for a
+  zone of its metazone, as Phoenix writes Mountain time's "MST" all year), so a name
+  ICU only parses leniently is not a zone: "MST" is `America/Denver` alone, not also
+  en_MO's obsolete Macau time. Zones of one ICU metazone are one zone ("EST" is
+  `America/New_York` in en_US, not also en_CA's `America/Toronto`). The interval
+  reader now also reads zone names only another locale of the language writes ("2:07 –
+  4:07 PM IST" in en_US), each reading checked in its own zone.
+- Which zones a name gives depends on the date: a reading with a date is read on it
+  ("Jul 5, 2:07 – 4:07 PM IST" and "July 5, 2026, 10:00 PM IST" are Irish time or India
+  time, the January ones India time alone), a date with no year in the current year; a
+  bare time is read today, and a zone counts if ICU writes the name for it today or in
+  mid-January or mid-July of this year, so a daylight name ("EDT") reads all year. The
+  metazone that groups zones is ICU's on the same day, read afresh from the clock.
+- The resolver keeps each zone's reading. The readings of a span that differ only in
+  zone weigh the same, so such a span resolves as a tie (`ambiguous` true, `margin` 0);
+  the tie is broken by the order the reader deposited them in, so the 1-best is the
+  reader's first zone: `Europe/Dublin` for en_US "10 PM IST", `Asia/Kolkata` for en_IN.
 
 ### Fixed
 

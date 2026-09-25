@@ -5,15 +5,21 @@ import os
 import subprocess
 import sys
 
+import icu
 import pytest
 
+import icukit.recognize as recognize
 from icukit.recognize import (
     FlexibleDateTimeDetector,
     FlexibleTimeDetector,
+    _day_of,
     _language_flexible_periods,
+    _language_locale_names,
+    _reading_days,
+    _zone_parses,
     _zone_readings,
 )
-from icukit.resolve import _dedupe
+from icukit.resolve import _dedupe, resolve
 
 
 def _times(text):
@@ -194,3 +200,110 @@ def test_a_zone_capture_is_the_same_under_any_process_tz(tz):
         [[zone_text, zone_id] for zone_id in zone_ids] for _, _, zone_text, zone_ids in ZONE_FORMS
     ]
     assert json.loads(result.stdout) == expected
+
+
+def _zones_of(detections, text):
+    return [
+        [c.value for c in d["captures"] if c.name == "time-zone"]
+        for d in detections
+        if d["text"] == text
+    ]
+
+
+def test_a_name_icu_only_parses_leniently_is_not_a_zone():
+    # en_MO's lenient parse takes the obsolete "MST" as Macau time, which ICU never writes
+    # as "MST" today; only Mountain time is read.
+    assert ("Asia/Macau", "en_MO") in _zone_parses("MST", "en_US")
+    assert _zone_readings("MST", "en_US") == (("America/Denver", "en_US"),)
+    assert _zones_of(FlexibleTimeDetector("en_US").detect("10 PM MST"), "10 PM MST") == [
+        ["America/Denver"]
+    ]
+    text = "July 5, 2026, 10:00 PM MST"
+    assert _zones_of(FlexibleDateTimeDetector("en_US").detect(text), text) == [["America/Denver"]]
+
+
+@pytest.mark.parametrize(
+    "text, zones",
+    [
+        # Ireland writes "IST" in summer only.
+        ("July 5, 2026, 10:00 PM IST", [["Europe/Dublin"], ["Asia/Kolkata"]]),
+        ("January 5, 2026, 10:00 PM IST", [["Asia/Kolkata"]]),
+        # en_US also reads "1/5/2026" day first, as May 1, when Ireland writes "IST".
+        ("1/5/2026, 10:00 PM IST", [["Asia/Kolkata"], ["Europe/Dublin"], ["Asia/Kolkata"]]),
+    ],
+)
+def test_a_dated_time_reads_its_zone_on_its_date(text, zones):
+    assert _zones_of(FlexibleDateTimeDetector("en_US").detect(text), text) == zones
+
+
+def test_a_bare_time_reads_a_zone_written_in_either_season(monkeypatch):
+    # A bare time has no date: a zone is read if ICU writes the name for it today or in
+    # either season of this year, so a daylight name reads in winter too.
+    winter = _day_of(2027, 1, 20)
+    monkeypatch.setattr(recognize, "_today", lambda: winter)
+    assert _reading_days() == (winter, _day_of(2027, 1, 15), _day_of(2027, 7, 15))
+    assert _zone_readings("EDT", "en_US") == (("America/New_York", "en_US"),)
+    assert [zone for zone, _ in _zone_readings("IST", "en_US")] == [
+        "Europe/Dublin",
+        "Asia/Kolkata",
+    ]
+
+
+def test_the_day_is_read_afresh_not_frozen(monkeypatch):
+    monkeypatch.setattr(recognize, "_today", lambda: _day_of(2030, 3, 1))
+    assert _reading_days()[0] == _day_of(2030, 3, 1)
+    monkeypatch.setattr(recognize, "_today", lambda: _day_of(2031, 3, 1))
+    assert _reading_days()[0] == _day_of(2031, 3, 1)
+    assert _reading_days({"M": 7, "d": 5})[0] == _day_of(2031, 7, 5)
+    assert _reading_days({"y": 2024, "M": 1, "d": 5}) == (_day_of(2024, 1, 5),)
+
+
+def _icu_writes(zone_text, zone_id, day):
+    """Independently: whether some en locale writes ``zone_text`` for the zone that day,
+    or for a zone ICU maps to the same metazone that day."""
+    names = icu.TimeZoneNames.createInstance(icu.Locale.getRoot())
+    instant = day * 86400 + 43200.0
+    metazone = names.getMetaZoneID(zone_id, instant)
+    zones = [zone_id]
+    if metazone:
+        zones += [
+            str(z)
+            for z in icu.TimeZone.createEnumeration()
+            if names.getMetaZoneID(str(z), instant) == metazone
+        ]
+    for name in _language_locale_names("en"):
+        for pattern in ("z", "zzzz", "v", "vvvv", "VVVV", "X"):
+            formatter = icu.SimpleDateFormat(pattern, icu.Locale(name))
+            for zone in zones:
+                formatter.setTimeZone(icu.TimeZone.createTimeZone(zone))
+                if formatter.format(instant) == zone_text:
+                    return True
+    return False
+
+
+@pytest.mark.parametrize("zone_text", ["IST", "MST", "CST", "AST", "BST", "EST", "CET"])
+@pytest.mark.parametrize("month", [1, 7])
+def test_every_other_locales_zone_is_one_icu_writes_that_text_for(zone_text, month):
+    day = _day_of(2026, month, 15)
+    for zone_id, name in _zone_readings(zone_text, "en_US", days=(day,)):
+        if name != "en_US":
+            assert _icu_writes(zone_text, zone_id, day), (zone_id, name)
+
+
+@pytest.mark.parametrize(
+    "locale, first, second",
+    [("en_US", "Europe/Dublin", "Asia/Kolkata"), ("en_IN", "Asia/Kolkata", "Europe/Dublin")],
+)
+def test_a_zone_ambiguous_span_resolves_as_a_tie_broken_by_the_readers_order(locale, first, second):
+    detections = FlexibleTimeDetector(locale).detect("10 PM IST")
+    zoned = [d for d in detections if d["text"] == "10 PM IST"]
+    assert _zones_of(zoned, "10 PM IST") == [[first], [second]]
+    resolution = resolve(detections)
+    assert resolution.ambiguous and resolution.margin == 0
+    assert _zones_of(resolution.best, "10 PM IST") == [[first]]
+    assert [_zones_of(cover, "10 PM IST") for cover in resolution.covers[:2]] == [
+        [[first]],
+        [[second]],
+    ]
+    # Deposit order, not zone name, decides: reversed, the other zone wins.
+    assert _zones_of(resolve(list(reversed(zoned))).best, "10 PM IST") == [[second]]

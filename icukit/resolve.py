@@ -61,11 +61,14 @@ class Resolution:
 _ScoredCover = tuple[int, tuple[ValueDetection, ...]]
 
 
-def _key(detection: ValueDetection) -> tuple:
-    """A canonical content key: identifies a detection independent of object identity."""
-    # A time-zone capture's value is kept: one span read in two zones is two readings.
+def _key(detection: ValueDetection, zones: bool = True) -> tuple:
+    """A canonical content key: identifies a detection independent of object identity.
+
+    A time-zone capture's value is part of it (one span read in two zones is two
+    readings) unless ``zones`` is false.
+    """
     captures = tuple(
-        (c.name, c.start, c.end, repr(c.value) if c.name == "time-zone" else None)
+        (c.name, c.start, c.end, repr(c.value) if zones and c.name == "time-zone" else None)
         for c in detection["captures"]
     )
     return (
@@ -89,6 +92,21 @@ def _dedupe(detections: list[ValueDetection]) -> list[ValueDetection]:
     return unique
 
 
+def _zone_ranks(detections: list[ValueDetection]) -> dict[int, int]:
+    """Each detection's place among the readings that differ from it only in zone.
+
+    A reader deposits a span it reads in several zones once per zone, in its own order:
+    the locale's own zone first ("10 PM IST" in en_IN: Asia/Kolkata, then Europe/Dublin).
+    """
+    seen: dict[tuple, int] = {}
+    ranks: dict[int, int] = {}
+    for detection in detections:
+        base = _key(detection, zones=False)
+        ranks[id(detection)] = seen.get(base, 0)
+        seen[base] = ranks[id(detection)] + 1
+    return ranks
+
+
 def _kbest(detections: list[ValueDetection], k: int) -> list[_ScoredCover]:
     """Top-k maximum-weight non-overlapping covers, by weighted interval scheduling.
 
@@ -98,7 +116,13 @@ def _kbest(detections: list[ValueDetection], k: int) -> list[_ScoredCover]:
     """
     # Sort by end for the scheduling recurrence; the content key breaks equal-span ties so the
     # chosen cover is deterministic regardless of the order detections were deposited in.
-    items = sorted(detections, key=lambda d: (d["end"], d["start"], _key(d)))
+    # Readings of one span that differ only in zone weigh the same and tie; they keep the
+    # order their reader deposited them in, and an equal-score cover keeps the earlier one,
+    # so the reader's first zone is the 1-best.
+    ranks = _zone_ranks(detections)
+    items = sorted(
+        detections, key=lambda d: (d["end"], d["start"], _key(d, zones=False), ranks[id(d)])
+    )
     ends = [d["end"] for d in items]
     dp: list[list[tuple[int, tuple[int, ...]]]] = [[(0, ())]]
     for i in range(1, len(items) + 1):

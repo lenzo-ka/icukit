@@ -5373,6 +5373,13 @@ without it ("10:30" and "10:30 hr"; "10 PM" and "10 PM ET"), so neither span
 replaces the other. A zone name that names several zones is read once per zone
 ("10 PM IST": Europe/Dublin and Asia/Kolkata), the locale's own zone first.
 
+#### `on_date(text: 'str', time: 'ValueDetection', fields) -> 'list[ValueDetection]'`
+
+``time``'s readings once it is known to fall on the date ``fields`` give.
+
+A zone is read as ICU writes it that day: "10:00 PM IST" is Irish summer time on
+July 5 but not on January 5. ``fields`` are a date's ``(letter, value)`` pairs.
+
 ### class `LetterNameDetector`
 
 Recognize an isolated ASCII Latin letter as its locale's letter name.

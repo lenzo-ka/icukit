@@ -930,42 +930,74 @@ def _iana_zone_id(zone_id: str) -> str:
 _ZONE_NAME_PATTERNS = ("zzzz", "z", "vvvv", "v", "VVVV", "X")
 
 
+_SECONDS_PER_DAY = 86400
+
+
+def _today() -> int:
+    """Today's day number (days since 1970-01-01), read from the clock on every call."""
+    return int(icu.Calendar.getNow() // _SECONDS_PER_DAY)
+
+
+def _day_of(year: int, month: int, day: int) -> int:
+    """The day number of a Gregorian date (``month`` 1-12)."""
+    calendar = icu.GregorianCalendar(icu.TimeZone.getGMT(), icu.Locale.getRoot())
+    calendar.clear()
+    calendar.set(year, month - 1, day)
+    return int(calendar.getTime() // _SECONDS_PER_DAY)
+
+
+def _reading_days(fields: dict[str, int] | None = None) -> tuple[int, ...]:
+    """The days a reading's zone text is read on, the first the one its zone is taken on.
+
+    A reading with a month is read on its date, in its year or else this one ("Jul 5":
+    July 5 of this year; a month with no day, its 15th). A reading with no date (a bare
+    time) is read today, and written for the zone on today, mid-January or mid-July of
+    this year: a daylight name ("EDT", "IST" for Irish summer time) names its zone in
+    its season, whatever today is.
+    """
+    today = _today()
+    calendar = icu.GregorianCalendar(icu.TimeZone.getGMT(), icu.Locale.getRoot())
+    calendar.setTime(float(today * _SECONDS_PER_DAY))
+    year = calendar.get(icu.UCalendarDateFields.YEAR)
+    if fields and "M" in fields:
+        return (_day_of(fields.get("y", year), fields["M"], fields.get("d", 15)),)
+    return (today, _day_of(year, 1, 15), _day_of(year, 7, 15))
+
+
 @cache
-def _zone_metazone(zone_id: str) -> str:
-    """The metazone ICU maps ``zone_id`` to today, or ``zone_id`` itself if it maps none.
+def _zone_metazone(zone_id: str, day: int) -> str:
+    """The metazone ICU maps ``zone_id`` to on ``day``, or ``zone_id`` if it maps none.
 
     A metazone is a zone name CLDR shares among regions: America_Eastern is "Eastern
     Time" for America/New_York, America/Toronto and America/Nassau alike, and ICU parses
     such a name to the metazone's zone for the locale's region. Zones of one metazone
     are one zone read in different regions; zones of different metazones (Irish time
     and India time, both "IST") are different zones. The mapping is ICU's
-    (``TimeZoneNames.getMetaZoneID``) at the current instant, as a name is read today.
-    A custom offset zone ("GMT-08:00") has no metazone and stands for itself.
+    (``TimeZoneNames.getMetaZoneID``), which changes over time, so it is taken on the
+    reading's day (see :func:`_reading_days`). A custom offset zone ("GMT-08:00") has
+    no metazone and stands for itself.
     """
     names = icu.TimeZoneNames.createInstance(icu.Locale.getRoot())
-    return names.getMetaZoneID(zone_id, icu.Calendar.getNow()) or zone_id
+    instant = day * _SECONDS_PER_DAY + _SECONDS_PER_DAY / 2
+    return names.getMetaZoneID(zone_id, instant) or zone_id
 
 
 @cache
-def _zone_readings(
+def _zone_parses(
     zone_text: str, locale: str, names: tuple[str, ...] | None = None
 ) -> tuple[tuple[str, str], ...]:
-    """Each zone ICU parses ``zone_text`` as, one per metazone: ``(IANA ID, locale)``.
+    """Each zone ICU parses ``zone_text`` as, in the locales of the language: ``(ID, locale)``.
 
     ``SimpleDateFormat`` parses the whole text with each zone field in turn, on a GMT
     calendar whose zone the parse sets, in ``locale`` and then in each other locale of
     its language (see :func:`_language_locales`); the locale is the first that parsed
-    the text as that zone. The locale's region picks the zone of a shared name ("Eastern
-    Time" is America/New_York in en_US, America/Toronto in en_CA), and a zone of a
-    metazone already found adds nothing (see :func:`_zone_metazone`). A name that
-    different metazones share gives each: en_US reads "IST" as en_IE's Europe/Dublin
-    and en_IN's Asia/Kolkata. ``locale``'s own zone comes first, then the others in
-    locale-name order. The process default zone plays no part. Each ID is canonicalized
-    as :func:`_iana_zone_id` does ("IST" in en_IN parses as Asia/Calcutta, read as
-    Asia/Kolkata).
+    the text as that zone. Each ID is canonicalized as :func:`_iana_zone_id` does ("IST"
+    in en_IN parses as Asia/Calcutta, read as Asia/Kolkata). A lenient parse also takes
+    names ICU no longer writes (en_MO parses "MST" as Asia/Macau), which
+    :func:`_zone_writes` weeds out.
     """
     source = icu.UnicodeString(zone_text)
-    found: dict[str, tuple[str, str]] = {}
+    found: dict[str, str] = {}
     for name in _language_locales(locale, names):
         icu_locale = icu.Locale(name)
         for pattern in _ZONE_NAME_PATTERNS:
@@ -974,9 +1006,89 @@ def _zone_readings(
             position = icu.ParsePosition(0)
             icu.SimpleDateFormat(pattern, icu_locale).parse(source, calendar, position)
             if position.getErrorIndex() == -1 and position.getIndex() == len(source):
-                zone_id = _iana_zone_id(str(calendar.getTimeZone().getID()))
-                found.setdefault(_zone_metazone(zone_id), (zone_id, name))
+                found.setdefault(_iana_zone_id(str(calendar.getTimeZone().getID())), name)
                 break
+    return tuple(found.items())
+
+
+@cache
+def _metazone_zones(metazone: str, day: int) -> tuple[str, ...]:
+    """The zones ICU maps to ``metazone`` on ``day`` (none for a zone standing for itself)."""
+    names = icu.TimeZoneNames.createInstance(icu.Locale.getRoot())
+    instant = day * _SECONDS_PER_DAY + _SECONDS_PER_DAY / 2
+    return tuple(
+        str(zone_id)
+        for zone_id in icu.TimeZone.createEnumeration()
+        if names.getMetaZoneID(str(zone_id), instant) == metazone
+    )
+
+
+def _plain_spaces(text: str) -> str:
+    return "".join(" " if character in _SPACES else character for character in text)
+
+
+@cache
+def _zone_writes(
+    zone_text: str, zone_id: str, locale: str, names: tuple[str, ...] | None, day: int
+) -> bool:
+    """Whether ICU writes ``zone_text`` for ``zone_id`` on ``day`` in a locale of the language.
+
+    In any zone field (see ``_ZONE_NAME_PATTERNS``), ``locale`` first, for the zone, a
+    zone ICU keeps with the same offset and rules (see :func:`_same_rule_zone_ids`: ICU
+    writes "UTC" for Etc/UTC, which "UTC" parses as Etc/GMT), or a zone of its metazone
+    that day (ICU parses "MST" as America/Denver, whose July name is "MDT", while
+    America/Phoenix, of the same Mountain metazone, writes "MST" all year). Spaces
+    compare as spaces, as CLDR's no-break spaces are typed as ordinary ones.
+    """
+    wanted = _plain_spaces(zone_text)
+    instant = day * _SECONDS_PER_DAY + _SECONDS_PER_DAY / 2
+    others = dict.fromkeys(
+        (*_same_rule_zone_ids(zone_id), *_metazone_zones(_zone_metazone(zone_id, day), day))
+    )
+    others.pop(zone_id, None)
+    zones = [icu.TimeZone.createTimeZone(zone_id)]
+    zones += [icu.TimeZone.createTimeZone(other) for other in others]
+    for name in _language_locales(locale, names):
+        icu_locale = icu.Locale(name)
+        for pattern in _ZONE_NAME_PATTERNS:
+            formatter = icu.SimpleDateFormat(pattern, icu_locale)
+            for zone in zones:
+                formatter.setTimeZone(zone)
+                if _plain_spaces(str(formatter.format(instant))) == wanted:
+                    return True
+    return False
+
+
+def _zone_readings(
+    zone_text: str,
+    locale: str,
+    names: tuple[str, ...] | None = None,
+    days: tuple[int, ...] | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """Each zone ``zone_text`` names, one per metazone: ``(IANA ID, locale)``.
+
+    The zones ICU parses the text as in the locales of the language (see
+    :func:`_zone_parses`), each kept only where ICU writes the text for it on one of
+    ``days`` (see :func:`_zone_writes`; by default a bare time's, see
+    :func:`_reading_days`), and grouped by metazone on the first day (see
+    :func:`_zone_metazone`). The locale's region picks the zone of a shared name
+    ("Eastern Time" is America/New_York in en_US, America/Toronto in en_CA). A name
+    that different metazones share gives each: en_US reads "IST" as en_IE's
+    Europe/Dublin and en_IN's Asia/Kolkata. ``locale``'s own zone comes first, then the
+    others in locale-name order. The process default zone plays no part.
+    """
+    return _zone_readings_on(zone_text, locale, names, days or _reading_days())
+
+
+@cache
+def _zone_readings_on(
+    zone_text: str, locale: str, names: tuple[str, ...] | None, days: tuple[int, ...]
+) -> tuple[tuple[str, str], ...]:
+    found: dict[str, tuple[str, str]] = {}
+    for zone_id, name in _zone_parses(zone_text, locale, names):
+        if not any(_zone_writes(zone_text, zone_id, name, names, day) for day in days):
+            continue
+        found.setdefault(_zone_metazone(zone_id, days[0]), (zone_id, name))
     return tuple(found.values())
 
 
@@ -1457,36 +1569,47 @@ class FlexibleDateIntervalDetector:
         reading per zone (see :func:`_zone_readings`), each parsed and gated in its own
         zone with the zone written as the locale that names it writes it: en_US "2:07 -
         4:07 PM IST" is read in Europe/Dublin and in Asia/Kolkata. Each reading is
-        ``(end, captures, value, zone ID, rank)``, the rank ordering the reader's own
-        locale's zone first.
+        ``(end, captures, value, zone key, rank)``, the key the zone's metazone on the
+        reading's date and the rank ordering the reader's own locale's zone first.
         """
         own = self._read_as(matcher, self.locale, dating, text, start, cp_to_u16, u16_to_cp)
         if matcher[6] is None:
-            return [(*own, 0)] if own is not None else []
+            return [(*own[:3], None, 0)] if own is not None else []
         if own is not None:
             zone_text = next(
                 (capture.text for capture in own[1] if capture.name == "time-zone"), None
             )
         else:
             zone_text = self._unread_zone_text(matcher, dating, text, start, cp_to_u16, u16_to_cp)
-        candidates = _zone_readings(zone_text, self.locale) if zone_text else ()
-        order = [_zone_metazone(zone_id) for zone_id, _ in candidates]
-
-        def rank(zone_id):
-            metazone = _zone_metazone(zone_id) if zone_id is not None else None
-            return order.index(metazone) if metazone in order else -1
-
-        readings = [(*own, rank(own[3]))] if own is not None else []
-        seen = {_zone_metazone(own[3])} if own is not None and own[3] is not None else set()
-        for zone_id, name in candidates:
-            if name == self.locale or _zone_metazone(zone_id) in seen:
-                continue
-            reading = self._read_as(matcher, name, dating, text, start, cp_to_u16, u16_to_cp)
+        if not zone_text:
+            return [(*own[:3], None, 0)] if own is not None else []
+        attempts = [(own, self.locale)]
+        for _zone_id, name in _zone_parses(zone_text, self.locale):
+            if name != self.locale:
+                attempts.append(
+                    (
+                        self._read_as(matcher, name, dating, text, start, cp_to_u16, u16_to_cp),
+                        name,
+                    )
+                )
+        readings = []
+        seen: set[str] = set()
+        for rank, (reading, name) in enumerate(attempts):
             if reading is None or reading[3] is None:
                 continue
-            if _zone_metazone(reading[3]) not in seen:
-                seen.add(_zone_metazone(reading[3]))
-                readings.append((*reading, rank(reading[3])))
+            end, captures, value, zone_id = reading
+            written = next(c.text for c in captures if c.name == "time-zone")
+            days = _reading_days(dict(value.start.fields))
+            # Kept only where ICU writes the zone text for the zone on the reading's
+            # date, in some locale of the language: a lenient parse also takes names ICU
+            # no longer writes ("MST" as Asia/Macau), and a date-less side is parsed on
+            # a stand-in dating.
+            if not any(_zone_writes(written, zone_id, name, None, day) for day in days):
+                continue
+            metazone = _zone_metazone(zone_id, days[0])
+            if metazone not in seen:
+                seen.add(metazone)
+                readings.append((end, captures, value, metazone, rank))
         return readings
 
     def _unread_zone_text(self, matcher, dating, text, start, cp_to_u16, u16_to_cp):
@@ -1534,8 +1657,19 @@ class FlexibleDateIntervalDetector:
         separator_end = self._separator_end(text, end1, separator)
         if separator_end is None:
             return None
+        # A side that shows no date is parsed on the date the other shows: a daylight
+        # name ("IST", Irish summer time) is read on the day it names ("Jul 5, 2:07 -
+        # 4:07 PM IST"), not on the stand-in dating's January.
+        shown = {name: values1[name] for name in _INTERVAL_DATING_FIELDS if name in values1}
         parsed2 = self._parse_side(
-            formatter2, fields2, has_zone2, text, separator_end, cp_to_u16, u16_to_cp, dating
+            formatter2,
+            fields2,
+            has_zone2,
+            text,
+            separator_end,
+            cp_to_u16,
+            u16_to_cp,
+            {**dating, **shown},
         )
         if parsed2 is None:
             return None
@@ -1646,9 +1780,8 @@ class FlexibleDateIntervalDetector:
                 continue  # ICU writes this side's first field in digits
             for dating in matcher[9]:
                 found = self._read(matcher, dating, text, start, cp_to_u16, u16_to_cp)
-                for end, captures, value, zone_id, rank in found:
-                    key = (end, value, _zone_metazone(zone_id) if zone_id else None)
-                    readings.setdefault(key, (rank, end, captures, value))
+                for end, captures, value, zone_key, rank in found:
+                    readings.setdefault((end, value, zone_key), (rank, end, captures, value))
                 if found and matcher[6] is None:
                     break
         if not readings:
@@ -5265,12 +5398,39 @@ class FlexibleTimeDetector:
         end = cursor + len(form)
         return Capture("time-zone", begin, end, text[begin:end], self._zone_ids(form))
 
-    def _zone_ids(self, form: str) -> tuple[str, ...]:
-        """The IANA IDs of the zones ICU parses a zone form as (see :func:`_zone_readings`).
+    def _zone_ids(self, form: str, days: tuple[int, ...] | None = None) -> tuple[str, ...]:
+        """The IANA IDs of the zones a zone form names (see :func:`_zone_readings`).
 
-        The capture holds them all until :meth:`detect` gives each its own reading.
+        On ``days``, by default a bare time's (see :func:`_reading_days`). The capture
+        holds them all until :meth:`detect` gives each its own reading.
         """
-        return tuple(zone_id for zone_id, _ in _zone_readings(form, self.locale, self.locales))
+        readings = _zone_readings(form, self.locale, self.locales, days)
+        return tuple(zone_id for zone_id, _ in readings)
+
+    def on_date(self, text: str, time: ValueDetection, fields) -> list[ValueDetection]:
+        """``time``'s readings once it is known to fall on the date ``fields`` give.
+
+        A zone is read as ICU writes it that day: "10:00 PM IST" is Irish summer time on
+        July 5 but not on January 5. ``fields`` are a date's ``(letter, value)`` pairs.
+        """
+        zone = next((c for c in time["captures"] if c.name == "time-zone"), None)
+        if zone is None:
+            return [time]
+        written = zone.text[1:] if zone.text[:1] in _SPACES else zone.text
+        form = _zone_form_at(text, zone.end - len(written), self._language, self.locales)
+        days = _reading_days(dict(fields))
+        zone_ids = self._zone_ids(form or written, days)
+        dated = replace(zone, value=zone_ids)
+        return self._one_reading_per_zone(
+            ValueDetection(
+                **{
+                    **time,
+                    "captures": tuple(
+                        dated if capture is zone else capture for capture in time["captures"]
+                    ),
+                }
+            )
+        )[: len(zone_ids)]
 
     @staticmethod
     def _one_reading_per_zone(detection: ValueDetection) -> list[ValueDetection]:
@@ -5601,55 +5761,67 @@ class FlexibleDateTimeDetector:
         dates = [d for detector in self._dates for d in detector.detect(text)]
         times = self._time.detect(text)
         found: dict[tuple[int, int, object], ValueDetection] = {}
+        # A time's zones are read again on the date it is joined to, since the time
+        # reader's are a bare time's: one reading of each span stands for its zones.
+        by_span: dict[tuple, ValueDetection] = {}
+        for time in times:
+            by_span.setdefault((time["start"], time["end"], time["value"]), time)
+        spans = list(by_span.values())
         for date in dates:
-            for time in times:
+            for span in spans:
                 for date_first, literal, pattern in self._glue:
-                    first, second = (date, time) if date_first else (time, date)
+                    first, second = (date, span) if date_first else (span, date)
                     if not self._glue_matches(text[first["end"] : second["start"]], literal):
                         continue
-                    fields = date["value"].fields + time["value"].fields
-                    value = DateTimeValue(fields, date["value"].calendar)
-                    glue = Capture(
-                        "datetime-glue",
-                        first["end"],
-                        second["start"],
-                        text[first["end"] : second["start"]],
-                        None,
-                        "symbol",
-                    )
-                    captures = tuple(
-                        sorted(
-                            (*first["captures"], glue, *second["captures"]),
-                            key=lambda capture: (capture.start, capture.end),
-                        )
-                    )
-                    date_pattern = getattr(date["spec"], "pattern", "")
-                    time_pattern = getattr(time["spec"], "pattern", "")
-                    spec = DateFormatSpec(
-                        self.locale,
-                        "datetime",
-                        pattern.replace("{1}", date_pattern).replace("{0}", time_pattern),
-                        date["value"].calendar,
-                    )
-                    # A time read in two zones gives two readings.
-                    key = (first["start"], second["end"], value, _zone_key(time["captures"]))
-                    found.setdefault(
-                        key,
-                        ValueDetection(
-                            text=text[first["start"] : second["end"]],
-                            start=first["start"],
-                            end=second["end"],
-                            type=self.type,
-                            value=value,
-                            captures=captures,
-                            spec=spec,
-                        ),
-                    )
+                    for time in self._time.on_date(text, span, date["value"].fields):
+                        first, second = (date, time) if date_first else (time, date)
+                        self._compose(text, date, time, first, second, pattern, found)
         for time in times:
             found.update(
                 (key, detection) for key, detection in self._weekday_times(text, time).items()
             )
         return sorted(found.values(), key=lambda item: (item["start"], item["end"]))
+
+    def _compose(self, text, date, time, first, second, pattern, found) -> None:
+        """Deposit ``date`` and ``time`` joined by CLDR's ``pattern`` into ``found``."""
+        fields = date["value"].fields + time["value"].fields
+        value = DateTimeValue(fields, date["value"].calendar)
+        glue = Capture(
+            "datetime-glue",
+            first["end"],
+            second["start"],
+            text[first["end"] : second["start"]],
+            None,
+            "symbol",
+        )
+        captures = tuple(
+            sorted(
+                (*first["captures"], glue, *second["captures"]),
+                key=lambda capture: (capture.start, capture.end),
+            )
+        )
+        date_pattern = getattr(date["spec"], "pattern", "")
+        time_pattern = getattr(time["spec"], "pattern", "")
+        spec = DateFormatSpec(
+            self.locale,
+            "datetime",
+            pattern.replace("{1}", date_pattern).replace("{0}", time_pattern),
+            date["value"].calendar,
+        )
+        # A time read in two zones gives two readings.
+        key = (first["start"], second["end"], value, _zone_key(time["captures"]))
+        found.setdefault(
+            key,
+            ValueDetection(
+                text=text[first["start"] : second["end"]],
+                start=first["start"],
+                end=second["end"],
+                type=self.type,
+                value=value,
+                captures=captures,
+                spec=spec,
+            ),
+        )
 
     def _weekday_times(self, text: str, time: ValueDetection) -> dict:
         """A weekday and CLDR's glue right before ``time`` ("Tue 2:07 PM")."""
