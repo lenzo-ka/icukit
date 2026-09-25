@@ -4,6 +4,11 @@
 
 ### Added
 
+- `FlexibleTimeDetector` reads ICU's long zone names after a time ("2:07:09 PM Eastern
+  Standard Time", "10:30 Central European Time") and its generic location names ("00:05
+  New York Time"), beside the abbreviations; and ICU's flexible day periods (pattern
+  `B`), giving the hour the period covers: "2 in the afternoon" is 14:00, "10:59 at night"
+  22:59, "12 noon" 12:00. A one-letter period is not read after a space ("12 n").
 - `FlexibleDateTimeDetector` (`date:datetime-flexible`) reads a date and a time joined as
   CLDR's date-time patterns join them ("{1}, {0}", "{1} 'at' {0}" in English): "Mar 5,
   2024, 2:07 PM", "5 March 2024 at 14:07", "July 4, 1999 at 12:05:00 AM EDT". It composes
