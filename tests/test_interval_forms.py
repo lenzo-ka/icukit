@@ -350,3 +350,44 @@ def test_a_zoned_interval_reads_the_same_in_any_default_zone(
         assert detection["value"] == _value(start, end), default
         zones = [c for c in detection["captures"] if c.name == "time-zone"]
         assert [(zone.text, zone.value) for zone in zones] == [(zone_text, zone_id)], default
+
+
+@pytest.mark.parametrize(
+    "locale, surface, zone_ids",
+    [
+        # en_US writes no "IST"; en_IE writes it for Irish summer time and en_IN for
+        # India time, so the interval is read in each, in locale-name order.
+        ("en_US", f"2:07{DASH}4:07{NNBSP}PM IST", ["Europe/Dublin", "Asia/Kolkata"]),
+        # A locale that writes the name reads its own zone first.
+        ("en_IN", f"2:07{DASH}4:07{NNBSP}pm IST", ["Asia/Kolkata", "Europe/Dublin"]),
+        # en_CA's "EST" is America/Toronto, of New York's metazone: one reading.
+        ("en_US", f"2:07{DASH}4:07{NNBSP}PM EST", ["America/New_York"]),
+    ],
+)
+def test_an_interval_is_read_once_per_zone_its_zone_text_names(
+    default_zone, locale, surface, zone_ids
+):
+    for default in ("UTC", "Asia/Tokyo"):
+        default_zone(default)
+        detections = FlexibleDateIntervalDetector(locale, "hmz").detect(surface)
+        assert [d["text"] for d in detections] == [surface] * len(zone_ids), default
+        assert [
+            [(c.text, c.value) for c in d["captures"] if c.name == "time-zone"] for d in detections
+        ] == [[("IST" if "IST" in surface else "EST", zone_id)] for zone_id in zone_ids], default
+        values = {d["value"] for d in detections}
+        assert values == {_value({"H": 14, "m": 7}, {"H": 16, "m": 7})}
+
+
+def test_each_zone_reading_is_gated_in_its_own_zone():
+    # Ireland writes "IST" only in summer: a January interval is India time alone.
+    detector = FlexibleDateIntervalDetector("en_US", "yMdhmz")
+    january = f"1/15/2024, 2:07{NNBSP}PM IST{DASH}1/17/2024, 2:07{NNBSP}PM IST"
+    july = f"7/15/2024, 2:07{NNBSP}PM IST{DASH}7/17/2024, 2:07{NNBSP}PM IST"
+    zones = [
+        [c.value for c in d["captures"] if c.name == "time-zone"] for d in detector.detect(january)
+    ]
+    assert zones == [["Asia/Kolkata", "Asia/Kolkata"]]
+    zones = [
+        [c.value for c in d["captures"] if c.name == "time-zone"] for d in detector.detect(july)
+    ]
+    assert zones == [["Europe/Dublin", "Europe/Dublin"], ["Asia/Kolkata", "Asia/Kolkata"]]

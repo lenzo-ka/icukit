@@ -63,7 +63,11 @@ _ScoredCover = tuple[int, tuple[ValueDetection, ...]]
 
 def _key(detection: ValueDetection) -> tuple:
     """A canonical content key: identifies a detection independent of object identity."""
-    captures = tuple((c.name, c.start, c.end) for c in detection["captures"])
+    # A time-zone capture's value is kept: one span read in two zones is two readings.
+    captures = tuple(
+        (c.name, c.start, c.end, repr(c.value) if c.name == "time-zone" else None)
+        for c in detection["captures"]
+    )
     return (
         detection["start"],
         detection["end"],

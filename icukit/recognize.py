@@ -9,7 +9,7 @@ those candidates unchanged.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal, localcontext
 from functools import cache, lru_cache
 from itertools import chain, product
@@ -931,20 +931,41 @@ _ZONE_NAME_PATTERNS = ("zzzz", "z", "vvvv", "v", "VVVV", "X")
 
 
 @cache
-def _parsed_zone_id(
-    zone_text: str, locale: str, names: tuple[str, ...] | None = None
-) -> str | None:
-    """The IANA ID of the zone ICU parses ``zone_text`` as, or ``None`` if none parses it.
+def _zone_metazone(zone_id: str) -> str:
+    """The metazone ICU maps ``zone_id`` to today, or ``zone_id`` itself if it maps none.
 
-    ``SimpleDateFormat`` parses the whole text with each zone field in turn, in
-    ``locale`` first and then in the other locales of its language (see
-    :func:`_language_locales`), on a GMT calendar whose zone the parse sets. The locale's
-    region picks the zone of a shared name ("Eastern Time" is America/New_York in en_US,
-    America/Toronto in en_CA), and the process default zone plays no part. The parsed
-    zone is canonicalized as :func:`_iana_zone_id` does ("IST" in en_IN parses as
-    Asia/Calcutta, captured as Asia/Kolkata).
+    A metazone is a zone name CLDR shares among regions: America_Eastern is "Eastern
+    Time" for America/New_York, America/Toronto and America/Nassau alike, and ICU parses
+    such a name to the metazone's zone for the locale's region. Zones of one metazone
+    are one zone read in different regions; zones of different metazones (Irish time
+    and India time, both "IST") are different zones. The mapping is ICU's
+    (``TimeZoneNames.getMetaZoneID``) at the current instant, as a name is read today.
+    A custom offset zone ("GMT-08:00") has no metazone and stands for itself.
+    """
+    names = icu.TimeZoneNames.createInstance(icu.Locale.getRoot())
+    return names.getMetaZoneID(zone_id, icu.Calendar.getNow()) or zone_id
+
+
+@cache
+def _zone_readings(
+    zone_text: str, locale: str, names: tuple[str, ...] | None = None
+) -> tuple[tuple[str, str], ...]:
+    """Each zone ICU parses ``zone_text`` as, one per metazone: ``(IANA ID, locale)``.
+
+    ``SimpleDateFormat`` parses the whole text with each zone field in turn, on a GMT
+    calendar whose zone the parse sets, in ``locale`` and then in each other locale of
+    its language (see :func:`_language_locales`); the locale is the first that parsed
+    the text as that zone. The locale's region picks the zone of a shared name ("Eastern
+    Time" is America/New_York in en_US, America/Toronto in en_CA), and a zone of a
+    metazone already found adds nothing (see :func:`_zone_metazone`). A name that
+    different metazones share gives each: en_US reads "IST" as en_IE's Europe/Dublin
+    and en_IN's Asia/Kolkata. ``locale``'s own zone comes first, then the others in
+    locale-name order. The process default zone plays no part. Each ID is canonicalized
+    as :func:`_iana_zone_id` does ("IST" in en_IN parses as Asia/Calcutta, read as
+    Asia/Kolkata).
     """
     source = icu.UnicodeString(zone_text)
+    found: dict[str, tuple[str, str]] = {}
     for name in _language_locales(locale, names):
         icu_locale = icu.Locale(name)
         for pattern in _ZONE_NAME_PATTERNS:
@@ -953,8 +974,21 @@ def _parsed_zone_id(
             position = icu.ParsePosition(0)
             icu.SimpleDateFormat(pattern, icu_locale).parse(source, calendar, position)
             if position.getErrorIndex() == -1 and position.getIndex() == len(source):
-                return _iana_zone_id(str(calendar.getTimeZone().getID()))
-    return None
+                zone_id = _iana_zone_id(str(calendar.getTimeZone().getID()))
+                found.setdefault(_zone_metazone(zone_id), (zone_id, name))
+                break
+    return tuple(found.values())
+
+
+def _zone_key(captures: Iterable[Capture]) -> tuple[object, ...]:
+    """The zones a reading's ``time-zone`` captures name, which tell its readings apart."""
+    return tuple(capture.value for capture in captures if capture.name == "time-zone")
+
+
+@cache
+def _interval_side_formatter(pattern: str, locale: str):
+    """ICU's formatter for one side of an interval pattern, in ``locale``."""
+    return icu.SimpleDateFormat(pattern, icu.Locale(locale))
 
 
 @cache
@@ -1180,7 +1214,9 @@ class FlexibleDateIntervalDetector:
     parsed into the value, which keeps 24-hour ``H``; a time zone's text is parsed, gated
     against ICU's rendering of that zone, and captured as ``time-zone``: the text as
     written, the value the parsed zone's IANA ID ("ET" -> "America/New_York"; a GMT
-    offset, which has none, keeps ICU's custom ID, "GMT-08:00").
+    offset, which has none, keeps ICU's custom ID, "GMT-08:00"). Zone text another
+    locale of the language writes, or that names different zones in its locales, is
+    read once per zone, each gated in its own zone (see :meth:`_read`).
     """
 
     group = "date-interval"
@@ -1234,7 +1270,7 @@ class FlexibleDateIntervalDetector:
         """Whether ICU yielded at least one modeled, splittable interval recipe."""
         return bool(self._matchers)
 
-    def _parse_side(self, formatter, fields, has_zone, text, start, cp_to_u16, u16_to_cp, dating):
+    def _parse_position(self, formatter, text, start, cp_to_u16, dating):
         # The side is parsed on a GMT calendar, never in the process default zone: GMT
         # has no DST gap or overlap, so a side with no zone text keeps the wall time it
         # writes ("02:30" on a spring-forward date in America/New_York would be moved to
@@ -1246,6 +1282,10 @@ class FlexibleDateIntervalDetector:
             calendar.set(_INTERVAL_DATING_FIELDS[name], value)
         position = icu.ParsePosition(cp_to_u16[start])
         formatter.parse(icu.UnicodeString(text), calendar, position)
+        return position, calendar
+
+    def _parse_side(self, formatter, fields, has_zone, text, start, cp_to_u16, u16_to_cp, dating):
+        position, calendar = self._parse_position(formatter, text, start, cp_to_u16, dating)
         end_u16 = position.getIndex()
         if position.getErrorIndex() != -1 or end_u16 <= cp_to_u16[start]:
             return None
@@ -1308,24 +1348,59 @@ class FlexibleDateIntervalDetector:
             calendar.set(fields[name], value)
         return calendar
 
-    def _zone_capture(self, side_pattern, zone_run, zone, values, text, start, end, zone_id):
-        """The ``time-zone`` capture within one side, located by ICU's field position."""
+    def _zone_capture(self, side_pattern, zone_run, zone, values, text, start, end, zone_id, name):
+        """The ``time-zone`` capture within one side, located by ICU's field position.
+
+        The side is rendered in the reader's locale, with the zone field in ``name``'s
+        text for the zone (see :meth:`_in_zone_names_of`).
+        """
         icu_locale = icu.Locale(self.locale)
         formatter = icu.SimpleDateFormat(side_pattern, icu_locale)
         formatter.setTimeZone(zone)
         position = icu.FieldPosition(_letter_field_id(zone_run[0]))
-        rendered = str(formatter.format(self._calendar_from(values, zone).getTime(), position))
+        instant = self._calendar_from(values, zone).getTime()
+        rendered = str(formatter.format(instant, position))
+        _, u16_to_cp = boundary_maps(rendered)
+        zone_begin = u16_to_cp[position.getBeginIndex()]
+        zone_limit = u16_to_cp[position.getEndIndex()]
+        if name != self.locale:
+            written = self._zone_formatter(zone_run, zone, name).format(instant)
+            rendered = rendered[:zone_begin] + written + rendered[zone_limit:]
+            zone_limit = zone_begin + len(written)
         surface = text[start:end]
         if len(rendered) != len(surface) or _normalize_interval_surface(
             rendered
         ) != _normalize_interval_surface(surface):
             return None
-        _, u16_to_cp = boundary_maps(rendered)
-        zone_start = start + u16_to_cp[position.getBeginIndex()]
-        zone_end = start + u16_to_cp[position.getEndIndex()]
+        zone_start = start + zone_begin
+        zone_end = start + zone_limit
         if zone_end <= zone_start:
             return None
         return Capture("time-zone", zone_start, zone_end, text[zone_start:zone_end], zone_id)
+
+    @staticmethod
+    def _zone_formatter(zone_run, zone, name):
+        """ICU's formatter for the zone field alone, in locale ``name`` and ``zone``."""
+        formatter = icu.SimpleDateFormat(zone_run[0] * zone_run[1], icu.Locale(name))
+        formatter.setTimeZone(zone)
+        return formatter
+
+    def _in_zone_names_of(self, rendered, zone_run, zone, calendars, name):
+        """``rendered`` with the zone's text in ``name``, another locale of the language.
+
+        The interval is ICU's rendering in the reader's own locale; only the zone field
+        is written as ICU writes the zone in ``name`` ("IST", en_IN's name for India
+        time, where en_US writes "GMT+5:30"). Each endpoint's zone text is replaced, as
+        a zone may write a standard name at one end and a daylight name at the other.
+        """
+        if name == self.locale:
+            return rendered
+        own = self._zone_formatter(zone_run, zone, self.locale)
+        other = self._zone_formatter(zone_run, zone, name)
+        for calendar in calendars:
+            instant = calendar.getTime()
+            rendered = rendered.replace(str(own.format(instant)), str(other.format(instant)))
+        return rendered
 
     @staticmethod
     def _gated_end(
@@ -1376,9 +1451,80 @@ class FlexibleDateIntervalDetector:
         return clock(end_values) < clock(start_values)
 
     def _read(self, matcher, dating, text, start, cp_to_u16, u16_to_cp):
-        """One matcher's reading at ``start`` with its sides parsed on ``dating``."""
+        """One matcher's readings at ``start``, sides parsed on ``dating``, one per zone.
+
+        Zone text that names different zones in the locales of the language gives one
+        reading per zone (see :func:`_zone_readings`), each parsed and gated in its own
+        zone with the zone written as the locale that names it writes it: en_US "2:07 -
+        4:07 PM IST" is read in Europe/Dublin and in Asia/Kolkata. Each reading is
+        ``(end, captures, value, zone ID, rank)``, the rank ordering the reader's own
+        locale's zone first.
+        """
+        own = self._read_as(matcher, self.locale, dating, text, start, cp_to_u16, u16_to_cp)
+        if matcher[6] is None:
+            return [(*own, 0)] if own is not None else []
+        if own is not None:
+            zone_text = next(
+                (capture.text for capture in own[1] if capture.name == "time-zone"), None
+            )
+        else:
+            zone_text = self._unread_zone_text(matcher, dating, text, start, cp_to_u16, u16_to_cp)
+        candidates = _zone_readings(zone_text, self.locale) if zone_text else ()
+        order = [_zone_metazone(zone_id) for zone_id, _ in candidates]
+
+        def rank(zone_id):
+            metazone = _zone_metazone(zone_id) if zone_id is not None else None
+            return order.index(metazone) if metazone in order else -1
+
+        readings = [(*own, rank(own[3]))] if own is not None else []
+        seen = {_zone_metazone(own[3])} if own is not None and own[3] is not None else set()
+        for zone_id, name in candidates:
+            if name == self.locale or _zone_metazone(zone_id) in seen:
+                continue
+            reading = self._read_as(matcher, name, dating, text, start, cp_to_u16, u16_to_cp)
+            if reading is None or reading[3] is None:
+                continue
+            if _zone_metazone(reading[3]) not in seen:
+                seen.add(_zone_metazone(reading[3]))
+                readings.append((*reading, rank(reading[3])))
+        return readings
+
+    def _unread_zone_text(self, matcher, dating, text, start, cp_to_u16, u16_to_cp):
+        """The zone name where the reader's own locale stopped parsing a zoned side.
+
+        ICU's parse stops at zone text its locale does not write ("IST" in en_US); a
+        name another locale of the language writes there is read by that locale.
+        """
+        formatter1, separator, formatter2 = matcher[0], matcher[1], matcher[2]
+        has_zone1, has_zone2 = matcher[7]
+        position, _ = self._parse_position(formatter1, text, start, cp_to_u16, dating)
+        has_zone = has_zone1
+        if position.getErrorIndex() == -1:
+            end1 = u16_to_cp.get(position.getIndex())
+            if end1 is None or end1 <= start:
+                return None
+            separator_end = self._separator_end(text, end1, separator)
+            if separator_end is None:
+                return None
+            position, _ = self._parse_position(formatter2, text, separator_end, cp_to_u16, dating)
+            has_zone = has_zone2
+        error = u16_to_cp.get(position.getErrorIndex())
+        if not has_zone or error is None:
+            return None
+        return _zone_form_at(text, error, icu.Locale(self.locale).getLanguage())
+
+    def _read_as(self, matcher, name, dating, text, start, cp_to_u16, u16_to_cp):
+        """One matcher's reading at ``start``, its zone text read as locale ``name`` does.
+
+        ``name`` is the reader's own locale, or another of its language whose zone name
+        the text writes; the sides' other fields are the reader's own pattern's either
+        way. Returns ``(end, captures, value, zone ID)``, the ID ``None`` with no zone.
+        """
         formatter1, separator, formatter2, fields1, fields2, patterns, zone_run = matcher[:7]
         has_zone1, has_zone2 = matcher[7]
+        if name != self.locale:
+            formatter1 = _interval_side_formatter(patterns[0], name)
+            formatter2 = _interval_side_formatter(patterns[1], name)
         parsed1 = self._parse_side(
             formatter1, fields1, has_zone1, text, start, cp_to_u16, u16_to_cp, dating
         )
@@ -1438,6 +1584,10 @@ class FlexibleDateIntervalDetector:
                 reformatted = str(self._dif.formatToValue(start_calendar, end_calendar))
             except icu.ICUError:
                 continue
+            if zone is not None:
+                reformatted = self._in_zone_names_of(
+                    reformatted, zone_run, render_zone, (start_calendar, end_calendar), name
+                )
             end = self._gated_end(reformatted, text, start, end1, separator, separator_end, end2)
             if end is not None:
                 gated = end, render_zone
@@ -1450,6 +1600,7 @@ class FlexibleDateIntervalDetector:
             Capture("separator", end1, separator_end, text[end1:separator_end], form="symbol"),
             Capture("end", separator_end, end2, text[separator_end:end2]),
         ]
+        zone_id = None
         if zone is not None:
             # The capture names the zone the text was parsed as, in its IANA form,
             # whatever the process default zone is.
@@ -1462,12 +1613,20 @@ class FlexibleDateIntervalDetector:
                 if not has_zone:
                     continue
                 zone_capture = self._zone_capture(
-                    pattern, zone_run, render_zone, values, text, side_start, side_end, zone_id
+                    pattern,
+                    zone_run,
+                    render_zone,
+                    values,
+                    text,
+                    side_start,
+                    side_end,
+                    zone_id,
+                    name,
                 )
                 if zone_capture is not None:
                     captures.append(zone_capture)
         value = DateIntervalValue(self._endpoint(start_values), self._endpoint(end_values))
-        return end2, tuple(captures), value
+        return end2, tuple(captures), value, zone_id
 
     def _match(
         self,
@@ -1476,22 +1635,39 @@ class FlexibleDateIntervalDetector:
         offset_maps: tuple[list[int], dict[int, int]] | None = None,
     ):
         if _continues_interval_word(text, start - 1):
-            return None
+            return []
         cp_to_u16, u16_to_cp = offset_maps if offset_maps is not None else boundary_maps(text)
-        matches = []
+        # One reading per zone: every dating is tried for a zoned matcher, since a zone
+        # may write its name on one dating only (Irish time is "IST" in summer).
+        readings: dict[tuple, tuple] = {}
         leads_with_digit = icu.Char.isdigit(text[start]) if start < len(text) else False
         for matcher in self._matchers:
             if matcher[8] and not leads_with_digit:
                 continue  # ICU writes this side's first field in digits
             for dating in matcher[9]:
                 found = self._read(matcher, dating, text, start, cp_to_u16, u16_to_cp)
-                if found is not None:
-                    matches.append(found)
+                for end, captures, value, zone_id, rank in found:
+                    key = (end, value, _zone_metazone(zone_id) if zone_id else None)
+                    readings.setdefault(key, (rank, end, captures, value))
+                if found and matcher[6] is None:
                     break
-        return max(matches, key=lambda match: match[0], default=None)
+        if not readings:
+            return []
+        longest = max(end for _, end, _, _ in readings.values())
+        return [
+            _FlexibleMatch(end, captures, value, self._spec)
+            for _, end, captures, value in sorted(
+                (reading for reading in readings.values() if reading[1] == longest),
+                key=lambda reading: reading[0],
+            )
+        ]
 
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping date-interval candidates in source order."""
+        """Return greedy, non-overlapping date-interval candidates in source order.
+
+        A span whose zone text names several zones is read once per zone, the reader's
+        own locale's zone first.
+        """
         # Compute the code-point/UTF-16 offset maps once per scan and pass them to every
         # candidate start (avoids O(n^2) scanning). They are bound to this call, never
         # stored on the detector, so one detector can serve concurrent or nested calls.
@@ -1500,7 +1676,7 @@ class FlexibleDateIntervalDetector:
         def match(source: str, start: int):
             return self._match(source, start, offset_maps)
 
-        return _detect_flexible(text, self.locale, self.type, self._spec, match)
+        return _detect_flexible_alternatives(text, self.locale, self.type, match)
 
 
 @cache
@@ -4582,6 +4758,43 @@ def _language_zone_names(language: str, names: tuple[str, ...] | None = None) ->
 
 
 @cache
+def _zone_forms_by_initial(
+    language: str, names: tuple[str, ...] | None = None
+) -> dict[str, tuple[tuple[str, bool], ...]]:
+    """The zone names and abbreviations of ``language`` by first letter, longest first.
+
+    Each is ``(form, is_name)``: a long name matches any space where it has one (see
+    :func:`_match_period`), an abbreviation exactly.
+    """
+    forms: dict[str, list[tuple[str, bool]]] = {}
+    for form in _language_zone_names(language, names):
+        forms.setdefault(form[0], []).append((form, True))
+    for form in _language_zone_abbreviations(language, names):
+        forms.setdefault(form[0], []).append((form, False))
+    return {initial: tuple(entries) for initial, entries in forms.items()}
+
+
+def _zone_form_at(
+    text: str, cursor: int, language: str, names: tuple[str, ...] | None = None
+) -> str | None:
+    """The zone name or abbreviation ICU writes for ``language`` at ``cursor``, if any.
+
+    Long names first, as :func:`_language_zone_names` orders them, then abbreviations;
+    the form must end its letter token ("ET", not "ETC").
+    """
+    if cursor >= len(text):
+        return None
+    for form, is_name in _zone_forms_by_initial(language, names).get(text[cursor], ()):
+        if is_name:
+            end = _match_period(text, cursor, form, exact=True)
+        else:
+            end = cursor + len(form) if text[cursor : cursor + len(form)] == form else None
+        if end is not None and _ends_letter_token(text, end):
+            return form
+    return None
+
+
+@cache
 def _language_flexible_periods(
     language: str, names: tuple[str, ...] | None = None
 ) -> tuple[tuple[str, frozenset[int]], ...]:
@@ -4636,9 +4849,11 @@ class FlexibleTimeDetector:
     time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
     :func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
     ("12:00:00Z"), captured as ``time-zone``. The capture's text is the zone as written;
-    its value is the IANA ID of the zone ICU parses it as (see :func:`_parsed_zone_id`):
+    its value is the IANA ID of the zone ICU parses it as (see :func:`_zone_readings`):
     "Eastern Standard Time", "New York Time", "EST" and "ET" are all
-    "America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT".
+    "America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT". A name that
+    names several zones in the locales of the language gives one reading per zone:
+    "IST" is Europe/Dublin (en_IE) and Asia/Kolkata (en_IN).
 
     A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
     CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
@@ -4980,23 +5195,41 @@ class FlexibleTimeDetector:
         designator = _iso_utc_designator()
         end = cursor + len(designator)
         if text[cursor:end] == designator and _ends_letter_token(text, end):
-            return Capture("time-zone", cursor, end, designator, self._zone_id(designator))
+            return Capture("time-zone", cursor, end, designator, self._zone_ids(designator))
         if not (cursor < len(text) and text[cursor] in _SPACES):
             return None
         begin, cursor = cursor, cursor + 1
-        for form in _language_zone_names(self._language, self.locales):
-            end = _match_period(text, cursor, form, exact=True)
-            if end is not None and _ends_letter_token(text, end):
-                return Capture("time-zone", begin, end, text[begin:end], self._zone_id(form))
-        for form in _language_zone_abbreviations(self._language, self.locales):
-            end = cursor + len(form)
-            if text[cursor:end] == form and _ends_letter_token(text, end):
-                return Capture("time-zone", begin, end, text[begin:end], self._zone_id(form))
-        return None
+        form = _zone_form_at(text, cursor, self._language, self.locales)
+        if form is None:
+            return None
+        end = cursor + len(form)
+        return Capture("time-zone", begin, end, text[begin:end], self._zone_ids(form))
 
-    def _zone_id(self, form: str) -> str | None:
-        """The IANA ID of the zone ICU parses a zone form as (see :func:`_parsed_zone_id`)."""
-        return _parsed_zone_id(form, self.locale, self.locales)
+    def _zone_ids(self, form: str) -> tuple[str, ...]:
+        """The IANA IDs of the zones ICU parses a zone form as (see :func:`_zone_readings`).
+
+        The capture holds them all until :meth:`detect` gives each its own reading.
+        """
+        return tuple(zone_id for zone_id, _ in _zone_readings(form, self.locale, self.locales))
+
+    @staticmethod
+    def _one_reading_per_zone(detection: ValueDetection) -> list[ValueDetection]:
+        """``detection`` once per zone its zone capture names, in the capture's order."""
+        zone = next((c for c in detection["captures"] if c.name == "time-zone"), None)
+        if zone is None:
+            return [detection]
+        return [
+            ValueDetection(
+                **{
+                    **detection,
+                    "captures": tuple(
+                        replace(capture, value=zone_id) if capture is zone else capture
+                        for capture in detection["captures"]
+                    ),
+                }
+            )
+            for zone_id in zone.value or (None,)
+        ]
 
     def _hour_with_period(
         self,
@@ -5040,7 +5273,8 @@ class FlexibleTimeDetector:
 
         A time followed by an hour symbol or a time-zone abbreviation is read both with and
         without it ("10:30" and "10:30 hr"; "10 PM" and "10 PM ET"), so neither span
-        replaces the other.
+        replaces the other. A zone name that names several zones is read once per zone
+        ("10 PM IST": Europe/Dublin and Asia/Kolkata), the locale's own zone first.
         """
         if self._inert:
             return []
@@ -5051,7 +5285,13 @@ class FlexibleTimeDetector:
         def match_with_units(source: str, start: int):
             return self._match(source, start, read_units=True)
 
-        with_units = _detect_flexible(text, self.locale, self.type, self._spec, match_with_units)
+        with_units = [
+            reading
+            for detection in _detect_flexible(
+                text, self.locale, self.type, self._spec, match_with_units
+            )
+            for reading in self._one_reading_per_zone(detection)
+        ]
         spans = {(d["start"], d["end"]) for d in plain}
         merged = plain + [d for d in with_units if (d["start"], d["end"]) not in spans]
         return sorted(merged, key=lambda d: (d["start"], d["end"]))
@@ -5331,7 +5571,8 @@ class FlexibleDateTimeDetector:
                         pattern.replace("{1}", date_pattern).replace("{0}", time_pattern),
                         date["value"].calendar,
                     )
-                    key = (first["start"], second["end"], value)
+                    # A time read in two zones gives two readings.
+                    key = (first["start"], second["end"], value, _zone_key(time["captures"]))
                     found.setdefault(
                         key,
                         ValueDetection(
@@ -5382,7 +5623,7 @@ class FlexibleDateTimeDetector:
                         self.locale, "weekday-time", f"EEE{literal}{time_pattern}", "gregorian"
                     )
                     found.setdefault(
-                        (start, time["end"], value),
+                        (start, time["end"], value, _zone_key(time["captures"])),
                         ValueDetection(
                             text=text[start : time["end"]],
                             start=start,
@@ -6005,11 +6246,13 @@ def _detect_flexible_alternatives(
         if start < cursor or start in interior:
             continue
         ends: set[int] = set()
-        kept: set[tuple[int, object]] = set()
+        kept: set[tuple[int, object, tuple[object, ...]]] = set()
         for result in match(text, start):
-            if result.end in interior or (result.end, result.value) in kept:
+            # Readings of one value in different zones stay distinct.
+            key = (result.end, result.value, _zone_key(result.captures))
+            if result.end in interior or key in kept:
                 continue
-            kept.add((result.end, result.value))
+            kept.add(key)
             ends.add(result.end)
             detections.append(
                 ValueDetection(
