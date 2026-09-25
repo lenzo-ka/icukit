@@ -35,6 +35,11 @@
   detectors of one type for different locales share a gang; one with the same key
   still replaces a member in place. `without` removes a type for every locale, or for
   one with its new `locale` argument, and `names` repeats a type once per member.
+- A connector ICU's word rules join into a word, such as "_", makes a number beside it
+  part of that word, on either side: "_2788", "2788_", and "_2788_" read no number, as
+  "var_2788" did not. The connectors are ICU's Word_Break=ExtendNumLet characters
+  other than spaces, so French "5\u202f%" keeps its number. Markup such as emphasis is
+  taken out before text reaches recognition.
 
 ## [0.5.0] - 2026-09-24
 
