@@ -35,6 +35,7 @@ GUARDED_CLASSES = {
     "FlexibleLoneSpelloutDetector",
     "FlexibleLowercaseRomanDetector",
     "FlexibleMonthNameDetector",
+    "FlexibleShortYearDateDetector",
     "FlexibleWeekdayNameDetector",
 }
 

@@ -1588,6 +1588,12 @@ def _lexicon_expansions(locale: str, sense: str) -> tuple[tuple[str, str], ...]:
     )
 
 
+# The widths of a year the text-date reader reads, and those only the short-year reader
+# reads (see the comment in FlexibleTextDateDetector._match_structure).
+_YEAR_WIDTHS = frozenset({4})
+_SHORT_YEAR_WIDTHS = frozenset({2, 3})
+
+
 class FlexibleTextDateDetector:
     """Recognize textual-month dates licensed by CLDR date patterns and symbols.
 
@@ -1597,6 +1603,11 @@ class FlexibleTextDateDetector:
     en_US reads en_GB's "1 July", "23 October 2014", and "Thursday, 2 May 2013". An
     abbreviated month may carry a period where the locale's abbreviation lexicon lists
     the month that way ("Oct. 2006", "Jan. 1").
+
+    A year in a date is read in four digits. A two- or three-digit one is read only
+    beside an era ("5 March 44 BC"), since without one it cannot be told from a count
+    after a date ("5 June 200 attendees"); those dates are read under their own type by
+    :class:`FlexibleShortYearDateDetector`.
 
     A year beside an era abbreviation CLDR gives the language ("500 BC") is read as a
     year with its era, in the order the language's CLDR ``yG`` pattern writes them (year
@@ -1898,7 +1909,7 @@ class FlexibleTextDateDetector:
             return cursor + len(relaxed)
         return None
 
-    def _match_structure(self, text: str, start: int, structure):
+    def _match_structure(self, text: str, start: int, structure, year_widths=_YEAR_WIDTHS):
         fields, literals, _pattern = structure
         month_year = set(fields) == {"M", "y"}
         if month_year and start > 0:
@@ -1949,10 +1960,15 @@ class FlexibleTextDateDetector:
                     if not following or not text.startswith(following, cursor):
                         cursor = self._ordinal_end(text, cursor, digit_end, value)
                 # ICU's "y" writes a year in as many digits as it has ("24 April 350"),
-                # so two to four are read; a one-digit year is not, since nothing tells
-                # "3 May 2" from a count after a date ("3 May 2 people"), a hand-rolled
-                # limit.
-                elif field == "y" and width in {2, 3, 4}:
+                # but nothing in the patterns tells a short year from a count after a
+                # date ("5 June 200 attendees", "on 5 June 20 people came"), so the
+                # widths read are a hand-rolled limit: four by default, two and three
+                # also for FlexibleShortYearDateDetector, and never one ("3 May 2"). An
+                # era beside the year marks it a year, so there two and three are read
+                # too ("5 March 44 BC"), as the era pass reads "44 BC".
+                elif field == "y" and (
+                    width in year_widths or ("G" in fields and width in _SHORT_YEAR_WIDTHS)
+                ):
                     cursor = digit_end
                 else:
                     return None
@@ -1990,13 +2006,13 @@ class FlexibleTextDateDetector:
         )
         return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
 
-    def _match(self, text: str, start: int, structures=None):
+    def _match(self, text: str, start: int, structures=None, year_widths=_YEAR_WIDTHS):
         if start > 0 and text[start - 1].isalnum():
             return None
         matches = [
             match
             for structure in (self._structures if structures is None else structures)
-            if (match := self._match_structure(text, start, structure)) is not None
+            if (match := self._match_structure(text, start, structure, year_widths)) is not None
         ]
         return max(matches, key=lambda match: match[0], default=None)
 
@@ -2068,6 +2084,50 @@ class FlexibleTextDateDetector:
             if not any(e["start"] <= d["start"] and d["end"] <= e["end"] for e in dates)
         ]
         return sorted((*dates, *extra, *eras), key=lambda item: (item["start"], item["end"]))
+
+
+class FlexibleShortYearDateDetector(FlexibleTextDateDetector):
+    """Recognize the textual dates with a two- or three-digit year the text-date reader refuses.
+
+    :class:`FlexibleTextDateDetector` reads a year in a date without an era only in four
+    digits, since a shorter one cannot be told from a count after a date ("5 June 200
+    attendees", "in June 200 cases"). This reader deposits exactly those refused
+    readings: the dates that reader's patterns read with two- and three-digit years
+    allowed as well, less those it reads without them, which are the dates with no era
+    whose year has two or three digits ("24 April 350", "on 5 June 20 people came"). The
+    type is ``date:short-year`` and the value the text-date reader's
+    :class:`DateTimeValue`, with the year as written: ``("y", 20)`` is the year 20, not
+    2020, and "Mar 3, 07" is ``("y", 7)``: the value is the digits' value, never widened
+    to a century, since the patterns read here write ``y``, not ``yy``.
+    """
+
+    type = "date:short-year"
+
+    @property
+    def has_year_patterns(self) -> bool:
+        """Whether the locale's textual date patterns write a year at all."""
+        return any("y" in fields for fields, _literals, _pattern in self._structures)
+
+    def _match_short(self, text: str, start: int):
+        return self._match(text, start, year_widths=_YEAR_WIDTHS | _SHORT_YEAR_WIDTHS)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return the dates with a two- or three-digit year, in source order."""
+        return [
+            date
+            for date in _detect_flexible(
+                text, self.locale, self.type, self._spec, self._match_short
+            )
+            if _short_year_without_era(date["captures"])
+        ]
+
+
+def _short_year_without_era(captures) -> bool:
+    """Whether a text date's year has two or three digits and no era beside it."""
+    names = {capture.name for capture in captures}
+    return "era" not in names and any(
+        capture.name == "y" and len(capture.text) in _SHORT_YEAR_WIDTHS for capture in captures
+    )
 
 
 class _FlexibleDateNameDetector:

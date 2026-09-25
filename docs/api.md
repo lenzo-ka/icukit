@@ -26,6 +26,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleLoneSpelloutDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleLowercaseRomanDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMonthNameDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleShortYearDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleWeekdayNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
@@ -67,6 +68,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`MONTH_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`SHORT_YEAR_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`WEEKDAY_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`Family`](#icukitengine) — class, `icukit.engine`
@@ -2208,6 +2210,10 @@ Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
 The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
 date specification fixes GMT so date-only parsing cannot acquire host-zone behavior.
 
+A year from a ``y`` field is read only in four or more digits, as ICU writes every
+year from 1000 on; a shorter one cannot be told from a count after a month ("June
+200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
+
 #### `DateDetector(locale: 'str', skeleton: 'str', tz: 'str' = 'GMT') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -2944,11 +2950,11 @@ expansion is intentionally not an invertible formatter operation.
 
 :data:`DEFAULT_FAMILIES` is the default gang. :data:`GUARDED_FAMILIES` generates the
 readers of the readings the default readers refuse on purpose -- a lone "one" or
-"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour -- each
-under its own type, so a consumer that wants every path (a lattice for forced
-alignment) opts in with ``generated_detectors(locale, (*DEFAULT_FAMILIES,
-*GUARDED_FAMILIES))`` or adds one reader to a gang with ``DetectorSet.with_``, and one
-that does not leaves them out.
+"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
+with a two- or three-digit year -- each under its own type, so a consumer that wants
+every path (a lattice for forced alignment) opts in with
+``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
+reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
 
 :func:`flexible_detectors` assembles the flexible (recall) readers of
 :mod:`icukit.recognize` for a locale, each reader that takes a parameter built for the
@@ -2985,7 +2991,7 @@ inverter. Abbreviations use their typed lexicon.
 
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -3007,6 +3013,10 @@ DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
 `<icukit.engine.Family>`
 
 #### `SCIENTIFIC_NUMBER_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `SHORT_YEAR_FAMILY` (constant)
 
 `<icukit.engine.Family>`
 
@@ -5323,6 +5333,11 @@ weekday-day-month-year patterns CLDR gives every locale of the same language, so
 en_US reads en_GB's "1 July", "23 October 2014", and "Thursday, 2 May 2013". An
 abbreviated month may carry a period where the locale's abbreviation lexicon lists
 the month that way ("Oct. 2006", "Jan. 1").
+
+A year in a date is read in four digits. A two- or three-digit one is read only
+beside an era ("5 March 44 BC"), since without one it cannot be told from a count
+after a date ("5 June 200 attendees"); those dates are read under their own type by
+:class:`FlexibleShortYearDateDetector`.
 
 A year beside an era abbreviation CLDR gives the language ("500 BC") is read as a
 year with its era, in the order the language's CLDR ``yG`` pattern writes them (year
