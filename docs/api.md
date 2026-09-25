@@ -7008,11 +7008,20 @@ hand-rolled table (``data/unit_surfaces/<language>.tsv``) mapping each to the IC
 it names. Only the mapping is curated: the unit, the value, and the expansions stay
 ICU's. The same table names the units ICU composes from an SI prefix that are worth
 building ("kilovolt"), since ICU composes any prefix onto any unit and some
-compositions are false readings ("cc" is ICU's centicentury).
+compositions are false readings ("cc" is ICU's centicentury), and a few currency
+surfaces the currency reader does not take from ICU ("Rs" as the Indian rupee).
 
 ### `curated_composed_units(language: 'str') -> 'tuple[str, ...]'`
 
 The ICU units composed from an SI prefix that ``language``'s table chooses.
+
+### `curated_currency_surfaces(language: 'str') -> 'tuple[tuple[str, str], ...]'`
+
+``(surface, ISO 4217 code)`` for the curated currency surfaces of ``language``.
+
+English: "Rs" and "Rs." as the Indian rupee (what English text means by them), and
+"Rs" as the five rupees ICU itself writes it for (Pakistani, Mauritian, Seychellois,
+Sri Lankan, Nepalese).
 
 ### `curated_unit_surfaces(language: 'str') -> 'tuple[tuple[str, str], ...]'`
 

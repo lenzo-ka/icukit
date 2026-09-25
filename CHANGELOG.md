@@ -4,6 +4,15 @@
 
 ### Added
 
+- Curated currency surfaces in `data/unit_surfaces/en.tsv` (`curated_currency_surfaces`):
+  `FlexibleCurrencyDetector` reads "Rs" and "Rs." as the Indian rupee, what English text
+  means by them though ICU writes "₹", beside the five rupees ICU itself writes "Rs" for
+  (Pakistani, Mauritian, Seychellois, Sri Lankan, Nepalese), which the reader did not
+  take from other locales. `icu_abbreviations` lists "Rs" for INR as curated, with ICU's
+  names. The table also chooses two compound units ICU composes ("40 MJ/kg", "5 m³/s").
+
+### Added
+
 - `FlexibleTextDateDetector` reads a three-digit year, as ICU's `y` writes one ("24 April
   350"); a one-digit year is still not read, since it cannot be told from a count after
   a date. It also reads the abbreviation lexicon's weekday forms, with their period and
