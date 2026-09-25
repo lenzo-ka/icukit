@@ -34,6 +34,7 @@ from .detectors import (
     RelativeDateSpec,
     RelativeDateValue,
     SpelloutFormatSpec,
+    UnitValue,
     ValueDetection,
     _date_fields,
     _pattern_runs,
@@ -2299,7 +2300,9 @@ class FlexibleMeasureDetector:
     the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
-    number directly.
+    number directly. A per form written without an amount ("/s", "per second") reads as
+    a :class:`~icukit.detectors.UnitValue` of the rate's unit, where no digit is
+    written right before it.
     """
 
     group = "measure"
@@ -2381,9 +2384,32 @@ class FlexibleMeasureDetector:
             )
         return None
 
+    def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:
+        """A rate's per form at ``start`` with no amount before it: "/s", "per second"."""
+        if start and (text[start - 1] in self._number._digits or text[start - 1].isdigit()):
+            return None
+        for surface, width, _expects_space, unit in self._units:
+            if unit == self.unit or not text.startswith(surface, start):
+                continue
+            end = start + len(surface)
+            if self._continues_word(text, end):
+                continue
+            unit_capture = Capture("unit", start, end, surface, unit, "symbol")
+            spec = MeasureFormatSpec(self.locale, unit, width)
+            return _FlexibleMatch(end, (unit_capture,), UnitValue(unit), spec)
+        return None
+
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping flexible measure candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, None, self._match)
+        """Return flexible measure candidates in source order, a bare per form beside them."""
+        measures = _detect_flexible(text, self.locale, self.type, None, self._match)
+        # A per form inside a rate with its amount ("5 per square kilometre") is that
+        # rate's, not a bare one.
+        rates = [
+            item
+            for item in _detect_flexible(text, self.locale, self.type, None, self._match_per_form)
+            if not any(m["start"] <= item["start"] and item["end"] <= m["end"] for m in measures)
+        ]
+        return sorted((*measures, *rates), key=lambda item: (item["start"], item["end"]))
 
 
 class FlexibleMixedMeasureDetector:
