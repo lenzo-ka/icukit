@@ -344,6 +344,7 @@ def _date_years(locale, text):
         ("en_US", "3/4"),
         ("en_US", "5 June 200 attendees"),
         ("de_DE", "24. April 350"),
+        ("th_TH", "3 พฤษภาคม 200"),
     ],
 )
 def test_the_default_gang_reads_no_count_after_a_month_as_a_year(locale, text):
@@ -355,6 +356,18 @@ def test_the_default_gang_reads_four_digit_and_two_digit_pattern_years():
     assert ("date:yMMMM", "June 2020", 2020) in _date_years("en_US", "June 2020")
     assert ("date:yyMd", "3/4/24", 2024) in _date_years("en_US", "3/4/24")
     assert ("date:yMMMMd", "24. April 2024", 2024) in _date_years("de_DE", "24. April 2024")
+    # A Buddhist-calendar year, th_TH's default, reads in its four digits.
+    thai = _date_years("th_TH", "3 พฤษภาคม 2567")
+    assert ("date:yMMMMd", "3 พฤษภาคม 2567", 2567) in thai
+    assert ("date:yyyyMMMM", "พฤษภาคม 2567", 2567) in thai
+
+
+def test_the_default_gang_reads_the_month_year_inside_a_numeric_date():
+    # With "3/4" no longer read as the year 4, "M/y" reads "4/2024" inside "3/4/2024".
+    assert _date_years("en_US", "3/4/2024") == [
+        ("date:yMd", "3/4/2024", 2024),
+        ("date:yM", "4/2024", 2024),
+    ]
 
 
 # ------------------------------------------------------------------- default gang
