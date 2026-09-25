@@ -13,6 +13,11 @@
   units ("hr.": "hours"). Each row is an `IcuAbbreviation` with its kind
   (`ABBREVIATION_KINDS`), a key naming what it stands for, its width, and its
   expansions; a surface with several meanings is listed once per meaning.
+- `FlexibleMeasureDetector` reads a unit ICU composes with an SI prefix, as ICU's
+  `NumberFormatter` writes it: `FlexibleMeasureDetector("en_US", "kilovolt")` reads
+  "25 kV" and "25 kilovolts", and "kilonewton" reads "3 kN" (both raised before).
+  Which composed units to build is the caller's choice: ICU composes any prefix onto
+  any unit, and some are false readings ("cc" is ICU's centicentury).
 - `FlexibleTimeDetector` reads ICU's ISO 8601 "Z" written against a time as its
   zone: "12:00:00Z", "06:00Z", with a `time-zone` capture. The designator is what
   ICU's `X` pattern writes for UTC.
@@ -69,6 +74,8 @@
 
 ### Fixed
 
+- `FlexibleMeasureDetector` no longer reads a unit inside a longer symbol that ends in a
+  superscript digit: the kilometer reader read "5 km" in "5 km²" and "5/km" in "5/km²".
 - `DateDetector` reads a weekday date with no year on any weekday: "Tue, 3/5" and
   "Sat, 2/29" read as 5 March and 29 February. It read only the weekday those dates
   fall on in 1970 ("Thu, 3/5"), because ICU resolves a year-less parse in 1970. A
