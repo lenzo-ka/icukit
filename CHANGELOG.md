@@ -10,9 +10,6 @@
   (Pakistani, Mauritian, Seychellois, Sri Lankan, Nepalese), which the reader did not
   take from other locales. `icu_abbreviations` lists "Rs" for INR as curated, with ICU's
   names. The table also chooses two compound units ICU composes ("40 MJ/kg", "5 m³/s").
-
-### Added
-
 - `FlexibleNumberDetector` reads the language's other decimal styles where the locale's
   own styles do not already read the text: en_US reads en_DE's "1.234,56" (1234.56),
   "1,5" (1.5), "1.234.567", and en_ZA's "1 234,56", while "1,234" stays 1234 alone.
