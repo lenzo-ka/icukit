@@ -66,9 +66,10 @@ def test_a_grouped_reading_is_added_beside_the_separate_numbers():
     ]
 
 
-def test_a_grouping_that_writes_the_decimal_separator_is_not_read():
+def test_a_grouping_that_writes_the_decimal_separator_gives_no_rival_reading():
     # en_DE groups with ".", en_US's decimal separator; es_419 groups with ",", Spanish's.
-    assert _numbers(FlexibleNumberDetector("en_US"), "1.234.567") == []
+    # Text the locale reads keeps that reading alone: "1.234" is not also 1234.
+    assert _numbers(FlexibleNumberDetector("en_US"), "1.234") == [("1.234", "1.234")]
     assert _numbers(FlexibleNumberDetector("es"), "1,5") == [("1,5", "1.5")]
 
 

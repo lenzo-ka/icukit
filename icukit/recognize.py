@@ -1519,6 +1519,37 @@ def _language_groupings(
     return tuple(groupings)
 
 
+@cache
+def _language_decimal_styles(
+    locale: str, names: tuple[str, ...] | None = None
+) -> tuple[tuple[str, str, int, int, NumberFormatSpec], ...]:
+    """The other locales' number styles whose decimal separator is not ``locale``'s.
+
+    Each is ``(grouping separator, decimal separator, primary, secondary, spec)``: in
+    English, en_DE's "1.234,56" and en_ZA's "1 234,56". Any space is one grouping.
+    """
+    symbol = icu.DecimalFormatSymbols
+    own = icu.NumberFormat.createInstance(icu.Locale(locale)).getDecimalFormatSymbols()
+    own_decimal = own.getSymbol(symbol.kDecimalSeparatorSymbol)
+    styles: dict[tuple[str, str, int, int], tuple[str, str, int, int, NumberFormatSpec]] = {}
+    for name in _language_locales(locale, names)[1:]:
+        number_format = icu.NumberFormat.createInstance(icu.Locale(name))
+        symbols = number_format.getDecimalFormatSymbols()
+        decimal = symbols.getSymbol(symbol.kDecimalSeparatorSymbol)
+        if decimal == own_decimal:
+            continue
+        grouping = symbols.getSymbol(symbol.kGroupingSeparatorSymbol)
+        primary = number_format.getGroupingSize() if number_format.isGroupingUsed() else 0
+        secondary = number_format.getSecondaryGroupingSize() or primary
+        key = (" " if grouping in _SPACES else grouping, decimal, primary, secondary)
+        if key in styles:
+            continue
+        sizes = (secondary, primary) if secondary and secondary != primary else (primary,)
+        spec = NumberFormatSpec(name, "decimal", grouping_sizes=sizes if primary else None)
+        styles[key] = (grouping, decimal, primary, secondary, spec)
+    return tuple(styles.values())
+
+
 class FlexibleNumberDetector:
     """Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
@@ -1526,7 +1557,10 @@ class FlexibleNumberDetector:
     locale of the language ("250 000" as en_ZA formats it, "1'234'567" as en_CH,
     "12,34,567" as en_IN), as an extra reading: "12 100" still reads "12" and "100",
     and also 12100. A grouping whose separator is the locale's decimal separator is not
-    read, since it would reread every decimal number.
+    read that way, since it would reread every decimal number; instead the language's
+    other decimal styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the
+    locale's own styles do not already read the text: "1,5" reads 1.5 and "1.234,56"
+    1234.56, while "1,234" stays 1234 alone.
 
     ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
     cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
@@ -1568,6 +1602,7 @@ class FlexibleNumberDetector:
             grouping_sizes = (secondary, primary) if secondary else (primary,)
         self._spec = NumberFormatSpec(locale, "decimal", grouping_sizes=grouping_sizes)
         self._other_groupings = _language_groupings(locale, self.locales)
+        self._decimal_styles = _language_decimal_styles(locale, self.locales)
 
         self._roman = icu.RuleBasedNumberFormat(
             icu.URBNFRuleSetTag.NUMBERING_SYSTEM, icu.Locale(locale)
@@ -1604,13 +1639,18 @@ class FlexibleNumberDetector:
         return len(separator) if text.startswith(separator, cursor) else 0
 
     def _match(
-        self, text: str, start: int, grouping: tuple[str, int, int] | None = None
+        self,
+        text: str,
+        start: int,
+        grouping: tuple[str, int, int] | None = None,
+        decimal: str | None = None,
     ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         separator, primary_grouping, secondary_grouping = grouping or (
             self._grouping,
             self._primary_grouping,
             self._secondary_grouping,
         )
+        decimal = self._decimal if decimal is None else decimal
         cursor = start
         captures: list[Capture] = []
         negative = False
@@ -1623,11 +1663,11 @@ class FlexibleNumberDetector:
             cursor = sign_end
 
         integer_start = cursor
-        leading_decimal = text.startswith(self._decimal, cursor)
-        decimal_end = cursor + len(self._decimal)
+        leading_decimal = text.startswith(decimal, cursor)
+        decimal_end = cursor + len(decimal)
         if leading_decimal and start > 0:
             previous = text[start - 1]
-            if _is_word_character(previous) or previous == self._decimal:
+            if _is_word_character(previous) or previous == decimal:
                 return None
         if cursor >= len(text) or (
             text[cursor] not in self._digits
@@ -1677,9 +1717,9 @@ class FlexibleNumberDetector:
         )
 
         fraction_ascii = ""
-        separator_end = cursor + len(self._decimal)
+        separator_end = cursor + len(decimal)
         if (
-            text.startswith(self._decimal, cursor)
+            text.startswith(decimal, cursor)
             and separator_end < len(text)
             and text[separator_end] in self._digits
         ):
@@ -1688,7 +1728,7 @@ class FlexibleNumberDetector:
                     "decimal-separator",
                     cursor,
                     separator_end,
-                    self._decimal,
+                    decimal,
                     None,
                     "symbol",
                 )
@@ -1729,6 +1769,16 @@ class FlexibleNumberDetector:
                 found.append(_FlexibleMatch(end, captures, value, spec))
         return found
 
+    def _match_decimal_styles(self, text: str, start: int) -> list[_FlexibleMatch]:
+        """Each reading at ``start`` in another decimal style of the language."""
+        found = []
+        for grouping, decimal, primary, secondary, spec in self._decimal_styles:
+            match = self._match(text, start, (grouping, primary, secondary), decimal)
+            if match is not None:
+                end, captures, value = match
+                found.append(_FlexibleMatch(end, captures, value, spec))
+        return found
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible decimal candidates in source order."""
         decimals = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
@@ -1740,6 +1790,18 @@ class FlexibleNumberDetector:
                     text, self.locale, self.type, self._match_other_groupings
                 )
                 if (item["start"], item["end"]) not in spans
+            )
+        if self._decimal_styles:
+            # Only where the locale's own styles do not already read the text (kal's
+            # ruling of 2026-09-24): "1,234" stays 1234 alone in en_US, while "1 234,56"
+            # reads 1234.56 though en_US reads a fragment "1" of it.
+            own = [(item["start"], item["end"]) for item in decimals]
+            decimals.extend(
+                item
+                for item in _detect_flexible_alternatives(
+                    text, self.locale, self.type, self._match_decimal_styles
+                )
+                if not any(s <= item["start"] and item["end"] <= e for s, e in own)
             )
         romans = _detect_flexible(
             text, self.locale, "number:cardinal:roman", self._spec, self._match_roman
