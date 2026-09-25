@@ -5187,13 +5187,20 @@ Return greedy, non-overlapping scientific numbers in source order.
 
 ### class `FlexibleSpelloutDetector`
 
-Recognize canonical ICU spelled-out cardinals derived from locale RBNF data.
+Recognize canonical ICU spelled-out numbers derived from locale RBNF data.
+
+The cardinal rule set by default; ``ruleset`` chooses another the locale has (see
+:func:`_spellout_rulesets`): "%spellout-ordinal" ("twenty-first"),
+"%spellout-numbering-year" ("nineteen ninety-nine"), "%spellout-cardinal-verbose"
+("one hundred and one"). The type is ``number:spellout`` for the default and
+``number:spellout:<rule set>`` otherwise ("number:spellout:ordinal").
 
 A lone token is suppressed only when it is one of the ambiguous unit words obtained
-by formatting 0 through 9. Larger lone magnitudes and every multi-token canonical
-surface remain eligible for deposit-and-hold alongside other detector candidates.
+by formatting 0 through 9 ("one", "first"). Larger lone magnitudes and every
+multi-token canonical surface remain eligible for deposit-and-hold alongside other
+detector candidates.
 
-#### `FlexibleSpelloutDetector(locale: 'str') -> 'None'`
+#### `FlexibleSpelloutDetector(locale: 'str', *, ruleset: 'str | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
