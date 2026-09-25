@@ -214,11 +214,13 @@ def test_flexible_date_interval_reflects_non_english_locale():
     )
 
 
-def test_flexible_date_interval_gracefully_excludes_unmodeled_12_hour_forms():
-    # Day periods, era, quarter, week, and time-zone fields are not invertible by the
-    # DateDetector field model used by this recognizer.
-    detector = FlexibleDateIntervalDetector("en_US", "hm")
-    surface = _interval_surface("en_US", "hm", {"HOUR": 9, "AM_PM": 0}, {"HOUR": 5, "AM_PM": 1})
+def test_flexible_date_interval_gracefully_excludes_unmodeled_day_periods():
+    # Flexible day periods ("in the afternoon"), era, quarter, and week fields are not
+    # invertible by the field model used by this recognizer (AM/PM and zones are).
+    detector = FlexibleDateIntervalDetector("en_US", "Bhm")
+    surface = _interval_surface(
+        "en_US", "Bhm", {"HOUR_OF_DAY": 14, "MINUTE": 7}, {"HOUR_OF_DAY": 16, "MINUTE": 7}
+    )
     assert not detector.has_patterns
     assert detector.detect(surface) == []
 
