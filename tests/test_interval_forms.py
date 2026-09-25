@@ -304,18 +304,46 @@ def test_a_plain_interval_reads_the_same_in_any_default_zone(default_zone, surfa
         assert _read("yMdHm", surface)["value"] == _value(start, end), default
 
 
-@pytest.mark.parametrize("tz", ["UTC", "America/New_York"])
-def test_a_plain_interval_reads_under_the_process_tz(tz):
-    # The same gap reading with the zone taken from the process environment at startup.
+@pytest.mark.parametrize("tz", ["UTC", "America/New_York", "Europe/Berlin"])
+@pytest.mark.parametrize(
+    "skeleton, surface",
+    [("yMdHm", "3/10/2024, 02:30 – 02:45"), ("yMdhmz", "3/10/2024, 2:30 – 2:45 AM GMT")],
+)
+def test_an_interval_reads_under_the_process_tz(tz, skeleton, surface):
+    # Gap readings with the zone taken from the process environment at startup.
     script = (
+        "import sys\n"
         "from icukit.recognize import FlexibleDateIntervalDetector as F\n"
-        "print([d['text'] for d in F('en_US', 'yMdHm').detect('3/10/2024, 02:30 – 02:45')])\n"
+        "print([d['text'] for d in F('en_US', sys.argv[1]).detect(sys.argv[2])])\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", script],
+        [sys.executable, "-c", script, skeleton, surface],
         env={**os.environ, "TZ": tz},
         capture_output=True,
         text=True,
         check=True,
     )
-    assert result.stdout.strip() == "['3/10/2024, 02:30 – 02:45']"
+    assert result.stdout.strip() == repr([surface])
+
+
+@pytest.mark.parametrize(
+    "skeleton, surface, zone_text, zone_id",
+    [
+        # Inside the spring-forward gap in America/New_York, written in GMT.
+        ("yMdhmz", f"3/10/2024, 2:30{DASH}2:45{NNBSP}AM GMT", "GMT", "Etc/GMT"),
+        # ICU writes Etc/UTC as "UTC" and "GMT+0"; it parses both to Etc/GMT.
+        ("yMdhmz", f"3/10/2024, 2:30{DASH}2:45{NNBSP}AM UTC", "UTC", "Etc/GMT"),
+        ("Hmv", f"02:30{DASH}02:45 GMT+0", "GMT+0", "Etc/GMT"),
+    ],
+)
+def test_a_zoned_interval_reads_the_same_in_any_default_zone(
+    default_zone, skeleton, surface, zone_text, zone_id
+):
+    for default in ("UTC", "America/New_York", "Europe/Berlin"):
+        default_zone(default)
+        detection = _read(skeleton, surface)
+        dated = {"y": 2024, "M": 3, "d": 10} if skeleton.startswith("y") else {}
+        start, end = {**dated, "H": 2, "m": 30}, {**dated, "H": 2, "m": 45}
+        assert detection["value"] == _value(start, end), default
+        zones = [c for c in detection["captures"] if c.name == "time-zone"]
+        assert [(zone.text, zone.value) for zone in zones] == [(zone_text, zone_id)], default
