@@ -4,6 +4,11 @@
 
 ### Added
 
+- `FlexibleTimeDetector` reads ICU's long zone names after a time ("2:07:09 PM Eastern
+  Standard Time", "10:30 Central European Time") and its generic location names ("00:05
+  New York Time"), beside the abbreviations; and ICU's flexible day periods (pattern
+  `B`), giving the hour the period covers: "2 in the afternoon" is 14:00, "10:59 at night"
+  22:59, "12 noon" 12:00. A one-letter period is not read after a space ("12 n").
 - `FlexibleRelativeDateDetector` reads ICU's short and narrow relative styles beside the
   long one ("1 hr. ago", "in 2h", "last mo."), and relative weekdays at each style ("next
   Tuesday", "next Tue.", "last Fri."), with the weekday as the unit. Each reading is
