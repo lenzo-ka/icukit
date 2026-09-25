@@ -4,6 +4,15 @@
 
 ### Added
 
+- Curated unit surfaces (`icukit.unit_surfaces`, `data/unit_surfaces/en.tsv`): the few
+  unit forms English writes that ICU writes in no English locale, each mapped to the
+  ICU unit it names, so `FlexibleMeasureDetector` reads "500cc", "185 lbs", "78 rpm",
+  "83 KB", "3 sq km", "5 per km²", and "12/year" with ICU's unit and value. Only the
+  mapping is hand-rolled. The same table chooses which SI-prefixed units are worth
+  building ("kilovolt", "kilonewton"), since ICU composes any prefix onto any unit.
+  `icu_abbreviations` lists the curated surfaces with ICU's expansions ("cc": "cubic
+  centimeters"), marked by `IcuAbbreviation.source` ("curated", else "icu"), and
+  includes the chosen composed units.
 - `icu_abbreviations(locale, *, locales=None, kinds=None)` lists every abbreviation ICU
   writes for the language, with the expansions ICU gives it, generated from ICU at call
   time: unit symbols ("km": "kilometers"), per forms ("/km²": "per square kilometer"),
