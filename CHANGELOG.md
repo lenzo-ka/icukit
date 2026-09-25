@@ -36,6 +36,13 @@
   still replaces a member in place. `without` removes a type for every locale, or for
   one with its new `locale` argument, and `names` repeats a type once per member.
 
+### Fixed
+
+- `DateDetector` reads a weekday date with no year on any weekday: "Tue, 3/5" and
+  "Sat, 2/29" read as 5 March and 29 February. It read only the weekday those dates
+  fall on in 1970 ("Thu, 3/5"), because ICU resolves a year-less parse in 1970. A
+  date with a year still needs its own weekday.
+
 ## [0.5.0] - 2026-09-24
 
 ### Added
