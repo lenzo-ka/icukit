@@ -157,3 +157,113 @@ def test_reads_a_zoned_interval_in_the_default_zone():
 )
 def test_rejects_what_icu_would_not_write(skeleton, surface):
     assert FlexibleDateIntervalDetector("en_US", skeleton).detect(surface) == []
+
+
+@pytest.mark.parametrize(
+    "skeleton, surface",
+    [
+        # ICU writes these for 22:00-12:00, 23:00-13:00 and 23:30-12:30 as well, but with
+        # the marker carried and no date the reading must run forward.
+        ("h", f"10{DASH}12{NNBSP}PM"),
+        ("h", f"11{DASH}1{NNBSP}PM"),
+        ("hm", f"11:30{DASH}12:30{NNBSP}PM"),
+    ],
+)
+def test_a_carried_marker_does_not_read_backwards(skeleton, surface):
+    assert FlexibleDateIntervalDetector("en_US", skeleton).detect(surface) == []
+
+
+@pytest.mark.parametrize(
+    "skeleton, surface, start, end",
+    [
+        ("h", f"11{NNBSP}PM{DASH}1{NNBSP}AM", {"H": 23}, {"H": 1}),
+        ("hm", f"11:07{NNBSP}PM{DASH}1:07{NNBSP}AM", {"H": 23, "m": 7}, {"H": 1, "m": 7}),
+        ("hm", f"10:07{NNBSP}AM{DASH}12:07{NNBSP}PM", {"H": 10, "m": 7}, {"H": 12, "m": 7}),
+    ],
+)
+def test_two_markers_read_overnight_and_across_noon(skeleton, surface, start, end):
+    assert _read(skeleton, surface)["value"] == _value(start, end)
+
+
+@pytest.fixture
+def default_zone():
+    """Set ICU's default zone for one test, restoring the process default after."""
+    original = icu.TimeZone.createDefault()
+
+    def set_zone(zone_id):
+        icu.TimeZone.setDefault(icu.TimeZone.createTimeZone(zone_id))
+
+    yield set_zone
+    icu.TimeZone.setDefault(original)
+
+
+@pytest.mark.parametrize(
+    "skeleton, surface, zone_id, defaults",
+    [
+        ("hmz", f"2:07{DASH}4:07{NNBSP}PM EST", "America/New_York", ("America/Detroit", "UTC")),
+        ("Hmv", f"14:07{DASH}16:07 India Time", "Asia/Kolkata", ("Asia/Calcutta", "UTC")),
+    ],
+)
+def test_zone_capture_is_the_parsed_zone_whatever_the_default(
+    default_zone, skeleton, surface, zone_id, defaults
+):
+    for default in defaults:
+        default_zone(default)
+        zones = [c for c in _read(skeleton, surface)["captures"] if c.name == "time-zone"]
+        assert [zone.value for zone in zones] == [zone_id], default
+
+
+@pytest.mark.parametrize(
+    "skeleton, text, reading",
+    [
+        ("hm", f"It runs 2:07{DASH}4:07{NNBSP}PM.", f"2:07{DASH}4:07{NNBSP}PM"),
+        ("hmv", f"It runs 2:07{DASH}4:07{NNBSP}PM ET.", f"2:07{DASH}4:07{NNBSP}PM ET"),
+        ("yMMMMd", f"From March 5{DASH}7, 2024.", f"March 5{DASH}7, 2024"),
+    ],
+)
+def test_reads_an_interval_at_the_end_of_a_sentence(skeleton, text, reading):
+    detections = FlexibleDateIntervalDetector("en_US", skeleton).detect(text)
+    assert [detection["text"] for detection in detections] == [reading]
+
+
+@pytest.mark.parametrize(
+    "surface, zone_text, zone_id",
+    [
+        (f"2:07{DASH}4:07{NNBSP}PM EDT", "EDT", "America/New_York"),
+        (f"2:07{DASH}4:07{NNBSP}PM PDT", "PDT", "America/Los_Angeles"),
+        (f"2:07{DASH}4:07{NNBSP}PM PST", "PST", "America/Los_Angeles"),
+    ],
+)
+def test_reads_standard_and_daylight_names_on_a_time_only_interval(surface, zone_text, zone_id):
+    detection = _read("hmz", surface)
+    assert detection["value"] == _value({"H": 14, "m": 7}, {"H": 16, "m": 7})
+    zones = [c for c in detection["captures"] if c.name == "time-zone"]
+    assert [(zone.text, zone.value) for zone in zones] == [(zone_text, zone_id)]
+
+
+def test_a_dated_interval_keeps_its_own_zone_name():
+    # March 5 is before US daylight time began in 2024, and July 5 is inside it.
+    detector = FlexibleDateIntervalDetector("en_US", "yMdhmz")
+    assert detector.detect(f"3/5/2024, 2:07{NNBSP}PM EST{DASH}3/7/2024, 2:07{NNBSP}PM EST")
+    assert detector.detect(f"7/5/2024, 2:07{NNBSP}PM EST{DASH}7/7/2024, 2:07{NNBSP}PM EST") == []
+
+
+@pytest.mark.parametrize("zone_text", ["PST", "GMT-08:00", "UTC", "-0800"])
+def test_zone_gate_rejects_text_the_v_field_does_not_write(zone_text):
+    # SimpleDateFormat parses each of these to the end under the generic "v" field, so the
+    # rejection is the reformat gate's: ICU writes "PT", "GMT-8" and "GMT" there.
+    side = f"16:07 {zone_text}"
+    position = icu.ParsePosition(0)
+    calendar = icu.Calendar.createInstance(icu.Locale("en_US"))
+    icu.SimpleDateFormat("HH:mm v", icu.Locale("en_US")).parse(
+        icu.UnicodeString(side), calendar, position
+    )
+    assert position.getErrorIndex() == -1 and position.getIndex() == len(side)
+    detector = FlexibleDateIntervalDetector("en_US", "Hmv")
+    assert detector.detect(f"14:07{DASH}{side}") == []
+
+
+@pytest.mark.parametrize("zone_text", ["Pacific Time", "America/Los_Angeles"])
+def test_zone_names_the_v_field_does_not_parse_are_not_read(zone_text):
+    detector = FlexibleDateIntervalDetector("en_US", "Hmv")
+    assert detector.detect(f"14:07{DASH}16:07 {zone_text}") == []

@@ -39,7 +39,6 @@ from .detectors import (
     _date_fields,
     _DateField,
     _is_pattern_letter,
-    _pattern_field_id,
     _pattern_runs,
     _word_edges,
     _word_interior_offsets,
@@ -712,9 +711,6 @@ _ZONE_LETTERS = frozenset("zZOvVXx")
 # and one time zone; a day period ("B", "b") and the rest stay unmodeled.
 _MODELED_INTERVAL_LETTERS = frozenset(_MODELED_DATE_LETTERS | {"h", "K", "a"} | _ZONE_LETTERS)
 _INTERVAL_VALUE_ORDER = ("y", "M", "d", "H", "h", "m", "s")
-# CLDR pattern grammar, not locale data: every letter SimpleDateFormat reads, the
-# candidates when naming the pattern field behind a span of ICU's interval output.
-_DATE_PATTERN_LETTERS = "GyYuUrQqMLwWdDFgEecabBhHKkmsSAzZOvVXx"
 # hand-rolled: ICU publishes no sample intervals, so these are chosen here -- two start
 # instants and, per greatest-difference field, an end that differs at that field and at
 # every smaller one. The values are distinctive (1- vs 2-digit month, day and hour, a
@@ -745,26 +741,14 @@ def _interval_fields(pattern: str) -> tuple[_DateField, ...]:
 
 
 @cache
-def _letter_field_id(letter: str) -> int:
-    """ICU's field id for pattern ``letter``, probing every width ICU may write it at.
+def _pattern_chars() -> str:
+    """ICU's date pattern letters, indexed by ``UDateFormatField`` (``G`` is 0, ``y`` 1)."""
+    return str(icu.DateFormatSymbols(icu.Locale.getRoot()).getLocalPatternChars())
 
-    :func:`_pattern_field_id` probes width 3 only, which some letters lack (``vvv`` and
-    ``OOO`` write nothing); this tries it first and then the other widths.
-    """
-    field_id = _pattern_field_id(letter)
-    if field_id != -1:
-        return field_id
-    calendar = icu.GregorianCalendar(icu.Locale("en"))
-    calendar.set(2020, 0, 15)
-    instant = calendar.getTime()
-    for width in (1, 4, 2, 5):
-        probe = icu.SimpleDateFormat(letter * width, icu.Locale("en"))
-        for field_id in range(64):  # generous upper bound on ICU's UDateFormatField enum
-            position = icu.FieldPosition(field_id)
-            probe.format(instant, position)
-            if position.getBeginIndex() != position.getEndIndex():
-                return field_id
-    return -1
+
+def _letter_field_id(letter: str) -> int:
+    """ICU's ``UDateFormatField`` id for pattern ``letter``, or -1 for a non-field letter."""
+    return _pattern_chars().find(letter)
 
 
 def _leads_with_digit_field(pattern: str) -> bool:
@@ -780,6 +764,42 @@ def _leads_with_digit_field(pattern: str) -> bool:
     return letter in {"d", "H", "h", "K", "k", "m", "s"} or letter in {"M", "L"} and width <= 2
 
 
+_INTERVAL_DATING_FIELDS = {
+    "y": icu.UCalendarDateFields.YEAR,
+    "M": icu.UCalendarDateFields.MONTH,
+    "d": icu.UCalendarDateFields.DATE,
+}
+
+
+def _interval_datings(pattern: str) -> tuple[dict[str, int], ...]:
+    """The dates a zoned interval's sides are parsed and gated on.
+
+    An interval that shows no year falls on 1970, where a zone writes only its winter
+    name, and a parsed daylight name ("EDT") shifts the clock an hour. hand-rolled: such an
+    interval is also tried on a mid-January and a mid-July day of a recent year, to meet
+    either hemisphere's standard and daylight names; the dating whose zone name ICU
+    writes back is the one that reads. A shown month and day are kept (only the year is
+    supplied). The dating never enters the value.
+    """
+    letters = {letter for letter, _ in _pattern_runs(pattern)}
+    if "y" in letters:
+        return ({},)
+    if letters & {"M", "L", "d"}:
+        return ({}, {"y": 2024})
+    return ({}, *({"y": 2024, "M": month, "d": 15} for month in (0, 6)))
+
+
+def _iana_zone_id(zone_id: str) -> str:
+    """ICU's IANA form of a zone ID ("Asia/Calcutta" -> "Asia/Kolkata").
+
+    A custom offset zone ("GMT-08:00") has no IANA form and keeps its own ID.
+    """
+    try:
+        return str(icu.TimeZone.getIanaID(zone_id)) or zone_id
+    except icu.ICUError:
+        return zone_id
+
+
 def _zone_run(pattern: str) -> tuple[str, int] | None:
     """The pattern's zone field as ``(letter, width)``, or ``None`` when it has none."""
     runs = _pattern_runs(pattern)
@@ -791,10 +811,10 @@ def _zone_field_ids() -> frozenset[int]:
     return frozenset(_letter_field_id(letter) for letter in _ZONE_LETTERS)
 
 
-@cache
 def _letters_for_field(field_id: int) -> tuple[str, ...]:
-    """The pattern letters whose ICU field id is ``field_id`` (e.g. ``M`` and ``L``)."""
-    return tuple(letter for letter in _DATE_PATTERN_LETTERS if _letter_field_id(letter) == field_id)
+    """The pattern letter whose ICU field id is ``field_id``, or none for an unknown id."""
+    chars = _pattern_chars()
+    return (chars[field_id],) if 0 <= field_id < len(chars) else ()
 
 
 def _gregorian_instant(values: tuple[int, int, int, int, int, int]) -> float:
@@ -1028,6 +1048,7 @@ class FlexibleDateIntervalDetector:
                     next(iter(zones), None),
                     (_zone_run(part1) is not None, _zone_run(part2) is not None),
                     _leads_with_digit_field(part1),
+                    _interval_datings(part1 + part2) if zones else ({},),
                 )
             )
         self._matchers = tuple(matchers)
@@ -1040,9 +1061,11 @@ class FlexibleDateIntervalDetector:
         """Whether ICU yielded at least one modeled, splittable interval recipe."""
         return bool(self._matchers)
 
-    def _parse_side(self, formatter, fields, has_zone, text, start, cp_to_u16, u16_to_cp):
+    def _parse_side(self, formatter, fields, has_zone, text, start, cp_to_u16, u16_to_cp, dating):
         calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
         calendar.clear()
+        for name, value in dating.items():
+            calendar.set(_INTERVAL_DATING_FIELDS[name], value)
         position = icu.ParsePosition(cp_to_u16[start])
         formatter.parse(icu.UnicodeString(text), calendar, position)
         end_u16 = position.getIndex()
@@ -1109,7 +1132,7 @@ class FlexibleDateIntervalDetector:
         return calendar
 
     def _zoned_reformat(self, interval, zone, zone_run, start_values, end_values) -> str:
-        """ICU's rendering of the interval, its zone text written for ``zone``.
+        """ICU's rendering of the interval with its zone text written for ``zone``.
 
         hand-rolled: PyICU's DateIntervalFormat exposes no ``setTimeZone`` and no
         calendar-taking ``format``, so it writes only in the default zone. The wall-clock
@@ -1132,7 +1155,7 @@ class FlexibleDateIntervalDetector:
             text = text[:start] + str(zone_formatter.format(instant)) + text[limit:]
         return text
 
-    def _zone_capture(self, side_pattern, zone_run, zone, values, text, start, end):
+    def _zone_capture(self, side_pattern, zone_run, zone, values, text, start, end, zone_id):
         """The ``time-zone`` capture within one side, located by ICU's field position."""
         icu_locale = icu.Locale(self.locale)
         formatter = icu.SimpleDateFormat(side_pattern, icu_locale)
@@ -1149,7 +1172,146 @@ class FlexibleDateIntervalDetector:
         zone_end = start + u16_to_cp[position.getEndIndex()]
         if zone_end <= zone_start:
             return None
-        return Capture("time-zone", zone_start, zone_end, text[zone_start:zone_end], zone.getID())
+        return Capture("time-zone", zone_start, zone_end, text[zone_start:zone_end], zone_id)
+
+    @staticmethod
+    def _gated_end(
+        reformatted: str,
+        text: str,
+        start: int,
+        end1: int,
+        separator: str,
+        separator_end: int,
+        end2: int,
+    ) -> int | None:
+        """Where the reading ends if ICU's rendering matches the surface, else ``None``.
+
+        Lenient ``SimpleDateFormat.parse`` may take trailing punctuation into the last
+        field ("4:07 PM." at a sentence end); ICU's rendering says where the field ends,
+        so a surface that is the rendering plus only punctuation ends there.
+        """
+        rendered = _normalize_interval_surface(reformatted)
+        surface = text[start:end1] + separator + text[separator_end:end2]
+        gate_surface = _normalize_interval_surface(surface)
+        if rendered == gate_surface:
+            return end2
+        if len(gate_surface) != len(surface) or not gate_surface.startswith(rendered):
+            return None
+        trimmed = end2 - (len(gate_surface) - len(rendered))
+        tail = text[trimmed:end2]
+        if trimmed <= separator_end or any(_is_word_character(ch) or ch.isalnum() for ch in tail):
+            return None
+        return trimmed
+
+    @staticmethod
+    def _carried_marker_runs_backwards(values1, values2, start_values, end_values) -> bool:
+        """Whether an AM/PM carried to the unmarked side puts the end before the start.
+
+        ICU writes one marker when both times share it ("2:07 - 4:07 PM"), but it writes a
+        backwards interval the same way: "10 - 12 PM" is also ICU's text for 22:00 to
+        12:00. With no date to order the endpoints, the carried reading must run forward.
+        A reading with a marker on each side ("11 PM - 1 AM") is ICU's overnight form.
+        """
+        if ("ampm" in values1) == ("ampm" in values2):
+            return False
+        if {"y", "M", "d"} & (values1.keys() | values2.keys()):
+            return False
+
+        def clock(values):
+            return tuple(values.get(name, 0) for name in ("H", "m", "s"))
+
+        return clock(end_values) < clock(start_values)
+
+    def _read(self, matcher, dating, text, start, cp_to_u16, u16_to_cp):
+        """One matcher's reading at ``start`` with its sides parsed on ``dating``."""
+        formatter1, separator, formatter2, fields1, fields2, patterns, zone_run = matcher[:7]
+        has_zone1, has_zone2 = matcher[7]
+        parsed1 = self._parse_side(
+            formatter1, fields1, has_zone1, text, start, cp_to_u16, u16_to_cp, dating
+        )
+        if parsed1 is None:
+            return None
+        end1, values1, zone1 = parsed1
+        separator_end = self._separator_end(text, end1, separator)
+        if separator_end is None:
+            return None
+        parsed2 = self._parse_side(
+            formatter2, fields2, has_zone2, text, separator_end, cp_to_u16, u16_to_cp, dating
+        )
+        if parsed2 is None:
+            return None
+        end2, values2, zone2 = parsed2
+        if _continues_interval_word(text, end2):
+            return None
+        if zone1 is not None and zone2 is not None and zone1.getID() != zone2.getID():
+            return None  # ICU writes both endpoints in one zone
+        zone = zone2 if zone2 is not None else zone1
+        names = values1.keys() | values2.keys()
+        start_values = self._twenty_four_hour(
+            {name: values1[name] if name in values1 else values2[name] for name in names}
+        )
+        end_values = self._twenty_four_hour(
+            {name: values2[name] if name in values2 else values1[name] for name in names}
+        )
+        if self._carried_marker_runs_backwards(values1, values2, start_values, end_values):
+            return None
+        # The gate renders the endpoints on the dating the sides were parsed on.
+        dated_start = {**dating, **start_values}
+        dated_end = {**dating, **end_values}
+        try:
+            start_calendar = self._calendar_from(dated_start)
+            end_calendar = self._calendar_from(dated_end)
+            interval = icu.DateInterval(start_calendar.getTime(), end_calendar.getTime())
+            # ICU's own text in its zone stands as is ("GMT+0" parses to a zone that
+            # writes "GMT"); otherwise the zone text must be the parsed zone's.
+            dif_zone = self._dif.getDateFormat().getTimeZone()
+            candidates = [(str(self._dif.format(interval)), dif_zone)]
+            if zone is not None:
+                reformatted = self._zoned_reformat(interval, zone, zone_run, dated_start, dated_end)
+                candidates.append((reformatted, zone))
+        except icu.ICUError:
+            return None
+        # note: The reformat guard is the correctness gate for every deposited value.
+        # The two field regions are the exact surface text -- so a mis-parse whose
+        # fields would render differently is rejected. Only the separator is swapped
+        # for its reflective canonical form: the surface separator's non-space core was
+        # already validated by _separator_end, and its spacing is the sole intentional
+        # relaxation (letting "2020-2024" match canonical "2020 - 2024"). Thus a
+        # deposited interval's fields always round-trip; only separator spacing is free.
+        # AM/PM is resolved into 24-hour H before the reformat, so a wrong marker renders
+        # differently and fails here; a zone is gated on ICU's text for the parsed zone.
+        gated = None
+        for reformatted, render_zone in candidates:
+            end = self._gated_end(reformatted, text, start, end1, separator, separator_end, end2)
+            if end is not None:
+                gated = end, render_zone
+                break
+        if gated is None:
+            return None
+        end2, render_zone = gated
+        captures = [
+            Capture("start", start, end1, text[start:end1]),
+            Capture("separator", end1, separator_end, text[end1:separator_end], form="symbol"),
+            Capture("end", separator_end, end2, text[separator_end:end2]),
+        ]
+        if zone is not None:
+            # The capture names the zone the text was parsed as, in its IANA form,
+            # whatever the process default zone is.
+            zone_id = _iana_zone_id(zone.getID())
+            sides = (
+                (has_zone1, patterns[0], dated_start, start, end1),
+                (has_zone2, patterns[1], dated_end, separator_end, end2),
+            )
+            for has_zone, pattern, values, side_start, side_end in sides:
+                if not has_zone:
+                    continue
+                zone_capture = self._zone_capture(
+                    pattern, zone_run, render_zone, values, text, side_start, side_end, zone_id
+                )
+                if zone_capture is not None:
+                    captures.append(zone_capture)
+        value = DateIntervalValue(self._endpoint(start_values), self._endpoint(end_values))
+        return end2, tuple(captures), value
 
     def _match(
         self,
@@ -1163,91 +1325,13 @@ class FlexibleDateIntervalDetector:
         matches = []
         leads_with_digit = icu.Char.isdigit(text[start]) if start < len(text) else False
         for matcher in self._matchers:
-            formatter1, separator, formatter2, fields1, fields2, patterns, zone_run = matcher[:7]
-            (has_zone1, has_zone2), digit_lead = matcher[7:]
-            if digit_lead and not leads_with_digit:
+            if matcher[8] and not leads_with_digit:
                 continue  # ICU writes this side's first field in digits
-            parsed1 = self._parse_side(
-                formatter1, fields1, has_zone1, text, start, cp_to_u16, u16_to_cp
-            )
-            if parsed1 is None:
-                continue
-            end1, values1, zone1 = parsed1
-            separator_end = self._separator_end(text, end1, separator)
-            if separator_end is None:
-                continue
-            parsed2 = self._parse_side(
-                formatter2, fields2, has_zone2, text, separator_end, cp_to_u16, u16_to_cp
-            )
-            if parsed2 is None:
-                continue
-            end2, values2, zone2 = parsed2
-            if _continues_interval_word(text, end2):
-                continue
-            if zone1 is not None and zone2 is not None and zone1.getID() != zone2.getID():
-                continue  # ICU writes both endpoints in one zone
-            zone = zone2 if zone2 is not None else zone1
-            names = values1.keys() | values2.keys()
-            start_values = self._twenty_four_hour(
-                {name: values1[name] if name in values1 else values2[name] for name in names}
-            )
-            end_values = self._twenty_four_hour(
-                {name: values2[name] if name in values2 else values1[name] for name in names}
-            )
-            gate_surface = _normalize_interval_surface(
-                text[start:end1] + separator + text[separator_end:end2]
-            )
-            try:
-                start_calendar = self._calendar_from(start_values)
-                end_calendar = self._calendar_from(end_values)
-                interval = icu.DateInterval(start_calendar.getTime(), end_calendar.getTime())
-                reformatted = str(self._dif.format(interval))
-                if zone is not None:
-                    # ICU's own text in its zone stands as is ("GMT+0" parses to a zone
-                    # that writes "GMT"); otherwise the zone text must be the parsed zone's.
-                    if _normalize_interval_surface(reformatted) == gate_surface:
-                        zone = self._dif.getDateFormat().getTimeZone()
-                    else:
-                        reformatted = self._zoned_reformat(
-                            interval, zone, zone_run, start_values, end_values
-                        )
-            except icu.ICUError:
-                continue
-            # note: The reformat guard is the correctness gate for every deposited value.
-            # The two field regions are the exact surface text -- so a mis-parse whose
-            # fields would render differently is rejected. Only the separator is swapped
-            # for its reflective canonical form: the surface separator's non-space core was
-            # already validated by _separator_end, and its spacing is the sole intentional
-            # relaxation (letting "2020-2024" match canonical "2020 - 2024"). Thus a
-            # deposited interval's fields always round-trip; only separator spacing is free.
-            # AM/PM is resolved into 24-hour H before the reformat, so a wrong marker renders
-            # differently and fails here; a zone is gated on ICU's text for the parsed zone.
-            if _normalize_interval_surface(reformatted) != gate_surface:
-                continue
-            captures = [
-                Capture("start", start, end1, text[start:end1]),
-                Capture(
-                    "separator",
-                    end1,
-                    separator_end,
-                    text[end1:separator_end],
-                    form="symbol",
-                ),
-                Capture("end", separator_end, end2, text[separator_end:end2]),
-            ]
-            sides = (
-                (has_zone1, patterns[0], start_values, start, end1),
-                (has_zone2, patterns[1], end_values, separator_end, end2),
-            )
-            for has_zone, pattern, values, side_start, side_end in sides:
-                if has_zone:
-                    zone_capture = self._zone_capture(
-                        pattern, zone_run, zone, values, text, side_start, side_end
-                    )
-                    if zone_capture is not None:
-                        captures.append(zone_capture)
-            value = DateIntervalValue(self._endpoint(start_values), self._endpoint(end_values))
-            matches.append((end2, tuple(captures), value))
+            for dating in matcher[9]:
+                found = self._read(matcher, dating, text, start, cp_to_u16, u16_to_cp)
+                if found is not None:
+                    matches.append(found)
+                    break
         return max(matches, key=lambda match: match[0], default=None)
 
     def detect(self, text: str) -> list[ValueDetection]:
