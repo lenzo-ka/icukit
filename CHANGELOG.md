@@ -4,6 +4,15 @@
 
 ### Added
 
+- `icu_abbreviations(locale, *, locales=None, kinds=None)` lists every abbreviation ICU
+  writes for the language, with the expansions ICU gives it, generated from ICU at call
+  time: unit symbols ("km": "kilometers"), per forms ("/km²": "per square kilometer"),
+  months and weekdays ("Sept": "September"), eras ("BCE": "Before Common Era"), day
+  periods, time-zone abbreviations ("EST": "Eastern Standard Time"), currency symbols
+  and codes ("USD": "US dollars"), compact suffixes ("K": "thousand"), and relative-time
+  units ("hr.": "hours"). Each row is an `IcuAbbreviation` with its kind
+  (`ABBREVIATION_KINDS`), a key naming what it stands for, its width, and its
+  expansions; a surface with several meanings is listed once per meaning.
 - `FlexibleTimeDetector` reads ICU's ISO 8601 "Z" written against a time as its
   zone: "12:00:00Z", "06:00Z", with a `time-zone` capture. The designator is what
   ICU's `X` pattern writes for UTC.

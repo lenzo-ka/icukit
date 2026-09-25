@@ -30,6 +30,9 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`PluralNumeralDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
+- [`ABBREVIATION_KINDS`](#icukiticu-abbreviations) — constant, `icukit.icu_abbreviations`
+- [`IcuAbbreviation`](#icukiticu-abbreviations) — class, `icukit.icu_abbreviations`
+- [`icu_abbreviations`](#icukiticu-abbreviations) — function, `icukit.icu_abbreviations`
 - [`detector_key`](#icukitdetectors) — function, `icukit.detectors`
 - [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
 - [`DateTimeValue`](#icukitdetectors) — class, `icukit.detectors`
@@ -3302,6 +3305,68 @@ Args:
     file: Text stream to write to. Defaults to standard output.
     extended_columns: Keys from the record's ``extended`` mapping to append as TSV
         columns. This transformation is not applied to JSON output.
+
+## icukit.icu_abbreviations
+
+Every abbreviation ICU writes for a language, with the expansions ICU gives it.
+
+Generated from ICU at call time, not stored: for each kind of short form ICU formats,
+the short and narrow surfaces, and the long forms ICU writes for the same thing. A
+consumer that speaks text (a TTS front end) can expand what it reads from here
+without keeping its own list.
+
+Kinds:
+
+    * ``unit``: unit symbols ("km") with the unit's wide names ("kilometers");
+    * ``per-unit``: a rate's per form ("/km²") with its wide form ("per square
+      kilometer");
+    * ``month`` and ``weekday``: abbreviated and narrow names ("Sep") with the wide
+      name ("September");
+    * ``era``: abbreviated names and their variants ("BC", "BCE") with the wide names
+      ("Before Christ", "Before Common Era");
+    * ``day-period``: "AM", "PM", with a wide form where the language has one;
+    * ``time-zone``: zone abbreviations ("EST", "ET") with the long names ("Eastern
+      Standard Time", "Eastern Time");
+    * ``currency``: symbols and ISO codes ("$", "USD") with the currency's names ("US
+      dollars");
+    * ``compact``: compact-number suffixes ("K") with the long ones ("thousand");
+    * ``relative-unit``: relative-time unit abbreviations ("hr.", "mo") with the long
+      ones ("hours", "months").
+
+``key`` names what the surface stands for in ICU's terms: a unit identifier, a month
+or weekday number (ICU's, Sunday 1), an era index, a zone's long name (one
+abbreviation serves many zone IDs), an ISO 4217 code, a power of ten, or a relative
+unit. ``expansions`` are ICU's long forms, singular and
+plural where they differ, in the order ICU gave them; empty where ICU writes no longer
+form (English "AM"). The locales read are the locale's language's, or the ones a
+caller chooses, as for the readers.
+
+Example:
+    >>> from icukit import icu_abbreviations
+    >>> [a.expansions for a in icu_abbreviations("en_US", kinds=["unit"]) if a.surface == "km"]
+    [('kilometer', 'kilometers')]
+
+### Constants and type aliases
+
+#### `ABBREVIATION_KINDS` (constant)
+
+`('unit', 'per-unit', 'month', 'weekday', 'era', 'day-period', 'time-zone', 'currency', 'compact', 'relative-unit')`
+
+### class `IcuAbbreviation`
+
+One short form ICU writes, with the long forms ICU gives the same thing.
+
+#### `IcuAbbreviation(surface: 'str', kind: 'str', key: 'str', width: 'str', expansions: 'tuple[str, ...]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `icu_abbreviations(locale: 'str', *, locales: 'Iterable[str] | None' = None, kinds: 'Iterable[str] | None' = None) -> 'tuple[IcuAbbreviation, ...]'`
+
+The short forms ICU writes in ``locale``'s language, with their expansions.
+
+``locales`` chooses the other locales of the language read, as for the readers
+(``None``: all of them); ``kinds`` narrows the kinds (see ``ABBREVIATION_KINDS``).
+A kind's rows are generated once per locale and choice, then cached.
 
 ## icukit.idna
 

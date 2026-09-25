@@ -251,6 +251,7 @@ from .formatters import (
     print_output,
     print_record,
 )
+from .icu_abbreviations import ABBREVIATION_KINDS, IcuAbbreviation, icu_abbreviations
 from .idna import (
     IDNAConverter,
     idna_decode,
@@ -456,6 +457,9 @@ __all__ = [
     "PluralNumeralDetector",
     "SingleLetterWordDetector",
     "DetectorSet",
+    "ABBREVIATION_KINDS",
+    "IcuAbbreviation",
+    "icu_abbreviations",
     "detector_key",
     "ValueDetection",
     "DateTimeValue",
