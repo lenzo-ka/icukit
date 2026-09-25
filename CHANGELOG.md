@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-25
+
 ### Added
 
 - The readings the default readers refuse on purpose are read, each under a type of its
@@ -15,6 +17,17 @@
   hour cycle ("at 3", `time:bare-hour`, `("h", 3)` in en_US and `("H", 3)` in en_GB).
   The engine generates them from `GUARDED_FAMILIES`, which `DEFAULT_FAMILIES` does not
   include, so a consumer opts in by type; every existing type reads what it read.
+- `FlexibleDateIntervalDetector` reads the interval forms ICU's `DateIntervalFormat`
+  writes where CLDR lists no interval pattern, recovering each pattern from ICU's own
+  output and field positions: width-adjusted skeletons ("March 5 – 7, 2024" for `yMMMMd`,
+  "Tuesday, March 5 – Thursday, March 7, 2024" for `yMMMMEEEEd`) and a time skeleton's
+  date-and-time fallback ("3/5/2024, 14:07 – 3/7/2024, 14:07" for `Hm`). It also reads
+  12-hour intervals with their AM/PM marker ("2:07 – 4:07 PM" is 14:07 to 16:07,
+  "3/5/2024, 2:07 PM – 3/7/2024, 2:07 PM") and zoned ones ("14:07 – 16:07 ET", "2:07 –
+  4:07 PM EDT"), capturing the zone as `time-zone` with the IANA ID of the zone the text
+  names. Values keep 24-hour `H`; every reading still has to reformat to its surface. A
+  marker written once is not read backwards ("10 – 12 PM" is not 22:00 to 12:00), and a
+  period ending the sentence stays outside the reading.
 - The US English abbreviation lexicon adds the USPS two-letter codes for the states,
   DC and the inhabited territories ("NY": New York, sense `region`, cue `address`),
   curated since ICU and CLDR have none; a code that is also a word is marked so ("IN",
@@ -548,7 +561,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/lenzo-ka/icukit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lenzo-ka/icukit/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lenzo-ka/icukit/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lenzo-ka/icukit/compare/v0.3.0...v0.4.0

@@ -1,6 +1,6 @@
 # icukit API Reference
 
-Version: 0.6.0
+Version: 0.7.0
 
 ## Root API index
 
@@ -5065,6 +5065,12 @@ A date with its era is its own reading, beside the date without it.
 ### class `FlexibleDateIntervalDetector`
 
 Recognize date/time interval surfaces by inverting ICU DateIntervalFormat recipes.
+
+Each greatest-difference field's recipe is CLDR's interval pattern when
+``DateIntervalInfo`` has one, else the pattern recovered from ``DateIntervalFormat``'s
+own output (see :func:`_recovered_interval_parts`). A 12-hour side's AM/PM marker is
+parsed into the value, which keeps 24-hour ``H``; a time zone's text is parsed, gated
+against ICU's rendering of that zone, and captured as ``time-zone``.
 
 #### `FlexibleDateIntervalDetector(locale: 'str', skeleton: 'str') -> 'None'`
 
