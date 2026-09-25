@@ -25,6 +25,13 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 - **Text Segmentation**: Break text into words, sentences, lines, or grapheme clusters
 - **Unicode Regex**: Full Unicode-aware regular expressions with script and property support
 
+### Recognition
+
+- **Value readings**: Find numbers, dates, times, measures, currencies, ordinals, and abbreviations in text by inverting ICU's own formatting, keeping every plausible reading of a span
+- **Language-wide forms**: Read the forms every locale of a language writes (en_US text reads en_GB's "12 kilometres"), or only the locales a caller chooses
+
+Recognition reads plain text strings. Markdown, rich text, HTML, XML, and other markup must be turned into text before icukit reads it, by the caller or on the client; icukit has no mode for them. It also has no URL or email detector, so readings can fall inside a URL ("2004" in a path).
+
 ### Localization
 
 - **Number Formatting**: Decimal, currency, percent, scientific, spelled-out numbers

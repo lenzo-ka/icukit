@@ -119,9 +119,12 @@ def test_digits_against_a_script_written_without_spaces_are_a_token(locale, text
     assert _spans(FlexibleNumberDetector(locale), text) == expected
 
 
-def test_a_leading_connector_does_not_make_a_number_a_fragment():
-    # "_2788" is one ICU word, but the guard refuses only an offset with alphanumerics on
-    # both sides, and "_" is not one; "2788" after it is a path a speaker can take, so
-    # it stays a reading. "var_2788" is refused: the offset has "r" and "2" around "_".
-    assert _spans(FlexibleNumberDetector("en_US"), "_2788") == [(1, 5, "2788")]
+def test_a_connector_on_either_side_makes_a_number_part_of_a_word():
+    # "_2788" is one ICU word, and "_" is a connector ICU joins into words, so "2788" in
+    # it is a fragment of an identifier on either side; markup is taken out before
+    # recognition. A space ICU also joins (U+202F in French "5\u202f%") is not one.
+    assert _spans(FlexibleNumberDetector("en_US"), "_2788") == []
+    assert _spans(FlexibleNumberDetector("en_US"), "2788_") == []
+    assert _spans(FlexibleNumberDetector("en_US"), "_2788_") == []
     assert _spans(FlexibleNumberDetector("en_US"), "var_2788") == []
+    assert _spans(FlexibleNumberDetector("fr"), "5\u202f%") == [(0, 1, "5")]
