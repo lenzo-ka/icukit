@@ -1,7 +1,10 @@
 """Tests for Unicode normalization and character properties."""
 
+import codecs
+import json
 import subprocess
 import sys
+import warnings
 
 import pytest
 
@@ -35,29 +38,48 @@ class TestUnicodeEscapes:
             (r"\U0001F600", "😀"),
             (r"\x41", "A"),
             ("U+03B1 U+1F600", "α 😀"),
-            (r"\uD83D\uDE00", "😀"),
-            (r"\xCE\xB1\xF0\x9F\x98\x80", "α😀"),
-            (r"\xE9", "é"),
+            (r"\uD83D\uDE00", "\ud83d\ude00"),
+            (r"\xC3\xA9", "Ã©"),
+            (r"\101", "A"),
+            (r"a\nb\tc", "a\nb\tc"),
+            (r"\'\"\\", "'\"\\"),
             (r"\N{GREEK SMALL LETTER ALPHA}", "α"),
             (r"\N{NO SUCH CHARACTER}", r"\N{NO SUCH CHARACTER}"),
             (r"\\u03B1", r"\u03B1"),
             (r"\uZZZZ", r"\uZZZZ"),
+            (r"\U00110000", r"\U00110000"),
+            (r"\q", r"\q"),
         ],
     )
     def test_decode_unicode_escapes(self, escaped, expected):
         assert decode_unicode_escapes(escaped) == expected
 
-    @pytest.mark.parametrize("text", ["α", "café", "Москва", "世界", "😀", r"C:\path", "a\\n"])
-    def test_decode_leaves_non_escape_text_as_written(self, text):
+    @pytest.mark.parametrize(
+        "text",
+        [
+            r"\u03B1\U0001F600\x41\xC3\xA9\101",
+            r"a\nb\tc\rd\\e\'f\"g\a\b\f\v",
+            r"\N{LATIN SMALL LETTER E WITH ACUTE} \0 \12 \777",
+            r"plain ASCII, no escapes",
+            r"C:\path\to\file",
+        ],
+    )
+    def test_ascii_input_decodes_as_the_unicode_escape_codec_does(self, text):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            expected = codecs.decode(text, "unicode_escape")
+        assert decode_unicode_escapes(text) == expected
+
+    @pytest.mark.parametrize("text", ["α", "café", "Москва", "世界", "😀", "Ã©", "a\\é"])
+    def test_non_ascii_text_passes_through(self, text):
         assert decode_unicode_escapes(text) == text
 
     def test_decode_mixes_escapes_with_non_ascii_text(self):
-        assert decode_unicode_escapes(r"α=\u03B1, é=\xE9") == "α=α, é=é"
+        assert decode_unicode_escapes(r"α=\u03B1, é=\xE9, \n") == "α=α, é=é, \n"
 
-    @pytest.mark.parametrize("fmt", ["u", "U", "x"])
-    def test_decode_inverts_encode(self, fmt):
+    def test_decode_inverts_the_long_escape_format(self):
         text = "aé α😀"
-        assert decode_unicode_escapes(encode_unicode_escapes(text, format=fmt)) == text
+        assert decode_unicode_escapes(encode_unicode_escapes(text, format="U")) == text
 
     @pytest.mark.parametrize(
         ("format", "expected"),
@@ -336,3 +358,26 @@ class TestUnicodeInfoCli:
             "U+00E9",
             "U+03B2",
         ]
+
+    @pytest.mark.parametrize(("given", "codepoint"), [(r"\ud83d", "U+D83D"), ("U+D800", "U+D800")])
+    def test_a_lone_surrogate_prints_as_its_escape(self, given, codepoint):
+        result = subprocess.run(
+            [sys.executable, "-m", "icukit.cli", "unicode", "info", "-H", "-t", given],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        )
+        char, shown_codepoint = result.stdout.rstrip("\n").split("\t")[:2]
+        assert shown_codepoint == codepoint
+        assert char == "\\u" + codepoint[2:].lower()
+
+    def test_a_lone_surrogate_is_a_json_escape(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "icukit.cli", "unicode", "info", "-j", "-t", r"\ud83d"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        )
+        assert json.loads(result.stdout)[0]["char"] == "\ud83d"

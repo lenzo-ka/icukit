@@ -48,7 +48,9 @@ Example:
 
 from __future__ import annotations
 
+import codecs
 import re
+import warnings
 from typing import Any
 
 import icu
@@ -106,47 +108,38 @@ _NORMALIZERS = {
 }
 
 
+# Each escape sequence Python's ``unicode_escape`` codec knows, matched one at a time so
+# that the characters around it -- non-ASCII text above all -- are never passed through
+# the codec, which reads its input as Latin-1.
 _ESCAPE_RE = re.compile(
-    r"\\\\"
-    r"|\\u(?P<hi>[dD][89abAB][0-9A-Fa-f]{2})\\u(?P<lo>[dD][c-fC-F][0-9A-Fa-f]{2})"
-    r"|\\u(?P<u>[0-9A-Fa-f]{4})"
-    r"|\\U(?P<U>[0-9A-Fa-f]{8})"
-    r"|(?P<x>(?:\\x[0-9A-Fa-f]{2})+)"
-    r"|(?P<N>\\N\{[^}]*\})"
-    r"|U\+(?P<uplus>[0-9A-Fa-f]{4,6})"
+    r"\\(?:N\{[^}]*\}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|x[0-9A-Fa-f]{2}|[0-7]{1,3}"
+    r"|[\\'\"abfnrtv\n])"
+    r"|U\+([0-9A-Fa-f]{4,6})"
 )
 
 
 def _decode_escape(match: re.Match[str]) -> str:
-    groups = match.groupdict()
-    if groups["hi"]:
-        high = int(groups["hi"], 16)
-        low = int(groups["lo"], 16)
-        return chr(0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00))
-    code = groups["u"] or groups["U"] or groups["uplus"]
-    if code:
-        codepoint = int(code, 16)
+    if match.group(1) is not None:
+        codepoint = int(match.group(1), 16)
         return chr(codepoint) if codepoint <= 0x10FFFF else match.group(0)
-    if groups["x"]:
-        data = bytes(int(pair, 16) for pair in groups["x"].split("\\x")[1:])
-        try:
-            return data.decode("utf-8")
-        except UnicodeDecodeError:
-            return data.decode("latin-1")
-    if groups["N"]:
-        # ICU's Name-Any transform resolves \N{NAME}, and leaves an unknown name as written.
-        return icu.Transliterator.createInstance("Name-Any").transliterate(groups["N"])
-    return "\\"
+    try:
+        # An octal escape above \377 decodes, with a DeprecationWarning of its own.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            return codecs.decode(match.group(0), "unicode_escape")
+    except (UnicodeDecodeError, ValueError):
+        return match.group(0)
 
 
 def decode_unicode_escapes(text: str) -> str:
     """Decode Unicode escape sequences in text.
 
-    Recognizes ``\\uXXXX`` (a surrogate pair of them is one character),
-    ``\\UXXXXXXXX``, ``\\N{NAME}``, runs of ``\\xXX`` (read as UTF-8 when they
-    form it, as one character per byte otherwise), and ``U+XXXX`` through
-    ``U+XXXXXX``; ``\\\\`` is a literal backslash. Every other character,
-    including non-ASCII text and an escape that does not parse, is left as written.
+    Each escape Python's ``unicode_escape`` codec knows decodes as it does there
+    (``\\uXXXX``, ``\\UXXXXXXXX``, ``\\xXX`` as code point ``U+00XX``, octal,
+    ``\\N{NAME}``, and ``\\n``, ``\\t``, ``\\\\`` and the other single-character
+    escapes), and ``U+XXXX`` through ``U+XXXXXX`` is the character it names. Every
+    other character, including non-ASCII text and an escape that does not parse, is
+    left as written.
     """
     return _ESCAPE_RE.sub(_decode_escape, text)
 

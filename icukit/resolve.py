@@ -1,6 +1,6 @@
 """Resolve a universe of overlapping detections into a best non-overlapping sequence.
 
-See ``design/H4-resolution/design.md``. The detectors DEPOSIT every candidate they find --
+The detectors DEPOSIT every candidate they find --
 running them on ``1/3/2026`` yields a ``date:yMd`` over the whole span alongside the digit
 fragments ``1``, ``3``, ``26``. This module weighs that universe into the maximum-weight
 non-overlapping cover (1-best), or an ordering of covers that collapses to 1-best.

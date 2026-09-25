@@ -6013,7 +6013,7 @@ Example:
 
 Resolve a universe of overlapping detections into a best non-overlapping sequence.
 
-See ``design/H4-resolution/design.md``. The detectors DEPOSIT every candidate they find --
+The detectors DEPOSIT every candidate they find --
 running them on ``1/3/2026`` yields a ``date:yMd`` over the whole span alongside the digit
 fragments ``1``, ``3``, ``26``. This module weighs that universe into the maximum-weight
 non-overlapping cover (1-best), or an ordering of covers that collapses to 1-best.
@@ -6973,11 +6973,12 @@ Normalization form constants
 
 Decode Unicode escape sequences in text.
 
-Recognizes ``\uXXXX`` (a surrogate pair of them is one character),
-``\UXXXXXXXX``, ``\N{NAME}``, runs of ``\xXX`` (read as UTF-8 when they
-form it, as one character per byte otherwise), and ``U+XXXX`` through
-``U+XXXXXX``; ``\\`` is a literal backslash. Every other character,
-including non-ASCII text and an escape that does not parse, is left as written.
+Each escape Python's ``unicode_escape`` codec knows decodes as it does there
+(``\uXXXX``, ``\UXXXXXXXX``, ``\xXX`` as code point ``U+00XX``, octal,
+``\N{NAME}``, and ``\n``, ``\t``, ``\\`` and the other single-character
+escapes), and ``U+XXXX`` through ``U+XXXXXX`` is the character it names. Every
+other character, including non-ASCII text and an escape that does not parse, is
+left as written.
 
 ### `encode_unicode_escapes(text: 'str', format: 'str' = 'uplus') -> 'str'`
 
