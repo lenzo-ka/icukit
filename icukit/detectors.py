@@ -446,6 +446,10 @@ class DateDetector:
 
     The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
     date specification fixes GMT so date-only parsing cannot acquire host-zone behavior.
+
+    A year from a ``y`` field is read only in four or more digits, as ICU writes every
+    year from 1000 on; a shorter one cannot be told from a count after a month ("June
+    200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
     """
 
     group = "date"
@@ -583,6 +587,15 @@ class DateDetector:
             end_u16 = start_u16 + position.getEndIndex()
             begin_cp = u16_to_cp[begin_u16]
             end_cp = u16_to_cp[end_u16]
+            if field.letter == "y" and field.width != 2 and end_cp - begin_cp < 4:
+                # ICU's "y" writes a year in as many digits as it has: four for every
+                # year from 1000 on, and one to three below it ("June 200", "3/4"). The
+                # reformat check cannot tell those from a count after a month ("in June
+                # 200 cases", "August 9"), so a year under four digits is not read here,
+                # a hand-rolled limit; "yy" keeps its two digits, which ICU writes for
+                # every year. An era would mark a short year a year, but this detector
+                # refuses a pattern with an era field (see __init__), so none reaches here.
+                return None
             captures.append(
                 Capture(
                     field.name,
