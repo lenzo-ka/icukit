@@ -8,6 +8,14 @@
   other locales write it: "Thursday, 2 May 2013" (en_GB), "Saturday 3 January 1891"
   (en_AU, en_IE), "Sat, 3 Jan 1891". The weekday is checked against the date, so
   "Monday, 2 May 2013" reads only its date.
+- `FlexibleTextDateDetector` reads CLDR's variant and wide era names beside the
+  abbreviated ones: "300 BCE", "200 CE", "300 Before Christ", "44 Before Common Era".
+  The era capture's form is "short" or "wide" and the spec's pattern `y G` or `y GGGG`
+  accordingly; `_language_eras` gives each name with its era index and width.
+- A rate's per form written without an amount reads as its unit: `FlexibleMeasureDetector`
+  reads "/s", "/km²", "/min" in "beats/min", and "per second" as a `UnitValue`
+  (`per-second`), a new value with a unit and no amount. A per form right after its
+  amount stays the rate ("1.0/s", "5 per square kilometre").
 - `FlexibleMeasureDetector` reads a unit as every locale of the language formats it,
   so en_US text reads en_GB's "12 kilometres", "2 litres", and "5 per square
   kilometre".
