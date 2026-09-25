@@ -34,6 +34,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
 - [`DateTimeValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`MeasureValue`](#icukitdetectors) — class, `icukit.detectors`
+- [`UnitValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`NumberValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`RelativeDateValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`detect`](#icukitdetectors) — function, `icukit.detectors`
@@ -2390,6 +2391,17 @@ Initialize self.  See help(type(self)) for accurate signature.
 The locale and ICU rule set used for a spelled-out cardinal candidate.
 
 #### `SpelloutFormatSpec(locale: 'str', ruleset: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `UnitValue`
+
+A unit written without an amount, such as a rate's per form ("/s").
+
+``unit`` is the canonical ICU identifier (``per-second``). There is no amount, so
+none is recorded.
+
+#### `UnitValue(unit: 'str') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4974,7 +4986,9 @@ each of that locale's plural categories (see :func:`_plural_samples`), each also
 the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
-number directly.
+number directly. A per form written without an amount ("/s", "per second") reads as
+a :class:`~icukit.detectors.UnitValue` of the rate's unit, where no digit is
+written right before it.
 
 #### `FlexibleMeasureDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
@@ -4982,7 +4996,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return greedy, non-overlapping flexible measure candidates in source order.
+Return flexible measure candidates in source order, a bare per form beside them.
 
 ### class `FlexibleMixedMeasureDetector`
 
@@ -5123,10 +5137,11 @@ Return greedy, non-overlapping spelled-out cardinals in source order.
 Recognize textual-month dates licensed by CLDR date patterns and symbols.
 
 The structures are the locale's own medium, long, and full patterns (with their
-year-optional subsets), plus the day-month-year, month-year, and day-month patterns
-CLDR gives every locale of the same language, so en_US reads en_GB's "1 July" and
-"23 October 2014". An abbreviated month may carry a period where the locale's
-abbreviation lexicon lists the month that way ("Oct. 2006", "Jan. 1").
+year-optional subsets), plus the day-month-year, month-year, day-month, and
+weekday-day-month-year patterns CLDR gives every locale of the same language, so
+en_US reads en_GB's "1 July", "23 October 2014", and "Thursday, 2 May 2013". An
+abbreviated month may carry a period where the locale's abbreviation lexicon lists
+the month that way ("Oct. 2006", "Jan. 1").
 
 A year beside an era abbreviation CLDR gives the language ("500 BC") is read as a
 year with its era, in the order the language's CLDR ``yG`` pattern writes them (year

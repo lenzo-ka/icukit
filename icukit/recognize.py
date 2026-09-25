@@ -34,6 +34,7 @@ from .detectors import (
     RelativeDateSpec,
     RelativeDateValue,
     SpelloutFormatSpec,
+    UnitValue,
     ValueDetection,
     _date_fields,
     _pattern_runs,
@@ -931,18 +932,45 @@ class FlexibleDateIntervalDetector:
 @cache
 def _language_eras(
     language: str, names: tuple[str, ...] | None = None
-) -> tuple[tuple[str, int], ...]:
-    """CLDR's abbreviated era names for the locales of ``language``, with ICU's era index.
+) -> tuple[tuple[str, int, str], ...]:
+    """CLDR's era names for the locales of ``language``: ``(name, era index, width)``.
 
-    English gives "BC" (0) and "AD" (1). Longest first; the case is CLDR's.
+    The abbreviated names ("BC" 0, "AD" 1), and from CLDR's Gregorian era table the
+    variants and wide names ICU also formats: "BCE"/"CE", "Before Christ"/"Anno
+    Domini", "Before Common Era"/"Common Era". Longest first; the case is CLDR's.
     """
-    eras: dict[str, int] = {}
+    eras: dict[str, tuple[int, str]] = {}
     for name in _language_locale_names(language, names):
         locale = icu.Locale(name)
         for index, form in enumerate(icu.DateFormatSymbols(locale).getEras()):
             if form:
-                eras.setdefault(form, index)
-    return tuple(sorted(eras.items(), key=lambda item: -len(item[0])))
+                eras.setdefault(form, (index, "short"))
+        try:
+            table = (
+                icu.ResourceBundle("", locale)
+                .getWithFallback("calendar")
+                .getWithFallback("gregorian")
+                .getWithFallback("eras")
+            )
+        except icu.ICUError:
+            continue
+        for key, width in (
+            ("abbreviated%variant", "short"),
+            ("wide", "wide"),
+            ("wide%variant", "wide"),
+        ):
+            try:
+                forms = table.getWithFallback(key)
+            except icu.ICUError:
+                continue
+            for index in range(forms.getSize()):
+                form = forms.get(index).getString()
+                if form:
+                    eras.setdefault(form, (index, width))
+    return tuple(
+        (form, index, width)
+        for form, (index, width) in sorted(eras.items(), key=lambda item: -len(item[0]))
+    )
 
 
 @cache
@@ -1002,10 +1030,11 @@ class FlexibleTextDateDetector:
     """Recognize textual-month dates licensed by CLDR date patterns and symbols.
 
     The structures are the locale's own medium, long, and full patterns (with their
-    year-optional subsets), plus the day-month-year, month-year, and day-month patterns
-    CLDR gives every locale of the same language, so en_US reads en_GB's "1 July" and
-    "23 October 2014". An abbreviated month may carry a period where the locale's
-    abbreviation lexicon lists the month that way ("Oct. 2006", "Jan. 1").
+    year-optional subsets), plus the day-month-year, month-year, day-month, and
+    weekday-day-month-year patterns CLDR gives every locale of the same language, so
+    en_US reads en_GB's "1 July", "23 October 2014", and "Thursday, 2 May 2013". An
+    abbreviated month may carry a period where the locale's abbreviation lexicon lists
+    the month that way ("Oct. 2006", "Jan. 1").
 
     A year beside an era abbreviation CLDR gives the language ("500 BC") is read as a
     year with its era, in the order the language's CLDR ``yG`` pattern writes them (year
@@ -1044,6 +1073,10 @@ class FlexibleTextDateDetector:
             icu_locale.getLanguage(), self.locales
         )
         self._era_spec = DateFormatSpec(locale, "yG", "y G", "gregorian")
+        self._era_specs = {
+            "short": self._era_spec,
+            "wide": DateFormatSpec(locale, "yGGGG", "y GGGG", "gregorian"),
+        }
         self._digits = _locale_digit_map(icu_locale)
 
         structures: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
@@ -1074,13 +1107,20 @@ class FlexibleTextDateDetector:
         day_month: list[tuple[tuple[str, ...], tuple[str, ...], str]] = []
         for available in map(icu.Locale, _language_locale_names(language, self.locales)):
             generator = icu.DateTimePatternGenerator.createInstance(available)
-            for skeleton in ("dMMMMy", "dMMMy", "yMMMM", "yMMM"):
+            # A weekday reads only with its year, which checks it ("Thursday, 2 May 2013",
+            # en_GB; "Saturday 3 January 1891", en_AU and en_IE).
+            for skeleton in ("dMMMMy", "dMMMy", "yMMMM", "yMMM", "yMMMMEEEEd", "yMMMEd"):
                 pattern = generator.getBestPattern(skeleton)
                 parsed = self._date_structure(pattern)
                 if parsed is None:
                     continue
                 fields, literals = parsed
-                if fields in {("d", "M", "y"), ("M", "y")}:
+                if fields in {
+                    ("d", "M", "y"),
+                    ("M", "y"),
+                    ("E", "d", "M", "y"),
+                    ("E", "M", "d", "y"),
+                }:
                     structures.append((fields, literals, pattern))
             for skeleton in ("dMMMM", "dMMM"):
                 pattern = generator.getBestPattern(skeleton)
@@ -1316,11 +1356,11 @@ class FlexibleTextDateDetector:
     def _match_day_month(self, text: str, start: int):
         return self._match(text, start, self._day_month_structures)
 
-    def _era_at(self, text: str, cursor: int) -> tuple[int, int] | None:
-        for form, index in self._eras:
+    def _era_at(self, text: str, cursor: int) -> tuple[int, int, str] | None:
+        for form, index, width in self._eras:
             end = cursor + len(form)
             if text[cursor:end] == form and (end == len(text) or not text[end].isalnum()):
-                return end, index
+                return end, index, width
         return None
 
     def _match_era(self, text: str, start: int):
@@ -1329,7 +1369,7 @@ class FlexibleTextDateDetector:
             return None
         era_first = self._era_at(text, start) if self._era_first else None
         if era_first is not None:
-            era_end, era = era_first
+            era_end, era, width = era_first
             if not (era_end < len(text) and text[era_end] in _SPACES):
                 return None
             year_start = era_end + 1
@@ -1339,10 +1379,11 @@ class FlexibleTextDateDetector:
             if year_end < len(text) and text[year_end].isalnum():
                 return None
             captures = (
-                Capture("era", start, era_end, text[start:era_end], era, "short"),
+                Capture("era", start, era_end, text[start:era_end], era, width),
                 Capture("y", year_start, year_end, text[year_start:year_end], year, "numeric"),
             )
-            return year_end, captures, DateTimeValue((("G", era), ("y", year)), "gregorian")
+            value = DateTimeValue((("G", era), ("y", year)), "gregorian")
+            return _FlexibleMatch(year_end, captures, value, self._era_specs[width])
         if not self._year_first:
             return None
         year_end, year = self._digit_run(text, start)
@@ -1353,12 +1394,13 @@ class FlexibleTextDateDetector:
         found = self._era_at(text, year_end + 1)
         if found is None:
             return None
-        end, era = found
+        end, era, width = found
         captures = (
             Capture("y", start, year_end, text[start:year_end], year, "numeric"),
-            Capture("era", year_end + 1, end, text[year_end + 1 : end], era, "short"),
+            Capture("era", year_end + 1, end, text[year_end + 1 : end], era, width),
         )
-        return end, captures, DateTimeValue((("G", era), ("y", year)), "gregorian")
+        value = DateTimeValue((("G", era), ("y", year)), "gregorian")
+        return _FlexibleMatch(end, captures, value, self._era_specs[width])
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return textual-date, day-month, and era-year candidates in source order.
@@ -2285,7 +2327,9 @@ class FlexibleMeasureDetector:
     the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
-    number directly.
+    number directly. A per form written without an amount ("/s", "per second") reads as
+    a :class:`~icukit.detectors.UnitValue` of the rate's unit, where no digit is
+    written right before it.
     """
 
     group = "measure"
@@ -2367,9 +2411,32 @@ class FlexibleMeasureDetector:
             )
         return None
 
+    def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:
+        """A rate's per form at ``start`` with no amount before it: "/s", "per second"."""
+        if start and (text[start - 1] in self._number._digits or text[start - 1].isdigit()):
+            return None
+        for surface, width, _expects_space, unit in self._units:
+            if unit == self.unit or not text.startswith(surface, start):
+                continue
+            end = start + len(surface)
+            if self._continues_word(text, end):
+                continue
+            unit_capture = Capture("unit", start, end, surface, unit, "symbol")
+            spec = MeasureFormatSpec(self.locale, unit, width)
+            return _FlexibleMatch(end, (unit_capture,), UnitValue(unit), spec)
+        return None
+
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return greedy, non-overlapping flexible measure candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, None, self._match)
+        """Return flexible measure candidates in source order, a bare per form beside them."""
+        measures = _detect_flexible(text, self.locale, self.type, None, self._match)
+        # A per form inside a rate with its amount ("5 per square kilometre") is that
+        # rate's, not a bare one.
+        rates = [
+            item
+            for item in _detect_flexible(text, self.locale, self.type, None, self._match_per_form)
+            if not any(m["start"] <= item["start"] and item["end"] <= m["end"] for m in measures)
+        ]
+        return sorted((*measures, *rates), key=lambda item: (item["start"], item["end"]))
 
 
 class FlexibleMixedMeasureDetector:
