@@ -196,19 +196,11 @@ def test_multi_letter_roman_has_only_its_cardinal_candidate():
     ]
 
 
-@pytest.mark.parametrize(
-    ("multi_surface", "single_surface", "start", "end"),
-    [("_MIX", "_I", 1, 4)],
-)
-def test_multi_letter_roman_boundary_scope_limit(multi_surface, single_surface, start, end):
-    # This pins the accepted scope limit rather than endorsing the boundary asymmetry.
-    detections = _english_letter_readings(multi_surface)
-
-    assert [
-        (detection["type"], detection["start"], detection["end"], detection["text"])
-        for detection in detections
-    ] == [("number:cardinal:roman", start, end, "MIX")]
-    assert _english_letter_readings(single_surface) == []
+@pytest.mark.parametrize("surface", ["_MIX", "_I", "MIX_"])
+def test_a_connector_makes_a_roman_numeral_part_of_a_word(surface):
+    # "_" joins a word as ICU's word rules do, so neither a one-letter nor a longer
+    # Roman numeral beside it is read.
+    assert _english_letter_readings(surface) == []
 
 
 def test_a_multi_letter_roman_after_an_apostrophe_is_inside_the_word():

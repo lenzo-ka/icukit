@@ -924,21 +924,42 @@ def _is_script_seam(left: str | None, right: str) -> bool:
     return False
 
 
+_EXTEND_NUM_LET = icu.Char.getPropertyValueEnum(icu.UProperty.WORD_BREAK, "ExtendNumLet")
+
+
+def _is_word_joiner(character: str) -> bool:
+    """A connector ICU's word rules join into a word: "_" and its kin, not a space.
+
+    Word_Break=ExtendNumLet without the spaces it also holds (the narrow no-break space
+    French writes in "5\u202f%" stays a gap), so "_2788" and "2788_" are one word.
+    """
+    return icu.Char.getIntPropertyValue(
+        character, icu.UProperty.WORD_BREAK
+    ) == _EXTEND_NUM_LET and not icu.Char.isUWhiteSpace(character)
+
+
 @functools.lru_cache(maxsize=16)
 def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
-    """Offsets inside one word with alphanumerics on both sides of them in that word.
+    """Offsets inside one word with word characters on both sides of them in that word.
 
     A reading may not start or end at one of these: "788" inside "2788" or "ab2,788",
     "29" inside "29th", and "123" inside "asdf123" are fragments of a longer token, not
     readings of it. The word is ICU's, so "3" in "我有3个" is its own token, and a mark
-    or format character is part of the word it extends. A digit against a letter of a
-    script that ICU breaks between letters is a seam, not an interior ("100" in
+    or format character is part of the word it extends. A word character is an
+    alphanumeric or a connector ICU joins into words (:func:`_is_word_joiner`), so
+    "2788" in "_2788" or "2788_" is a fragment of an identifier; markup such as
+    emphasis is taken out before text reaches recognition. A digit against a letter of
+    a script that ICU breaks between letters is a seam, not an interior ("100" in
     "ราคา100บาท").
     """
     edges = sorted(_word_edges(text, locale))
     interior: set[int] = set()
     for word_start, word_end in zip(edges, edges[1:], strict=False):
-        alnum = [i for i in range(word_start, word_end) if icu.Char.isalnum(text[i])]
+        alnum = [
+            i
+            for i in range(word_start, word_end)
+            if icu.Char.isalnum(text[i]) or _is_word_joiner(text[i])
+        ]
         if len(alnum) < 2:
             continue
         for offset in range(alnum[0] + 1, alnum[-1] + 1):
