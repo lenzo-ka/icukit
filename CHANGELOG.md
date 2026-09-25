@@ -4,6 +4,12 @@
 
 ### Added
 
+- `FlexibleDateTimeDetector` (`date:datetime-flexible`) reads a date and a time joined as
+  CLDR's date-time patterns join them ("{1}, {0}", "{1} 'at' {0}" in English): "Mar 5,
+  2024, 2:07 PM", "5 March 2024 at 14:07", "July 4, 1999 at 12:05:00 AM EDT". It composes
+  the readings of the textual and numeric date readers and the time reader; the value
+  holds the date's fields and then the time's, and the spec's pattern is CLDR's
+  composition of the two.
 - `FlexibleRelativeDateDetector` reads ICU's short and narrow relative styles beside the
   long one ("1 hr. ago", "in 2h", "last mo."), and relative weekdays at each style ("next
   Tuesday", "next Tue.", "last Fri."), with the weekday as the unit. Each reading is

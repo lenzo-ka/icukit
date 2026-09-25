@@ -24,6 +24,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleTextDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleDateTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMixedMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumericDurationDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
