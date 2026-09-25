@@ -118,16 +118,23 @@
     "June 5, 99 at 3:00 PM". `FlexibleMonthNameDetector` and `FlexibleBareHourDetector`,
     which step aside for its dates, read what it no longer takes: "June" in "in June 200
     cases", and the hour "20" in en_GB's "5 June 20 people".
-
-### Changed
-
 - `FlexibleTimeDetector`'s `time-zone` capture holds the IANA ID of the zone ICU parses
   the zone text as, as `FlexibleDateIntervalDetector`'s does, where it held the zone
   name as written: "Eastern Standard Time", "New York Time", "EST" and "ET" are
   `America/New_York` in en_US (`America/Toronto` in en_CA, whose region ICU's parse
   follows), "Central European Time" and "CET" are `Europe/Paris`, and "UTC", "GMT" and
   "Z" are `Etc/GMT`, whatever the process time zone. The capture's text is still the
-  zone as written, and every time reads as it did.
+  zone as written.
+- Zone text that the locales of the language parse as different zones is read once per
+  zone, by `FlexibleTimeDetector`, `FlexibleDateIntervalDetector` and
+  `FlexibleDateTimeDetector`: the same span and value, one `time-zone` capture each,
+  the locale's own zone first and then the others in locale-name order. "10 PM IST" is
+  `Europe/Dublin` (en_IE's Irish time) and `Asia/Kolkata` (en_IN's India time) in en_US,
+  where it was one reading; en_IN reads Kolkata first. Zones of one ICU metazone are one
+  zone ("EST" is `America/New_York` in en_US, not also en_CA's `America/Toronto`). The
+  interval reader now also reads zone names only another locale of the language writes
+  ("2:07 – 4:07 PM IST" in en_US), each reading checked in its own zone, so a January
+  "IST" is India time alone. The resolver keeps each zone's reading.
 
 ### Fixed
 

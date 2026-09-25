@@ -5082,7 +5082,9 @@ own output (see :func:`_recovered_interval_parts`). A 12-hour side's AM/PM marke
 parsed into the value, which keeps 24-hour ``H``; a time zone's text is parsed, gated
 against ICU's rendering of that zone, and captured as ``time-zone``: the text as
 written, the value the parsed zone's IANA ID ("ET" -> "America/New_York"; a GMT
-offset, which has none, keeps ICU's custom ID, "GMT-08:00").
+offset, which has none, keeps ICU's custom ID, "GMT-08:00"). Zone text another
+locale of the language writes, or that names different zones in its locales, is
+read once per zone, each gated in its own zone (see :meth:`_read`).
 
 #### `FlexibleDateIntervalDetector(locale: 'str', skeleton: 'str') -> 'None'`
 
@@ -5091,6 +5093,9 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping date-interval candidates in source order.
+
+A span whose zone text names several zones is read once per zone, the reader's
+own locale's zone first.
 
 ### class `FlexibleFractionDetector`
 
@@ -5343,9 +5348,11 @@ Likewise the hour-minute separator may be any the language's CLDR patterns use
 time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
 :func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
 ("12:00:00Z"), captured as ``time-zone``. The capture's text is the zone as written;
-its value is the IANA ID of the zone ICU parses it as (see :func:`_parsed_zone_id`):
+its value is the IANA ID of the zone ICU parses it as (see :func:`_zone_readings`):
 "Eastern Standard Time", "New York Time", "EST" and "ET" are all
-"America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT".
+"America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT". A name that
+names several zones in the locales of the language gives one reading per zone:
+"IST" is Europe/Dublin (en_IE) and Asia/Kolkata (en_IN).
 
 A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
 CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
@@ -5363,7 +5370,8 @@ Return flexible clock times in source order.
 
 A time followed by an hour symbol or a time-zone abbreviation is read both with and
 without it ("10:30" and "10:30 hr"; "10 PM" and "10 PM ET"), so neither span
-replaces the other.
+replaces the other. A zone name that names several zones is read once per zone
+("10 PM IST": Europe/Dublin and Asia/Kolkata), the locale's own zone first.
 
 ### class `LetterNameDetector`
 
