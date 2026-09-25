@@ -134,6 +134,46 @@
     "June 5, 99 at 3:00 PM". `FlexibleMonthNameDetector` and `FlexibleBareHourDetector`,
     which step aside for its dates, read what it no longer takes: "June" in "in June 200
     cases", and the hour "20" in en_GB's "5 June 20 people".
+- `FlexibleTimeDetector`'s `time-zone` capture holds the IANA ID of the zone ICU parses
+  the zone text as, as `FlexibleDateIntervalDetector`'s does, where it held the zone
+  name as written: "Eastern Standard Time", "New York Time", "EST" and "ET" are
+  `America/New_York` in en_US (`America/Toronto` in en_CA, whose region ICU's parse
+  follows), "Central European Time" and "CET" are `Europe/Paris`, "GMT" and "Z" are
+  `Etc/GMT`, and "UTC" is `Etc/UTC`, whatever the process time zone. The capture's
+  text is still the zone as written.
+- Zone text that names different zones in the locales of the language is read once per
+  zone, by `FlexibleTimeDetector`, `FlexibleDateIntervalDetector` and
+  `FlexibleDateTimeDetector`: the same span and value, one `time-zone` capture each,
+  the locale's own zone first and then the others in locale-name order. "10 PM IST" is
+  `Europe/Dublin` (en_IE's Irish summer time) and `Asia/Kolkata` (en_IN's India time)
+  in en_US, where it was one reading; en_IN reads Kolkata first. Zones of one ICU
+  metazone are one zone ("EST" is `America/New_York` in en_US, not also en_CA's
+  `America/Toronto`). The interval reader now also reads zone names only another
+  locale of the language writes ("2:07 – 4:07 PM IST" in en_US), each reading checked
+  in its own zone.
+- A zone read is one ICU writes the text for: a zone a locale of the language parses
+  the text as is read as the zone that writes it on the reading's day, the parsed zone
+  if it does, else one of the same offset rules or the same metazone that day (a zone
+  of the reader locale's region first, then of the regions of the language's other
+  locales in locale-name order, then by IANA ID), so the ID carries the offset the name
+  means. "July 5, 2026, 10:00 PM MST" is `America/Phoenix` (Denver writes "MDT" in
+  July); July "CST", which no US zone writes, is `America/Belize` in en_US (en_BZ comes
+  before en_CA), `America/Regina` in en_CA and `America/Bahia_Banderas` in es_MX; January
+  "MST" is `America/Denver`, and "UTC", which ICU parses as `Etc/GMT` but writes for
+  `Etc/UTC`, is `Etc/UTC`. A name ICU only parses leniently is not a zone: "MST" is not
+  also en_MO's obsolete Macau time. A name no zone writes on its date is still read, as
+  a bare time's, since people write "PST" all year: "July 5, 2026, 10:00 PM PST" is
+  `America/Los_Angeles`, "January 5, 2026, 10:00 PM EDT" `America/New_York`.
+- Which zones a name gives depends on the date: a reading with a date is read on it
+  ("Jul 5, 2:07 – 4:07 PM IST" and "July 5, 2026, 10:00 PM IST" are Irish time or India
+  time, the January ones India time alone), a date with no year in the current year; a
+  bare time is read today, and a zone counts if ICU writes the name for it today or in
+  mid-January or mid-July of this year, so a daylight name ("EDT") reads all year. The
+  metazone that groups zones is ICU's on the same day, read afresh from the clock.
+- The resolver keeps each zone's reading. The readings of a span that differ only in
+  zone weigh the same, so such a span resolves as a tie (`ambiguous` true, `margin` 0);
+  the tie is broken by the order the reader deposited them in, so the 1-best is the
+  reader's first zone: `Europe/Dublin` for en_US "10 PM IST", `Asia/Kolkata` for en_IN.
 
 ### Fixed
 
@@ -144,7 +184,7 @@
   `TZ=UTC` and not under `TZ=America/New_York`. An interval is now checked in the zone
   its text names, or in GMT when it names none. The zone text ICU writes for UTC
   ("UTC", "GMT+0") reads under any process zone, where it read only when the process
-  zone was UTC; the `time-zone` capture is still the parsed zone's IANA ID (`Etc/GMT`).
+  zone was UTC; the `time-zone` capture is `Etc/UTC`, the zone ICU writes them for.
 
 ## [0.6.0] - 2026-09-25
 

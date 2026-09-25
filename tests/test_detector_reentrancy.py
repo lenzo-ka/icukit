@@ -4,19 +4,22 @@ import icukit.recognize as recognize
 from icukit.recognize import FlexibleDateIntervalDetector, FlexibleTimeDetector
 
 
-def _nest_once(monkeypatch, detector, nested_text, on_call):
-    """Run ``detector.detect(nested_text)`` inside the ``on_call``-th scan of an outer call."""
-    real = recognize._detect_flexible
+def _nest_once(monkeypatch, detector, nested_text, on_call, scan="_detect_flexible"):
+    """Run ``detector.detect(nested_text)`` inside the ``on_call``-th scan of an outer call.
+
+    ``scan`` names the scanning function the detector drives.
+    """
+    real = getattr(recognize, scan)
     calls = {"count": 0, "nested": False}
 
-    def wrapped(text, locale, type_label, spec, match):
+    def wrapped(*args):
         calls["count"] += 1
         if calls["count"] == on_call and not calls["nested"]:
             calls["nested"] = True
             detector.detect(nested_text)
-        return real(text, locale, type_label, spec, match)
+        return real(*args)
 
-    monkeypatch.setattr(recognize, "_detect_flexible", wrapped)
+    monkeypatch.setattr(recognize, scan, wrapped)
     return calls
 
 
@@ -34,7 +37,10 @@ def test_a_nested_time_call_does_not_turn_off_the_outer_unit_pass(monkeypatch):
 def test_a_nested_interval_call_does_not_clear_the_outer_offset_maps(monkeypatch):
     detector = FlexibleDateIntervalDetector("en_US", "yMMMd")
     expected = [d["text"] for d in detector.detect("from Jan 3 – 5, 2026 on")]
-    calls = _nest_once(monkeypatch, detector, "nothing here", on_call=1)
+    # The interval reader keeps one reading per zone, so it scans for alternatives.
+    calls = _nest_once(
+        monkeypatch, detector, "nothing here", on_call=1, scan="_detect_flexible_alternatives"
+    )
 
     surfaces = [d["text"] for d in detector.detect("from Jan 3 – 5, 2026 on")]
 

@@ -38,6 +38,7 @@ from icukit.recognize import (
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
+    _language_time_separators,
     _normalize_interval_surface,
 )
 from icukit.resolve import resolve
@@ -989,7 +990,11 @@ def test_flexible_date_or_time_is_inert_for_an_unsupported_locale_pattern(monkey
         monkeypatch.setattr(
             FlexibleTimeDetector, "_time_structure", staticmethod(lambda pattern: unsupported)
         )
+        # The patched parser would leave the language's cached separators empty for
+        # every later time detector in this process, so they are not kept.
+        _language_time_separators.cache_clear()
         detector = FlexibleTimeDetector("en_US")
+        _language_time_separators.cache_clear()
 
     assert detector.detect("1/3/2026 3:45 PM") == []
 
