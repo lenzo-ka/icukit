@@ -2,11 +2,24 @@
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-25
+
 ### Added
 
 - `DEFAULT_FAMILIES` is exported from the top-level `icukit` package beside
   `GUARDED_FAMILIES`, so the default and guarded readers can be built together with
   `generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`.
+
+### Changed
+
+- The documentation matches 0.7: the README's command-line examples run as written
+  (`transliterate name`, `transliterate list`, `script detect -t`, `unicode info -t`,
+  and a `detect` example), its example outputs are the real ones, its recognition
+  section shows a detection's shape, `locales=`, `icu_abbreviations`, and how to build
+  the default and guarded readers together, and `docs/install.md` states icukit's own
+  Python range (3.11 and later; CI tests 3.11 through 3.13) beside the wheels'. The
+  command-line description names recognition and formatting, and the module
+  docstrings no longer cite internal design notes.
 
 ### Fixed
 
@@ -673,7 +686,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/lenzo-ka/icukit/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/lenzo-ka/icukit/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lenzo-ka/icukit/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/lenzo-ka/icukit/compare/v0.4.0...v0.5.0
