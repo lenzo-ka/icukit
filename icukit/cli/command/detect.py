@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 from ...detectors import date_detectors, number_detectors
-from ...engine import generated_detectors
+from ...engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, flexible_detectors, generated_detectors
 from ...formatters import format_json, format_tsv
 from ...recognize import FlexibleMeasureDetector
 from ...serialize import detection_to_dict, detections_to_json
@@ -28,18 +29,75 @@ indices. The default set covers dates, date intervals, compact numbers, relative
 dates, scientific numbers, spellout numbers, abbreviations, decimals, and percents.
 Currencies and measures require explicit --currency and --measure options.
 
+--flexible adds the flexible readers, which read the forms text writes beyond ICU's
+own: negative and accounting currency, mixed measures, other decimal styles, dates
+with eras, times with zone names, and the currencies and units ICU chooses for the
+locale's language. It reads every locale of the language unless --locales chooses
+them, and takes seconds to build. --guarded adds the readings the default readers
+refuse on purpose ("one" alone, "May" alone as a month).
+
 Overlapping candidates for a span are expected: recognition deposits a candidate
 forest, and downstream consumers perform disambiguation.
+
+Examples:
+  # Dates and numbers
+  icukit detect -t 'Due March 5, 2024, up 12%'
+
+  # Accounting and negative currency, and mixed measures
+  icukit detect --flexible -t 'Paid ($12.50), then -$5, for 5 ft 3 in'
+
+  # A German decimal comma and a measure
+  icukit detect --flexible --locale de_DE -t '3,5 kg'
+
+  # Only en_US's own forms (no en_GB "kilometres")
+  icukit detect --flexible --locales -t '12 kilometres'
+
+  # en_US and en_GB forms only
+  icukit detect --flexible --locales en_GB -t '12 kilometres'
+
+  # The flexible readers of chosen currencies and units only
+  icukit detect --flexible --currency EUR --measure kilogram -t '-€5 for 3 kg'
+
+  # A lone spelled-out number
+  icukit detect --guarded -t 'one'
 """,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         cls._add_input_options(parser)
         cls._add_locale_option(parser)
         parser.add_argument(
-            "--currency", action="append", default=[], metavar="CODE", help="Add an ISO currency"
+            "--currency",
+            action="append",
+            default=[],
+            metavar="CODE",
+            help="Add an ISO currency (with --flexible, the flexible currency readers read "
+            "only the currencies given)",
         )
         parser.add_argument(
-            "--measure", action="append", default=[], metavar="UNIT", help="Add an ICU measure unit"
+            "--measure",
+            action="append",
+            default=[],
+            metavar="UNIT",
+            help="Add an ICU measure unit, single or mixed (with --flexible, the measure "
+            "readers read only the units given)",
+        )
+        parser.add_argument(
+            "--flexible",
+            action="store_true",
+            help="Add the flexible readers (seconds to build)",
+        )
+        parser.add_argument(
+            "--guarded",
+            action="store_true",
+            help="Add the readings the default readers refuse on purpose",
+        )
+        parser.add_argument(
+            "--locales",
+            nargs="*",
+            default=None,
+            metavar="LOC",
+            help="With --flexible, the other locales of the language to read (default: "
+            "every one; none given: the locale alone)",
         )
         parser.add_argument(
             "--skeleton", action="append", default=[], metavar="SKEL", help="Add a date skeleton"
@@ -56,21 +114,38 @@ forest, and downstream consumers perform disambiguation.
     @classmethod
     def run(cls, args):
         """Recognize and render typed candidates."""
+        if args.locales is not None and not args.flexible:
+            print("icukit detect: --locales requires --flexible", file=sys.stderr)
+            return 2
         # Honor an explicit --text "" (distinct from an omitted option, which reads stdin).
         if getattr(args, "text", None) is not None:
             text = args.text
         else:
             text = cls._read_input(args)
-        detectors = generated_detectors(args.locale)
-        numbers = number_detectors(
-            args.locale, decimal=True, percent=True, currencies=args.currency
-        )
-        detectors = detectors.with_(*numbers.detectors)
+        families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if args.guarded else DEFAULT_FAMILIES
+        detectors = generated_detectors(args.locale, families)
+        if args.flexible:
+            # The flexible set reads decimals, percents, and the currencies and units asked
+            # for (or ICU's choice) itself, so the strict number readers and the
+            # per-unit measure readers below would only repeat its readings.
+            flexible = flexible_detectors(
+                args.locale,
+                locales=args.locales,
+                currencies=args.currency or None,
+                units=args.measure or None,
+                guarded=args.guarded,
+            )
+            detectors = detectors.with_(*flexible.detectors)
+        else:
+            numbers = number_detectors(
+                args.locale, decimal=True, percent=True, currencies=args.currency
+            )
+            detectors = detectors.with_(*numbers.detectors)
+            detectors = detectors.with_(
+                *(FlexibleMeasureDetector(args.locale, unit) for unit in args.measure)
+            )
         if args.skeleton:
             detectors = detectors.with_(*date_detectors(args.locale, args.skeleton).detectors)
-        detectors = detectors.with_(
-            *(FlexibleMeasureDetector(args.locale, unit) for unit in args.measure)
-        )
         detections = detectors.detect(text)
 
         if args.jsonl:

@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+
+- `icukit detect` runs the flexible and opt-in readers. `--flexible` adds
+  `flexible_detectors` (accounting and negative currency, mixed measures, other decimal
+  styles, zoned times), `--guarded` adds the readings the default readers refuse on
+  purpose ("one" alone), and `--locales LOC ...` chooses the other locales of the
+  language the flexible readers read (none given: the locale alone). With `--flexible`,
+  `--currency` and `--measure` choose the currencies and units the flexible readers
+  read, in place of ICU's choice.
+
+### Changed
+
+- The date-interval readers, in both `generated_detectors` and `flexible_detectors`,
+  include each zoned skeleton's counterpart in the other zone family: CLDR gives interval
+  patterns for the generic zone (`hmv`) alone, and ICU writes a specific-zone skeleton
+  (`hmz`) through them, so "2:07 – 4:07 PM EDT" is now read whole, not only as
+  "2:07 – 4:07 PM".
+
 ## [0.7.0] - 2026-09-25
 
 ### Added

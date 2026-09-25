@@ -652,16 +652,48 @@ indices. The default set covers dates, date intervals, compact numbers, relative
 dates, scientific numbers, spellout numbers, abbreviations, decimals, and percents.
 Currencies and measures require explicit --currency and --measure options.
 
+--flexible adds the flexible readers, which read the forms text writes beyond ICU's
+own: negative and accounting currency, mixed measures, other decimal styles, dates
+with eras, times with zone names, and the currencies and units ICU chooses for the
+locale's language. It reads every locale of the language unless --locales chooses
+them, and takes seconds to build. --guarded adds the readings the default readers
+refuse on purpose ("one" alone, "May" alone as a month).
+
 Overlapping candidates for a span are expected: recognition deposits a candidate
 forest, and downstream consumers perform disambiguation.
+
+Examples:
+  # Dates and numbers
+  icukit detect -t 'Due March 5, 2024, up 12%'
+
+  # Accounting and negative currency, and mixed measures
+  icukit detect --flexible -t 'Paid ($12.50), then -$5, for 5 ft 3 in'
+
+  # A German decimal comma and a measure
+  icukit detect --flexible --locale de_DE -t '3,5 kg'
+
+  # Only en_US's own forms (no en_GB "kilometres")
+  icukit detect --flexible --locales -t '12 kilometres'
+
+  # en_US and en_GB forms only
+  icukit detect --flexible --locales en_GB -t '12 kilometres'
+
+  # The flexible readers of chosen currencies and units only
+  icukit detect --flexible --currency EUR --measure kilogram -t '-€5 for 3 kg'
+
+  # A lone spelled-out number
+  icukit detect --guarded -t 'one'
 
 **Options:**
 
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
-- `--currency`: Add an ISO currency (default: `[]`)
-- `--measure`: Add an ICU measure unit (default: `[]`)
+- `--currency`: Add an ISO currency (with --flexible, the flexible currency readers read only the currencies given) (default: `[]`)
+- `--measure`: Add an ICU measure unit, single or mixed (with --flexible, the measure readers read only the units given) (default: `[]`)
+- `--flexible`: Add the flexible readers (seconds to build) (default: `False`)
+- `--guarded`: Add the readings the default readers refuse on purpose (default: `False`)
+- `--locales`: With --flexible, the other locales of the language to read (default: every one; none given: the locale alone)
 - `--skeleton`: Add a date skeleton (default: `[]`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)

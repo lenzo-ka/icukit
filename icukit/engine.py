@@ -188,9 +188,24 @@ DATE_TIME_SKELETON_FAMILY = Family(
 )
 
 
+_ZONE_COUNTERPART = str.maketrans("vz", "zv")
+
+
 def _date_interval_skeletons(locale: str) -> Iterable[Spec]:
+    # The pattern generator's skeletons, and for each one with a time zone field, its
+    # counterpart in the other zone family at the same width (hmv and hmz). CLDR gives
+    # interval patterns for the generic zone (v) alone, and ICU's interval formatter
+    # writes a specific-zone (z) skeleton through them, so "2:07 – 4:07 PM EDT" has a
+    # skeleton of its own only this way; the probe keeps the counterparts ICU gives
+    # patterns for.
     generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
-    return sorted(generator.getSkeletons())
+    skeletons = set(generator.getSkeletons())
+    skeletons |= {
+        skeleton.translate(_ZONE_COUNTERPART)
+        for skeleton in tuple(skeletons)
+        if "v" in skeleton or "z" in skeleton
+    }
+    return sorted(skeletons)
 
 
 def _date_interval_invert(spec: Spec, locale: str) -> Detector | None:
@@ -838,7 +853,8 @@ def flexible_detectors(
     compact (each ICU width), spell-out (each RBNF spell-out rule set), currency and
     currency-name, measure, mixed-measure, numeric-duration, numeric-date, text-date,
     date-time, time, relative-date, and date-interval (each skeleton ICU gives an
-    interval) readers, and the letter-name, single-letter-word, and alphanumeric-run
+    interval, a zoned one in both the generic and the specific zone family, hmv and
+    hmz) readers, and the letter-name, single-letter-word, and alphanumeric-run
     readers. Where :func:`generated_detectors` builds a reader too, the two are the same
     member, so ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)``
     is the strict and flexible readers together.

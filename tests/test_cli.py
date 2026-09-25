@@ -85,6 +85,63 @@ class TestDetectCommand:
         assert code == 0, err
         assert json.loads(out) == []
 
+    @staticmethod
+    def _rows(*args):
+        code, out, err = run_cli("detect", "-H", *args)
+        assert code == 0, err
+        return {tuple(line.split("\t")[2:]) for line in out.splitlines()}
+
+    def test_flexible_reads_accounting_and_negative_currency_mixed_measures_and_zones(self):
+        text = "Paid ($12.50), then -$5, for 5 ft 3 in, 2:07 – 4:07 PM EDT"
+        rows = self._rows("--flexible", "--locales", "-t", text)
+        assert {
+            ("number:currency:USD", "($12.50)"),
+            ("number:currency:USD", "-$5"),
+            ("measure:foot-and-inch", "5 ft 3 in"),
+            ("date-interval:hmz", "2:07 – 4:07 PM EDT"),
+        } <= rows
+        # Without --flexible, the currencies and the mixed measure are not read.
+        assert not {
+            ("number:currency:USD", "($12.50)"),
+            ("number:currency:USD", "-$5"),
+            ("measure:foot-and-inch", "5 ft 3 in"),
+        } & self._rows("-t", text)
+
+    def test_flexible_reads_a_comma_decimal_measure_in_german(self):
+        rows = self._rows("--flexible", "--locale", "de_DE", "-t", "3,5 kg")
+        assert rows == {("measure:kilogram", "3,5 kg"), ("number:decimal", "3,5")}
+
+    def test_locales_chooses_the_locales_of_the_language_read(self):
+        text = "12 kilometres"
+        assert ("measure:kilometer", text) in self._rows(
+            "--flexible", "--locales", "en_GB", "-t", text
+        )
+        # An empty selection reads the locale alone, and en_US writes "kilometers".
+        assert ("measure:kilometer", text) not in self._rows("--flexible", "--locales", "-t", text)
+
+    def test_locales_requires_flexible(self):
+        code, out, err = run_cli("detect", "--locales", "en_GB", "-t", "one")
+        assert code == 2
+        assert "--locales requires --flexible" in err
+
+    def test_flexible_reads_only_the_currencies_and_units_given(self):
+        rows = self._rows(
+            "--flexible",
+            "--locales",
+            "--currency",
+            "EUR",
+            "--measure",
+            "kilogram",
+            "-t",
+            "-€5 for 3 kg, 5 ft, ($2.00)",
+        )
+        assert {("number:currency:EUR", "-€5"), ("measure:kilogram", "3 kg")} <= rows
+        assert not {kind for kind, _ in rows} & {"measure:foot", "number:currency:USD"}
+
+    def test_guarded_reads_a_lone_spelled_out_number(self):
+        assert ("number:spellout-lone", "one") in self._rows("--guarded", "-t", "one")
+        assert self._rows("-t", "one") == set()
+
     def test_version(self):
         """CLI should show version."""
         code, out, err = run_cli("--version")

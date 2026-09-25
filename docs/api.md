@@ -3060,7 +3060,8 @@ It holds the numeric, percent, fraction, ordinal, plural-numeral, scientific,
 compact (each ICU width), spell-out (each RBNF spell-out rule set), currency and
 currency-name, measure, mixed-measure, numeric-duration, numeric-date, text-date,
 date-time, time, relative-date, and date-interval (each skeleton ICU gives an
-interval) readers, and the letter-name, single-letter-word, and alphanumeric-run
+interval, a zoned one in both the generic and the specific zone family, hmv and
+hmz) readers, and the letter-name, single-letter-word, and alphanumeric-run
 readers. Where :func:`generated_detectors` builds a reader too, the two are the same
 member, so ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)``
 is the strict and flexible readers together.
