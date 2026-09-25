@@ -2,17 +2,6 @@
 
 ## [Unreleased]
 
-### Fixed
-
-- `FlexibleDateIntervalDetector` reads an interval the same whatever the process time
-  zone is. It parsed and checked the wall-clock times in the process default zone, so
-  a time inside a daylight-saving gap there was moved to another hour and the reading
-  dropped: "3/10/2024, 02:30 – 02:45" and "3/10/2024, 2:30 – 2:45 AM GMT" read under
-  `TZ=UTC` and not under `TZ=America/New_York`. An interval is now checked in the zone
-  its text names, or in GMT when it names none. The zone text ICU writes for UTC
-  ("UTC", "GMT+0") reads under any process zone, where it read only when the process
-  zone was UTC; the `time-zone` capture is still the parsed zone's IANA ID (`Etc/GMT`).
-
 ## [0.7.0] - 2026-09-25
 
 ### Added
@@ -107,6 +96,17 @@
   those CLDR does not name ("Sun. 29 September 1912", "Tues. 3 May 2011", "Thurs., 2
   May 2013"), as it reads the lexicon's dotted months; the weekday is still checked
   against the date.
+
+### Fixed
+
+- `FlexibleDateIntervalDetector` reads an interval the same whatever the process time
+  zone is. It parsed and checked the wall-clock times in the process default zone, so
+  a time inside a daylight-saving gap there was moved to another hour and the reading
+  dropped: "3/10/2024, 02:30 – 02:45" and "3/10/2024, 2:30 – 2:45 AM GMT" read under
+  `TZ=UTC` and not under `TZ=America/New_York`. An interval is now checked in the zone
+  its text names, or in GMT when it names none. The zone text ICU writes for UTC
+  ("UTC", "GMT+0") reads under any process zone, where it read only when the process
+  zone was UTC; the `time-zone` capture is still the parsed zone's IANA ID (`Etc/GMT`).
 
 ## [0.6.0] - 2026-09-25
 
