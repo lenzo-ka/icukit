@@ -545,6 +545,43 @@ def _language_date_structures(
     )
 
 
+@cache
+def _language_era_date_structures(language: str, names: tuple[str, ...] | None = None):
+    """CLDR's ``GyMd`` patterns for the locales of ``language``, read around their era.
+
+    Each is ``(fields, separators, pattern, era_first, era_literal)``: the numeric date
+    as :class:`FlexibleDateDetector` reads a short-date pattern, and where the era
+    stands ("M/d/y G" after, with " "; ja's "Gy/M/d" before, with nothing).
+    """
+    structures = {}
+    for name in _language_locale_names(language, names):
+        generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(name))
+        pattern = generator.getBestPattern("GyMd")
+        found = _era_date_structure(pattern)
+        if found is not None:
+            structures.setdefault(found, pattern)
+    return tuple((*structure, pattern) for structure, pattern in structures.items())
+
+
+def _era_date_structure(pattern: str):
+    """``pattern``'s numeric date and its era's place: ``(fields, separators, era_first,
+    era_literal)``, or ``None`` where the era is not at one end."""
+    stripped = pattern.rstrip("G")
+    if stripped != pattern and "G" not in stripped:
+        core = stripped.rstrip(" \u00a0\u202f,")
+        era_first, literal = False, stripped[len(core) :]
+    else:
+        stripped = pattern.lstrip("G")
+        if stripped == pattern or "G" in stripped:
+            return None
+        core = stripped.lstrip(" \u00a0\u202f,")
+        era_first, literal = True, stripped[: len(stripped) - len(core)]
+    structure = FlexibleDateDetector._date_structure(core)
+    if structure is None or "'" in literal:
+        return None
+    return (*structure, era_first, literal)
+
+
 class FlexibleDateDetector:
     """Recognize flexible numeric dates using CLDR short-date structures.
 
@@ -558,6 +595,10 @@ class FlexibleDateDetector:
     reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
     pattern it came from. A year written first must have four digits, since a leading
     two-digit year cannot be told from a day ("10-12-14").
+
+    A date with its era reads as CLDR's ``GyMd`` patterns write it ("3/5/2024 AD",
+    "15/03/44 BC"), the era's names the language's (see ``_language_eras``); the value
+    leads with ``("G", era)``.
     """
 
     group = "date"
@@ -582,6 +623,9 @@ class FlexibleDateDetector:
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "yMd", self.pattern, self._calendar)
+        language = icu_locale.getLanguage()
+        self._era_structures = _language_era_date_structures(language, self.locales)
+        self._eras = _language_eras(language, self.locales)
 
     @staticmethod
     def _date_structure(
@@ -642,8 +686,15 @@ class FlexibleDateDetector:
         return match
 
     def _match_structure(
-        self, text: str, start: int, fields: tuple[str, ...], separators: tuple[str, ...]
+        self,
+        text: str,
+        start: int,
+        fields: tuple[str, ...],
+        separators: tuple[str, ...],
+        checked: bool = True,
     ) -> tuple[int, tuple[Capture, ...], DateTimeValue] | None:
+        """The date at ``start``; ``checked`` confirms it exists (the era reader checks
+        it in its era instead)."""
         cursor = start
         values: dict[str, int] = {}
         captures: list[Capture] = []
@@ -665,25 +716,98 @@ class FlexibleDateDetector:
                     return None
                 cursor += len(separator)
 
-        calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
-        calendar.setLenient(False)
-        calendar.clear()
-        try:
-            calendar.set(values["y"], values["M"] - 1, values["d"])
-            calendar.getTime()
-        except icu.ICUError:
-            return None
+        if checked:
+            calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+            calendar.setLenient(False)
+            calendar.clear()
+            try:
+                calendar.set(values["y"], values["M"] - 1, values["d"])
+                calendar.getTime()
+            except icu.ICUError:
+                return None
 
         ordered = tuple((field, values[field]) for field in ("y", "M", "d"))
         return cursor, tuple(captures), DateTimeValue(ordered, self._calendar)
 
+    def _era_at(
+        self, text: str, cursor: int, before_digits: bool = False
+    ) -> tuple[int, int, str] | None:
+        """The era at ``cursor``, ending a word, or touching a digit where the pattern
+        writes the era straight before the year (``before_digits``)."""
+        for form, index, width in self._eras:
+            end = cursor + len(form)
+            if text[cursor:end] != form:
+                continue
+            if end == len(text) or not text[end].isalnum():
+                return end, index, width
+            if before_digits and text[end] in self._digits:
+                return end, index, width
+        return None
+
+    def _era_matcher(self, fields, separators, era_first, literal, pattern):
+        spec = DateFormatSpec(self.locale, "GyMd", pattern, self._calendar)
+
+        def match(text: str, start: int) -> _FlexibleMatch | None:
+            if era_first:
+                found = self._era_at(text, start, before_digits=not literal)
+                if found is None or not text.startswith(literal, found[0]):
+                    return None
+                era_start, (era_end, era, width) = start, found
+                date = self._match_structure(
+                    text, era_end + len(literal), fields, separators, checked=False
+                )
+                if date is None:
+                    return None
+                end, captures, value = date
+            else:
+                date = self._match_structure(text, start, fields, separators, checked=False)
+                if date is None or not text.startswith(literal, date[0]):
+                    return None
+                end, captures, value = date
+                era_start = end + len(literal)
+                found = self._era_at(text, era_start)
+                if found is None:
+                    return None
+                end, era, width = found
+                era_end = end
+            if not self._valid_in_era(value, era):
+                return None
+            era_capture = Capture("era", era_start, era_end, text[era_start:era_end], era, width)
+            joined = (era_capture, *captures) if era_first else (*captures, era_capture)
+            dated = DateTimeValue((("G", era), *value.fields), value.calendar)
+            return _FlexibleMatch(end, joined, dated, spec)
+
+        return match
+
+    def _valid_in_era(self, value: DateTimeValue, era: int) -> bool:
+        """Whether the date exists in the era (a leap day in 44 BC, say)."""
+        fields = dict(value.fields)
+        calendar = icu.Calendar.createInstance(icu.Locale(self.locale))
+        calendar.setLenient(False)
+        calendar.clear()
+        try:
+            calendar.set(icu.UCalendarDateFields.ERA, era)
+            calendar.set(icu.UCalendarDateFields.YEAR, fields["y"])
+            calendar.set(icu.UCalendarDateFields.MONTH, fields["M"] - 1)
+            calendar.set(icu.UCalendarDateFields.DATE, fields["d"])
+            calendar.getTime()
+        except icu.ICUError:
+            return False
+        return True
+
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return every structure's flexible numeric dates, distinct, in source order."""
+        """Return every structure's flexible numeric dates, distinct, in source order.
+
+        A date with its era is its own reading, beside the date without it.
+        """
         if self._inert:
             return []
         found: dict[tuple[int, int, object], ValueDetection] = {}
-        for fields, separators, pattern in self._structures:
-            matcher = self._structure_matcher(fields, separators, pattern)
+        matchers = [
+            self._structure_matcher(fields, separators, pattern)
+            for fields, separators, pattern in self._structures
+        ] + [self._era_matcher(*structure) for structure in self._era_structures]
+        for matcher in matchers:
             for detection in _detect_flexible(text, self.locale, self.type, self._spec, matcher):
                 key = (detection["start"], detection["end"], detection["value"])
                 found.setdefault(key, detection)
