@@ -165,6 +165,24 @@ def test_a_default_selection_is_keyed_by_the_locales_it_reads():
     assert DetectorSet(()).with_(default, every).detectors == (every,)
 
 
+class _Custom:
+    type = "custom:thing"
+    group = "custom"
+    locale = "en_US"
+
+    def __init__(self, locales):
+        self.locales = locales
+
+    def detect(self, text):
+        return []
+
+
+def test_a_custom_readers_locales_give_a_stable_key():
+    assert detector_key(_Custom("en_GB"))[3] == ("en_GB",)
+    assert detector_key(_Custom({"en_US", "en_GB"})) == detector_key(_Custom(["en_US", "en_GB"]))
+    assert detector_key(_Custom({"en_US", "en_GB"}))[3] == ("en_GB", "en_US")
+
+
 @pytest.mark.parametrize("locales", [None, ()])
 def test_a_strict_and_a_flexible_reader_of_one_type_are_two_members(locales):
     strict = NumberDetector("en_US", "currency", "USD")

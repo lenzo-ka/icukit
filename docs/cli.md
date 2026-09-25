@@ -678,6 +678,9 @@ Examples:
   # Accounting and negative currency, and mixed measures
   icukit detect --flexible -t 'Paid ($12.50), then -$5, for 5 ft 3 in'
 
+  # With --currency, the strict reading "$12.50" inside "($12.50)" as well
+  icukit detect --flexible --currency USD -t 'Paid ($12.50)'
+
   # A German decimal comma and a measure
   icukit detect --flexible --locale de_DE -t '3,5 kg'
 

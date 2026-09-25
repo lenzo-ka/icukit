@@ -13,7 +13,7 @@
   flexible readers read, in place of ICU's choice. Building the language-wide set
   prints a one-line notice on stderr. A locale, currency, or unit ICU does not know is
   refused with exit status 2, with and without `--flexible`; a lowercase currency code
-  is read as its ISO code.
+  is read as its ISO code. A reading two readers give alike is printed once.
 
 ### Changed
 

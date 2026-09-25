@@ -1207,13 +1207,26 @@ def _read_locales(detector: Detector) -> tuple[str, ...] | None:
     locale = getattr(detector, "locale", None)
     if locale is None:
         return None
-    base = icu.Locale(locale)
     if not hasattr(detector, "locales"):
-        return (base.getName(),)
-    if detector.locales is not None:
-        return tuple(detector.locales)
+        return _own_locale(locale)
+    chosen = detector.locales
+    if chosen is None:
+        return _every_locale_of_language(locale)
+    if isinstance(chosen, str):
+        return (chosen,)
+    return tuple(sorted(str(name) for name in chosen))
+
+
+@functools.cache
+def _own_locale(locale: str) -> tuple[str, ...]:
+    return (icu.Locale(locale).getName(),)
+
+
+@functools.cache
+def _every_locale_of_language(locale: str) -> tuple[str, ...]:
     from .recognize import _language_locale_names
 
+    base = icu.Locale(locale)
     return tuple(sorted({base.getName(), *_language_locale_names(base.getLanguage())}))
 
 

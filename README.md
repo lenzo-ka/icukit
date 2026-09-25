@@ -149,6 +149,8 @@ ik detect --currency USD -t 'Paid $1,234.50 on March 5, 2024'
 
 # Add the flexible readers (accounting currency, mixed measures); --locales '' reads en_US alone
 ik detect --flexible --locales '' -t 'Paid ($12.50) for 5 ft 3 in'
+# --currency USD also reads the strict "$12.50" inside "($12.50)"
+ik detect --flexible --locales '' --currency USD -t 'Paid ($12.50)'
 
 # Format numbers
 ik locale format 1234567.89 --locale de_DE

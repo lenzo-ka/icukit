@@ -48,6 +48,9 @@ Examples:
   # Accounting and negative currency, and mixed measures
   icukit detect --flexible -t 'Paid ($12.50), then -$5, for 5 ft 3 in'
 
+  # With --currency, the strict reading "$12.50" inside "($12.50)" as well
+  icukit detect --flexible --currency USD -t 'Paid ($12.50)'
+
   # A German decimal comma and a measure
   icukit detect --flexible --locale de_DE -t '3,5 kg'
 
@@ -131,7 +134,8 @@ Examples:
                     raise ValueError(f"unknown locale {name!r} in --locales")
                 if icu.Locale(name).getLanguage() != language:
                     raise ValueError(
-                        f"--locales {name!r} is not a locale of {args.locale!r}'s language"
+                        f"--locales {name!r} is not a locale of the language of "
+                        f"{args.locale!r} ({language!r})"
                     )
         currencies = []
         known = _iso_currency_codes()
@@ -165,10 +169,11 @@ Examples:
             text = cls._read_input(args)
         families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if args.guarded else DEFAULT_FAMILIES
         detectors = generated_detectors(args.locale, families)
-        # The strict readers: a currency's strict reading stands beside the flexible set's
-        # (the "$12.50" inside "($12.50)"), while the flexible set's decimal and percent
-        # readers read every number the strict ones would, so under --flexible those
-        # would only repeat a reading.
+        # The strict readers. A strict currency reader is built only for a --currency
+        # code; under --flexible its reading stands beside the flexible set's (with
+        # --currency USD, the "$12.50" inside "($12.50)"). The flexible set's decimal and
+        # percent readers read every number the strict ones would, so under --flexible
+        # those are left out.
         plain = not args.flexible
         numbers = number_detectors(args.locale, decimal=plain, percent=plain, currencies=currencies)
         detectors = detectors.with_(*numbers.detectors)
@@ -196,7 +201,15 @@ Examples:
             )
         if args.skeleton:
             detectors = detectors.with_(*date_detectors(args.locale, args.skeleton).detectors)
-        detections = detectors.detect(text)
+        # A strict and a flexible reader can give the same reading ("$5.00" as USD 5.00);
+        # print it once. Distinct readings of one span are all kept.
+        seen = set()
+        detections = []
+        for item in detectors.detect(text):
+            reading = (item["start"], item["end"], item["type"], item["text"], repr(item["value"]))
+            if reading not in seen:
+                seen.add(reading)
+                detections.append(item)
 
         if args.jsonl:
             output = "\n".join(

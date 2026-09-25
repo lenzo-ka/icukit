@@ -115,6 +115,21 @@ class TestDetectCommand:
             ("measure:foot-and-inch", "5 ft 3 in"),
         } & self._rows("--currency", "USD", "-t", text)
 
+    def test_a_reading_two_readers_give_prints_once(self):
+        args = ("--flexible", "--locales", "", "--currency", "USD", "-t")
+        code, out, err = run_cli("detect", "-H", *args, "paid $5.00 and USD 7, ($12.50)")
+        assert code == 0, err
+        lines = out.splitlines()
+        assert len(lines) == len(set(lines))
+        assert "5\t10\tnumber:currency:USD\t$5.00" in lines
+        # Distinct readings of one span stay: the strict "$12.50" inside "($12.50)".
+        assert "23\t29\tnumber:currency:USD\t$12.50" in lines
+
+    def test_the_inner_strict_reading_needs_currency(self):
+        rows = self._rows("--flexible", "--locales", "", "-t", "Paid ($12.50)")
+        assert ("number:currency:USD", "($12.50)") in rows
+        assert ("number:currency:USD", "$12.50") not in rows
+
     def test_flexible_reads_a_comma_decimal_measure_in_german(self):
         rows, err = self._run("--flexible", "--locale", "de_DE", "-t", "3,5 kg")
         assert rows == {("measure:kilogram", "3,5 kg"), ("number:decimal", "3,5")}
