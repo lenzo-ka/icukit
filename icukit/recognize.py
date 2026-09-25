@@ -1014,6 +1014,12 @@ def _lexicon_month_abbreviations(locale: str) -> frozenset[str]:
     writes one ("Oct."), and icukit's abbreviation lexicon records it with the month
     sense. An empty set where the locale has no lexicon.
     """
+    return _lexicon_dotted(locale, "month")
+
+
+@cache
+def _lexicon_dotted(locale: str, sense: str) -> frozenset[str]:
+    """The locale lexicon's abbreviations with a period for ``sense`` ("Oct.", "Sun.")."""
     from .abbreviation_compile import compile_lexicon
 
     compiled = compile_lexicon(locale)
@@ -1023,7 +1029,24 @@ def _lexicon_month_abbreviations(locale: str) -> frozenset[str]:
         entry.surface
         for entry in compiled.lexicon.entries
         if entry.surface.endswith(".")
-        and any(expansion.sense == "month" for expansion in entry.expansions)
+        and any(expansion.sense == sense for expansion in entry.expansions)
+    )
+
+
+@cache
+def _lexicon_expansions(locale: str, sense: str) -> tuple[tuple[str, str], ...]:
+    """The locale lexicon's dotted abbreviations for ``sense``, with what each expands to."""
+    from .abbreviation_compile import compile_lexicon
+
+    compiled = compile_lexicon(locale)
+    if compiled is None:
+        return ()
+    return tuple(
+        (entry.surface, expansion.value)
+        for entry in compiled.lexicon.entries
+        if entry.surface.endswith(".")
+        for expansion in entry.expansions
+        if expansion.sense == sense
     )
 
 
@@ -1057,6 +1080,24 @@ class FlexibleTextDateDetector:
         self._weekdays = self._language_symbol_names(icu_locale, "weekday")
         self._dotted_months = _lexicon_month_abbreviations(locale)
         self._dotted = frozenset(surface.casefold() for surface in self._dotted_months)
+        # Weekdays take the lexicon's period ("Sun.") and its forms CLDR does not name
+        # ("Tues.", "Thurs."), as months do.
+        self._dotted_weekdays = frozenset(
+            surface.casefold() for surface in _lexicon_dotted(locale, "weekday")
+        )
+        weekday_values = {surface.casefold(): value for surface, value, _form in self._weekdays}
+        extra_weekdays = [
+            (surface, weekday_values[expansion.casefold()], "short")
+            for surface, expansion in _lexicon_expansions(locale, "weekday")
+            if expansion.casefold() in weekday_values
+            and surface[:-1].casefold() not in weekday_values
+        ]
+        if extra_weekdays:
+            self._weekdays = tuple(
+                sorted(
+                    (*self._weekdays, *extra_weekdays), key=lambda item: len(item[0]), reverse=True
+                )
+            )
         # A lexicon month form CLDR does not name ("Sept." beside CLDR's "Sep") is read as
         # the month its expansion names.
         month_values = {surface.casefold(): value for surface, value, _form in self._months}
@@ -1295,6 +1336,11 @@ class FlexibleTextDateDetector:
                 cursor, value, form = named
                 if field == "M" and text[field_start : cursor + 1].casefold() in self._dotted:
                     cursor += 1
+                elif (
+                    field == "E"
+                    and text[field_start : cursor + 1].casefold() in self._dotted_weekdays
+                ):
+                    cursor += 1
                 name = "month" if field == "M" else "weekday"
                 captures.append(
                     Capture(name, field_start, cursor, text[field_start:cursor], value, form)
@@ -1308,7 +1354,11 @@ class FlexibleTextDateDetector:
                     cursor = digit_end
                     if not following or not text.startswith(following, cursor):
                         cursor = self._ordinal_end(text, cursor, digit_end, value)
-                elif field == "y" and width in {2, 4}:
+                # ICU's "y" writes a year in as many digits as it has ("24 April 350"),
+                # so two to four are read; a one-digit year is not, since nothing tells
+                # "3 May 2" from a count after a date ("3 May 2 people"), a hand-rolled
+                # limit.
+                elif field == "y" and width in {2, 3, 4}:
                     cursor = digit_end
                 else:
                     return None
