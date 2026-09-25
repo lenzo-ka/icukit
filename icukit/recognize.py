@@ -4008,6 +4008,130 @@ class FlexibleTimeDetector:
         return sorted(merged, key=lambda d: (d["start"], d["end"]))
 
 
+@cache
+def _language_datetime_glue(
+    language: str, names: tuple[str, ...] | None = None
+) -> tuple[tuple[bool, str, str], ...]:
+    """How CLDR joins a date and a time in the locales of ``language``.
+
+    Each is ``(date_first, literal, pattern)`` from the ``{1}``/``{0}`` date-time
+    pattern ICU gives each style: English ``"{1}, {0}"`` and ``"{1} 'at' {0}"``, so
+    ``(True, ", ", "{1}, {0}")`` and ``(True, " at ", "{1} 'at' {0}")``. Longest first.
+    """
+    glue: dict[tuple[bool, str], str] = {}
+    styles = (
+        icu.DateFormat.kFull,
+        icu.DateFormat.kLong,
+        icu.DateFormat.kMedium,
+        icu.DateFormat.kShort,
+    )
+    for name in _language_locale_names(language, names):
+        generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(name))
+        for style in styles:
+            try:
+                pattern = generator.getDateTimeFormat(style)
+            except (icu.ICUError, TypeError):
+                pattern = generator.getDateTimeFormat()
+            date_at, time_at = pattern.find("{1}"), pattern.find("{0}")
+            if date_at < 0 or time_at < 0:
+                continue
+            first, second = sorted((date_at, time_at))
+            literal = pattern[first + 3 : second].replace("'", "")
+            if literal.strip() or literal:
+                glue.setdefault((date_at < time_at, literal), pattern)
+    return tuple(
+        (date_first, literal, pattern)
+        for (date_first, literal), pattern in sorted(
+            glue.items(), key=lambda item: -len(item[0][1])
+        )
+    )
+
+
+class FlexibleDateTimeDetector:
+    """Recognize a date and a time joined as CLDR's date-time patterns join them.
+
+    CLDR joins a date and a time with a pattern per style ("{1}, {0}", "{1} 'at' {0}"
+    in English; see :func:`_language_datetime_glue`), which this reader inverts over
+    the readings of :class:`FlexibleTextDateDetector`, :class:`FlexibleDateDetector`,
+    and :class:`FlexibleTimeDetector`: "Mar 5, 2024, 2:07 PM", "July 4, 1999 at 12:05:00
+    AM EDT", "3/5/24, 14:07". A space in the glue matches any space. The value holds the
+    date's fields and then the time's; the spec's pattern is the glue with the date's
+    pattern for ``{1}`` and the time's for ``{0}``.
+    """
+
+    group = "date"
+    type = "date:datetime-flexible"
+
+    def __init__(self, locale: str, *, locales: Iterable[str] | None = None) -> None:
+        self.locale = locale
+        self.locales = _locale_selection(locale, locales)
+        self._dates = (
+            FlexibleTextDateDetector(locale, locales=locales),
+            FlexibleDateDetector(locale, locales=locales),
+        )
+        self._time = FlexibleTimeDetector(locale, locales=locales)
+        self._glue = _language_datetime_glue(icu.Locale(locale).getLanguage(), self.locales)
+
+    @staticmethod
+    def _glue_matches(between: str, literal: str) -> bool:
+        if len(between) != len(literal):
+            return False
+        return all(
+            (written in _SPACES and expected in _SPACES) or written == expected
+            for written, expected in zip(between, literal, strict=True)
+        )
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return each date and time CLDR's glue joins, in source order."""
+        dates = [d for detector in self._dates for d in detector.detect(text)]
+        times = self._time.detect(text)
+        found: dict[tuple[int, int, object], ValueDetection] = {}
+        for date in dates:
+            for time in times:
+                for date_first, literal, pattern in self._glue:
+                    first, second = (date, time) if date_first else (time, date)
+                    if not self._glue_matches(text[first["end"] : second["start"]], literal):
+                        continue
+                    fields = date["value"].fields + time["value"].fields
+                    value = DateTimeValue(fields, date["value"].calendar)
+                    glue = Capture(
+                        "datetime-glue",
+                        first["end"],
+                        second["start"],
+                        text[first["end"] : second["start"]],
+                        None,
+                        "symbol",
+                    )
+                    captures = tuple(
+                        sorted(
+                            (*first["captures"], glue, *second["captures"]),
+                            key=lambda capture: (capture.start, capture.end),
+                        )
+                    )
+                    date_pattern = getattr(date["spec"], "pattern", "")
+                    time_pattern = getattr(time["spec"], "pattern", "")
+                    spec = DateFormatSpec(
+                        self.locale,
+                        "datetime",
+                        pattern.replace("{1}", date_pattern).replace("{0}", time_pattern),
+                        date["value"].calendar,
+                    )
+                    key = (first["start"], second["end"], value)
+                    found.setdefault(
+                        key,
+                        ValueDetection(
+                            text=text[first["start"] : second["end"]],
+                            start=first["start"],
+                            end=second["end"],
+                            type=self.type,
+                            value=value,
+                            captures=captures,
+                            spec=spec,
+                        ),
+                    )
+        return sorted(found.values(), key=lambda item: (item["start"], item["end"]))
+
+
 class FlexibleFractionDetector:
     """Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
