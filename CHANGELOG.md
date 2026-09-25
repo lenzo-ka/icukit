@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- `FlexibleNumberDetector` reads the language's other decimal styles where the locale's
+  own styles do not already read the text: en_US reads en_DE's "1.234,56" (1234.56),
+  "1,5" (1.5), "1.234.567", and en_ZA's "1 234,56", while "1,234" stays 1234 alone.
+
 ## [0.6.0] - 2026-09-25
 
 ### Added
