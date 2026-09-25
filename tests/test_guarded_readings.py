@@ -1,9 +1,10 @@
 """Readings the default readers refuse on purpose are read under their own types.
 
-A lone "one" or "first", a lowercase Roman numeral, a month or weekday name alone, and a
-bare hour are refused by the readers of the existing types, which keep refusing them;
-each is deposited by an opt-in reader under a type of its own, so a consumer that wants
-every path (forced alignment reads "May" as a month and as a verb) includes it by type.
+A lone "one" or "first", a lowercase Roman numeral, a month or weekday name alone, a bare
+hour, and a date with a two- or three-digit year are refused by the readers of the
+default types; each is deposited by an opt-in reader under a type of its own, so a
+consumer that wants every path (forced alignment reads "May" as a month and as a verb)
+includes it by type.
 """
 
 import pytest
@@ -13,14 +14,17 @@ from icukit.detectors import DateTimeValue, NumberValue
 from icukit.engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, generated_detectors
 from icukit.recognize import (
     FlexibleBareHourDetector,
+    FlexibleDateTimeDetector,
     FlexibleLoneSpelloutDetector,
     FlexibleLowercaseRomanDetector,
     FlexibleMonthNameDetector,
     FlexibleNumberDetector,
+    FlexibleShortYearDateDetector,
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
     FlexibleWeekdayNameDetector,
+    _detect_flexible,
 )
 
 GUARDED_TYPES = {
@@ -29,6 +33,7 @@ GUARDED_TYPES = {
     "number:cardinal:roman-lower",
     "date:month-name",
     "date:weekday-name",
+    "date:short-year",
     "time:bare-hour",
 }
 
@@ -206,6 +211,113 @@ def test_bare_hour_reads_no_number_that_does_not_stand_alone(text):
 def test_bare_hour_leaves_a_day_inside_a_date_to_the_date(locale, text, hours):
     found = FlexibleBareHourDetector(locale).detect(text)
     assert [d["start"] for d in found] == hours
+
+
+# ------------------------------------------------------------------------ short year
+
+
+def _dated(detector, text):
+    return [(d["type"], d["text"], d["value"].fields) for d in detector.detect(text)]
+
+
+# The counts after a date that the text-date reader took for a two- or three-digit year.
+SHORT_YEAR_REPROS = [
+    (
+        "5 June 200 attendees",
+        [("date:text-flexible", "5 June", (("M", 6), ("d", 5)))],
+        [("date:short-year", "5 June 200", (("y", 200), ("M", 6), ("d", 5)))],
+    ),
+    (
+        "in June 200 cases",
+        [],
+        [("date:short-year", "June 200", (("y", 200), ("M", 6)))],
+    ),
+    (
+        "on 5 June 20 people came",
+        [
+            ("date:text-flexible", "5 June", (("M", 6), ("d", 5))),
+            ("date:text-flexible", "June 20", (("M", 6), ("d", 20))),
+        ],
+        [("date:short-year", "5 June 20", (("y", 20), ("M", 6), ("d", 5)))],
+    ),
+]
+
+
+@pytest.mark.parametrize("text, dates, short", SHORT_YEAR_REPROS)
+def test_the_text_date_reader_reads_no_two_or_three_digit_year(text, dates, short):
+    assert _dated(FlexibleTextDateDetector("en_US"), text) == dates
+
+
+@pytest.mark.parametrize("text, dates, short", SHORT_YEAR_REPROS)
+def test_the_short_year_reader_reads_them_as_written(text, dates, short):
+    assert _dated(FlexibleShortYearDateDetector("en_US"), text) == short
+
+
+@pytest.mark.parametrize(
+    "locale, text, surface, fields",
+    [
+        ("en_US", "5 June 2020 attendees", "5 June 2020", (("y", 2020), ("M", 6), ("d", 5))),
+        ("en_US", "May 5, 2020", "May 5, 2020", (("y", 2020), ("M", 5), ("d", 5))),
+        ("en_US", "in June 2000", "June 2000", (("y", 2000), ("M", 6))),
+        ("en_GB", "Tuesday, 2 May 2023", "Tuesday, 2 May 2023", (("y", 2023), ("M", 5), ("d", 2))),
+        ("de_DE", "15. Januar 2012", "15. Januar 2012", (("y", 2012), ("M", 1), ("d", 15))),
+    ],
+)
+def test_a_four_digit_year_reads_as_before_and_not_as_a_short_year(locale, text, surface, fields):
+    assert (surface, fields) in [
+        (d["text"], d["value"].fields) for d in FlexibleTextDateDetector(locale).detect(text)
+    ]
+    assert FlexibleShortYearDateDetector(locale).detect(text) == []
+
+
+def test_a_short_year_beside_an_era_stays_a_date():
+    text = "5 March 44 BC"
+    fields = (("G", 0), ("y", 44), ("M", 3), ("d", 5))
+    assert (text, fields) in [
+        (d["text"], d["value"].fields) for d in FlexibleTextDateDetector("en_US").detect(text)
+    ]
+    assert FlexibleShortYearDateDetector("en_US").detect(text) == []
+
+
+@pytest.mark.parametrize("locale", ["en_US", "en_GB", "de_DE"])
+def test_short_year_is_exactly_what_the_text_date_reader_withholds(locale):
+    text = (
+        "On 5 June 200 attendees came; 24 April 350 and May 5, 20; in June 200 cases, "
+        "3. Mai 99 und Mai 812; 5 June 2020, June 2021, 5 March 44 BC, Tuesday, 2 May 13"
+    )
+    dates = FlexibleTextDateDetector(locale)
+    short = FlexibleShortYearDateDetector(locale)
+
+    def widened(text, start):
+        return dates._match(text, start, year_widths=frozenset({2, 3, 4}))
+
+    unguarded = {
+        (d["start"], d["end"], d["value"])
+        for d in _detect_flexible(text, locale, dates.type, None, widened)
+    }
+    kept = {(d["start"], d["end"], d["value"]) for d in dates.detect(text)}
+    refused = {(d["start"], d["end"], d["value"]) for d in short.detect(text)}
+    assert refused, "the text must exercise the year width"
+    assert refused == unguarded - kept
+    assert not refused & kept
+
+
+def test_the_readers_built_on_the_text_date_reader_follow_it():
+    # A date and time with a short year is no longer read by the date-time reader.
+    assert FlexibleDateTimeDetector("en_US").detect("June 5, 99 at 3:00 PM") == []
+    assert [
+        d["text"] for d in FlexibleDateTimeDetector("en_US").detect("June 5, 1999 at 3:00 PM")
+    ] == ["June 5, 1999 at 3:00 PM"]
+    # The month-name reader reads the name the text-date reader no longer reads in a date.
+    assert [d["text"] for d in FlexibleMonthNameDetector("en_US").detect("in June 200 cases")] == [
+        "June"
+    ]
+    assert FlexibleMonthNameDetector("en_US").detect("in June 2000") == []
+    # The bare-hour reader reads a number the text-date reader no longer reads as a year.
+    assert [d["text"] for d in FlexibleBareHourDetector("en_GB").detect("5 June 20 people")] == [
+        "20"
+    ]
+    assert FlexibleBareHourDetector("en_GB").detect("5 June 2020 people") == []
 
 
 # ------------------------------------------------------------------- default gang

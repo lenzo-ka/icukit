@@ -8,11 +8,11 @@ expansion is intentionally not an invertible formatter operation.
 
 :data:`DEFAULT_FAMILIES` is the default gang. :data:`GUARDED_FAMILIES` generates the
 readers of the readings the default readers refuse on purpose -- a lone "one" or
-"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour -- each
-under its own type, so a consumer that wants every path (a lattice for forced
-alignment) opts in with ``generated_detectors(locale, (*DEFAULT_FAMILIES,
-*GUARDED_FAMILIES))`` or adds one reader to a gang with ``DetectorSet.with_``, and one
-that does not leaves them out.
+"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
+with a two- or three-digit year -- each under its own type, so a consumer that wants
+every path (a lattice for forced alignment) opts in with
+``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
+reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ from .recognize import (
     FlexibleMonthNameDetector,
     FlexibleRelativeDateDetector,
     FlexibleScientificDetector,
+    FlexibleShortYearDateDetector,
     FlexibleSpelloutDetector,
     FlexibleWeekdayNameDetector,
     _spellout_formatter_and_ruleset,
@@ -55,6 +56,7 @@ __all__ = [
     "MONTH_NAME_FAMILY",
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
+    "SHORT_YEAR_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
     "WEEKDAY_NAME_FAMILY",
     "SkippedSpec",
@@ -408,6 +410,13 @@ BARE_HOUR_FAMILY = _guarded_family(
     "ICU's best pattern for the j skeleton has no hour field",
 )
 
+SHORT_YEAR_FAMILY = _guarded_family(
+    "short-year",
+    FlexibleShortYearDateDetector,
+    lambda detector: detector.has_year_patterns,
+    "the locale's textual date patterns write no year",
+)
+
 # note: A measure family belongs here once its ICU surfaces have an introspective
 # inverter. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
@@ -427,6 +436,7 @@ GUARDED_FAMILIES = (
     LOWERCASE_ROMAN_FAMILY,
     MONTH_NAME_FAMILY,
     WEEKDAY_NAME_FAMILY,
+    SHORT_YEAR_FAMILY,
     BARE_HOUR_FAMILY,
 )
 

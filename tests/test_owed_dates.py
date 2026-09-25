@@ -2,15 +2,21 @@
 
 import pytest
 
-from icukit.recognize import FlexibleTextDateDetector
+from icukit.recognize import FlexibleShortYearDateDetector, FlexibleTextDateDetector
 
 
 def _dates(text):
     return [(d["text"], d["value"].fields) for d in FlexibleTextDateDetector("en_US").detect(text)]
 
 
-def test_a_three_digit_year_reads_as_icu_writes_it():
-    assert _dates("24 April 350") == [("24 April 350", (("y", 350), ("M", 4), ("d", 24)))]
+def test_a_three_digit_year_reads_as_icu_writes_it_under_its_own_type():
+    # The text-date reader leaves it (it cannot be told from a count, "5 June 200
+    # attendees"); the short-year reader reads it.
+    assert _dates("24 April 350") == [("24 April", (("M", 4), ("d", 24)))]
+    assert [
+        (d["type"], d["text"], d["value"].fields)
+        for d in FlexibleShortYearDateDetector("en_US").detect("24 April 350")
+    ] == [("date:short-year", "24 April 350", (("y", 350), ("M", 4), ("d", 24)))]
 
 
 def test_a_one_digit_year_is_not_read():
