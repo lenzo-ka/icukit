@@ -476,16 +476,52 @@ class DateDetector:
                 f"(skeleton {skeleton!r}); 12-hour/day-period, era, quarter, week, and time-zone "
                 f"fields are not supported"
             )
+        # A weekday with no year ("Tue, 3/5") names a date in some year the text does not
+        # give; ICU resolves a year-less parse in 1970, where 5 March is a Thursday.
+        self._yearless_weekday = bool(_letters & {"E", "e", "c"}) and "y" not in _letters
         self._inv = _Inverter(self._parse, self._reformat, self._build)
 
     def _parse(self, text: icu.UnicodeString, start_u16: int) -> tuple[int, object] | None:
         calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(self.locale))
         calendar.clear()
+        if self._yearless_weekday:
+            # A leap year, so "Sat, 2/29" keeps its day rather than rolling to 1 March.
+            calendar.set(icu.Calendar.YEAR, 1972)
         position = icu.ParsePosition(start_u16)
         self._df.parse(text, calendar, position)
         if position.getErrorIndex() != -1 or position.getIndex() <= start_u16:
             return None
-        return position.getIndex(), calendar
+        end = position.getIndex()
+        if self._yearless_weekday:
+            calendar = self._weekday_year(calendar, str(text[start_u16:end]))
+        return end, calendar
+
+    def _weekday_year(self, calendar: object, surface: str) -> object:
+        """The parse placed in a year where its day falls on the weekday the text names.
+
+        The weekdays repeat every 28 years, so one of 1970 to 1997 reproduces the surface
+        if any year does; the year is not a value field, since the pattern shows none.
+        Where none does, the parse stands and fails the reformat check as before.
+        """
+        if self._df.format(calendar.getTime()) == surface:
+            return calendar
+        fields = (
+            icu.Calendar.MONTH,
+            icu.Calendar.DATE,
+            icu.Calendar.HOUR_OF_DAY,
+            icu.Calendar.MINUTE,
+            icu.Calendar.SECOND,
+        )
+        month, day, hour, minute, second = (calendar.get(field) for field in fields)
+        for year in range(1970, 1998):
+            candidate = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(self.locale))
+            candidate.clear()
+            candidate.set(year, month, day, hour, minute, second)
+            if candidate.get(icu.Calendar.DATE) != day:
+                continue
+            if self._df.format(candidate.getTime()) == surface:
+                return candidate
+        return calendar
 
     def _reformat(self, parsed: object) -> str:
         calendar = parsed
