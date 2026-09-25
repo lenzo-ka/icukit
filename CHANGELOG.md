@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `DEFAULT_FAMILIES` is exported from the top-level `icukit` package beside
+  `GUARDED_FAMILIES`, so the default and guarded readers can be built together with
+  `generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`.
+
+### Fixed
+
+- `decode_unicode_escapes` (and so `icukit unicode info`, `unicode name`, and
+  `unicode encode`) decodes only escape sequences -- `\uXXXX` (a surrogate pair of them
+  as one character), `\UXXXXXXXX`, `\N{NAME}`, runs of `\xXX` (as UTF-8 when they form
+  it), and `U+XXXX` -- and leaves every other character as written. Non-ASCII input was
+  mangled: `unicode info -t 'α'` reported U+00CE and U+00B1.
+- The error raised when the `icu` module cannot be imported no longer suggests the
+  nonexistent `icukit[bundled]` extra or a PyICU build; it names the `icukit-pyicu`
+  dependency, how to reinstall it, and how to use a system PyICU instead.
+- `icukit sort --help` spells its Swedish example with "ö" again; it had lost the
+  diacritic, so the example sorted "o" after "z".
+
 ## [0.7.0] - 2026-09-25
 
 ### Added

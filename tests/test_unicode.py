@@ -1,5 +1,8 @@
 """Tests for Unicode normalization and character properties."""
 
+import subprocess
+import sys
+
 import pytest
 
 from icukit import (
@@ -31,13 +34,30 @@ class TestUnicodeEscapes:
             (r"\u03B1", "α"),
             (r"\U0001F600", "😀"),
             (r"\x41", "A"),
-            ("U+03B1 U+1F600", "Î± ð\x9f\x98\x80"),
-            (r"\uD83D\uDE00", "\ud83d\ude00"),
+            ("U+03B1 U+1F600", "α 😀"),
+            (r"\uD83D\uDE00", "😀"),
+            (r"\xCE\xB1\xF0\x9F\x98\x80", "α😀"),
+            (r"\xE9", "é"),
+            (r"\N{GREEK SMALL LETTER ALPHA}", "α"),
+            (r"\N{NO SUCH CHARACTER}", r"\N{NO SUCH CHARACTER}"),
+            (r"\\u03B1", r"\u03B1"),
             (r"\uZZZZ", r"\uZZZZ"),
         ],
     )
     def test_decode_unicode_escapes(self, escaped, expected):
         assert decode_unicode_escapes(escaped) == expected
+
+    @pytest.mark.parametrize("text", ["α", "café", "Москва", "世界", "😀", r"C:\path", "a\\n"])
+    def test_decode_leaves_non_escape_text_as_written(self, text):
+        assert decode_unicode_escapes(text) == text
+
+    def test_decode_mixes_escapes_with_non_ascii_text(self):
+        assert decode_unicode_escapes(r"α=\u03B1, é=\xE9") == "α=α, é=é"
+
+    @pytest.mark.parametrize("fmt", ["u", "U", "x"])
+    def test_decode_inverts_encode(self, fmt):
+        text = "aé α😀"
+        assert decode_unicode_escapes(encode_unicode_escapes(text, format=fmt)) == text
 
     @pytest.mark.parametrize(
         ("format", "expected"),
@@ -52,8 +72,9 @@ class TestUnicodeEscapes:
     def test_encode_unicode_escapes_formats(self, format, expected):
         assert encode_unicode_escapes(r"\u03B1\U0001F600", format=format) == expected
 
-    def test_encode_preserves_decoding_of_literal_non_ascii_text(self):
-        assert encode_unicode_escapes("α", format="char") == "Î±"
+    def test_encode_keeps_literal_non_ascii_text(self):
+        assert encode_unicode_escapes("α", format="char") == "α"
+        assert encode_unicode_escapes("α") == "U+03B1"
 
     def test_encode_decodes_input_first(self):
         assert encode_unicode_escapes(r"\u03B1") == "U+03B1"
@@ -290,3 +311,28 @@ class TestCategoryChars:
     def test_invalid_category(self):
         with pytest.raises(ValueError):
             get_category_characters("Invalid")
+
+
+class TestUnicodeInfoCli:
+    """``unicode info`` reads the characters it is given, and decodes only escapes."""
+
+    @staticmethod
+    def _codepoints(text):
+        result = subprocess.run(
+            [sys.executable, "-m", "icukit.cli", "unicode", "info", "-H", "-t", text],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        )
+        return [line.split("\t")[1] for line in result.stdout.splitlines()]
+
+    def test_non_ascii_input(self):
+        assert self._codepoints("αé😀") == ["U+03B1", "U+00E9", "U+1F600"]
+
+    def test_escapes_beside_non_ascii_input(self):
+        assert self._codepoints(r"α\u00E9\N{GREEK SMALL LETTER BETA}") == [
+            "U+03B1",
+            "U+00E9",
+            "U+03B2",
+        ]

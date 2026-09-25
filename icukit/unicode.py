@@ -48,7 +48,6 @@ Example:
 
 from __future__ import annotations
 
-import codecs
 import re
 from typing import Any
 
@@ -107,24 +106,49 @@ _NORMALIZERS = {
 }
 
 
+_ESCAPE_RE = re.compile(
+    r"\\\\"
+    r"|\\u(?P<hi>[dD][89abAB][0-9A-Fa-f]{2})\\u(?P<lo>[dD][c-fC-F][0-9A-Fa-f]{2})"
+    r"|\\u(?P<u>[0-9A-Fa-f]{4})"
+    r"|\\U(?P<U>[0-9A-Fa-f]{8})"
+    r"|(?P<x>(?:\\x[0-9A-Fa-f]{2})+)"
+    r"|(?P<N>\\N\{[^}]*\})"
+    r"|U\+(?P<uplus>[0-9A-Fa-f]{4,6})"
+)
+
+
+def _decode_escape(match: re.Match[str]) -> str:
+    groups = match.groupdict()
+    if groups["hi"]:
+        high = int(groups["hi"], 16)
+        low = int(groups["lo"], 16)
+        return chr(0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00))
+    code = groups["u"] or groups["U"] or groups["uplus"]
+    if code:
+        codepoint = int(code, 16)
+        return chr(codepoint) if codepoint <= 0x10FFFF else match.group(0)
+    if groups["x"]:
+        data = bytes(int(pair, 16) for pair in groups["x"].split("\\x")[1:])
+        try:
+            return data.decode("utf-8")
+        except UnicodeDecodeError:
+            return data.decode("latin-1")
+    if groups["N"]:
+        # ICU's Name-Any transform resolves \N{NAME}, and leaves an unknown name as written.
+        return icu.Transliterator.createInstance("Name-Any").transliterate(groups["N"])
+    return "\\"
+
+
 def decode_unicode_escapes(text: str) -> str:
     """Decode Unicode escape sequences in text.
 
-    Recognizes ``\\uXXXX``, ``\\UXXXXXXXX``, ``\\xXX``, and ``U+XXXX`` through
-    ``U+XXXXXX`` notation. Invalid Python-style escapes leave the post-``U+``
-    conversion text unchanged.
+    Recognizes ``\\uXXXX`` (a surrogate pair of them is one character),
+    ``\\UXXXXXXXX``, ``\\N{NAME}``, runs of ``\\xXX`` (read as UTF-8 when they
+    form it, as one character per byte otherwise), and ``U+XXXX`` through
+    ``U+XXXXXX``; ``\\\\`` is a literal backslash. Every other character,
+    including non-ASCII text and an escape that does not parse, is left as written.
     """
-
-    def replace_uplus(match):
-        codepoint = int(match.group(1), 16)
-        return chr(codepoint)
-
-    text = re.sub(r"U\+([0-9A-Fa-f]{4,6})", replace_uplus, text)
-    try:
-        text = codecs.decode(text, "unicode_escape")
-    except (UnicodeDecodeError, ValueError):
-        pass
-    return text
+    return _ESCAPE_RE.sub(_decode_escape, text)
 
 
 def encode_unicode_escapes(text: str, format: str = "uplus") -> str:
