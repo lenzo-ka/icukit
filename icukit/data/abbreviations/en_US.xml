@@ -4,8 +4,8 @@
 
   Loaded over en.xml by ICU locale fallback (en_US, and en_US_POSIX through
   it), never on its own. It holds what is true of US English only: the
-  traditional US state abbreviations, and Maryland as a reading of the postal
-  code MD. An entry whose surface en.xml also lists adds its expansions to
+  traditional US state abbreviations and the USPS postal codes, Maryland as a
+  reading of MD among them. An entry whose surface en.xml also lists adds its expansions to
   en.xml's. Status and review state follow en.xml.
 
   Validated against abbreviations.rng.
@@ -54,6 +54,68 @@
   <entry break="suppress"><surface>R.I.</surface><expansion sense="region">Rhode Island</expansion></entry>
   <entry break="suppress"><surface>W.Va.</surface><expansion sense="region">West Virginia</expansion></entry>
 
+  <!-- ============================ US postal codes ==================== -->
+  <!--
+    Curated from the USPS two-letter codes for the states, DC and the inhabited
+    territories (ICU and CLDR have no source for them); MD, Maryland, is below with
+    its note. A code that is also an ISO country code (CA Canada, PA Panama) keeps
+    both readings: this one here, the country's in icukit.icu_abbreviations.
+  -->
+  <entry break="suppress" also="proper-name"><surface>AL</surface><expansion sense="region" cue="address">Alabama</expansion></entry>
+  <entry break="suppress"><surface>AK</surface><expansion sense="region" cue="address">Alaska</expansion></entry>
+  <entry break="suppress"><surface>AZ</surface><expansion sense="region" cue="address">Arizona</expansion></entry>
+  <entry break="suppress"><surface>AR</surface><expansion sense="region" cue="address">Arkansas</expansion></entry>
+  <entry break="suppress"><surface>CA</surface><expansion sense="region" cue="address">California</expansion></entry>
+  <entry break="suppress"><surface>CO</surface><expansion sense="region" cue="address">Colorado</expansion></entry>
+  <entry break="suppress"><surface>CT</surface><expansion sense="region" cue="address">Connecticut</expansion></entry>
+  <entry break="suppress"><surface>DE</surface><expansion sense="region" cue="address">Delaware</expansion></entry>
+  <entry break="suppress"><surface>FL</surface><expansion sense="region" cue="address">Florida</expansion></entry>
+  <entry break="suppress"><surface>GA</surface><expansion sense="region" cue="address">Georgia</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>HI</surface><expansion sense="region" cue="address">Hawaii</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>ID</surface><expansion sense="region" cue="address">Idaho</expansion></entry>
+  <entry break="suppress"><surface>IL</surface><expansion sense="region" cue="address">Illinois</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>IN</surface><expansion sense="region" cue="address">Indiana</expansion></entry>
+  <entry break="suppress"><surface>IA</surface><expansion sense="region" cue="address">Iowa</expansion></entry>
+  <entry break="suppress"><surface>KS</surface><expansion sense="region" cue="address">Kansas</expansion></entry>
+  <entry break="suppress"><surface>KY</surface><expansion sense="region" cue="address">Kentucky</expansion></entry>
+  <entry break="suppress"><surface>LA</surface><expansion sense="region" cue="address">Louisiana</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>ME</surface><expansion sense="region" cue="address">Maine</expansion></entry>
+  <entry break="suppress"><surface>MA</surface><expansion sense="region" cue="address">Massachusetts</expansion></entry>
+  <entry break="suppress"><surface>MI</surface><expansion sense="region" cue="address">Michigan</expansion></entry>
+  <entry break="suppress"><surface>MN</surface><expansion sense="region" cue="address">Minnesota</expansion></entry>
+  <entry break="suppress"><surface>MS</surface><expansion sense="region" cue="address">Mississippi</expansion></entry>
+  <entry break="suppress"><surface>MO</surface><expansion sense="region" cue="address">Missouri</expansion></entry>
+  <entry break="suppress"><surface>MT</surface><expansion sense="region" cue="address">Montana</expansion></entry>
+  <entry break="suppress"><surface>NE</surface><expansion sense="region" cue="address">Nebraska</expansion></entry>
+  <entry break="suppress"><surface>NV</surface><expansion sense="region" cue="address">Nevada</expansion></entry>
+  <entry break="suppress"><surface>NH</surface><expansion sense="region" cue="address">New Hampshire</expansion></entry>
+  <entry break="suppress"><surface>NJ</surface><expansion sense="region" cue="address">New Jersey</expansion></entry>
+  <entry break="suppress"><surface>NM</surface><expansion sense="region" cue="address">New Mexico</expansion></entry>
+  <entry break="suppress"><surface>NY</surface><expansion sense="region" cue="address">New York</expansion></entry>
+  <entry break="suppress"><surface>NC</surface><expansion sense="region" cue="address">North Carolina</expansion></entry>
+  <entry break="suppress"><surface>ND</surface><expansion sense="region" cue="address">North Dakota</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>OH</surface><expansion sense="region" cue="address">Ohio</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>OK</surface><expansion sense="region" cue="address">Oklahoma</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>OR</surface><expansion sense="region" cue="address">Oregon</expansion></entry>
+  <entry break="suppress"><surface>PA</surface><expansion sense="region" cue="address">Pennsylvania</expansion></entry>
+  <entry break="suppress"><surface>RI</surface><expansion sense="region" cue="address">Rhode Island</expansion></entry>
+  <entry break="suppress"><surface>SC</surface><expansion sense="region" cue="address">South Carolina</expansion></entry>
+  <entry break="suppress"><surface>SD</surface><expansion sense="region" cue="address">South Dakota</expansion></entry>
+  <entry break="suppress"><surface>TN</surface><expansion sense="region" cue="address">Tennessee</expansion></entry>
+  <entry break="suppress"><surface>TX</surface><expansion sense="region" cue="address">Texas</expansion></entry>
+  <entry break="suppress"><surface>UT</surface><expansion sense="region" cue="address">Utah</expansion></entry>
+  <entry break="suppress"><surface>VT</surface><expansion sense="region" cue="address">Vermont</expansion></entry>
+  <entry break="suppress"><surface>VA</surface><expansion sense="region" cue="address">Virginia</expansion></entry>
+  <entry break="suppress"><surface>WA</surface><expansion sense="region" cue="address">Washington</expansion></entry>
+  <entry break="suppress"><surface>WV</surface><expansion sense="region" cue="address">West Virginia</expansion></entry>
+  <entry break="suppress"><surface>WI</surface><expansion sense="region" cue="address">Wisconsin</expansion></entry>
+  <entry break="suppress"><surface>WY</surface><expansion sense="region" cue="address">Wyoming</expansion></entry>
+  <entry break="suppress"><surface>DC</surface><expansion sense="region" cue="address">District of Columbia</expansion></entry>
+  <entry break="suppress" also="common-word"><surface>AS</surface><expansion sense="region" cue="address">American Samoa</expansion></entry>
+  <entry break="suppress"><surface>GU</surface><expansion sense="region" cue="address">Guam</expansion></entry>
+  <entry break="suppress"><surface>MP</surface><expansion sense="region" cue="address">Northern Mariana Islands</expansion></entry>
+  <entry break="suppress"><surface>PR</surface><expansion sense="region" cue="address">Puerto Rico</expansion></entry>
+  <entry break="suppress"><surface>VI</surface><expansion sense="region" cue="address">U.S. Virgin Islands</expansion></entry>
   <entry break="suppress">
     <!-- MD: Maryland's postal code, added to en.xml's spelled-out degree. -->
     <surface>MD</surface>

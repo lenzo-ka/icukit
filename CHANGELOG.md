@@ -15,6 +15,27 @@
   names. Values keep 24-hour `H`; every reading still has to reformat to its surface. A
   marker written once is not read backwards ("10 – 12 PM" is not 22:00 to 12:00), and a
   period ending the sentence stays outside the reading.
+- The US English abbreviation lexicon adds the USPS two-letter codes for the states,
+  DC and the inhabited territories ("NY": New York, sense `region`, cue `address`),
+  curated since ICU and CLDR have none; a code that is also a word is marked so ("IN",
+  "OR"), and one the English lexicon also lists keeps both readings ("MP").
+- `FlexibleDateDetector` reads a numeric date with its era, as CLDR's `GyMd` patterns
+  write it for the language ("3/5/2024 AD", "15/03/44 BC", Japanese "西暦2024/3/5"),
+  with the value led by `("G", era)`; the date is checked in its era (2/29/45 BC
+  exists, 2/29/45 does not), and the reading without the era stays.
+- `icu_abbreviations` lists territories (kind `territory`): the region codes ICU knows
+  that are letters ("US", "EU", "UN") and CLDR's short territory names ("UK"), each
+  expanded by the territory's names in the locale ("United States"; "Czechia", "Czech
+  Republic").
+- The English abbreviation lexicon adds curated acronyms that ICU and CLDR have no
+  source for ("FBI", "NASA", "CEO", "PDF"), chosen by corpus frequency, each with its
+  written long form; an ambiguous one keeps all of them ("CD": compact disc, certificate
+  of deposit).
+- `FlexibleDateTimeDetector` reads a weekday before a time, as CLDR's weekday-and-time
+  patterns write it ("Tue 2:07 PM", "Thu 10 at night", "Tuesday 14:07"), with the value
+  `("E", weekday)` and then the time's fields; and `FlexibleTextDateDetector` reads an
+  era on a month-year or weekday date ("Jul 1999 AD", "Sun, Jul 4, 1999 AD"), from
+  CLDR's `GyMMM` and `GyMMMEd` patterns.
 - `FlexibleMixedMeasureDetector` reads a mixed unit of any number of components, with the
   joiner and factor of each adjacent pair from ICU: `hour-and-minute-and-second` reads "1
   hr, 15 min, 27 sec" and "1h 15m 27s" as 4527 seconds.

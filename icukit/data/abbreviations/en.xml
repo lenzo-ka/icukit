@@ -319,6 +319,58 @@
   <entry break="suppress"><surface>Mfg.</surface><expansion sense="organization">Manufacturing</expansion></entry>
   <entry break="suppress"><surface>Mgr.</surface><expansion sense="title">Manager</expansion></entry>
 
+  <!-- ============================ Acronyms ============================ -->
+  <!--
+    Curated: acronyms with no ICU/CLDR source (region codes such as US, EU and UN,
+    eras and day periods are ICU's; see icukit.icu_abbreviations). Chosen by their
+    count among the TN corpus's LETTERS tokens, where the acronym has a settled
+    written long form. The expansion is the written form only; whether the surface
+    is spoken as letters or as the long form is the consumer's choice.
+  -->
+  <entry break="suppress"><surface>PDF</surface><expansion sense="other">Portable Document Format</expansion></entry>
+  <entry break="suppress"><surface>ISBN</surface><expansion sense="number">International Standard Book Number</expansion></entry>
+  <entry break="suppress"><surface>TV</surface><expansion sense="other">television</expansion></entry>
+  <entry break="suppress"><surface>BBC</surface><expansion sense="organization">British Broadcasting Corporation</expansion></entry>
+  <entry break="suppress"><surface>CD</surface><expansion sense="other">compact disc</expansion><expansion sense="other">certificate of deposit</expansion></entry>
+  <entry break="suppress"><surface>FC</surface><expansion sense="organization" cue="follows-name">Football Club</expansion></entry>
+  <entry break="suppress"><surface>DVD</surface><expansion sense="other">digital versatile disc</expansion><expansion sense="other">digital video disc</expansion></entry>
+  <entry break="suppress"><surface>IUCN</surface><expansion sense="organization">International Union for Conservation of Nature</expansion></entry>
+  <entry break="suppress"><surface>FM</surface><expansion sense="other">frequency modulation</expansion></entry>
+  <entry break="suppress"><surface>LLC</surface><expansion sense="organization" cue="follows-name">limited liability company</expansion></entry>
+  <entry break="suppress"><surface>NFL</surface><expansion sense="organization">National Football League</expansion></entry>
+  <entry break="suppress"><surface>ABC</surface><expansion sense="organization">American Broadcasting Company</expansion><expansion sense="organization">Australian Broadcasting Corporation</expansion></entry>
+  <entry break="suppress"><surface>EP</surface><expansion sense="other">extended play</expansion></entry>
+  <entry break="suppress"><surface>MP</surface><expansion sense="title">Member of Parliament</expansion><expansion sense="other">military police</expansion></entry>
+  <entry break="suppress"><surface>DNA</surface><expansion sense="other">deoxyribonucleic acid</expansion></entry>
+  <entry break="suppress"><surface>CEO</surface><expansion sense="title">chief executive officer</expansion></entry>
+  <entry break="suppress"><surface>NBA</surface><expansion sense="organization">National Basketball Association</expansion></entry>
+  <entry break="suppress"><surface>PC</surface><expansion sense="other">personal computer</expansion><expansion sense="title" cue="precedes-name">Police Constable</expansion></entry>
+  <entry break="suppress"><surface>AFL</surface><expansion sense="organization">Australian Football League</expansion><expansion sense="organization">American Federation of Labor</expansion></entry>
+  <entry break="suppress"><surface>DJ</surface><expansion sense="title">disc jockey</expansion></entry>
+  <entry break="suppress"><surface>UFC</surface><expansion sense="organization">Ultimate Fighting Championship</expansion></entry>
+  <entry break="suppress"><surface>NBC</surface><expansion sense="organization">National Broadcasting Company</expansion></entry>
+  <entry break="suppress"><surface>NSW</surface><expansion sense="region">New South Wales</expansion></entry>
+  <entry break="suppress"><surface>NHL</surface><expansion sense="organization">National Hockey League</expansion></entry>
+  <entry break="suppress"><surface>MTV</surface><expansion sense="organization">Music Television</expansion></entry>
+  <entry break="suppress"><surface>LP</surface><expansion sense="other">long-playing record</expansion></entry>
+  <entry break="suppress"><surface>WWE</surface><expansion sense="organization">World Wrestling Entertainment</expansion></entry>
+  <entry break="suppress"><surface>HMS</surface><expansion sense="title" cue="precedes-name">His Majesty's Ship</expansion><expansion sense="title" cue="precedes-name">Her Majesty's Ship</expansion></entry>
+  <entry break="suppress"><surface>IATA</surface><expansion sense="organization">International Air Transport Association</expansion></entry>
+  <entry break="suppress"><surface>HD</surface><expansion sense="other">high definition</expansion></entry>
+  <entry break="suppress"><surface>RNA</surface><expansion sense="other">ribonucleic acid</expansion></entry>
+  <entry break="suppress"><surface>IBM</surface><expansion sense="organization">International Business Machines</expansion></entry>
+  <entry break="suppress"><surface>CIA</surface><expansion sense="organization">Central Intelligence Agency</expansion></entry>
+  <entry break="suppress"><surface>CNN</surface><expansion sense="organization">Cable News Network</expansion></entry>
+  <entry break="suppress"><surface>HIV</surface><expansion sense="other">human immunodeficiency virus</expansion></entry>
+  <entry break="suppress"><surface>FBI</surface><expansion sense="organization">Federal Bureau of Investigation</expansion></entry>
+  <entry break="suppress"><surface>FCC</surface><expansion sense="organization">Federal Communications Commission</expansion></entry>
+  <entry break="suppress"><surface>UCLA</surface><expansion sense="organization">University of California, Los Angeles</expansion></entry>
+  <entry break="suppress"><surface>MLB</surface><expansion sense="organization">Major League Baseball</expansion></entry>
+  <entry break="suppress"><surface>NASA</surface><expansion sense="organization">National Aeronautics and Space Administration</expansion></entry>
+  <entry break="suppress"><surface>CBC</surface><expansion sense="organization">Canadian Broadcasting Corporation</expansion></entry>
+  <entry break="suppress"><surface>OCLC</surface><expansion sense="organization">Online Computer Library Center</expansion></entry>
+  <entry break="suppress"><surface>CDP</surface><expansion sense="place">census-designated place</expansion></entry>
+
   <!-- ============================ Latin / editorial phrases ========== -->
   <entry break="suppress"><surface>A.D.</surface><expansion sense="era" cue="date">Anno Domini</expansion></entry>
   <entry break="suppress"><surface>B.C.</surface><expansion sense="era" cue="date">Before Christ</expansion></entry>

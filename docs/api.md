@@ -3332,12 +3332,14 @@ Kinds:
       dollars");
     * ``compact``: compact-number suffixes ("K") with the long ones ("thousand");
     * ``relative-unit``: relative-time unit abbreviations ("hr.", "mo") with the long
-      ones ("hours", "months").
+      ones ("hours", "months");
+    * ``territory``: region codes ("US", "EU", "UN") and CLDR's short territory names
+      ("UK") with the territory's names ("United States", "European Union").
 
 ``key`` names what the surface stands for in ICU's terms: a unit identifier, a month
 or weekday number (ICU's, Sunday 1), an era index, a zone's long name (one
-abbreviation serves many zone IDs), an ISO 4217 code, a power of ten, or a relative
-unit. ``expansions`` are ICU's long forms, singular and
+abbreviation serves many zone IDs), an ISO 4217 code, a power of ten, a relative
+unit, or a region code. ``expansions`` are ICU's long forms, singular and
 plural where they differ, in the order ICU gave them; empty where ICU writes no longer
 form (English "AM"). The locales read are the locale's language's, or the ones a
 caller chooses, as for the readers.
@@ -3351,7 +3353,7 @@ Example:
 
 #### `ABBREVIATION_KINDS` (constant)
 
-`('unit', 'per-unit', 'month', 'weekday', 'era', 'day-period', 'time-zone', 'currency', 'compact', 'relative-unit')`
+`('unit', 'per-unit', 'month', 'weekday', 'era', 'day-period', 'time-zone', 'currency', 'compact', 'relative-unit', 'territory')`
 
 ### class `IcuAbbreviation`
 
@@ -5000,6 +5002,10 @@ reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
 pattern it came from. A year written first must have four digits, since a leading
 two-digit year cannot be told from a day ("10-12-14").
 
+A date with its era reads as CLDR's ``GyMd`` patterns write it ("3/5/2024 AD",
+"15/03/44 BC"), the era's names the language's (see ``_language_eras``); the value
+leads with ``("G", era)``.
+
 #### `FlexibleDateDetector(locale: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -5007,6 +5013,8 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return every structure's flexible numeric dates, distinct, in source order.
+
+A date with its era is its own reading, beside the date without it.
 
 ### class `FlexibleDateIntervalDetector`
 
