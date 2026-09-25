@@ -4,6 +4,15 @@
 
 ### Added
 
+- `icu_abbreviations(locale, *, locales=None, kinds=None)` lists every abbreviation ICU
+  writes for the language, with the expansions ICU gives it, generated from ICU at call
+  time: unit symbols ("km": "kilometers"), per forms ("/km²": "per square kilometer"),
+  months and weekdays ("Sept": "September"), eras ("BCE": "Before Common Era"), day
+  periods, time-zone abbreviations ("EST": "Eastern Standard Time"), currency symbols
+  and codes ("USD": "US dollars"), compact suffixes ("K": "thousand"), and relative-time
+  units ("hr.": "hours"). Each row is an `IcuAbbreviation` with its kind
+  (`ABBREVIATION_KINDS`), a key naming what it stands for, its width, and its
+  expansions; a surface with several meanings is listed once per meaning.
 - `FlexibleMeasureDetector` reads a unit ICU composes with an SI prefix, as ICU's
   `NumberFormatter` writes it: `FlexibleMeasureDetector("en_US", "kilovolt")` reads
   "25 kV" and "25 kilovolts", and "kilonewton" reads "3 kN" (both raised before).
