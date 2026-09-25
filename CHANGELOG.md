@@ -4,6 +4,10 @@
 
 ### Added
 
+- The US English abbreviation lexicon adds the USPS two-letter codes for the states,
+  DC and the inhabited territories ("NY": New York, sense `region`, cue `address`),
+  curated since ICU and CLDR have none; a code that is also a word is marked so ("IN",
+  "OR"), and one the English lexicon also lists keeps both readings ("MP").
 - `icu_abbreviations` lists territories (kind `territory`): the region codes ICU knows
   that are letters ("US", "EU", "UN") and CLDR's short territory names ("UK"), each
   expanded by the territory's names in the locale ("United States"; "Czechia", "Czech
