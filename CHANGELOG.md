@@ -4,6 +4,9 @@
 
 ### Added
 
+- `FlexibleMixedMeasureDetector` reads a mixed unit of any number of components, with the
+  joiner and factor of each adjacent pair from ICU: `hour-and-minute-and-second` reads "1
+  hr, 15 min, 27 sec" and "1h 15m 27s" as 4527 seconds.
 - `FlexibleTextDateDetector` reads an era on a full date and quarters, from CLDR's
   `yMMMdG`, `yMMMMdG`, `yQQQ`, and `yQQQQ` patterns in each locale of the language: "Mar
   5, 2024 AD" (`G` 1), "5 March 44 BC", "Q1 2024", "3rd quarter 1999" (`Q` 3). Quarter
