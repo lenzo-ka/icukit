@@ -4,6 +4,10 @@
 
 ### Added
 
+- `FlexibleTextDateDetector` reads CLDR's variant and wide era names beside the
+  abbreviated ones: "300 BCE", "200 CE", "300 Before Christ", "44 Before Common Era".
+  The era capture's form is "short" or "wide" and the spec's pattern `y G` or `y GGGG`
+  accordingly; `_language_eras` gives each name with its era index and width.
 - A rate's per form written without an amount reads as its unit: `FlexibleMeasureDetector`
   reads "/s", "/km²", "/min" in "beats/min", and "per second" as a `UnitValue`
   (`per-second`), a new value with a unit and no amount. A per form right after its
