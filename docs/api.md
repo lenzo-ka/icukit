@@ -2208,6 +2208,10 @@ Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
 The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
 date specification fixes GMT so date-only parsing cannot acquire host-zone behavior.
 
+A year from a ``y`` field is read only in four or more digits, as ICU writes every
+year from 1000 on; a shorter one cannot be told from a count after a month ("June
+200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
+
 #### `DateDetector(locale: 'str', skeleton: 'str', tz: 'str' = 'GMT') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.

@@ -320,6 +320,43 @@ def test_the_readers_built_on_the_text_date_reader_follow_it():
     assert FlexibleBareHourDetector("en_GB").detect("5 June 2020 people") == []
 
 
+def test_the_short_year_value_is_the_year_as_written():
+    assert _dated(FlexibleShortYearDateDetector("en_US"), "Mar 3, 07") == [
+        ("date:short-year", "Mar 3, 07", (("y", 7), ("M", 3), ("d", 3)))
+    ]
+
+
+def _date_years(locale, text):
+    gang = generated_detectors(locale, DEFAULT_FAMILIES)
+    return [
+        (d["type"], d["text"], dict(d["value"].fields)["y"])
+        for d in gang.detect(text)
+        if d["type"].startswith("date:") and "y" in dict(d["value"].fields)
+    ]
+
+
+@pytest.mark.parametrize(
+    "locale, text",
+    [
+        ("en_US", "in June 200 cases"),
+        ("en_US", "June 5"),
+        ("en_US", "August 9"),
+        ("en_US", "3/4"),
+        ("en_US", "5 June 200 attendees"),
+        ("de_DE", "24. April 350"),
+    ],
+)
+def test_the_default_gang_reads_no_count_after_a_month_as_a_year(locale, text):
+    assert _date_years(locale, text) == []
+
+
+def test_the_default_gang_reads_four_digit_and_two_digit_pattern_years():
+    # A four-digit "y" year, and the "yy" pattern's two digits, read as before.
+    assert ("date:yMMMM", "June 2020", 2020) in _date_years("en_US", "June 2020")
+    assert ("date:yyMd", "3/4/24", 2024) in _date_years("en_US", "3/4/24")
+    assert ("date:yMMMMd", "24. April 2024", 2024) in _date_years("de_DE", "24. April 2024")
+
+
 # ------------------------------------------------------------------- default gang
 
 

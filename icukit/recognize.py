@@ -2096,8 +2096,9 @@ class FlexibleShortYearDateDetector(FlexibleTextDateDetector):
     allowed as well, less those it reads without them, which are the dates with no era
     whose year has two or three digits ("24 April 350", "on 5 June 20 people came"). The
     type is ``date:short-year`` and the value the text-date reader's
-    :class:`DateTimeValue`, with the year as written (``("y", 20)`` is the year 20, not
-    2020).
+    :class:`DateTimeValue`, with the year as written: ``("y", 20)`` is the year 20, not
+    2020, and "Mar 3, 07" is ``("y", 7)``: the value is the digits' value, never widened
+    to a century, since the patterns read here write ``y``, not ``yy``.
     """
 
     type = "date:short-year"
