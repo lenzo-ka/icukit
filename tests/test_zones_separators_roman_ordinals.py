@@ -34,7 +34,7 @@ def test_the_zone_is_its_own_capture():
     detection = FlexibleTimeDetector("en_US").detect("10 PM ET")[-1]
     zone = [c for c in detection["captures"] if c.name == "time-zone"]
 
-    assert [(c.text, c.value) for c in zone] == [(" ET", "ET")]
+    assert [(c.text, c.value) for c in zone] == [(" ET", "America/New_York")]
 
 
 @pytest.mark.parametrize("text", ["10:30 ETC", "10:30 et"])

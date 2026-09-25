@@ -5070,7 +5070,9 @@ Each greatest-difference field's recipe is CLDR's interval pattern when
 ``DateIntervalInfo`` has one, else the pattern recovered from ``DateIntervalFormat``'s
 own output (see :func:`_recovered_interval_parts`). A 12-hour side's AM/PM marker is
 parsed into the value, which keeps 24-hour ``H``; a time zone's text is parsed, gated
-against ICU's rendering of that zone, and captured as ``time-zone``.
+against ICU's rendering of that zone, and captured as ``time-zone``: the text as
+written, the value the parsed zone's IANA ID ("ET" -> "America/New_York"; a GMT
+offset, which has none, keeps ICU's custom ID, "GMT-08:00").
 
 #### `FlexibleDateIntervalDetector(locale: 'str', skeleton: 'str') -> 'None'`
 
@@ -5325,7 +5327,10 @@ Likewise the hour-minute separator may be any the language's CLDR patterns use
 ("7.30pm"; see :func:`_language_time_separators`), and a time may be followed by a
 time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
 :func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
-("12:00:00Z"), captured as ``time-zone``.
+("12:00:00Z"), captured as ``time-zone``. The capture's text is the zone as written;
+its value is the IANA ID of the zone ICU parses it as (see :func:`_parsed_zone_id`):
+"Eastern Standard Time", "New York Time", "EST" and "ET" are all
+"America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT".
 
 A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
 CLDR writes attached may stand between hour and minutes ("10h30"); both forms come

@@ -97,6 +97,16 @@
   May 2013"), as it reads the lexicon's dotted months; the weekday is still checked
   against the date.
 
+### Changed
+
+- `FlexibleTimeDetector`'s `time-zone` capture holds the IANA ID of the zone ICU parses
+  the zone text as, as `FlexibleDateIntervalDetector`'s does, where it held the zone
+  name as written: "Eastern Standard Time", "New York Time", "EST" and "ET" are
+  `America/New_York` in en_US (`America/Toronto` in en_CA, whose region ICU's parse
+  follows), "Central European Time" and "CET" are `Europe/Paris`, and "UTC", "GMT" and
+  "Z" are `Etc/GMT`, whatever the process time zone. The capture's text is still the
+  zone as written, and every time reads as it did.
+
 ### Fixed
 
 - `FlexibleDateIntervalDetector` reads an interval the same whatever the process time

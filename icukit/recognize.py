@@ -924,6 +924,39 @@ def _iana_zone_id(zone_id: str) -> str:
         return zone_id
 
 
+# The zone fields ICU writes a zone name with (UTS #35): long and short specific
+# ("Eastern Standard Time", "EST"), long and short generic ("Eastern Time", "ET"), the
+# generic location ("New York Time"), and ISO 8601 ("Z").
+_ZONE_NAME_PATTERNS = ("zzzz", "z", "vvvv", "v", "VVVV", "X")
+
+
+@cache
+def _parsed_zone_id(
+    zone_text: str, locale: str, names: tuple[str, ...] | None = None
+) -> str | None:
+    """The IANA ID of the zone ICU parses ``zone_text`` as, or ``None`` if none parses it.
+
+    ``SimpleDateFormat`` parses the whole text with each zone field in turn, in
+    ``locale`` first and then in the other locales of its language (see
+    :func:`_language_locales`), on a GMT calendar whose zone the parse sets. The locale's
+    region picks the zone of a shared name ("Eastern Time" is America/New_York in en_US,
+    America/Toronto in en_CA), and the process default zone plays no part. The parsed
+    zone is canonicalized as :func:`_iana_zone_id` does ("IST" in en_IN parses as
+    Asia/Calcutta, captured as Asia/Kolkata).
+    """
+    source = icu.UnicodeString(zone_text)
+    for name in _language_locales(locale, names):
+        icu_locale = icu.Locale(name)
+        for pattern in _ZONE_NAME_PATTERNS:
+            calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu_locale)
+            calendar.clear()
+            position = icu.ParsePosition(0)
+            icu.SimpleDateFormat(pattern, icu_locale).parse(source, calendar, position)
+            if position.getErrorIndex() == -1 and position.getIndex() == len(source):
+                return _iana_zone_id(str(calendar.getTimeZone().getID()))
+    return None
+
+
 @cache
 def _same_rule_zone_ids(zone_id: str) -> tuple[str, ...]:
     """The zones ICU keeps with the same offset and rules as ``zone_id``, other than it.
@@ -1145,7 +1178,9 @@ class FlexibleDateIntervalDetector:
     ``DateIntervalInfo`` has one, else the pattern recovered from ``DateIntervalFormat``'s
     own output (see :func:`_recovered_interval_parts`). A 12-hour side's AM/PM marker is
     parsed into the value, which keeps 24-hour ``H``; a time zone's text is parsed, gated
-    against ICU's rendering of that zone, and captured as ``time-zone``.
+    against ICU's rendering of that zone, and captured as ``time-zone``: the text as
+    written, the value the parsed zone's IANA ID ("ET" -> "America/New_York"; a GMT
+    offset, which has none, keeps ICU's custom ID, "GMT-08:00").
     """
 
     group = "date-interval"
@@ -4600,7 +4635,10 @@ class FlexibleTimeDetector:
     ("7.30pm"; see :func:`_language_time_separators`), and a time may be followed by a
     time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
     :func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
-    ("12:00:00Z"), captured as ``time-zone``.
+    ("12:00:00Z"), captured as ``time-zone``. The capture's text is the zone as written;
+    its value is the IANA ID of the zone ICU parses it as (see :func:`_parsed_zone_id`):
+    "Eastern Standard Time", "New York Time", "EST" and "ET" are all
+    "America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT".
 
     A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
     CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
@@ -4942,19 +4980,23 @@ class FlexibleTimeDetector:
         designator = _iso_utc_designator()
         end = cursor + len(designator)
         if text[cursor:end] == designator and _ends_letter_token(text, end):
-            return Capture("time-zone", cursor, end, designator, designator)
+            return Capture("time-zone", cursor, end, designator, self._zone_id(designator))
         if not (cursor < len(text) and text[cursor] in _SPACES):
             return None
         begin, cursor = cursor, cursor + 1
         for form in _language_zone_names(self._language, self.locales):
             end = _match_period(text, cursor, form, exact=True)
             if end is not None and _ends_letter_token(text, end):
-                return Capture("time-zone", begin, end, text[begin:end], form)
+                return Capture("time-zone", begin, end, text[begin:end], self._zone_id(form))
         for form in _language_zone_abbreviations(self._language, self.locales):
             end = cursor + len(form)
             if text[cursor:end] == form and _ends_letter_token(text, end):
-                return Capture("time-zone", begin, end, text[begin:end], form)
+                return Capture("time-zone", begin, end, text[begin:end], self._zone_id(form))
         return None
+
+    def _zone_id(self, form: str) -> str | None:
+        """The IANA ID of the zone ICU parses a zone form as (see :func:`_parsed_zone_id`)."""
+        return _parsed_zone_id(form, self.locale, self.locales)
 
     def _hour_with_period(
         self,
