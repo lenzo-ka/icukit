@@ -82,7 +82,8 @@ def test_a_long_zone_name_after_a_time_reads_with_it(text, fields, zone, zone_id
 
 
 # One of each zone form a time is read with: long specific, long generic, generic
-# location, short specific, short generic, and GMT and UTC, which ICU parses as Etc/GMT.
+# location, short specific, short generic, and GMT and UTC: ICU parses both as Etc/GMT,
+# and writes "UTC" for Etc/UTC, the zone the capture names.
 # Each gives the zones it is read in, one reading per zone, in order.
 ZONE_FORMS = [
     ("en_US", "2:07:09 PM Eastern Standard Time", " Eastern Standard Time", ["America/New_York"]),
@@ -95,7 +96,7 @@ ZONE_FORMS = [
     ("en_US", "10 PM PT", " PT", ["America/Los_Angeles"]),
     ("en_US", "14:00 CET", " CET", ["Europe/Paris"]),
     ("en_US", "18:30:00 GMT", " GMT", ["Etc/GMT"]),
-    ("en_US", "18:00 UTC", " UTC", ["Etc/GMT"]),
+    ("en_US", "18:00 UTC", " UTC", ["Etc/UTC"]),
     # The locale's region picks the zone of a shared name.
     ("en_CA", "10 PM ET", " ET", ["America/Toronto"]),
     # "IST" is Irish time in en_IE and India time in en_IN. en_US writes neither, so it
@@ -218,8 +219,39 @@ def test_a_name_icu_only_parses_leniently_is_not_a_zone():
     assert _zones_of(FlexibleTimeDetector("en_US").detect("10 PM MST"), "10 PM MST") == [
         ["America/Denver"]
     ]
-    text = "July 5, 2026, 10:00 PM MST"
+    text = "January 5, 2026, 10:00 PM MST"
     assert _zones_of(FlexibleDateTimeDetector("en_US").detect(text), text) == [["America/Denver"]]
+
+
+@pytest.mark.parametrize(
+    "text, zones",
+    [
+        # On July 5 Denver writes "MDT": the zone that writes "MST" that day is Phoenix,
+        # of the same Mountain metazone and in en_US's region, so the ID has the offset
+        # the name means (UTC-7).
+        ("July 5, 2026, 10:00 PM MST", [["America/Phoenix"]]),
+        # No US zone writes "CST" in July; of the Central metazone's zones that do, the
+        # first by IANA ID.
+        ("July 5, 2026, 10:00 PM CST", [["America/Bahia_Banderas"]]),
+        ("January 5, 2026, 10:00 PM CST", [["America/Chicago"]]),
+    ],
+)
+def test_a_dated_zone_is_the_zone_that_writes_the_name_that_day(text, zones):
+    assert _zones_of(FlexibleDateTimeDetector("en_US").detect(text), text) == zones
+
+
+@pytest.mark.parametrize(
+    "text, zones",
+    [
+        # No zone writes these names on these dates, but people write them all year:
+        # they are read as a bare time's, as the zone that writes them in their season.
+        ("January 5, 2026, 10:00 PM EDT", [["America/New_York"]]),
+        ("July 5, 2026, 10:00 PM PST", [["America/Los_Angeles"]]),
+        ("December 25, 2026, 9:00 AM BST", [["Europe/London"]]),
+    ],
+)
+def test_an_out_of_season_zone_name_is_still_read(text, zones):
+    assert _zones_of(FlexibleDateTimeDetector("en_US").detect(text), text) == zones
 
 
 @pytest.mark.parametrize(
@@ -259,35 +291,57 @@ def test_the_day_is_read_afresh_not_frozen(monkeypatch):
 
 
 def _icu_writes(zone_text, zone_id, day):
-    """Independently: whether some en locale writes ``zone_text`` for the zone that day,
-    or for a zone ICU maps to the same metazone that day."""
-    names = icu.TimeZoneNames.createInstance(icu.Locale.getRoot())
+    """Whether ICU formats ``zone_id`` itself as ``zone_text`` on ``day``, in some zone
+    field, in some locale of English."""
     instant = day * 86400 + 43200.0
-    metazone = names.getMetaZoneID(zone_id, instant)
-    zones = [zone_id]
-    if metazone:
-        zones += [
-            str(z)
-            for z in icu.TimeZone.createEnumeration()
-            if names.getMetaZoneID(str(z), instant) == metazone
-        ]
+    zone = icu.TimeZone.createTimeZone(zone_id)
     for name in _language_locale_names("en"):
-        for pattern in ("z", "zzzz", "v", "vvvv", "VVVV", "X"):
+        for pattern in ("z", "zzzz", "v", "vvvv", "VVVV", "X", "O", "OOOO"):
             formatter = icu.SimpleDateFormat(pattern, icu.Locale(name))
-            for zone in zones:
-                formatter.setTimeZone(icu.TimeZone.createTimeZone(zone))
-                if formatter.format(instant) == zone_text:
-                    return True
+            formatter.setTimeZone(zone)
+            if formatter.format(instant) == zone_text:
+                return True
     return False
 
 
-@pytest.mark.parametrize("zone_text", ["IST", "MST", "CST", "AST", "BST", "EST", "CET"])
-@pytest.mark.parametrize("month", [1, 7])
-def test_every_other_locales_zone_is_one_icu_writes_that_text_for(zone_text, month):
-    day = _day_of(2026, month, 15)
-    for zone_id, name in _zone_readings(zone_text, "en_US", days=(day,)):
-        if name != "en_US":
-            assert _icu_writes(zone_text, zone_id, day), (zone_id, name)
+@pytest.mark.parametrize(
+    "zone_text, date",
+    [
+        ("IST", (2026, 7, 5)),
+        ("IST", (2026, 1, 5)),
+        ("MST", (2026, 7, 5)),
+        ("MST", (2026, 1, 5)),
+        ("CST", (2026, 7, 5)),
+        ("CST", (2026, 1, 5)),
+        ("EST", (2026, 1, 5)),
+        ("EDT", (2026, 7, 5)),
+        ("BST", (2026, 7, 5)),
+        ("CET", (2026, 1, 5)),
+        ("CEST", (2026, 7, 5)),
+        ("AST", (2026, 1, 5)),
+        ("UTC", (2026, 7, 5)),
+        ("GMT", (2026, 1, 5)),
+    ],
+)
+def test_every_dated_zone_read_is_one_icu_writes_the_name_for_that_day(zone_text, date):
+    # Every zone captured, the reader's own locale's included, is one ICU itself
+    # formats with the text on the reading's date.
+    year, month, day = date
+    months = "January February March April May June July August September October November December"
+    text = f"{months.split()[month - 1]} {day}, {year}, 10:00 PM {zone_text}"
+    zones = _zones_of(FlexibleDateTimeDetector("en_US").detect(text), text)
+    assert zones
+    for (zone_id,) in zones:
+        assert _icu_writes(zone_text, zone_id, _day_of(year, month, day)), (text, zone_id)
+
+
+@pytest.mark.parametrize("text", ["10 PM IST", "10 PM MST", "10 PM CST", "18:00 UTC", "10 PM BST"])
+def test_every_bare_time_zone_read_is_one_icu_writes_the_name_for_this_year(text):
+    zone_text = text.split()[-1]
+    zones = _zones_of(FlexibleTimeDetector("en_US").detect(text), text)
+    assert zones
+    for (zone_id,) in zones:
+        assert any(_icu_writes(zone_text, zone_id, day) for day in _reading_days()), zone_id
 
 
 @pytest.mark.parametrize(

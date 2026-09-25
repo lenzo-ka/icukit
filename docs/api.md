@@ -5400,9 +5400,10 @@ Likewise the hour-minute separator may be any the language's CLDR patterns use
 time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
 :func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
 ("12:00:00Z"), captured as ``time-zone``. The capture's text is the zone as written;
-its value is the IANA ID of the zone ICU parses it as (see :func:`_zone_readings`):
-"Eastern Standard Time", "New York Time", "EST" and "ET" are all
-"America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT". A name that
+its value is the IANA ID of the zone ICU parses it as, or of the zone that writes it
+where that zone does not (see :func:`_zone_readings`): "Eastern Standard Time", "New
+York Time", "EST" and "ET" are all "America/New_York" in en_US, "GMT" and "Z" are
+"Etc/GMT", and "UTC" is "Etc/UTC". A name that
 names several zones in the locales of the language gives one reading per zone:
 "IST" is Europe/Dublin (en_IE) and Asia/Kolkata (en_IN).
 

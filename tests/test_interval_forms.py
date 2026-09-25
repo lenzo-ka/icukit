@@ -331,9 +331,10 @@ def test_an_interval_reads_under_the_process_tz(tz, skeleton, surface):
     [
         # Inside the spring-forward gap in America/New_York, written in GMT.
         ("yMdhmz", f"3/10/2024, 2:30{DASH}2:45{NNBSP}AM GMT", "GMT", "Etc/GMT"),
-        # ICU writes Etc/UTC as "UTC" and "GMT+0"; it parses both to Etc/GMT.
-        ("yMdhmz", f"3/10/2024, 2:30{DASH}2:45{NNBSP}AM UTC", "UTC", "Etc/GMT"),
-        ("Hmv", f"02:30{DASH}02:45 GMT+0", "GMT+0", "Etc/GMT"),
+        # ICU writes Etc/UTC as "UTC" and "GMT+0"; it parses both to Etc/GMT, which writes
+        # "GMT", so the capture names Etc/UTC, the zone that writes them.
+        ("yMdhmz", f"3/10/2024, 2:30{DASH}2:45{NNBSP}AM UTC", "UTC", "Etc/UTC"),
+        ("Hmv", f"02:30{DASH}02:45 GMT+0", "GMT+0", "Etc/UTC"),
         # A GMT offset parses to a custom zone, which has no IANA form and keeps its ID.
         ("Hmv", f"02:30{DASH}02:45 GMT-8", "GMT-8", "GMT-08:00"),
         ("hmz", f"2:30{DASH}2:45{NNBSP}AM GMT+5:30", "GMT+5:30", "GMT+05:30"),

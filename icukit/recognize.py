@@ -964,7 +964,7 @@ def _reading_days(fields: dict[str, int] | None = None) -> tuple[int, ...]:
     return (today, _day_of(year, 1, 15), _day_of(year, 7, 15))
 
 
-@cache
+@lru_cache(maxsize=4096)
 def _zone_metazone(zone_id: str, day: int) -> str:
     """The metazone ICU maps ``zone_id`` to on ``day``, or ``zone_id`` if it maps none.
 
@@ -1011,7 +1011,7 @@ def _zone_parses(
     return tuple(found.items())
 
 
-@cache
+@lru_cache(maxsize=256)
 def _metazone_zones(metazone: str, day: int) -> tuple[str, ...]:
     """The zones ICU maps to ``metazone`` on ``day`` (none for a zone standing for itself)."""
     names = icu.TimeZoneNames.createInstance(icu.Locale.getRoot())
@@ -1028,35 +1028,68 @@ def _plain_spaces(text: str) -> str:
 
 
 @cache
+def _zone_field_formatter(pattern: str, locale: str):
+    """ICU's formatter for one zone field in ``locale``; callers set its zone each use."""
+    return icu.SimpleDateFormat(pattern, icu.Locale(locale))
+
+
+@lru_cache(maxsize=8192)
 def _zone_writes(
     zone_text: str, zone_id: str, locale: str, names: tuple[str, ...] | None, day: int
 ) -> bool:
-    """Whether ICU writes ``zone_text`` for ``zone_id`` on ``day`` in a locale of the language.
+    """Whether ICU writes ``zone_text`` for ``zone_id`` itself on ``day``.
 
-    In any zone field (see ``_ZONE_NAME_PATTERNS``), ``locale`` first, for the zone, a
-    zone ICU keeps with the same offset and rules (see :func:`_same_rule_zone_ids`: ICU
-    writes "UTC" for Etc/UTC, which "UTC" parses as Etc/GMT), or a zone of its metazone
-    that day (ICU parses "MST" as America/Denver, whose July name is "MDT", while
-    America/Phoenix, of the same Mountain metazone, writes "MST" all year). Spaces
-    compare as spaces, as CLDR's no-break spaces are typed as ordinary ones.
+    In any zone field (see ``_ZONE_NAME_PATTERNS``), in ``locale`` or another locale of
+    its language. Spaces compare as spaces, as CLDR's no-break spaces are typed as
+    ordinary ones.
     """
     wanted = _plain_spaces(zone_text)
     instant = day * _SECONDS_PER_DAY + _SECONDS_PER_DAY / 2
-    others = dict.fromkeys(
-        (*_same_rule_zone_ids(zone_id), *_metazone_zones(_zone_metazone(zone_id, day), day))
-    )
-    others.pop(zone_id, None)
-    zones = [icu.TimeZone.createTimeZone(zone_id)]
-    zones += [icu.TimeZone.createTimeZone(other) for other in others]
+    zone = icu.TimeZone.createTimeZone(zone_id)
     for name in _language_locales(locale, names):
-        icu_locale = icu.Locale(name)
         for pattern in _ZONE_NAME_PATTERNS:
-            formatter = icu.SimpleDateFormat(pattern, icu_locale)
-            for zone in zones:
-                formatter.setTimeZone(zone)
-                if _plain_spaces(str(formatter.format(instant))) == wanted:
-                    return True
+            formatter = _zone_field_formatter(pattern, name)
+            formatter.setTimeZone(zone)
+            if _plain_spaces(str(formatter.format(instant))) == wanted:
+                return True
     return False
+
+
+@lru_cache(maxsize=4096)
+def _zone_writer(
+    zone_text: str,
+    zone_id: str,
+    locale: str,
+    names: tuple[str, ...] | None,
+    days: tuple[int, ...],
+) -> str | None:
+    """The zone ``zone_text`` names when ICU parses it as ``zone_id``, or ``None``.
+
+    ``zone_id`` itself if ICU writes the text for it on one of ``days``. Otherwise the
+    zone that does write it: one with the same offset and rules (see
+    :func:`_same_rule_zone_ids`; "UTC" parses as Etc/GMT, which writes "GMT", and is
+    written for Etc/UTC), or one of the same metazone that day ("MST" parses as
+    America/Denver, whose July name is "MDT"; on July 5 it is America/Phoenix, which
+    writes "MST" all year, so the ID carries the offset the name means). Of several, a
+    zone of ``locale``'s region comes first, then IANA ID order; the first day that
+    has one gives it. ``None`` if no zone writes the text on any of ``days``: a lenient
+    parse also takes names ICU no longer writes (en_MO parses "MST" as Asia/Macau).
+    """
+    if any(_zone_writes(zone_text, zone_id, locale, names, day) for day in days):
+        return zone_id
+    region = icu.Locale(locale).getCountry()
+    for day in days:
+        others = dict.fromkeys(
+            (*_same_rule_zone_ids(zone_id), *_metazone_zones(_zone_metazone(zone_id, day), day))
+        )
+        others.pop(zone_id, None)
+        ordered = sorted(
+            others, key=lambda other: (str(icu.TimeZone.getRegion(other)) != region, other)
+        )
+        for other in ordered:
+            if _zone_writes(zone_text, other, locale, names, day):
+                return _iana_zone_id(other)
+    return None
 
 
 def _zone_readings(
@@ -1068,27 +1101,34 @@ def _zone_readings(
     """Each zone ``zone_text`` names, one per metazone: ``(IANA ID, locale)``.
 
     The zones ICU parses the text as in the locales of the language (see
-    :func:`_zone_parses`), each kept only where ICU writes the text for it on one of
-    ``days`` (see :func:`_zone_writes`; by default a bare time's, see
-    :func:`_reading_days`), and grouped by metazone on the first day (see
-    :func:`_zone_metazone`). The locale's region picks the zone of a shared name
-    ("Eastern Time" is America/New_York in en_US, America/Toronto in en_CA). A name
-    that different metazones share gives each: en_US reads "IST" as en_IE's
-    Europe/Dublin and en_IN's Asia/Kolkata. ``locale``'s own zone comes first, then the
-    others in locale-name order. The process default zone plays no part.
+    :func:`_zone_parses`), each read as the zone that writes the text on one of ``days``
+    (see :func:`_zone_writer`), by default a bare time's (see :func:`_reading_days`), and
+    grouped by metazone on the first day (see :func:`_zone_metazone`). The locale's
+    region picks the zone of a shared name ("Eastern Time" is America/New_York in en_US,
+    America/Toronto in en_CA). A name that different metazones share gives each: en_US
+    reads "IST" as en_IE's Europe/Dublin and en_IN's Asia/Kolkata. ``locale``'s own
+    zone comes first, then the others in locale-name order. The process default zone
+    plays no part.
+
+    A name no zone writes on a given date is still read, as a bare time's: people write
+    "PST" all year, so "July 5, 2026, 10:00 PM PST" is America/Los_Angeles, which writes
+    "PST" in winter.
     """
-    return _zone_readings_on(zone_text, locale, names, days or _reading_days())
+    if days is None:
+        return _zone_readings_on(zone_text, locale, names, _reading_days())
+    found = _zone_readings_on(zone_text, locale, names, days)
+    return found or _zone_readings_on(zone_text, locale, names, _reading_days())
 
 
-@cache
+@lru_cache(maxsize=4096)
 def _zone_readings_on(
     zone_text: str, locale: str, names: tuple[str, ...] | None, days: tuple[int, ...]
 ) -> tuple[tuple[str, str], ...]:
     found: dict[str, tuple[str, str]] = {}
     for zone_id, name in _zone_parses(zone_text, locale, names):
-        if not any(_zone_writes(zone_text, zone_id, name, names, day) for day in days):
-            continue
-        found.setdefault(_zone_metazone(zone_id, days[0]), (zone_id, name))
+        writer = _zone_writer(zone_text, zone_id, name, names, days)
+        if writer is not None:
+            found.setdefault(_zone_metazone(writer, days[0]), (writer, name))
     return tuple(found.values())
 
 
@@ -1600,15 +1640,19 @@ class FlexibleDateIntervalDetector:
             end, captures, value, zone_id = reading
             written = next(c.text for c in captures if c.name == "time-zone")
             days = _reading_days(dict(value.start.fields))
-            # Kept only where ICU writes the zone text for the zone on the reading's
-            # date, in some locale of the language: a lenient parse also takes names ICU
-            # no longer writes ("MST" as Asia/Macau), and a date-less side is parsed on
-            # a stand-in dating.
-            if not any(_zone_writes(written, zone_id, name, None, day) for day in days):
+            # Read as the zone ICU writes the zone text for on the reading's date, in some
+            # locale of the language (see _zone_writer): a lenient parse also takes names
+            # ICU no longer writes ("MST" as Asia/Macau), and a date-less side is parsed
+            # on a stand-in dating.
+            writer = _zone_writer(written, zone_id, name, None, days)
+            if writer is None:
                 continue
-            metazone = _zone_metazone(zone_id, days[0])
+            metazone = _zone_metazone(writer, days[0])
             if metazone not in seen:
                 seen.add(metazone)
+                captures = tuple(
+                    replace(c, value=writer) if c.name == "time-zone" else c for c in captures
+                )
                 readings.append((end, captures, value, metazone, rank))
         return readings
 
@@ -5097,9 +5141,10 @@ class FlexibleTimeDetector:
     time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
     :func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
     ("12:00:00Z"), captured as ``time-zone``. The capture's text is the zone as written;
-    its value is the IANA ID of the zone ICU parses it as (see :func:`_zone_readings`):
-    "Eastern Standard Time", "New York Time", "EST" and "ET" are all
-    "America/New_York" in en_US, and "UTC", "GMT" and "Z" are "Etc/GMT". A name that
+    its value is the IANA ID of the zone ICU parses it as, or of the zone that writes it
+    where that zone does not (see :func:`_zone_readings`): "Eastern Standard Time", "New
+    York Time", "EST" and "ET" are all "America/New_York" in en_US, "GMT" and "Z" are
+    "Etc/GMT", and "UTC" is "Etc/UTC". A name that
     names several zones in the locales of the language gives one reading per zone:
     "IST" is Europe/Dublin (en_IE) and Asia/Kolkata (en_IN).
 
