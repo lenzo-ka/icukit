@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+### Added
+
+- `FlexibleMeasureDetector` reads a unit as every locale of the language formats it,
+  so en_US text reads en_GB's "12 kilometres", "2 litres", and "5 per square
+  kilometre".
+- `FlexibleNumberDetector` also reads a number in each other grouping ICU gives a
+  locale of the language, as an extra reading: "250 000" (en_ZA and others, with any
+  space), "1'234'567" (en_CH), and "12,34,567" (en_IN). "12 100" keeps its readings
+  "12" and "100" beside 12100. A grouping whose separator is the locale's decimal
+  separator is not read, so en_US does not reread "1.234" as en_DE's 1234.
+- `FlexibleNumericDurationDetector` (`measure:duration:numeric`) reads a duration as
+  CLDR's numeric duration patterns write it: "1:47.22", "2:03:04", "2:30", and Danish
+  "1.47,5". The value is the whole duration in the smallest field (107.22 seconds),
+  under ICU's mixed unit (`minute-and-second`), with the fields captured by their
+  pattern letters. Where two patterns read the same text, as "2:30" does, both
+  readings are kept.
+- A `locales` argument on each detector that reads other locales of its language
+  (`FlexibleDateDetector`, `FlexibleTextDateDetector`, `FlexibleTimeDetector`,
+  `FlexibleNumberDetector`, `FlexiblePercentDetector`, `FlexibleCurrencyDetector`,
+  `FlexibleMeasureDetector`, `FlexibleMixedMeasureDetector`,
+  `FlexibleNumericDurationDetector`) and on `date_detectors` and `all_detectors`. It
+  chooses those locales: `None`, the default, reads every locale of the language as
+  before; `()` reads the detector's own locale alone; `["en_GB"]` reads en_GB beside
+  it. A locale of another language raises `ValueError`.
+- `detector_key`, a detector's identity in a gang: its type, locale, and chosen
+  locales.
+
+### Changed
+
+- A `DetectorSet` identifies a member by `detector_key` instead of by type alone, so
+  detectors of one type for different locales share a gang; one with the same key
+  still replaces a member in place. `without` removes a type for every locale, or for
+  one with its new `locale` argument, and `names` repeats a type once per member.
+
 ## [0.5.0] - 2026-09-24
 
 ### Added

@@ -65,6 +65,7 @@ __all__ = [
     "all_detectors",
     "date_detectors",
     "detect",
+    "detector_key",
     "number_detectors",
 ]
 
@@ -1051,6 +1052,9 @@ class DetectorSet:
     result :func:`detect` would give). A gang is a value -- there is no mutable global
     registry; selection and grouping are expressed by composing gangs with
     :meth:`with_` / :meth:`without`.
+
+    A member is identified by its type, its locale, and the locales it reads (see
+    :func:`detector_key`), so an en_US and an en_GB detector of one type share a gang.
     """
 
     detectors: tuple[Detector, ...]
@@ -1059,19 +1063,47 @@ class DetectorSet:
         return detect(text, self.detectors)
 
     def names(self) -> tuple[str, ...]:
+        """The members' types, in order; a type repeats once per locale it is built for."""
         return tuple(d.type for d in self.detectors)
 
     def with_(self, *more: Detector) -> DetectorSet:
-        """Return a new gang with ``more`` detectors added (deduplicated by type)."""
-        seen = {d.type: d for d in self.detectors}
+        """Return a new gang with ``more`` detectors added.
+
+        A detector with the same key as a member (:func:`detector_key`) replaces it in
+        place.
+        """
+        seen = {detector_key(d): d for d in self.detectors}
         for d in more:
-            seen[d.type] = d
+            seen[detector_key(d)] = d
         return DetectorSet(tuple(seen.values()))
 
-    def without(self, *types: str) -> DetectorSet:
-        """Return a new gang with the named detector types removed."""
+    def without(self, *types: str, locale: str | None = None) -> DetectorSet:
+        """Return a new gang with the named detector types removed.
+
+        Every locale's member of a type is removed, or only ``locale``'s when given.
+        """
         drop = set(types)
-        return DetectorSet(tuple(d for d in self.detectors if d.type not in drop))
+        return DetectorSet(
+            tuple(
+                d
+                for d in self.detectors
+                if d.type not in drop
+                or (locale is not None and getattr(d, "locale", None) != locale)
+            )
+        )
+
+
+def detector_key(detector: Detector) -> tuple[str, str | None, tuple[str, ...] | None]:
+    """A detector's identity in a gang: its type, locale, and chosen locales.
+
+    ``locale`` and ``locales`` are read where a detector has them; a detector without a
+    locale is identified by its type alone.
+    """
+    return (
+        detector.type,
+        getattr(detector, "locale", None),
+        getattr(detector, "locales", None),
+    )
 
 
 # --------------------------------------------------------------------------- groups
@@ -1080,7 +1112,13 @@ class DetectorSet:
 # just a DetectorSet -- compose or trim it with .with_/.without like any other.
 
 
-def date_detectors(locale: str, skeletons: Iterable[str], *, flexible: bool = False) -> DetectorSet:
+def date_detectors(
+    locale: str,
+    skeletons: Iterable[str],
+    *,
+    flexible: bool = False,
+    locales: Iterable[str] | None = None,
+) -> DetectorSet:
     """A gang of date detectors for ``locale``, one per skeleton.
 
     ``skeletons`` are ICU date-time skeletons (``"yMd"``, ``"yMMMd"``); each becomes a
@@ -1088,13 +1126,14 @@ def date_detectors(locale: str, skeletons: Iterable[str], *, flexible: bool = Fa
     harmless. A skeleton whose pattern carries an uninvertible field raises (see
     :class:`DateDetector`). When ``flexible`` is true, the gang additionally contains
     only a :class:`~icukit.recognize.FlexibleTextDateDetector`; it does not add the
-    flexible numeric-date or other flexible date recognizers.
+    flexible numeric-date or other flexible date recognizers. ``locales`` chooses the
+    other locales of the language that reader reads (every one by default).
     """
     members: list[Detector] = [DateDetector(locale, skeleton) for skeleton in skeletons]
     if flexible:
         from .recognize import FlexibleTextDateDetector
 
-        members.append(FlexibleTextDateDetector(locale))
+        members.append(FlexibleTextDateDetector(locale, locales=locales))
     return DetectorSet(()).with_(*members)
 
 
@@ -1142,6 +1181,7 @@ def all_detectors(
     currencies: Iterable[str] = (),
     flexible: bool = False,
     abbreviations: bool = False,
+    locales: Iterable[str] | None = None,
 ) -> DetectorSet:
     """Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
 
@@ -1149,7 +1189,9 @@ def all_detectors(
     ``locale`` into one gang.
     """
     numbers = number_detectors(locale, currencies=currencies, flexible=flexible)
-    gang = date_detectors(locale, skeletons, flexible=flexible).with_(*numbers.detectors)
+    gang = date_detectors(locale, skeletons, flexible=flexible, locales=locales).with_(
+        *numbers.detectors
+    )
     if abbreviations:
         gang = gang.with_(*abbreviation_detectors(locale).detectors)
     return gang

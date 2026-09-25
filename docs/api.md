@@ -25,10 +25,12 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMixedMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleNumericDurationDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`LetterNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`PluralNumeralDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
+- [`detector_key`](#icukitdetectors) — function, `icukit.detectors`
 - [`ValueDetection`](#icukitdetectors) — class, `icukit.detectors`
 - [`DateTimeValue`](#icukitdetectors) — class, `icukit.detectors`
 - [`MeasureValue`](#icukitdetectors) — class, `icukit.detectors`
@@ -2286,6 +2288,9 @@ result :func:`detect` would give). A gang is a value -- there is no mutable glob
 registry; selection and grouping are expressed by composing gangs with
 :meth:`with_` / :meth:`without`.
 
+A member is identified by its type, its locale, and the locales it reads (see
+:func:`detector_key`), so an en_US and an en_GB detector of one type share a gang.
+
 #### `DetectorSet(detectors: 'tuple[Detector, ...]') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -2296,15 +2301,20 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `names() -> 'tuple[str, ...]'`
 
-
+The members' types, in order; a type repeats once per locale it is built for.
 
 #### `with_(*more: 'Detector') -> 'DetectorSet'`
 
-Return a new gang with ``more`` detectors added (deduplicated by type).
+Return a new gang with ``more`` detectors added.
 
-#### `without(*types: 'str') -> 'DetectorSet'`
+A detector with the same key as a member (:func:`detector_key`) replaces it in
+place.
+
+#### `without(*types: 'str', locale: 'str | None' = None) -> 'DetectorSet'`
 
 Return a new gang with the named detector types removed.
+
+Every locale's member of a type is removed, or only ``locale``'s when given.
 
 ### class `MeasureFormatSpec`
 
@@ -2399,14 +2409,14 @@ reformats.
 
 The lexicon-backed abbreviation detector, or an empty gang when unavailable.
 
-### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = (), flexible: 'bool' = False, abbreviations: 'bool' = False) -> 'DetectorSet'`
+### `all_detectors(locale: 'str', skeletons: 'Iterable[str]', *, currencies: 'Iterable[str]' = (), flexible: 'bool' = False, abbreviations: 'bool' = False, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
 
 Date detectors for ``skeletons`` plus the decimal, percent, and currency detectors.
 
 A convenience composition of :func:`date_detectors` and :func:`number_detectors` for
 ``locale`` into one gang.
 
-### `date_detectors(locale: 'str', skeletons: 'Iterable[str]', *, flexible: 'bool' = False) -> 'DetectorSet'`
+### `date_detectors(locale: 'str', skeletons: 'Iterable[str]', *, flexible: 'bool' = False, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
 
 A gang of date detectors for ``locale``, one per skeleton.
 
@@ -2415,7 +2425,8 @@ A gang of date detectors for ``locale``, one per skeleton.
 harmless. A skeleton whose pattern carries an uninvertible field raises (see
 :class:`DateDetector`). When ``flexible`` is true, the gang additionally contains
 only a :class:`~icukit.recognize.FlexibleTextDateDetector`; it does not add the
-flexible numeric-date or other flexible date recognizers.
+flexible numeric-date or other flexible date recognizers. ``locales`` chooses the
+other locales of the language that reader reads (every one by default).
 
 ### `detect(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]') -> 'list[ValueDetection]'`
 
@@ -2431,6 +2442,13 @@ merge of its members. The single-pass variant §12.5 describes -- one shared sca
 with per-member resume cursors and a freshly cleared calendar per (member, start)
 attempt -- is a deferred efficiency optimization, not yet built; its equivalence
 to this merge is the invariant that variant must preserve.
+
+### `detector_key(detector: 'Detector') -> 'tuple[str, str | None, tuple[str, ...] | None]'`
+
+A detector's identity in a gang: its type, locale, and chosen locales.
+
+``locale`` and ``locales`` are read where a detector has them; a detector without a
+locale is identified by its type alone.
 
 ### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = (), flexible: 'bool' = False) -> 'DetectorSet'`
 
@@ -4869,7 +4887,7 @@ Return greedy, non-overlapping flexible compact numbers in source order.
 
 Recognize a reflective currency symbol or name around a scaled flexible number.
 
-#### `FlexibleCurrencyDetector(locale: 'str', currency: 'str') -> 'None'`
+#### `FlexibleCurrencyDetector(locale: 'str', currency: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4904,7 +4922,7 @@ reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
 pattern it came from. A year written first must have four digits, since a leading
 two-digit year cannot be told from a day ("10-12-14").
 
-#### `FlexibleDateDetector(locale: 'str') -> 'None'`
+#### `FlexibleDateDetector(locale: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4950,13 +4968,15 @@ Return greedy, non-overlapping flexible fractions in source order.
 Recognize a flexible number followed by a reflectively derived ICU unit surface.
 
 The surfaces are the unit's short, narrow, and wide forms as ICU formats them
-("5 km", "5km", "5 kilometers"), for an amount in each of the locale's plural
-categories (see :func:`_plural_samples`), each also in the spellings ICU equates with
-it (see :func:`_unit_surface_variants`: "km2", 12"). A rate ("1.0/km²", "3 per
-square kilometer") is read through CLDR's per-unit pattern, with the value's unit
-``per-<unit>``; a symbol-only per form follows the number directly.
+("5 km", "5km", "5 kilometers"), in every locale of the language (en_GB's "5
+kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
+each of that locale's plural categories (see :func:`_plural_samples`), each also in
+the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
+pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
+number directly.
 
-#### `FlexibleMeasureDetector(locale: 'str', unit: 'str') -> 'None'`
+#### `FlexibleMeasureDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4976,7 +4996,7 @@ optional where the joiner is only a space, and the factor between the components
 from ICU (1.5 feet formats as 1 foot 6 inches). The value is the whole quantity in
 the smallest component, which is exact ("5'10"" is 70 inches).
 
-#### `FlexibleMixedMeasureDetector(locale: 'str', unit: 'str') -> 'None'`
+#### `FlexibleMixedMeasureDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4988,11 +5008,17 @@ Return greedy, non-overlapping mixed-unit measures in source order.
 
 Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
+Beside the locale's own grouping, a number reads in each other grouping ICU gives a
+locale of the language ("250 000" as en_ZA formats it, "1'234'567" as en_CH,
+"12,34,567" as en_IN), as an extra reading: "12 100" still reads "12" and "100",
+and also 12100. A grouping whose separator is the locale's decimal separator is not
+read, since it would reread every decimal number.
+
 ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
 cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
 unit abbreviations and common words.
 
-#### `FlexibleNumberDetector(locale: 'str', *, accept_single_letter_roman: 'bool' = True, accept_lowercase_roman: 'bool' = False) -> 'None'`
+#### `FlexibleNumberDetector(locale: 'str', *, accept_single_letter_roman: 'bool' = True, accept_lowercase_roman: 'bool' = False, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -5044,7 +5070,7 @@ Recognize flexible numbers adjacent to the locale's percent symbol.
 The percent may also be written as a wide name ICU gives the percent unit in any
 locale of the language ("5 percent", "5 per cent"), after the number.
 
-#### `FlexiblePercentDetector(locale: 'str') -> 'None'`
+#### `FlexiblePercentDetector(locale: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -5108,7 +5134,7 @@ first in English, so "Vancouver, BC 2010" is not 2010 BC). The era names are
 Gregorian, so the value is a Gregorian year: ``G`` (0 before the epoch, 1 after, as
 ICU numbers them) and ``y``, with ``era`` and ``y`` captures.
 
-#### `FlexibleTextDateDetector(locale: 'str') -> 'None'`
+#### `FlexibleTextDateDetector(locale: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -5153,7 +5179,7 @@ from :func:`_hour_unit_forms`. Composing a clock time with a unit symbol this wa
 is hand-rolled, as CLDR has no pattern for it; the symbol is captured as
 ``hour-unit``.
 
-#### `FlexibleTimeDetector(locale: 'str') -> 'None'`
+#### `FlexibleTimeDetector(locale: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
