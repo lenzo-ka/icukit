@@ -52,6 +52,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`all_detectors`](#icukitdetectors) — function, `icukit.detectors`
 - [`generated_detectors`](#icukitengine) — function, `icukit.engine`
 - [`generated_detectors_report`](#icukitengine) — function, `icukit.engine`
+- [`flexible_detectors`](#icukitengine) — function, `icukit.engine`
+- [`flexible_detectors_report`](#icukitengine) — function, `icukit.engine`
 - [`detection_to_dict`](#icukitserialize) — function, `icukit.serialize`
 - [`detections_to_json`](#icukitserialize) — function, `icukit.serialize`
 - [`ABBREVIATION_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -2948,6 +2950,10 @@ alignment) opts in with ``generated_detectors(locale, (*DEFAULT_FAMILIES,
 *GUARDED_FAMILIES))`` or adds one reader to a gang with ``DetectorSet.with_``, and one
 that does not leaves them out.
 
+:func:`flexible_detectors` assembles the flexible (recall) readers of
+:mod:`icukit.recognize` for a locale, each reader that takes a parameter built for the
+values it chooses from ICU; ``guarded=True`` adds the guarded readers.
+
 ### Constants and type aliases
 
 #### `ABBREVIATION_FAMILY` (constant)
@@ -3035,6 +3041,43 @@ A formatter specification that its family could not invert.
 #### `SkippedSpec(family: 'str', spec: 'Spec', reason: 'str') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
+
+### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'DetectorSet'`
+
+A gang of every flexible (recall) reader of :mod:`icukit.recognize` for ``locale``.
+
+It holds the numeric, percent, fraction, ordinal, plural-numeral, scientific,
+compact (each ICU width), spell-out (each RBNF spell-out rule set), currency and
+currency-name, measure, mixed-measure, numeric-duration, numeric-date, text-date,
+date-time, time, relative-date, and date-interval (each skeleton ICU gives an
+interval) readers, and the letter-name, single-letter-word, and alphanumeric-run
+readers. Where :func:`generated_detectors` builds a reader too, the two are the same
+member, so ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)``
+is the strict and flexible readers together.
+
+A reader that takes a parameter is built for each value chosen from ICU:
+
+* ``currencies`` -- each read locale's own currency (en_IN's INR) and each currency
+  ``locale`` writes with a symbol of its own rather than its ISO code (en_US's "¥");
+  pass ISO codes to choose others.
+* ``units`` -- the units CLDR's unit preferences give the world and the regions of
+  the read locales, with the composed units icukit's curated table chooses; and the
+  preferences' mixed units ("foot-and-inch") with each run of CLDR's default
+  duration order ("hour-and-minute-and-second"). Pass ICU unit identifiers, single
+  or mixed, to choose others; the full ICU inventory reads more ("900 MHz") at more
+  cost.
+
+``locales`` chooses the other locales of the language the language-wide readers
+read, and the locales the currencies and units are chosen from (every one by
+default). ``guarded`` adds the readers of the readings the default readers refuse on
+purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
+built is left out; :func:`flexible_detectors_report` names it and why.
+
+### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'GenerationReport'`
+
+The flexible readers for ``locale``, and every spec that could not be built.
+
+See :func:`flexible_detectors`.
 
 ### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'DetectorSet'`
 
