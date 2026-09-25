@@ -199,7 +199,7 @@ def test_bare_hour_reads_no_number_that_does_not_stand_alone(text):
     [
         ("en_US", "On May 5, 2020 we left at 3", [26]),
         ("en_US", "Jan 3 at 4", [9]),
-        ("en_US", "on 3/5/2024 at 4", [15]),
+        ("en_US", "5 March 2024 at 4", [16]),
         ("de_DE", "am 3. Mai 2020 um 3", [18]),
     ],
 )

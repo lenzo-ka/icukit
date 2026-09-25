@@ -5056,7 +5056,7 @@ class FlexibleBareHourDetector:
     percent and per-mille signs), a signed number ("-3"; its minus and plus signs), and
     a number in a word ("3D") are not read. A number inside one of the time reader's
     readings ("3 pm", "3 in the afternoon") is left to it, and one inside a text or
-    numeric date's reading ("May 5, 2020", "Jan 3", "3/5/2024") to the date, so this
+    numeric date's reading ("May 5, 2020", "Jan 3", "5 March 2024") to the date, so this
     reader deposits only the numbers those readers leave.
     """
 
