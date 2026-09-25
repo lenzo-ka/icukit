@@ -4,6 +4,9 @@
 
 ### Added
 
+- `FlexibleCurrencyDetector` reads a negative amount as ICU's standard and accounting
+  forms write one: "-$42.50" and "($42.50)" are -42.50, "-€42" is -42. The wrapping is
+  what ICU's negative form adds around the positive one, in each locale of the language.
 - `FlexibleTimeDetector` reads ICU's long zone names after a time ("2:07:09 PM Eastern
   Standard Time", "10:30 Central European Time") and its generic location names ("00:05
   New York Time"), beside the abbreviations; and ICU's flexible day periods (pattern

@@ -2228,6 +2228,31 @@ class FlexiblePercentDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
 
 
+@cache
+def _negative_currency_wraps(
+    locale: str, currency: str, names: tuple[str, ...] | None = None
+) -> tuple[tuple[str, str], ...]:
+    """What ICU writes around a currency amount to make it negative, in the language.
+
+    Each is ``(before, after)``: the negative form with the positive one taken out, at
+    ICU's standard and accounting sign displays: en_US "-$42.50" gives ``("-", "")`` and
+    "($42.50)" ``("(", ")")``. A sign ICU writes inside, after the symbol ("US$-42.50"),
+    is the number's own and needs none.
+    """
+    wraps: dict[tuple[str, str], None] = {}
+    signs = (icu.UNumberSignDisplay.AUTO, icu.UNumberSignDisplay.ACCOUNTING)
+    for name in _language_locales(locale, names):
+        base = icu.NumberFormatter.withLocale(icu.Locale(name)).unit(icu.CurrencyUnit(currency))
+        for sign in signs:
+            formatter = base.sign(sign)
+            positive = str(formatter.formatDouble(42.5))
+            negative = str(formatter.formatDouble(-42.5))
+            index = negative.find(positive)
+            if index >= 0 and negative != positive:
+                wraps.setdefault((negative[:index], negative[index + len(positive) :]))
+    return tuple(wraps)
+
+
 class FlexibleCurrencyDetector:
     """Recognize a reflective currency symbol or name around a scaled flexible number."""
 
@@ -2365,9 +2390,27 @@ class FlexibleCurrencyDetector:
             default=None,
         )
 
+    def _match_signed(self, text: str, start: int):
+        """An amount ICU's negative forms wrap ("-$42.50", "($42.50)"), else a plain one."""
+        for before, after in _negative_currency_wraps(self.locale, self.currency, self.locales):
+            if not before or not text.startswith(before, start):
+                continue
+            inner = self._match(text, start + len(before))
+            if inner is None:
+                continue
+            end, captures, value = inner
+            if not text.startswith(after, end) or value.decimal.startswith("-"):
+                continue
+            wrap = [Capture("sign", start, start + len(before), before, None, "symbol")]
+            if after:
+                wrap.append(Capture("sign", end, end + len(after), after, None, "symbol"))
+            ordered = tuple(sorted((*captures, *wrap), key=lambda c: (c.start, c.end)))
+            return end + len(after), ordered, NumberValue("-" + value.decimal, self.currency)
+        return self._match(text, start)
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible currency candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(text, self.locale, self.type, self._spec, self._match_signed)
 
 
 @cache
