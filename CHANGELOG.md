@@ -4,6 +4,9 @@
 
 ### Added
 
+- `FlexibleTimeDetector` reads ICU's ISO 8601 "Z" written against a time as its
+  zone: "12:00:00Z", "06:00Z", with a `time-zone` capture. The designator is what
+  ICU's `X` pattern writes for UTC.
 - `FlexibleTextDateDetector` reads the month and weekday names of every locale of the
   language, its own first, so en_US reads en_GB's "Sept" ("Sept 2004", "5 Sept 2010").
 - `FlexibleTextDateDetector` reads a weekday before a day-first date as the language's
