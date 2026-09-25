@@ -4,6 +4,14 @@
 
 ### Added
 
+- `icu_abbreviations` lists territories (kind `territory`): the region codes ICU knows
+  that are letters ("US", "EU", "UN") and CLDR's short territory names ("UK"), each
+  expanded by the territory's names in the locale ("United States"; "Czechia", "Czech
+  Republic").
+- The English abbreviation lexicon adds curated acronyms that ICU and CLDR have no
+  source for ("FBI", "NASA", "CEO", "PDF"), chosen by corpus frequency, each with its
+  written long form; an ambiguous one keeps all of them ("CD": compact disc, certificate
+  of deposit).
 - `FlexibleDateTimeDetector` reads a weekday before a time, as CLDR's weekday-and-time
   patterns write it ("Tue 2:07 PM", "Thu 10 at night", "Tuesday 14:07"), with the value
   `("E", weekday)` and then the time's fields; and `FlexibleTextDateDetector` reads an
