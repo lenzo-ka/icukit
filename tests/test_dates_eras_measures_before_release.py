@@ -70,7 +70,8 @@ def test_no_era_year_without_a_whole_year_and_era(text):
 
 
 def test_the_eras_are_cldrs():
-    assert dict(_language_eras("en")) == {"BC": 0, "AD": 1}
+    eras = {form: (index, width) for form, index, width in _language_eras("en")}
+    assert {"BC": (0, "short"), "AD": (1, "short")}.items() <= eras.items()
 
 
 def _measures(unit, text, locale="en_US"):
