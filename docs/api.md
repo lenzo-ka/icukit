@@ -5002,6 +5002,10 @@ reads "31.12.2012" through en_CH's dotted pattern. Each reading's spec names the
 pattern it came from. A year written first must have four digits, since a leading
 two-digit year cannot be told from a day ("10-12-14").
 
+A date with its era reads as CLDR's ``GyMd`` patterns write it ("3/5/2024 AD",
+"15/03/44 BC"), the era's names the language's (see ``_language_eras``); the value
+leads with ``("G", era)``.
+
 #### `FlexibleDateDetector(locale: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -5009,6 +5013,8 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return every structure's flexible numeric dates, distinct, in source order.
+
+A date with its era is its own reading, beside the date without it.
 
 ### class `FlexibleDateIntervalDetector`
 
