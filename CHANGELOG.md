@@ -4,6 +4,9 @@
 
 ### Added
 
+- `FlexibleTimeDetector` reads ICU's ISO 8601 "Z" written against a time as its
+  zone: "12:00:00Z", "06:00Z", with a `time-zone` capture. The designator is what
+  ICU's `X` pattern writes for UTC.
 - `FlexibleMeasureDetector` reads a unit as every locale of the language formats it,
   so en_US text reads en_GB's "12 kilometres", "2 litres", and "5 per square
   kilometre".

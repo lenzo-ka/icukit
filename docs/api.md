@@ -5171,7 +5171,8 @@ language (see :func:`_language_day_periods`), so en_US also reads en_CA's "a.m."
 Likewise the hour-minute separator may be any the language's CLDR patterns use
 ("7.30pm"; see :func:`_language_time_separators`), and a time may be followed by a
 time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
-:func:`_language_zone_abbreviations`), captured as ``time-zone``.
+:func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
+("12:00:00Z"), captured as ``time-zone``.
 
 A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
 CLDR writes attached may stand between hour and minutes ("10h30"); both forms come

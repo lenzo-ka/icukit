@@ -3381,6 +3381,14 @@ def _language_zone_abbreviations(
     return tuple(sorted(forms, key=lambda form: (-len(form), form)))
 
 
+@cache
+def _iso_utc_designator() -> str:
+    """What ICU's ISO 8601 zone pattern ``X`` writes for UTC: "Z"."""
+    formatter = icu.SimpleDateFormat("X", icu.Locale("en_US"))
+    formatter.setTimeZone(icu.TimeZone.getGMT())
+    return formatter.format(0.0)
+
+
 class FlexibleTimeDetector:
     """Recognize clock times using a locale's CLDR short-time structure.
 
@@ -3406,7 +3414,8 @@ class FlexibleTimeDetector:
     Likewise the hour-minute separator may be any the language's CLDR patterns use
     ("7.30pm"; see :func:`_language_time_separators`), and a time may be followed by a
     time-zone abbreviation ICU writes for the language ("10 PM ET", "18:00 UTC"; see
-    :func:`_language_zone_abbreviations`), captured as ``time-zone``.
+    :func:`_language_zone_abbreviations`), or by ICU's ISO 8601 "Z" written against it
+    ("12:00:00Z"), captured as ``time-zone``.
 
     A time may end in the locale's hour symbol ("10:30h", "10:30 Std."), and the symbol
     CLDR writes attached may stand between hour and minutes ("10h30"); both forms come
@@ -3708,7 +3717,15 @@ class FlexibleTimeDetector:
         return None
 
     def _time_zone(self, text: str, cursor: int) -> Capture | None:
-        """A time-zone abbreviation after a time, after one space ("10 PM ET")."""
+        """A time-zone abbreviation after a time, after one space ("10 PM ET").
+
+        Or ICU's ISO 8601 zero-offset designator written against the time, as its ``X``
+        pattern writes UTC ("12:00:00Z"; see :func:`_iso_utc_designator`).
+        """
+        designator = _iso_utc_designator()
+        end = cursor + len(designator)
+        if text[cursor:end] == designator and _ends_letter_token(text, end):
+            return Capture("time-zone", cursor, end, designator, designator)
         if not (cursor < len(text) and text[cursor] in _SPACES):
             return None
         begin, cursor = cursor, cursor + 1
