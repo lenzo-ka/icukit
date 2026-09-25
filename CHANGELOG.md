@@ -4,6 +4,8 @@
 
 ### Added
 
+- `FlexibleTextDateDetector` reads the month and weekday names of every locale of the
+  language, its own first, so en_US reads en_GB's "Sept" ("Sept 2004", "5 Sept 2010").
 - `FlexibleMeasureDetector` reads a unit as every locale of the language formats it,
   so en_US text reads en_GB's "12 kilometres", "2 litres", and "5 per square
   kilometre".
