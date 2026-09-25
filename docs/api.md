@@ -3332,12 +3332,14 @@ Kinds:
       dollars");
     * ``compact``: compact-number suffixes ("K") with the long ones ("thousand");
     * ``relative-unit``: relative-time unit abbreviations ("hr.", "mo") with the long
-      ones ("hours", "months").
+      ones ("hours", "months");
+    * ``territory``: region codes ("US", "EU", "UN") and CLDR's short territory names
+      ("UK") with the territory's names ("United States", "European Union").
 
 ``key`` names what the surface stands for in ICU's terms: a unit identifier, a month
 or weekday number (ICU's, Sunday 1), an era index, a zone's long name (one
-abbreviation serves many zone IDs), an ISO 4217 code, a power of ten, or a relative
-unit. ``expansions`` are ICU's long forms, singular and
+abbreviation serves many zone IDs), an ISO 4217 code, a power of ten, a relative
+unit, or a region code. ``expansions`` are ICU's long forms, singular and
 plural where they differ, in the order ICU gave them; empty where ICU writes no longer
 form (English "AM"). The locales read are the locale's language's, or the ones a
 caller chooses, as for the readers.
@@ -3351,7 +3353,7 @@ Example:
 
 #### `ABBREVIATION_KINDS` (constant)
 
-`('unit', 'per-unit', 'month', 'weekday', 'era', 'day-period', 'time-zone', 'currency', 'compact', 'relative-unit')`
+`('unit', 'per-unit', 'month', 'weekday', 'era', 'day-period', 'time-zone', 'currency', 'compact', 'relative-unit', 'territory')`
 
 ### class `IcuAbbreviation`
 

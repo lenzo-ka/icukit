@@ -24,6 +24,10 @@ def _find(kind, surface, locale="en_US", **options):
         ("currency", "USD", "USD", "US dollars"),
         ("compact", "K", "1e3", "thousand"),
         ("relative-unit", "hr.", "hour", "hours"),
+        ("territory", "US", "US", "United States"),
+        ("territory", "EU", "EU", "European Union"),
+        ("territory", "UN", "UN", "United Nations"),
+        ("territory", "UK", "GB", "United Kingdom"),
     ],
 )
 def test_each_kind_gives_the_surface_its_icu_expansion(kind, surface, key, expansion):
@@ -61,3 +65,13 @@ def test_rows_are_icu_abbreviations():
     assert all(
         isinstance(row, IcuAbbreviation) for row in icu_abbreviations("en_US", kinds=["era"])
     )
+
+
+def test_a_territory_carries_cldrs_variant_name_and_numeric_regions_are_not_listed():
+    assert _find("territory", "CZ")[0].expansions == ("Czechia", "Czech Republic")
+    surfaces = {row.surface for row in icu_abbreviations("en_US", kinds=["territory"])}
+    assert "419" not in surfaces and "001" not in surfaces
+
+
+def test_territory_names_come_from_the_locale():
+    assert "Vereinigte Staaten" in _find("territory", "US", locale="de_DE")[0].expansions
