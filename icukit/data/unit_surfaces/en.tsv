@@ -5,9 +5,13 @@
 # and every expansion ("cubic centimeters") are ICU's. Each was measured in the
 # en_with_types census (agents register, coverage/icu_forms_check.py).
 #
-# "compose" rows: units ICU composes from an SI prefix that are worth building. ICU
-# composes any prefix onto any unit, and some compositions are false readings (its
-# centicentury is written "cc", its decibyte "dB"), so which to build is a choice.
+# "compose" rows: units ICU composes (an SI prefix, a product, a quotient) that are
+# worth building. ICU composes any prefix onto any unit, and some compositions are false
+# readings (its centicentury is written "cc", its decibyte "dB"), so which to build is a
+# choice.
+#
+# "currency" rows: a currency surface the currency reader does not take from ICU,
+# mapped to an ISO 4217 code; the currency's names stay ICU's.
 #
 # kind	surface	unit	note
 surface	cc	cubic-centimeter	engine displacement; ICU writes "cm³"
@@ -24,3 +28,12 @@ compose		kilonewton	"3 kN"
 compose		gigapascal	"70 GPa"
 compose		nanogram	"5 ng"
 compose		millisievert	"20 mSv"
+compose		megajoule-per-kilogram	"40 MJ/kg"
+compose		cubic-meter-per-second	"5 m³/s"
+currency	Rs	INR	India's symbol before "₹" (2010), and what English text writes; ICU writes "₹"
+currency	Rs.	INR	as above, with the period English also writes
+currency	Rs	PKR	ICU's own symbol in en_PK; the reader takes no other locale's symbol that is also its narrow form
+currency	Rs	MUR	ICU's own symbol in en_MU, as above
+currency	Rs	SCR	ICU's own symbol in en_AU, as above
+currency	Rs	LKR	ICU's narrow symbol for the Sri Lankan rupee in English, as above
+currency	Rs	NPR	ICU's narrow symbol for the Nepalese rupee in English, as above

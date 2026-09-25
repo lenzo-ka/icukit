@@ -9,6 +9,12 @@
   Tuesday", "next Tue.", "last Fri."), with the weekday as the unit. Each reading is
   checked against its own style's formatter, and a named phrase's capture form is its
   style ("wide", "short", "narrow").
+- Curated currency surfaces in `data/unit_surfaces/en.tsv` (`curated_currency_surfaces`):
+  `FlexibleCurrencyDetector` reads "Rs" and "Rs." as the Indian rupee, what English text
+  means by them though ICU writes "₹", beside the five rupees ICU itself writes "Rs" for
+  (Pakistani, Mauritian, Seychellois, Sri Lankan, Nepalese), which the reader did not
+  take from other locales. `icu_abbreviations` lists "Rs" for INR as curated, with ICU's
+  names. The table also chooses two compound units ICU composes ("40 MJ/kg", "5 m³/s").
 - `FlexibleNumberDetector` reads the language's other decimal styles where the locale's
   own styles do not already read the text: en_US reads en_DE's "1.234,56" (1234.56),
   "1,5" (1.5), "1.234.567", and en_ZA's "1 234,56", while "1,234" stays 1234 alone.
