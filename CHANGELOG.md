@@ -4,6 +4,15 @@
 
 ### Added
 
+- `FlexibleDateIntervalDetector` reads the interval forms ICU's `DateIntervalFormat`
+  writes where CLDR lists no interval pattern, recovering each pattern from ICU's own
+  output and field positions: width-adjusted skeletons ("March 5 – 7, 2024" for `yMMMMd`,
+  "Tuesday, March 5 – Thursday, March 7, 2024" for `yMMMMEEEEd`) and a time skeleton's
+  date-and-time fallback ("3/5/2024, 14:07 – 3/7/2024, 14:07" for `Hm`). It also reads
+  12-hour intervals with their AM/PM marker ("2:07 – 4:07 PM" is 14:07 to 16:07,
+  "3/5/2024, 2:07 PM – 3/7/2024, 2:07 PM") and zoned ones ("14:07 – 16:07 ET", "2:07 –
+  4:07 PM PT"), capturing the zone as `time-zone` with its zone ID. Values keep 24-hour
+  `H`; every reading still has to reformat to its surface.
 - `FlexibleMixedMeasureDetector` reads a mixed unit of any number of components, with the
   joiner and factor of each adjacent pair from ICU: `hour-and-minute-and-second` reads "1
   hr, 15 min, 27 sec" and "1h 15m 27s" as 4527 seconds.

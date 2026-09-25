@@ -5012,6 +5012,12 @@ Return every structure's flexible numeric dates, distinct, in source order.
 
 Recognize date/time interval surfaces by inverting ICU DateIntervalFormat recipes.
 
+Each greatest-difference field's recipe is CLDR's interval pattern when
+``DateIntervalInfo`` has one, else the pattern recovered from ``DateIntervalFormat``'s
+own output (see :func:`_recovered_interval_parts`). A 12-hour side's AM/PM marker is
+parsed into the value, which keeps 24-hour ``H``; a time zone's text is parsed, gated
+against ICU's rendering of that zone, and captured as ``time-zone``.
+
 #### `FlexibleDateIntervalDetector(locale: 'str', skeleton: 'str') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
