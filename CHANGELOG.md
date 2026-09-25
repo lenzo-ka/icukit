@@ -4,6 +4,8 @@
 
 ### Added
 
+- `FlexibleTextDateDetector` reads the month and weekday names of every locale of the
+  language, its own first, so en_US reads en_GB's "Sept" ("Sept 2004", "5 Sept 2010").
 - `FlexibleTextDateDetector` reads a weekday before a day-first date as the language's
   other locales write it: "Thursday, 2 May 2013" (en_GB), "Saturday 3 January 1891"
   (en_AU, en_IE), "Sat, 3 Jan 1891". The weekday is checked against the date, so

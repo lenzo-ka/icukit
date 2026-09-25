@@ -1052,9 +1052,8 @@ class FlexibleTextDateDetector:
         icu_locale = icu.Locale(locale)
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._rbnf = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.ORDINAL, icu_locale)
-        symbols = icu.DateFormatSymbols(icu_locale)
-        self._months = self._symbol_names(symbols, "month")
-        self._weekdays = self._symbol_names(symbols, "weekday")
+        self._months = self._language_symbol_names(icu_locale, "month")
+        self._weekdays = self._language_symbol_names(icu_locale, "weekday")
         self._dotted_months = _lexicon_month_abbreviations(locale)
         self._dotted = frozenset(surface.casefold() for surface in self._dotted_months)
         # A lexicon month form CLDR does not name ("Sept." beside CLDR's "Sep") is read as
@@ -1140,6 +1139,26 @@ class FlexibleTextDateDetector:
         pattern = self._structures[0][2] if self._structures else ""
         self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
         # note: Bare years and decades remain cardinal candidates for downstream reinterpretation.
+
+    def _language_symbol_names(self, icu_locale: icu.Locale, field: str):
+        """The month or weekday names of the locale, then of its language's other locales.
+
+        So en_US reads en_GB's "Sept". ``DateFormatSymbols`` gives every locale its
+        Gregorian names (fa_IR's first month is January, whatever its calendar), so the
+        names merged are the same calendar's.
+        """
+        found = {
+            surface.casefold(): (surface, value, form)
+            for surface, value, form in self._symbol_names(icu.DateFormatSymbols(icu_locale), field)
+        }
+        own = icu_locale.getName()
+        for name in _language_locale_names(icu_locale.getLanguage(), self.locales):
+            if name == own:
+                continue
+            symbols = icu.DateFormatSymbols(icu.Locale(name))
+            for surface, value, form in self._symbol_names(symbols, field):
+                found.setdefault(surface.casefold(), (surface, value, form))
+        return tuple(sorted(found.values(), key=lambda item: len(item[0]), reverse=True))
 
     def _symbol_names(self, symbols: icu.DateFormatSymbols, field: str):
         found: dict[str, tuple[str, int, str]] = {}
