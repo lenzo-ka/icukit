@@ -54,6 +54,7 @@ __all__ = [
     "DetectorSet",
     "MeasureFormatSpec",
     "MeasureValue",
+    "UnitValue",
     "NumberFormatSpec",
     "NumberDetector",
     "NumberValue",
@@ -131,6 +132,17 @@ class MeasureValue:
     """A numeric value paired with its canonical ICU unit identifier."""
 
     decimal: str
+    unit: str
+
+
+@dataclass(frozen=True)
+class UnitValue:
+    """A unit written without an amount, such as a rate's per form ("/s").
+
+    ``unit`` is the canonical ICU identifier (``per-second``). There is no amount, so
+    none is recorded.
+    """
+
     unit: str
 
 
