@@ -4,6 +4,10 @@
 
 ### Added
 
+- `FlexibleTextDateDetector` reads a weekday before a day-first date as the language's
+  other locales write it: "Thursday, 2 May 2013" (en_GB), "Saturday 3 January 1891"
+  (en_AU, en_IE), "Sat, 3 Jan 1891". The weekday is checked against the date, so
+  "Monday, 2 May 2013" reads only its date.
 - `FlexibleMeasureDetector` reads a unit as every locale of the language formats it,
   so en_US text reads en_GB's "12 kilometres", "2 litres", and "5 per square
   kilometre".

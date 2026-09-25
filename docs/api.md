@@ -5123,10 +5123,11 @@ Return greedy, non-overlapping spelled-out cardinals in source order.
 Recognize textual-month dates licensed by CLDR date patterns and symbols.
 
 The structures are the locale's own medium, long, and full patterns (with their
-year-optional subsets), plus the day-month-year, month-year, and day-month patterns
-CLDR gives every locale of the same language, so en_US reads en_GB's "1 July" and
-"23 October 2014". An abbreviated month may carry a period where the locale's
-abbreviation lexicon lists the month that way ("Oct. 2006", "Jan. 1").
+year-optional subsets), plus the day-month-year, month-year, day-month, and
+weekday-day-month-year patterns CLDR gives every locale of the same language, so
+en_US reads en_GB's "1 July", "23 October 2014", and "Thursday, 2 May 2013". An
+abbreviated month may carry a period where the locale's abbreviation lexicon lists
+the month that way ("Oct. 2006", "Jan. 1").
 
 A year beside an era abbreviation CLDR gives the language ("500 BC") is read as a
 year with its era, in the order the language's CLDR ``yG`` pattern writes them (year
