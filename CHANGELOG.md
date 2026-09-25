@@ -13,6 +13,9 @@
 
 ### Added
 
+- `FlexibleNumberDetector` reads the language's other decimal styles where the locale's
+  own styles do not already read the text: en_US reads en_DE's "1.234,56" (1234.56),
+  "1,5" (1.5), "1.234.567", and en_ZA's "1 234,56", while "1,234" stays 1234 alone.
 - `FlexibleTextDateDetector` reads a three-digit year, as ICU's `y` writes one ("24 April
   350"); a one-digit year is still not read, since it cannot be told from a count after
   a date. It also reads the abbreviation lexicon's weekday forms, with their period and
