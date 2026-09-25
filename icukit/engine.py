@@ -5,6 +5,14 @@ attempts to construct one detector per specification. Unsupported specifications
 observable in the generation report, rather than making generation fail or silently
 narrowing the enumerated surface. The abbreviation family is inventory-driven because
 expansion is intentionally not an invertible formatter operation.
+
+:data:`DEFAULT_FAMILIES` is the default gang. :data:`GUARDED_FAMILIES` generates the
+readers of the readings the default readers refuse on purpose -- a lone "one" or
+"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour -- each
+under its own type, so a consumer that wants every path (a lattice for forced
+alignment) opts in with ``generated_detectors(locale, (*DEFAULT_FAMILIES,
+*GUARDED_FAMILIES))`` or adds one reader to a gang with ``DetectorSet.with_``, and one
+that does not leaves them out.
 """
 
 from __future__ import annotations
@@ -16,11 +24,16 @@ import icu
 
 from .detectors import DateDetector, Detector, DetectorSet
 from .recognize import (
+    FlexibleBareHourDetector,
     FlexibleCompactDetector,
     FlexibleDateIntervalDetector,
+    FlexibleLoneSpelloutDetector,
+    FlexibleLowercaseRomanDetector,
+    FlexibleMonthNameDetector,
     FlexibleRelativeDateDetector,
     FlexibleScientificDetector,
     FlexibleSpelloutDetector,
+    FlexibleWeekdayNameDetector,
     _spellout_formatter_and_ruleset,
 )
 from .recognize import (
@@ -29,15 +42,21 @@ from .recognize import (
 
 __all__ = [
     "ABBREVIATION_FAMILY",
+    "BARE_HOUR_FAMILY",
     "COMPACT_NUMBER_FAMILY",
     "DATE_INTERVAL_FAMILY",
     "DATE_TIME_SKELETON_FAMILY",
     "DEFAULT_FAMILIES",
     "Family",
+    "GUARDED_FAMILIES",
     "GenerationReport",
+    "LONE_SPELLOUT_NUMBER_FAMILY",
+    "LOWERCASE_ROMAN_FAMILY",
+    "MONTH_NAME_FAMILY",
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
+    "WEEKDAY_NAME_FAMILY",
     "SkippedSpec",
     "generated_detectors",
     "generated_detectors_report",
@@ -311,6 +330,84 @@ RELATIVE_DATE_FAMILY = Family(
     _relative_date_skip_reason,
 )
 
+
+def _lone_spellout_invert(spec: Spec, locale: str) -> Detector | None:
+    return _lone_spellout_probe(spec, locale).detector
+
+
+def _lone_spellout_probe(spec: Spec, locale: str) -> _Probe:
+    try:
+        detector = FlexibleLoneSpelloutDetector(locale, ruleset=str(spec))
+    except (icu.ICUError, ValueError) as error:
+        return _Probe(None, str(error))
+    if detector._ruleset != str(spec):
+        return _Probe(None, "ICU selected a different spellout rule set")
+    return _Probe(detector)
+
+
+def _lone_spellout_skip_reason(spec: Spec, locale: str) -> str:
+    return _lone_spellout_probe(spec, locale).reason or "spellout rule set was not invertible"
+
+
+LONE_SPELLOUT_NUMBER_FAMILY = Family(
+    "spellout-lone",
+    _spellout_rulesets,
+    _lone_spellout_invert,
+    _lone_spellout_skip_reason,
+)
+
+
+def _guarded_family(
+    name: str, build: Callable[[str], Detector], available: Callable[[Detector], bool], why: str
+) -> Family:
+    """A family of one reader per locale, skipped where ``available`` says ICU has none."""
+
+    def probe(locale: str) -> _Probe:
+        try:
+            detector = build(locale)
+        except (icu.ICUError, ValueError) as error:
+            return _Probe(None, str(error))
+        return _Probe(detector) if available(detector) else _Probe(None, why)
+
+    def invert(spec: Spec, locale: str) -> Detector | None:
+        del spec
+        return probe(locale).detector
+
+    def skip_reason(spec: Spec, locale: str) -> str:
+        del spec
+        return probe(locale).reason or why
+
+    return Family(name, lambda locale: (name,), invert, skip_reason)
+
+
+LOWERCASE_ROMAN_FAMILY = _guarded_family(
+    "roman-lower",
+    FlexibleLowercaseRomanDetector,
+    lambda detector: detector.has_rule_sets,
+    "ICU gives the locale no lowercase Roman rule set",
+)
+
+MONTH_NAME_FAMILY = _guarded_family(
+    "month-name",
+    FlexibleMonthNameDetector,
+    lambda detector: detector.has_names,
+    "ICU gives the locale's language no month names",
+)
+
+WEEKDAY_NAME_FAMILY = _guarded_family(
+    "weekday-name",
+    FlexibleWeekdayNameDetector,
+    lambda detector: detector.has_names,
+    "ICU gives the locale's language no weekday names",
+)
+
+BARE_HOUR_FAMILY = _guarded_family(
+    "bare-hour",
+    FlexibleBareHourDetector,
+    lambda detector: detector.letter is not None,
+    "ICU's best pattern for the j skeleton has no hour field",
+)
+
 # note: A measure family belongs here once its ICU surfaces have an introspective
 # inverter. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
@@ -323,6 +420,16 @@ DEFAULT_FAMILIES = (
     SPELLOUT_NUMBER_FAMILY,
 )
 
+# The readings the default readers refuse on purpose, each under its own type; not in
+# DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
+GUARDED_FAMILIES = (
+    LONE_SPELLOUT_NUMBER_FAMILY,
+    LOWERCASE_ROMAN_FAMILY,
+    MONTH_NAME_FAMILY,
+    WEEKDAY_NAME_FAMILY,
+    BARE_HOUR_FAMILY,
+)
+
 _FAMILY_PROBES = (
     (DATE_TIME_SKELETON_FAMILY, _date_time_probe),
     (DATE_INTERVAL_FAMILY, _date_interval_probe),
@@ -330,6 +437,7 @@ _FAMILY_PROBES = (
     (RELATIVE_DATE_FAMILY, _relative_date_probe),
     (SCIENTIFIC_NUMBER_FAMILY, _scientific_probe),
     (SPELLOUT_NUMBER_FAMILY, _spellout_probe),
+    (LONE_SPELLOUT_NUMBER_FAMILY, _lone_spellout_probe),
 )
 
 

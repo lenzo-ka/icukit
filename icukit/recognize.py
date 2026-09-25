@@ -1656,6 +1656,101 @@ class FlexibleTextDateDetector:
         return sorted((*dates, *extra, *eras), key=lambda item: (item["start"], item["end"]))
 
 
+class _FlexibleDateNameDetector:
+    """A month or weekday name alone, where the text-date reader reads no date.
+
+    The names, their widths, and the lexicon's dotted and extra forms ("Sept.",
+    "Tues.") are exactly the ones :class:`FlexibleTextDateDetector` reads inside a date,
+    for the same locales of the language, matched as it matches them (in any case, not
+    followed by a letter or digit). A name inside one of that reader's dates is left to
+    the date, so this reader deposits only the names it refuses to read alone.
+    """
+
+    group = "date"
+    type: str
+    _field: str
+    _capture: str
+    _skeletons: dict[str, str]
+
+    def __init__(self, locale: str, *, locales: Iterable[str] | None = None) -> None:
+        self.locale = locale
+        self.locales = _locale_selection(locale, locales)
+        self._dates = FlexibleTextDateDetector(locale, locales=locales)
+        if self._field == "M":
+            self._names, self._dotted = self._dates._months, self._dates._dotted
+        else:
+            self._names, self._dotted = self._dates._weekdays, self._dates._dotted_weekdays
+        generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
+        self._specs = {
+            form: DateFormatSpec(locale, skeleton, generator.getBestPattern(skeleton), "gregorian")
+            for form, skeleton in self._skeletons.items()
+        }
+
+    @property
+    def has_names(self) -> bool:
+        """Whether ICU gives the locale's language any such names."""
+        return bool(self._names)
+
+    def _match(self, text: str, start: int) -> _FlexibleMatch | None:
+        if start > 0 and text[start - 1].isalnum():
+            return None
+        named = FlexibleTextDateDetector._name(text, start, self._names)
+        if named is None:
+            return None
+        end, value, form = named
+        if text[start : end + 1].casefold() in self._dotted:
+            end += 1
+        capture = Capture(self._capture, start, end, text[start:end], value, form)
+        # DateFormatSymbols gives every locale its Gregorian names (see
+        # FlexibleTextDateDetector._language_symbol_names), so the value is Gregorian.
+        value_record = DateTimeValue(((self._field, value),), "gregorian")
+        return _FlexibleMatch(end, (capture,), value_record, self._specs[form])
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return the names read alone, in source order, outside the text-date readings."""
+        found = _detect_flexible(text, self.locale, self.type, None, self._match)
+        if not found:
+            return []
+        dates = self._dates.detect(text)
+        return [
+            name
+            for name in found
+            if not any(
+                date["start"] < name["end"] and name["start"] < date["end"] for date in dates
+            )
+        ]
+
+
+class FlexibleMonthNameDetector(_FlexibleDateNameDetector):
+    """Recognize a month name alone ("May", "Sept."), which the date readers refuse.
+
+    The type is ``date:month-name`` and the value ``DateTimeValue((("M", month),),
+    "gregorian")``, with the month numbered from 1 as ICU's ``M`` field does; the spec
+    is the locale's ``MMMM`` or ``MMM`` pattern, by the name's width. See
+    :class:`_FlexibleDateNameDetector` for which names are read.
+    """
+
+    type = "date:month-name"
+    _field = "M"
+    _capture = "month"
+    _skeletons = {"wide": "MMMM", "short": "MMM"}
+
+
+class FlexibleWeekdayNameDetector(_FlexibleDateNameDetector):
+    """Recognize a weekday name alone ("Tuesday", "Sun"), which the date readers refuse.
+
+    The type is ``date:weekday-name`` and the value ``DateTimeValue((("E", weekday),),
+    "gregorian")``, with the weekday numbered as ICU's calendar numbers it (Sunday 1);
+    the spec is the locale's ``EEEE`` or ``EEE`` pattern, by the name's width. See
+    :class:`_FlexibleDateNameDetector` for which names are read.
+    """
+
+    type = "date:weekday-name"
+    _field = "E"
+    _capture = "weekday"
+    _skeletons = {"wide": "EEEE", "short": "EEE"}
+
+
 @cache
 def _language_groupings(
     locale: str, names: tuple[str, ...] | None = None
@@ -1746,7 +1841,8 @@ class FlexibleNumberDetector:
 
     ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
     cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
-    unit abbreviations and common words.
+    unit abbreviations and common words; :class:`FlexibleLowercaseRomanDetector` reads
+    them as their own type, ``number:cardinal:roman-lower``.
     """
 
     group = "number"
@@ -2027,6 +2123,48 @@ class FlexibleNumberDetector:
                 captures.extend(suffix_captures)
             return end, tuple(captures), NumberValue(str(value), None)
         return None
+
+
+class FlexibleLowercaseRomanDetector:
+    """Recognize lowercase Roman cardinals ("iv", "xii") as their own type.
+
+    :class:`FlexibleNumberDetector` refuses these by default, since the surfaces collide
+    with unit abbreviations and words ("mix", "mi", "cm", "di"), and its
+    ``accept_lowercase_roman`` option deposits them under the same
+    ``number:cardinal:roman`` type as the uppercase ones. This reader deposits exactly the
+    readings that option adds, under ``number:cardinal:roman-lower`` (after ICU's
+    ``%roman-lower`` rule set), so a consumer includes or excludes them by type. The value
+    is a :class:`NumberValue` of the integer, as for uppercase Roman numerals; the rule
+    sets and their alphabets are ICU's (``URBNFRuleSetTag.NUMBERING_SYSTEM``).
+    """
+
+    group = "number"
+    type = "number:cardinal:roman-lower"
+
+    def __init__(self, locale: str, *, accept_single_letter_roman: bool = True) -> None:
+        self.locale = locale
+        self.accept_single_letter_roman = accept_single_letter_roman
+        self._number = FlexibleNumberDetector(
+            locale,
+            accept_single_letter_roman=accept_single_letter_roman,
+            accept_lowercase_roman=True,
+        )
+        # Only the rule sets the default reader leaves out, so every reading here is one
+        # it refuses; the uppercase ones stay number:cardinal:roman's.
+        self._number._roman_rule_sets = tuple(
+            name for name in self._number._roman_rule_sets if "lower" in name.casefold()
+        )
+
+    @property
+    def has_rule_sets(self) -> bool:
+        """Whether ICU gives the locale a lowercase Roman rule set."""
+        return bool(self._number._roman_rule_sets)
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return lowercase Roman cardinals in source order."""
+        return _detect_flexible(
+            text, self.locale, self.type, self._number._spec, self._number._match_roman
+        )
 
 
 _RELATIVE_NUMERIC_UNITS = (
@@ -3593,7 +3731,7 @@ class FlexibleSpelloutDetector:
             return None
         return parsed[1]
 
-    def _match(self, text: str, start: int, token_end=None):
+    def _match(self, text: str, start: int, token_end=None, guard: bool = True):
         if not self._left_boundary(text, start):
             return None
         token_end = token_end or (lambda cursor: self._token_end(text, cursor))
@@ -3633,7 +3771,7 @@ class FlexibleSpelloutDetector:
             if self._continues_word(text, end):
                 continue
             surface = text[start:end]
-            if token_index == 1 and surface.casefold() in self._ambiguous_units:
+            if guard and token_index == 1 and surface.casefold() in self._ambiguous_units:
                 continue
             if end == absolute_end:
                 value = parsed_value
@@ -3650,6 +3788,10 @@ class FlexibleSpelloutDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping spelled-out cardinals in source order."""
+        return self._scan(text, guard=True)
+
+    def _scan(self, text: str, *, guard: bool) -> list[ValueDetection]:
+        """The greedy scan, with or without the guard on a lone ambiguous unit word."""
         token_ends: dict[int, int | None] = {}
 
         def token_end(cursor: int) -> int | None:
@@ -3658,9 +3800,43 @@ class FlexibleSpelloutDetector:
             return token_ends[cursor]
 
         def match(source: str, start: int):
-            return self._match(source, start, token_end)
+            return self._match(source, start, token_end, guard)
 
         return _detect_flexible(text, self.locale, self.type, self._spec, match)
+
+
+class FlexibleLoneSpelloutDetector(FlexibleSpelloutDetector):
+    """Recognize the lone spelled-out unit words the spell-out reader refuses.
+
+    :class:`FlexibleSpelloutDetector` does not read a lone token that is one of the
+    locale's words for 0 through 9 in its rule set ("one", "first"), since most are not
+    numbers in running text. This reader deposits exactly those refused readings: the
+    readings the spell-out reader makes with its guard lifted, less those it makes with
+    it, which are the lone unit words (the multi-token readings do not change, since the
+    guard only ever withholds a one-token reading). The type is
+    ``number:spellout-lone`` for the cardinal rule set and
+    ``number:spellout-lone:<rule set>`` otherwise ("number:spellout-lone:ordinal" reads
+    "first" as 1), and the value is the spell-out reader's :class:`NumberValue`.
+    """
+
+    type = "number:spellout-lone"
+
+    def __init__(self, locale: str, *, ruleset: str | None = None) -> None:
+        super().__init__(locale, ruleset=ruleset)
+        # The parent names a non-default rule set's type on the instance.
+        chosen = self.__dict__.get("type", FlexibleSpelloutDetector.type)
+        self.type = FlexibleLoneSpelloutDetector.type + chosen.removeprefix(
+            FlexibleSpelloutDetector.type
+        )
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return the lone unit words the spell-out reader refuses, in source order."""
+        return [
+            detection
+            for detection in self._scan(text, guard=False)
+            if detection["text"].casefold() in self._ambiguous_units
+            and not any(character in self._connectors for character in detection["text"])
+        ]
 
 
 class FlexibleCurrencyNameDetector:
@@ -4423,6 +4599,131 @@ class FlexibleTimeDetector:
         spans = {(d["start"], d["end"]) for d in plain}
         merged = plain + [d for d in with_units if (d["start"], d["end"]) not in spans]
         return sorted(merged, key=lambda d: (d["start"], d["end"]))
+
+
+# ICU's hour-field letters and the clock hours each writes (UTS #35, the date field
+# symbol table): h 1-12, H 0-23, K 0-11, k 1-24. The ranges are the standard's, which
+# PyICU exposes no accessor for, so they are listed here.
+_HOUR_CYCLE_RANGES = {"h": (1, 12), "H": (0, 23), "K": (0, 11), "k": (1, 24)}
+
+
+def _hour_cycle_letter(pattern: str) -> str | None:
+    """The first unquoted hour-field letter of a date pattern, or ``None``."""
+    quoted = False
+    for character in pattern:
+        if character == "'":
+            quoted = not quoted
+        elif not quoted and character in _HOUR_CYCLE_RANGES:
+            return character
+    return None
+
+
+class FlexibleBareHourDetector:
+    """Recognize a lone number as a clock hour ("at 3"), which the time reader refuses.
+
+    :class:`FlexibleTimeDetector` reads an hour without minutes only with a day period
+    after it ("3pm"), never a number alone. This reader deposits the lone number as an
+    hour of the locale's own hour cycle: the hour field of ICU's best pattern for the
+    ``j`` skeleton (the locale's preferred cycle; en_US "h a", en_GB "HH") says which
+    field and so which range. The type is ``time:bare-hour`` and the value
+    ``DateTimeValue(((letter, hour),), "gregorian")`` with that field's letter: ``("h",
+    3)`` in a 12-hour locale, where the number does not say morning or afternoon, and
+    ``("H", 15)`` in a 24-hour one. Only an hour the field can write is read (1-12 for
+    ``h``, 0-23 for ``H``), in one or two of the locale's digits.
+
+    The number must stand alone, a hand-rolled rule because CLDR has no pattern for a
+    number in running text: before it, the start of the text, a space, or opening
+    punctuation ("at 3", "(3)"); after it, the end, a space, or closing punctuation not
+    followed by a letter or digit ("at 3.", "at 3, then"). So a decimal ("3.5"), a
+    ratio or time ("3:30", "3/4"), a range ("3-4"), a percentage ("3%"; the locale's
+    percent and per-mille signs), a signed number ("-3"; its minus and plus signs), and
+    a number in a word ("3D") are not read. A number inside one of the time reader's
+    readings ("3 pm", "3 in the afternoon") is left to it, so this reader deposits only
+    the numbers that reader refuses.
+    """
+
+    group = "time"
+    type = "time:bare-hour"
+
+    _OPENING = frozenset(
+        {icu.UCharCategory.START_PUNCTUATION, icu.UCharCategory.INITIAL_PUNCTUATION}
+    )
+    _CLOSING = frozenset(
+        {
+            icu.UCharCategory.END_PUNCTUATION,
+            icu.UCharCategory.FINAL_PUNCTUATION,
+            icu.UCharCategory.OTHER_PUNCTUATION,
+        }
+    )
+
+    def __init__(self, locale: str, *, locales: Iterable[str] | None = None) -> None:
+        self.locale = locale
+        self.locales = _locale_selection(locale, locales)
+        icu_locale = icu.Locale(locale)
+        generator = icu.DateTimePatternGenerator.createInstance(icu_locale)
+        self.pattern = generator.getBestPattern("j")
+        self.letter = _hour_cycle_letter(self.pattern)
+        self._range = _HOUR_CYCLE_RANGES.get(self.letter or "", (1, 0))
+        self._digits = _locale_digit_map(icu_locale)
+        symbols = icu.DecimalFormatSymbols(icu_locale)
+        symbol = icu.DecimalFormatSymbols
+        self._signs = frozenset(
+            symbols.getSymbol(kind)
+            for kind in (
+                symbol.kMinusSignSymbol,
+                symbol.kPlusSignSymbol,
+                symbol.kPercentSymbol,
+                symbol.kPerMillSymbol,
+            )
+        )
+        self._time = FlexibleTimeDetector(locale, locales=locales)
+        self._spec = DateFormatSpec(locale, "j", self.pattern, "gregorian")
+
+    def _opens(self, character: str) -> bool:
+        return character.isspace() or (
+            character not in self._signs and icu.Char.charType(character) in self._OPENING
+        )
+
+    def _closes(self, text: str, end: int) -> bool:
+        character = text[end]
+        if character.isspace():
+            return True
+        if character in self._signs or icu.Char.charType(character) not in self._CLOSING:
+            return False
+        after = text[end + 1 : end + 2]
+        return not after or not (_is_word_character(after) or after in self._digits)
+
+    def _match(self, text: str, start: int):
+        if self.letter is None or text[start] not in self._digits:
+            return None
+        if start > 0 and not self._opens(text[start - 1]):
+            return None
+        end = start
+        hour = 0
+        while end < len(text) and text[end] in self._digits:
+            hour = hour * 10 + self._digits[text[end]]
+            end += 1
+        low, high = self._range
+        if end - start > 2 or not low <= hour <= high:
+            return None
+        if end < len(text) and not self._closes(text, end):
+            return None
+        capture = Capture(self.letter, start, end, text[start:end], hour, "numeric")
+        return end, (capture,), DateTimeValue(((self.letter, hour),), "gregorian")
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return lone clock hours in source order, outside the time reader's readings."""
+        found = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        if not found:
+            return []
+        times = self._time.detect(text)
+        return [
+            hour
+            for hour in found
+            if not any(
+                time["start"] < hour["end"] and hour["start"] < time["end"] for time in times
+            )
+        ]
 
 
 @cache
