@@ -4,6 +4,10 @@
 
 ### Added
 
+- `FlexibleTextDateDetector` reads a weekday before a day-first date as the language's
+  other locales write it: "Thursday, 2 May 2013" (en_GB), "Saturday 3 January 1891"
+  (en_AU, en_IE), "Sat, 3 Jan 1891". The weekday is checked against the date, so
+  "Monday, 2 May 2013" reads only its date.
 - `FlexibleTextDateDetector` reads CLDR's variant and wide era names beside the
   abbreviated ones: "300 BCE", "200 CE", "300 Before Christ", "44 Before Common Era".
   The era capture's form is "short" or "wide" and the spec's pattern `y G` or `y GGGG`
