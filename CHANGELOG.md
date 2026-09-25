@@ -4,6 +4,11 @@
 
 ### Added
 
+- `FlexibleRelativeDateDetector` reads ICU's short and narrow relative styles beside the
+  long one ("1 hr. ago", "in 2h", "last mo."), and relative weekdays at each style ("next
+  Tuesday", "next Tue.", "last Fri."), with the weekday as the unit. Each reading is
+  checked against its own style's formatter, and a named phrase's capture form is its
+  style ("wide", "short", "narrow").
 - `FlexibleNumberDetector` reads the language's other decimal styles where the locale's
   own styles do not already read the text: en_US reads en_DE's "1.234,56" (1234.56),
   "1,5" (1.5), "1.234.567", and en_ZA's "1 234,56", while "1,234" stays 1234 alone.

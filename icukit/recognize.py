@@ -1858,6 +1858,30 @@ _RELATIVE_NUMERIC_UNITS = (
     "YEAR",
 )
 _RELATIVE_NAMED_UNITS = ("DAY", "WEEK", "MONTH", "QUARTER", "YEAR")
+# ICU names a weekday relative to now too ("next Tuesday", "last Fri."): LAST, THIS,
+# and NEXT only, since ICU writes no "the Tuesday after next".
+_RELATIVE_WEEKDAYS = (
+    "SUNDAY",
+    "MONDAY",
+    "TUESDAY",
+    "WEDNESDAY",
+    "THURSDAY",
+    "FRIDAY",
+    "SATURDAY",
+)
+_RELATIVE_STYLES = (("LONG", "wide"), ("SHORT", "short"), ("NARROW", "narrow"))
+
+
+def _relative_formatter(icu_locale, style: str):
+    """ICU's relative-date formatter for the locale at a style (LONG, SHORT, NARROW)."""
+    return icu.RelativeDateTimeFormatter(
+        icu_locale,
+        icu.NumberFormat.createInstance(icu_locale),
+        getattr(icu.UDateRelativeDateTimeFormatterStyle, style),
+        icu.UDisplayContext.CAPITALIZATION_NONE,
+    )
+
+
 _RELATIVE_DIRECTIONS = (
     ("LAST", -1),
     ("LAST_2", -2),
@@ -1869,8 +1893,12 @@ _RELATIVE_DIRECTIONS = (
 
 @lru_cache(maxsize=128)
 def _relative_date_vocabulary(locale: str):
+    """The numeric templates and named phrases ICU writes at its long, short and narrow styles.
+
+    Each entry ends with its style, whose formatter checks a reading ("in 2 hr.", "last
+    mo.", "next Tue."); the first style that writes a surface keeps it.
+    """
     icu_locale = icu.Locale(locale)
-    formatter = icu.RelativeDateTimeFormatter(icu_locale)
     number_format = icu.NumberFormat.createInstance(icu_locale)
     plural_rules = icu.PluralRules.forLocale(icu_locale)
 
@@ -1884,58 +1912,66 @@ def _relative_date_vocabulary(locale: str):
         if representative is not None:
             required_samples.add(representative)
 
-    numeric: dict[tuple[str, str], tuple[int, str, object]] = {}
-    for unit_member in _RELATIVE_NUMERIC_UNITS:
-        unit_enum = getattr(icu.URelativeDateTimeUnit, unit_member, None)
-        if unit_enum is None:
-            continue
-        unit_name = unit_member.lower()
-        for sign in (-1, 1):
-            for magnitude in sorted(required_samples):
-                if sign < 0 and magnitude == 0:
-                    # ICU assigns numeric zero to the future form regardless of signed zero.
-                    continue
-                surface = formatter.formatNumeric(sign * magnitude, unit_enum)
-                number_surface = number_format.format(magnitude)
-                number_start = surface.find(number_surface)
-                if number_start < 0:
-                    # note: A locale/magnitude whose numeral is not embedded is silently skipped.
-                    continue
-                number_end = number_start + len(number_surface)
-                template = (surface[:number_start], surface[number_end:])
-                if not template[0] and not template[1]:
-                    # A template with no marker words would reduce this lane to a bare-number
-                    # matcher; no ICU relative surface is a naked numeral, so skip it.
-                    continue
-                numeric.setdefault(template, (sign, unit_name, unit_enum))
-
-    named: dict[str, tuple[str, int, str, object, object]] = {}
-    for unit_member in _RELATIVE_NAMED_UNITS:
-        unit_enum = getattr(icu.UDateAbsoluteUnit, unit_member, None)
-        if unit_enum is None:
-            continue
-        for direction_member, offset in _RELATIVE_DIRECTIONS:
-            direction_enum = getattr(icu.UDateDirection, direction_member)
-            try:
-                surface = formatter.format(direction_enum, unit_enum)
-            except icu.ICUError:
+    numeric: dict[tuple[str, str], tuple[int, str, object, str]] = {}
+    named: dict[str, tuple[str, int, str, object, object, str]] = {}
+    for style, _form in _RELATIVE_STYLES:
+        formatter = _relative_formatter(icu_locale, style)
+        for unit_member in _RELATIVE_NUMERIC_UNITS:
+            unit_enum = getattr(icu.URelativeDateTimeUnit, unit_member, None)
+            if unit_enum is None:
                 continue
-            if surface:
-                named.setdefault(
-                    surface.casefold(),
-                    (surface, offset, unit_member.lower(), unit_enum, direction_enum),
-                )
+            unit_name = unit_member.lower()
+            for sign in (-1, 1):
+                for magnitude in sorted(required_samples):
+                    if sign < 0 and magnitude == 0:
+                        # ICU assigns numeric zero to the future form regardless of sign.
+                        continue
+                    surface = formatter.formatNumeric(sign * magnitude, unit_enum)
+                    number_surface = number_format.format(magnitude)
+                    number_start = surface.find(number_surface)
+                    if number_start < 0:
+                        # note: A locale/magnitude whose numeral is not embedded is skipped.
+                        continue
+                    number_end = number_start + len(number_surface)
+                    template = (surface[:number_start], surface[number_end:])
+                    if not template[0] and not template[1]:
+                        # A template with no marker words would reduce this lane to a
+                        # bare-number matcher; no ICU relative surface is a naked numeral.
+                        continue
+                    numeric.setdefault(template, (sign, unit_name, unit_enum, style))
 
-    now_unit = icu.UDateAbsoluteUnit.NOW
-    plain = icu.UDateDirection.PLAIN
-    try:
-        now_surface = formatter.format(plain, now_unit)
-    except icu.ICUError:
-        now_surface = ""
-    if now_surface:
-        named.setdefault(now_surface.casefold(), (now_surface, 0, "now", now_unit, plain))
+        named_units = [
+            (member, offsets)
+            for member in _RELATIVE_NAMED_UNITS
+            for offsets in [_RELATIVE_DIRECTIONS]
+        ] + [(member, (("LAST", -1), ("THIS", 0), ("NEXT", 1))) for member in _RELATIVE_WEEKDAYS]
+        for unit_member, directions in named_units:
+            unit_enum = getattr(icu.UDateAbsoluteUnit, unit_member, None)
+            if unit_enum is None:
+                continue
+            for direction_member, offset in directions:
+                direction_enum = getattr(icu.UDateDirection, direction_member)
+                try:
+                    surface = formatter.format(direction_enum, unit_enum)
+                except icu.ICUError:
+                    continue
+                if surface:
+                    named.setdefault(
+                        surface.casefold(),
+                        (surface, offset, unit_member.lower(), unit_enum, direction_enum, style),
+                    )
 
-    # note: Weekday-relative offsets are out of scope for this lane.
+        now_unit = icu.UDateAbsoluteUnit.NOW
+        plain = icu.UDateDirection.PLAIN
+        try:
+            now_surface = formatter.format(plain, now_unit)
+        except icu.ICUError:
+            now_surface = ""
+        if now_surface:
+            named.setdefault(
+                now_surface.casefold(), (now_surface, 0, "now", now_unit, plain, style)
+            )
+
     return tuple(
         (prefix, suffix, *details)
         for (prefix, suffix), details in sorted(
@@ -1953,6 +1989,10 @@ class FlexibleRelativeDateDetector:
     def __init__(self, locale: str) -> None:
         self.locale = locale
         self._formatter = icu.RelativeDateTimeFormatter(icu.Locale(locale))
+        self._formatters = {
+            style: _relative_formatter(icu.Locale(locale), style) for style, _ in _RELATIVE_STYLES
+        }
+        self._forms = dict(_RELATIVE_STYLES)
         self._number = FlexibleNumberDetector(locale)
         self._numeric_templates, self._named_phrases = _relative_date_vocabulary(locale)
         self._spec = RelativeDateSpec(locale)
@@ -1989,23 +2029,24 @@ class FlexibleRelativeDateDetector:
         return "present"
 
     def _named_match(self, text: str, start: int):
-        for surface, offset, unit_name, unit_enum, direction_enum in self._named_phrases:
+        for surface, offset, unit_name, unit_enum, direction_enum, style in self._named_phrases:
             end = start + len(surface)
             if text[start:end].casefold() != surface.casefold():
                 continue
             if self._continues_word(text, end):
                 continue
-            canonical = self._formatter.format(direction_enum, unit_enum)
+            canonical = self._formatters[style].format(direction_enum, unit_enum)
             # note: The reformat guard is the correctness gate for every deposited value.
             if canonical.casefold() != text[start:end].casefold():
                 continue
-            capture = Capture("relative", start, end, text[start:end], offset, "wide")
+            form = self._forms[style]
+            capture = Capture("relative", start, end, text[start:end], offset, form)
             value = RelativeDateValue(offset, unit_name, self._direction(offset))
             return end, (capture,), value
         return None
 
     def _numeric_match(self, text: str, start: int):
-        for prefix, suffix, sign, unit_name, unit_enum in self._numeric_templates:
+        for prefix, suffix, sign, unit_name, unit_enum, style in self._numeric_templates:
             number_start = start + len(prefix)
             if text[start:number_start].casefold() != prefix.casefold():
                 continue
@@ -2021,7 +2062,7 @@ class FlexibleRelativeDateDetector:
             if self._continues_word(text, end):
                 continue
             offset = sign * int(number_value.decimal)
-            canonical = self._formatter.formatNumeric(offset, unit_enum)
+            canonical = self._formatters[style].formatNumeric(offset, unit_enum)
             if canonical.casefold() != text[start:end].casefold():
                 continue
             markers: list[Capture] = []
