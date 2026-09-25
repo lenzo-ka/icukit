@@ -2715,13 +2715,14 @@ class FlexibleMeasureDetector:
 class FlexibleMixedMeasureDetector:
     """Recognize a mixed-unit measure, such as feet and inches: "5'10\"", "5 ft, 10 in".
 
-    ``unit`` is an ICU mixed-unit identifier (``foot-and-inch``, ``pound-and-ounce``).
-    Everything is read from ICU: each component's surfaces as
-    :class:`FlexibleMeasureDetector` reads a single unit, the joiner between components
-    from ICU's own formatting of the mixed unit at each width ("5′ 10″", "5 ft, 10 in"),
-    optional where the joiner is only a space, and the factor between the components
-    from ICU (1.5 feet formats as 1 foot 6 inches). The value is the whole quantity in
-    the smallest component, which is exact ("5'10\"" is 70 inches).
+    ``unit`` is an ICU mixed-unit identifier of two or more components (``foot-and-inch``,
+    ``pound-and-ounce``, ``hour-and-minute-and-second``). Everything is read from ICU:
+    each component's surfaces as :class:`FlexibleMeasureDetector` reads a single unit,
+    and, for each adjacent pair (itself an ICU mixed unit), the joiner from ICU's own
+    formatting of the pair at each width ("5′ 10″", "5 ft, 10 in"), optional where the
+    joiner is only a space, and the factor between the two (1.5 feet formats as 1 foot
+    6 inches). The value is the whole quantity in the smallest component, which is exact
+    ("5'10\"" is 70 inches; "1 hr, 15 min, 27 sec" is 4527 seconds).
     """
 
     group = "measure"
@@ -2732,54 +2733,67 @@ class FlexibleMixedMeasureDetector:
         self.unit = unit
         self.type = f"measure:{unit}"
         parts = unit.split("-and-")
-        if len(parts) != 2:
-            raise ValueError(f"expected a two-component mixed unit identifier: {unit!r}")
+        if len(parts) < 2:
+            raise ValueError(f"expected a mixed unit identifier of two or more parts: {unit!r}")
         self._number = FlexibleNumberDetector(locale)
-        self._large = FlexibleMeasureDetector(locale, parts[0], locales=self.locales)
-        self._small = FlexibleMeasureDetector(locale, parts[1], locales=self.locales)
-        icu_locale = icu.Locale(locale)
-        mixed = icu.MeasureUnit.forIdentifier(unit)
-        joiners: set[str] = set()
-        factor = None
-        for width in (
-            icu.UNumberUnitWidth.NARROW,
-            icu.UNumberUnitWidth.SHORT,
-            icu.UNumberUnitWidth.FULL_NAME,
-        ):
-            formatter = icu.NumberFormatter.withLocale(icu_locale).unit(mixed).unitWidth(width)
-            rendered = str(formatter.formatDouble(1.5))
-            numbers = [(index, index + len(match)) for index, match in _digit_spans(rendered)]
-            if len(numbers) != 2:
-                continue
-            factor = int(rendered[numbers[1][0] : numbers[1][1]]) * 2
-            between = rendered[numbers[0][1] : numbers[1][0]]
-            for surface, *_rest in self._large._units:
-                if between.startswith(surface) or between.lstrip().startswith(surface):
-                    joiners.add(between.lstrip()[len(surface) :])
-                    break
-        if factor is None or not joiners:
-            raise ValueError(f"ICU formats no two-number surface for mixed unit: {unit!r}")
-        self._factor = factor
-        self._joiners = tuple(
-            sorted({*joiners, *(j.strip() for j in joiners)}, key=len, reverse=True)
+        self._components = tuple(
+            FlexibleMeasureDetector(locale, part, locales=self.locales) for part in parts
         )
+        icu_locale = icu.Locale(locale)
+        self._factors: list[int] = []
+        self._joiners: list[tuple[str, ...]] = []
+        for index in range(len(parts) - 1):
+            pair = icu.MeasureUnit.forIdentifier(f"{parts[index]}-and-{parts[index + 1]}")
+            joiners: set[str] = set()
+            factor = None
+            for width in (
+                icu.UNumberUnitWidth.NARROW,
+                icu.UNumberUnitWidth.SHORT,
+                icu.UNumberUnitWidth.FULL_NAME,
+            ):
+                formatter = icu.NumberFormatter.withLocale(icu_locale).unit(pair).unitWidth(width)
+                rendered = str(formatter.formatDouble(1.5))
+                numbers = [(i, i + len(match)) for i, match in _digit_spans(rendered)]
+                if len(numbers) != 2:
+                    continue
+                factor = int(rendered[numbers[1][0] : numbers[1][1]]) * 2
+                between = rendered[numbers[0][1] : numbers[1][0]]
+                for surface, *_rest in self._components[index]._units:
+                    if between.startswith(surface) or between.lstrip().startswith(surface):
+                        joiners.add(between.lstrip()[len(surface) :])
+                        break
+            if factor is None or not joiners:
+                raise ValueError(f"ICU formats no two-number surface for mixed unit: {unit!r}")
+            self._factors.append(factor)
+            self._joiners.append(
+                tuple(sorted({*joiners, *(j.strip() for j in joiners)}, key=len, reverse=True))
+            )
         self._spec = MeasureFormatSpec(locale, unit, "mixed")
-        self._small_unit = parts[1]
+        self._small_unit = parts[-1]
 
     def _match(self, text: str, start: int) -> _FlexibleMatch | None:
-        large = self._large._match(text, start, digit_may_follow=True)
-        if large is None or large.value.unit != self._large.unit:
+        first = self._components[0]._match(text, start, digit_may_follow=True)
+        if first is None or first.value.unit != self._components[0].unit:
             return None
-        for joiner in self._joiners:
-            if not text.startswith(joiner, large.end):
-                continue
-            small_start = large.end + len(joiner)
-            small = self._small._match(text, small_start)
-            if small is None or small.value.unit != self._small.unit:
-                continue
-            total = Decimal(large.value.decimal) * self._factor + Decimal(small.value.decimal)
+        return self._continue(text, first, 1, Decimal(first.value.decimal), first.captures)
+
+    def _continue(self, text, previous, index, total, captures) -> _FlexibleMatch | None:
+        """The components from ``index`` on, each after a joiner ICU writes."""
+        if index == len(self._components):
             value = MeasureValue(format(total, "f"), self._small_unit)
-            return _FlexibleMatch(small.end, (*large.captures, *small.captures), value, self._spec)
+            return _FlexibleMatch(previous.end, captures, value, self._spec)
+        component = self._components[index]
+        last = index == len(self._components) - 1
+        for joiner in self._joiners[index - 1]:
+            if not text.startswith(joiner, previous.end):
+                continue
+            match = component._match(text, previous.end + len(joiner), digit_may_follow=not last)
+            if match is None or match.value.unit != component.unit:
+                continue
+            carried = total * self._factors[index - 1] + Decimal(match.value.decimal)
+            found = self._continue(text, match, index + 1, carried, (*captures, *match.captures))
+            if found is not None:
+                return found
         return None
 
     def detect(self, text: str) -> list[ValueDetection]:

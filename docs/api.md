@@ -5068,13 +5068,14 @@ Return flexible measure candidates in source order, a bare per form beside them.
 
 Recognize a mixed-unit measure, such as feet and inches: "5'10"", "5 ft, 10 in".
 
-``unit`` is an ICU mixed-unit identifier (``foot-and-inch``, ``pound-and-ounce``).
-Everything is read from ICU: each component's surfaces as
-:class:`FlexibleMeasureDetector` reads a single unit, the joiner between components
-from ICU's own formatting of the mixed unit at each width ("5′ 10″", "5 ft, 10 in"),
-optional where the joiner is only a space, and the factor between the components
-from ICU (1.5 feet formats as 1 foot 6 inches). The value is the whole quantity in
-the smallest component, which is exact ("5'10"" is 70 inches).
+``unit`` is an ICU mixed-unit identifier of two or more components (``foot-and-inch``,
+``pound-and-ounce``, ``hour-and-minute-and-second``). Everything is read from ICU:
+each component's surfaces as :class:`FlexibleMeasureDetector` reads a single unit,
+and, for each adjacent pair (itself an ICU mixed unit), the joiner from ICU's own
+formatting of the pair at each width ("5′ 10″", "5 ft, 10 in"), optional where the
+joiner is only a space, and the factor between the two (1.5 feet formats as 1 foot
+6 inches). The value is the whole quantity in the smallest component, which is exact
+("5'10"" is 70 inches; "1 hr, 15 min, 27 sec" is 4527 seconds).
 
 #### `FlexibleMixedMeasureDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
 

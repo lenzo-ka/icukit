@@ -4,6 +4,9 @@
 
 ### Added
 
+- `FlexibleMixedMeasureDetector` reads a mixed unit of any number of components, with the
+  joiner and factor of each adjacent pair from ICU: `hour-and-minute-and-second` reads "1
+  hr, 15 min, 27 sec" and "1h 15m 27s" as 4527 seconds.
 - `FlexibleSpelloutDetector` takes a `ruleset` among the locale's RBNF spell-out rule
   sets, and the engine generates a reader for each cardinal, ordinal, and year one:
   "twenty-first" (`number:spellout:ordinal`, 21), "nineteen ninety-nine"
