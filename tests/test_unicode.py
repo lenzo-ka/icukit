@@ -14,6 +14,7 @@ from icukit import (
     NFKC,
     NFKD,
     NormalizationError,
+    char_from_name,
     decode_unicode_escapes,
     encode_unicode_escapes,
     get_block_characters,
@@ -21,6 +22,7 @@ from icukit import (
     get_char_category,
     get_char_info,
     get_char_name,
+    get_char_names,
     is_normalized,
     list_blocks,
     list_categories,
@@ -184,6 +186,114 @@ class TestGetCharName:
             get_char_name("")
 
 
+class TestCharNameChoices:
+    """The three names ICU keeps for a code point, and the lookup from name to character."""
+
+    @pytest.mark.parametrize(
+        ("codepoint", "unicode", "alias", "extended"),
+        [
+            (
+                0x01A2,
+                "LATIN CAPITAL LETTER OI",
+                "LATIN CAPITAL LETTER GHA",
+                "LATIN CAPITAL LETTER OI",
+            ),
+            (0x0041, "LATIN CAPITAL LETTER A", "", "LATIN CAPITAL LETTER A"),
+            (0x0007, "", "", "<control-0007>"),
+            (0xD7A4, "", "", "<unassigned-D7A4>"),
+            (0xAC01, "HANGUL SYLLABLE GAG", "", "HANGUL SYLLABLE GAG"),
+            (0x4F60, "CJK UNIFIED IDEOGRAPH-4F60", "", "CJK UNIFIED IDEOGRAPH-4F60"),
+            (0x1F600, "GRINNING FACE", "", "GRINNING FACE"),
+            (0xFFFF, "", "", "<noncharacter-FFFF>"),
+            (0xD800, "", "", "<lead surrogate-D800>"),
+            (0xDC00, "", "", "<trail surrogate-DC00>"),
+        ],
+    )
+    def test_names(self, codepoint, unicode, alias, extended):
+        char = chr(codepoint)
+        assert get_char_name(char) == unicode
+        assert get_char_name(char, "unicode") == unicode
+        assert get_char_name(char, "alias") == alias
+        assert get_char_name(char, "extended") == extended
+        assert get_char_names(char) == {"unicode": unicode, "alias": alias, "extended": extended}
+
+    @pytest.mark.parametrize("choice", ["any", "Unicode", "", None])
+    def test_invalid_choice(self, choice):
+        with pytest.raises(ValueError, match="Invalid name choice"):
+            get_char_name("A", choice)
+
+    @pytest.mark.parametrize(
+        ("name", "codepoint"),
+        [
+            ("GREEK SMALL LETTER ALPHA", 0x03B1),
+            ("LATIN CAPITAL LETTER OI", 0x01A2),
+            ("LATIN CAPITAL LETTER GHA", 0x01A2),
+            ("<control-0007>", 0x0007),
+            ("<unassigned-D7A4>", 0xD7A4),
+            ("HANGUL SYLLABLE GAG", 0xAC01),
+            ("CJK UNIFIED IDEOGRAPH-4F60", 0x4F60),
+            ("GRINNING FACE", 0x1F600),
+            ("<noncharacter-FFFF>", 0xFFFF),
+            ("<lead surrogate-D800>", 0xD800),
+        ],
+    )
+    def test_char_from_name(self, name, codepoint):
+        assert char_from_name(name) == chr(codepoint)
+
+    @pytest.mark.parametrize(
+        "codepoint", [0x0041, 0x01A2, 0x0007, 0xAC01, 0x4F60, 0x1F600, 0xFFFF, 0xD800]
+    )
+    def test_every_name_round_trips(self, codepoint):
+        char = chr(codepoint)
+        for choice, name in get_char_names(char).items():
+            if name:
+                assert char_from_name(name, choice) == char
+                assert char_from_name(name) == char
+
+    def test_icu_matches_without_regard_to_case(self):
+        assert char_from_name("greek small letter alpha") == "α"
+        assert char_from_name("Latin Capital Letter Gha") == "Ƣ"
+        assert char_from_name("<CONTROL-0007>") == "\x07"
+
+    @pytest.mark.parametrize(
+        ("name", "choice"),
+        [
+            ("LATIN CAPITAL LETTER GHA", "unicode"),
+            ("LATIN CAPITAL LETTER GHA", "extended"),
+            ("LATIN CAPITAL LETTER OI", "alias"),
+            ("<control-0007>", "unicode"),
+        ],
+    )
+    def test_each_choice_searches_only_its_names(self, name, choice):
+        with pytest.raises(ValueError, match="Unknown character name"):
+            char_from_name(name, choice)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "NO SUCH CHARACTER",
+            "",
+            " GREEK SMALL LETTER ALPHA",
+            "GREEK SMALL LETTER  ALPHA",
+            "GREEK SMALL LETTER ÅLPHA",
+            "\ud800",
+            "BEL",  # a control alias, which ICU does not carry
+        ],
+    )
+    def test_unknown_name(self, name):
+        with pytest.raises(ValueError, match="Unknown character name"):
+            char_from_name(name)
+
+    @pytest.mark.parametrize("name", [None, 123, b"GREEK SMALL LETTER ALPHA"])
+    def test_non_str_name(self, name):
+        with pytest.raises(TypeError, match="must be a str"):
+            char_from_name(name)
+
+    def test_char_from_name_invalid_choice(self):
+        with pytest.raises(ValueError, match="Invalid name choice"):
+            char_from_name("GREEK SMALL LETTER ALPHA", "formal")
+
+
 class TestGetCharCategory:
     """Tests for get_char_category function."""
 
@@ -232,6 +342,16 @@ class TestGetCharInfo:
         assert info["script"] == "Greek"
         assert info["is_letter"] is True
         assert info["is_lower"] is True
+
+    def test_alias_and_extended_name(self):
+        info = get_char_info("Ƣ")
+        assert info["name"] == "LATIN CAPITAL LETTER OI"
+        assert info["alias"] == "LATIN CAPITAL LETTER GHA"
+        assert info["extended_name"] == "LATIN CAPITAL LETTER OI"
+        info = get_char_info("\x07")
+        assert info["name"] == ""
+        assert info["alias"] == ""
+        assert info["extended_name"] == "<control-0007>"
 
     def test_invalid_input(self):
         with pytest.raises(ValueError):
@@ -381,3 +501,111 @@ class TestUnicodeInfoCli:
             check=True,
         )
         assert json.loads(result.stdout)[0]["char"] == "\ud83d"
+
+
+def _run_unicode_cli(*args):
+    return subprocess.run(
+        [sys.executable, "-m", "icukit.cli", "unicode", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+
+
+class TestUnicodeNameCli:
+    """``unicode name`` picks a name, and ``unicode lookup`` goes from name to character."""
+
+    def test_name_default_is_the_formal_name(self):
+        result = _run_unicode_cli("name", "-H", "-t", "Ƣ")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == "Ƣ\tU+01A2\tLATIN CAPITAL LETTER OI\n"
+
+    @pytest.mark.parametrize(
+        ("text", "choice", "name"),
+        [
+            ("Ƣ", "alias", "LATIN CAPITAL LETTER GHA"),
+            (r"\u0007", "extended", "<control-0007>"),
+            ("U+FFFF", "extended", "<noncharacter-FFFF>"),
+        ],
+    )
+    def test_name_choice(self, text, choice, name):
+        result = _run_unicode_cli("name", "-j", "-t", text, "--choice", choice)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)[0]["name"] == name
+
+    def test_name_all(self):
+        result = _run_unicode_cli("name", "-t", "Ƣ", "--choice", "all")
+        assert result.returncode == 0, result.stderr
+        header, row = result.stdout.splitlines()
+        assert header.split("\t") == ["char", "codepoint", "name", "alias", "extended_name"]
+        assert row.split("\t")[2:] == [
+            "LATIN CAPITAL LETTER OI",
+            "LATIN CAPITAL LETTER GHA",
+            "LATIN CAPITAL LETTER OI",
+        ]
+
+    def test_info_columns_are_unchanged_without_all_names(self):
+        result = _run_unicode_cli("info", "-t", "Ƣ")
+        assert result.returncode == 0, result.stderr
+        header, row = result.stdout.splitlines()
+        assert header.split("\t") == ["char", "codepoint", "name", "category", "script"]
+        assert row.split("\t") == ["Ƣ", "U+01A2", "LATIN CAPITAL LETTER OI", "Lu", "Latin"]
+
+    def test_info_all_names(self):
+        result = _run_unicode_cli("info", "-H", "-t", "Ƣ", "--all-names")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.rstrip("\n").split("\t")[-2:] == [
+            "LATIN CAPITAL LETTER GHA",
+            "LATIN CAPITAL LETTER OI",
+        ]
+
+    def test_info_json_has_the_names(self):
+        result = _run_unicode_cli("info", "-j", "-t", r"\u0007")
+        assert result.returncode == 0, result.stderr
+        info = json.loads(result.stdout)[0]
+        assert info["alias"] == ""
+        assert info["extended_name"] == "<control-0007>"
+
+    def test_lookup(self):
+        text = "GREEK SMALL LETTER ALPHA\nlatin capital letter gha\n<control-0007>"
+        result = _run_unicode_cli("lookup", "-j", "-t", text)
+        assert result.returncode == 0, result.stderr
+        data = json.loads(result.stdout)
+        assert [row["char"] for row in data] == ["α", "Ƣ", "\x07"]
+        assert [row["codepoint"] for row in data] == ["U+03B1", "U+01A2", "U+0007"]
+        assert data[1]["query"] == "latin capital letter gha"
+        assert data[1]["name"] == "LATIN CAPITAL LETTER OI"
+
+    def test_lookup_choice(self):
+        result = _run_unicode_cli("lookup", "-t", "LATIN CAPITAL LETTER GHA", "--choice", "unicode")
+        assert result.returncode == 1
+        assert "Unknown character name" in result.stderr
+
+    def test_lookup_unknown_name_reports_and_keeps_going(self):
+        result = _run_unicode_cli("lookup", "-H", "-t", "NO SUCH CHARACTER\nGRINNING FACE")
+        assert result.returncode == 1
+        assert "Unknown character name: 'NO SUCH CHARACTER'" in result.stderr
+        assert result.stdout == "GRINNING FACE\t😀\tU+1F600\tGRINNING FACE\n"
+
+    def test_lookup_trims_but_keeps_the_query_as_given(self):
+        result = _run_unicode_cli("lookup", "-j", "-t", "  grinning face \n  NO SUCH  ")
+        assert result.returncode == 1
+        assert "Unknown character name: '  NO SUCH  '" in result.stderr
+        data = json.loads(result.stdout)
+        assert [row["query"] for row in data] == ["  grinning face "]
+        assert data[0]["char"] == "😀"
+
+    def test_lookup_does_not_decode_escapes(self):
+        result = _run_unicode_cli("lookup", "-t", r"\x41")
+        assert result.returncode == 1
+        assert "Unknown character name: '\\\\x41'" in result.stderr
+
+    def test_lookup_every_name_unknown(self):
+        text = "NO SUCH CHARACTER\nNOR THIS"
+        result = _run_unicode_cli("lookup", "-j", "-t", text)
+        assert result.returncode == 1
+        assert json.loads(result.stdout) == []
+        result = _run_unicode_cli("lookup", "-t", text)
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert result.stderr.count("Unknown character name") == 2

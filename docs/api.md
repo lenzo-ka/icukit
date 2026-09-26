@@ -240,6 +240,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`decode_unicode_escapes`](#icukitunicode) — function, `icukit.unicode`
 - [`encode_unicode_escapes`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_name`](#icukitunicode) — function, `icukit.unicode`
+- [`get_char_names`](#icukitunicode) — function, `icukit.unicode`
+- [`char_from_name`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_category`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_info`](#icukitunicode) — function, `icukit.unicode`
 - [`list_categories`](#icukitunicode) — function, `icukit.unicode`
@@ -6916,7 +6918,8 @@ query Unicode character properties like names and categories.
 
 Key Features:
     * Normalize text to NFC, NFD, NFKC, NFKD forms
-    * Get Unicode character names
+    * Get Unicode character names, name aliases and extended names
+    * Look up a character by its name
     * Get character categories and properties
     * Check normalization status
 
@@ -6944,12 +6947,14 @@ Example:
 
     Character properties::
 
-        >>> from icukit import get_char_name, get_char_category
+        >>> from icukit import char_from_name, get_char_name, get_char_category
         >>>
         >>> get_char_name('α')
         'GREEK SMALL LETTER ALPHA'
         >>> get_char_name('😀')
         'GRINNING FACE'
+        >>> char_from_name('GREEK SMALL LETTER ALPHA')
+        'α'
         >>>
         >>> get_char_category('A')
         'Lu'  # Letter, uppercase
@@ -6975,6 +6980,45 @@ Normalization form constants
 #### `NFKD` (constant)
 
 `'NFKD'`
+
+### `char_from_name(name: 'str', choice: 'str' = 'any') -> 'str'`
+
+Look up the character a Unicode name names.
+
+The lookup is ICU's, exact apart from case: ICU matches names without regard to
+case, and nothing looser is added here -- no trimming, no collapsing of spaces or
+hyphens. ``choice`` selects the names searched:
+
+* ``unicode`` -- formal names, including the algorithmic ones such as
+  ``HANGUL SYLLABLE GAG`` and ``CJK UNIFIED IDEOGRAPH-4F60``.
+* ``alias`` -- formal name aliases only, such as ``LATIN CAPITAL LETTER GHA``;
+  the correction aliases alone, as :func:`get_char_name` describes.
+* ``extended`` -- formal names and the labels :func:`get_char_name` gives for
+  ``extended``, such as ``<control-0007>``.
+* ``any`` (the default) -- all of the above. Unicode keeps names and aliases in
+  one namespace, so no name is both one character's name and another's alias.
+
+Args:
+    name: A character name.
+    choice: ``any`` (the default), ``unicode``, ``alias``, or ``extended``.
+
+Returns:
+    The named character.
+
+Raises:
+    ValueError: If no character has that name among the names searched, or choice
+        is not one of the four.
+    TypeError: If name is not a str.
+
+Example:
+    >>> char_from_name('GREEK SMALL LETTER ALPHA')
+    'α'
+    >>> char_from_name('greek small letter alpha')
+    'α'
+    >>> char_from_name('LATIN CAPITAL LETTER GHA')
+    'Ƣ'
+    >>> char_from_name('<control-0007>')
+    '\x07'
 
 ### `decode_unicode_escapes(text: 'str') -> 'str'`
 
@@ -7063,7 +7107,10 @@ Args:
     char: A single character.
 
 Returns:
-    Dict with character info: codepoint, name, category, script, etc.
+    Dict with character info: codepoint, name, category, script, etc. ``name`` is
+    the formal name, ``alias`` the formal name alias (empty where there is none),
+    and ``extended_name`` the extended name, which names every code point, as
+    :func:`get_char_name` describes each.
 
 Raises:
     ValueError: If input is not a single character.
@@ -7077,18 +7124,35 @@ Example:
     >>> info['codepoint']
     'U+03B1'
 
-### `get_char_name(char: 'str') -> 'str'`
+### `get_char_name(char: 'str', choice: 'str' = 'unicode') -> 'str'`
 
-Get the Unicode name of a character.
+Get a Unicode name of a character.
+
+ICU keeps three names for a code point, and ``choice`` selects one:
+
+* ``unicode`` -- the formal name (the Unicode ``Name`` property). Empty for a code
+  point that has none: a control, a surrogate, a noncharacter, a private-use or an
+  unassigned code point.
+* ``alias`` -- the formal name alias Unicode published to correct a mistaken name,
+  such as ``LATIN CAPITAL LETTER GHA`` for U+01A2, whose formal name
+  ``LATIN CAPITAL LETTER OI`` stays fixed by the stability policy. ICU carries only
+  these corrections, not the other kinds of alias in ``NameAliases.txt`` (``BEL``,
+  ``ALERT``, ``NBSP`` and the like). Empty where there is none, which is almost
+  everywhere.
+* ``extended`` -- the formal name where there is one, and otherwise a label that
+  names the code point by its type, such as ``<control-0007>``,
+  ``<noncharacter-FFFF>`` or ``<unassigned-D7A4>``. Never empty.
 
 Args:
     char: A single character.
+    choice: ``unicode`` (the default), ``alias``, or ``extended``.
 
 Returns:
-    Unicode character name.
+    The chosen name, or an empty string where ICU has none of that kind.
 
 Raises:
-    ValueError: If input is not a single character.
+    ValueError: If input is not a single character, or choice is not one of the
+        three.
 
 Example:
     >>> get_char_name('A')
@@ -7099,6 +7163,29 @@ Example:
     'CJK UNIFIED IDEOGRAPH-4F60'
     >>> get_char_name('😀')
     'GRINNING FACE'
+    >>> get_char_name('Ƣ', 'alias')
+    'LATIN CAPITAL LETTER GHA'
+    >>> get_char_name('\x07', 'extended')
+    '<control-0007>'
+
+### `get_char_names(char: 'str') -> 'dict[str, str]'`
+
+Get all three of ICU's names for a character.
+
+Args:
+    char: A single character.
+
+Returns:
+    Dict with the ``unicode``, ``alias`` and ``extended`` names, as
+    :func:`get_char_name` returns each.
+
+Raises:
+    ValueError: If input is not a single character.
+
+Example:
+    >>> names = get_char_names('Ƣ')
+    >>> names['unicode'], names['alias']
+    ('LATIN CAPITAL LETTER OI', 'LATIN CAPITAL LETTER GHA')
 
 ### `is_normalized(text: 'str', form: 'str' = 'NFC') -> 'bool'`
 

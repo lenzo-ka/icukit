@@ -22,6 +22,7 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 
 - **Transliteration**: Convert between scripts (Latin to Cyrillic, Hangul to Latin, etc.)
 - **Normalization**: NFC, NFD, NFKC, NFKD Unicode normalization forms
+- **Character Names**: Formal names, name aliases, and extended names of every code point, and lookup from a name to its character
 - **Text Segmentation**: Break text into words, sentences, lines, or grapheme clusters
 - **Unicode Regex**: Full Unicode-aware regular expressions with script and property support
 
@@ -169,6 +170,9 @@ ik script detect --all -t "Hello Мир 世界"
 
 # Get Unicode character information
 ik unicode info -t "Aé"
+
+# Look up a character by its name
+ik unicode lookup -t "GREEK SMALL LETTER ALPHA"
 ```
 
 Run `ik help` or `ik <command> --help` for detailed usage information.
