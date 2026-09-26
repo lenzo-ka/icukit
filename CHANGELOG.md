@@ -22,6 +22,22 @@
   prints a one-line notice on stderr. A locale, currency, or unit ICU does not know is
   refused with exit status 2, with and without `--flexible`; a lowercase currency code
   is read as its ISO code. A reading two readers give alike is printed once.
+- ICU's full character-name API. `get_char_name(char, choice)` takes `"unicode"` (the
+  formal name, the default and the name it returned before), `"alias"` (Unicode's formal
+  correction, "LATIN CAPITAL LETTER GHA" for U+01A2, empty where there is none), or
+  `"extended"` (a name for every code point: `<control-0007>`, `<noncharacter-FFFF>`,
+  `<unassigned-D7A4>`); `get_char_names(char)` returns all three.
+  `char_from_name(name, choice="any")` looks up the character a formal name, alias, or
+  extended name names, matching without regard to case as ICU does and raising
+  `ValueError` on an unknown name (`TypeError` on a name that is not a `str`). ICU
+  carries only Unicode's correction aliases, not the control or abbreviation aliases
+  (`BEL`, `ALERT`, `NBSP`, `LINE FEED`), so neither direction knows those.
+  `get_char_info` gains `alias` and `extended_name`. On the CLI,
+  `ik unicode name --choice {unicode,alias,extended,all}`, `ik unicode lookup` (one
+  name per line, whitespace around it trimmed; exit status 1 if a name is unknown), and
+  `ik unicode info --all-names`, which adds the two name columns to the TSV (its
+  default columns are unchanged). The JSON output of `ik unicode info`, `block`, and
+  `category` carries the two new keys always.
 
 ### Changed
 
