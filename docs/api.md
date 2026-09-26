@@ -2320,8 +2320,9 @@ result :func:`detect` would give). A gang is a value -- there is no mutable glob
 registry; selection and grouping are expressed by composing gangs with
 :meth:`with_` / :meth:`without`.
 
-A member is identified by its type, its locale, and the locales it reads (see
-:func:`detector_key`), so an en_US and an en_GB detector of one type share a gang.
+A member is identified by its type, its reader class, its locale, and the locales it
+reads (see :func:`detector_key`), so an en_US and an en_GB detector of one type share
+a gang, as do a strict and a flexible reader of one type.
 
 #### `DetectorSet(detectors: 'tuple[Detector, ...]') -> None`
 
@@ -2484,12 +2485,17 @@ Each detector runs its own scan, so a gang's result equals the merge of running 
 members alone. A single shared scan would be faster; any such scan must give this
 same merge.
 
-### `detector_key(detector: 'Detector') -> 'tuple[str, str | None, tuple[str, ...] | None]'`
+### `detector_key(detector: 'Detector') -> 'tuple[str, str, str | None, tuple[str, ...] | None]'`
 
-A detector's identity in a gang: its type, locale, and chosen locales.
+A detector's identity in a gang: its type, reader class, locale, and the locales it reads.
 
-``locale`` and ``locales`` are read where a detector has them; a detector without a
-locale is identified by its type alone.
+The locales are the ones the reader actually reads: a reader with no choice of
+locales reads its own locale alone, and a language-wide reader left at its default
+(``locales=None``) reads every ICU locale of the language, spelled out. So two
+readers share a key only when they are the same kind of reader reading the same
+locales -- a strict currency reader and a flexible one of the same type and locale
+are two members, not one replacing the other -- while a reader built twice, or once
+with ``locales=None`` and once with every locale named, is one member.
 
 ### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = (), flexible: 'bool' = False) -> 'DetectorSet'`
 
@@ -3066,7 +3072,8 @@ It holds the numeric, percent, fraction, ordinal, plural-numeral, scientific,
 compact (each ICU width), spell-out (each RBNF spell-out rule set), currency and
 currency-name, measure, mixed-measure, numeric-duration, numeric-date, text-date,
 date-time, time, relative-date, and date-interval (each skeleton ICU gives an
-interval) readers, and the letter-name, single-letter-word, and alphanumeric-run
+interval, a zoned one in both the generic and the specific zone family, hmv and
+hmz) readers, and the letter-name, single-letter-word, and alphanumeric-run
 readers. Where :func:`generated_detectors` builds a reader too, the two are the same
 member, so ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)``
 is the strict and flexible readers together.

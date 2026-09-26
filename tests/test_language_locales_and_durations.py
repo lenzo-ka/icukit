@@ -3,7 +3,9 @@
 import pytest
 
 from icukit import DetectorSet, date_detectors, detector_key
+from icukit.detectors import NumberDetector
 from icukit.recognize import (
+    FlexibleCurrencyDetector,
     FlexibleDateDetector,
     FlexibleMeasureDetector,
     FlexibleMixedMeasureDetector,
@@ -12,8 +14,13 @@ from icukit.recognize import (
     FlexiblePercentDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
+    _language_locale_names,
     _numeric_duration_patterns,
 )
+
+
+def default_locales(language):
+    return _language_locale_names(language)
 
 
 def _texts(detector, text):
@@ -141,8 +148,55 @@ def test_a_detector_with_the_same_key_replaces_a_member_in_place():
     gang = DetectorSet(()).with_(first).with_(second)
 
     assert gang.detectors == (second,)
-    assert detector_key(first) == ("measure:kilometer", "en_US", None)
+    assert detector_key(first)[:3] == (
+        "measure:kilometer",
+        "icukit.recognize.FlexibleMeasureDetector",
+        "en_US",
+    )
     assert DetectorSet(()).with_(first, narrowed).detectors == (first, narrowed)
+
+
+def test_a_default_selection_is_keyed_by_the_locales_it_reads():
+    default = FlexibleMeasureDetector("en_US", "kilometer")
+    every = FlexibleMeasureDetector("en_US", "kilometer", locales=default_locales("en"))
+
+    assert "en_GB" in detector_key(default)[3]
+    assert detector_key(default) == detector_key(every)
+    assert DetectorSet(()).with_(default, every).detectors == (every,)
+
+
+class _Custom:
+    type = "custom:thing"
+    group = "custom"
+    locale = "en_US"
+
+    def __init__(self, locales):
+        self.locales = locales
+
+    def detect(self, text):
+        return []
+
+
+def test_a_custom_readers_locales_give_a_stable_key():
+    assert detector_key(_Custom("en_GB"))[3] == ("en_GB",)
+    assert detector_key(_Custom({"en_US", "en_GB"})) == detector_key(_Custom(["en_US", "en_GB"]))
+    assert detector_key(_Custom({"en_US", "en_GB"}))[3] == ("en_GB", "en_US")
+
+
+@pytest.mark.parametrize("locales", [None, ()])
+def test_a_strict_and_a_flexible_reader_of_one_type_are_two_members(locales):
+    strict = NumberDetector("en_US", "currency", "USD")
+    flexible = FlexibleCurrencyDetector("en_US", "USD", locales=locales)
+
+    assert DetectorSet(()).with_(strict).with_(flexible).detectors == (strict, flexible)
+    assert DetectorSet(()).with_(flexible).with_(strict).detectors == (flexible, strict)
+    both = DetectorSet(()).with_(strict, flexible)
+    found = {(d["type"], d["text"]) for d in both.detect("Paid ($12.50) and -$5.")}
+    assert {
+        ("number:currency:USD", "($12.50)"),
+        ("number:currency:USD", "$12.50"),
+        ("number:currency:USD", "-$5"),
+    } <= found
 
 
 def test_date_detectors_pass_the_choice_to_the_flexible_reader():

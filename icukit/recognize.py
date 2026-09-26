@@ -509,7 +509,10 @@ def _locale_selection(locale: str, locales: Iterable[str] | None) -> tuple[str, 
     for name in [locales] if isinstance(locales, str) else locales:
         other = icu.Locale(name)
         if other.getLanguage() != base.getLanguage():
-            raise ValueError(f"locale {name!r} is not a locale of {locale!r}'s language")
+            raise ValueError(
+                f"locale {name!r} is not a locale of the language of {locale!r} "
+                f"({base.getLanguage()!r})"
+            )
         chosen.add(other.getName())
     return tuple(sorted(chosen))
 

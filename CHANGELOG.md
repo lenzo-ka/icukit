@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+### Added
+
+- `icukit detect` runs the flexible and opt-in readers. `--flexible` adds
+  `flexible_detectors` (accounting and negative currency, mixed measures, other decimal
+  styles, zoned times), `--guarded` adds the readings the default readers refuse on
+  purpose ("one" alone), and `--locales LOC,LOC` chooses the other locales of the
+  language the flexible readers read (`--locales ''`: the locale alone). With
+  `--flexible`, `--currency` and `--measure` choose the currencies and units the
+  flexible readers read, in place of ICU's choice. Building the language-wide set
+  prints a one-line notice on stderr. A locale, currency, or unit ICU does not know is
+  refused with exit status 2, with and without `--flexible`; a lowercase currency code
+  is read as its ISO code. A reading two readers give alike is printed once.
+
+### Changed
+
+- The date-interval readers, in both `generated_detectors` and `flexible_detectors`,
+  include each zoned skeleton's counterpart in the other zone family: CLDR gives interval
+  patterns for the generic zone (`hmv`) alone, and ICU writes a specific-zone skeleton
+  (`hmz`) through them, so "2:07 – 4:07 PM EDT" is now read whole, not only as
+  "2:07 – 4:07 PM".
+
+### Fixed
+
+- `detector_key` keys a reader by its class and by the locales it actually reads, so a
+  language-wide flexible reader left at `locales=None` and a strict single-locale reader
+  of the same type are two members of a `DetectorSet`. They shared a key, and `with_`
+  kept whichever came last: adding the strict number readers after the flexible set
+  lost "-€5", "($12.50)", and "-$5". A reader built twice, or with `locales=None` and
+  with every locale of its language named, is still one member.
+
 ## [0.7.1] - 2026-09-25
 
 ### Added

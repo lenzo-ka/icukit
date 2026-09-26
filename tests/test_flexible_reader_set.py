@@ -378,6 +378,19 @@ def test_parameters_are_chosen_from_icu():
         name for name in generated_detectors("en_US").names() if name.startswith("date-interval:")
     }
     assert interval_types == engine_intervals
+    # A zoned interval skeleton in both zone families: CLDR gives hmv, and ICU's interval
+    # formatter writes hmz through it.
+    assert {"date-interval:hmv", "date-interval:hmz", "date-interval:Hmv", "date-interval:Hmz"} <= (
+        interval_types
+    )
+
+
+def test_the_set_reads_an_interval_with_a_specific_zone_whole():
+    text = "2:07 – 4:07 PM EDT"
+    start = DateTimeValue((("H", 14), ("m", 7)), "gregorian")
+    end = DateTimeValue((("H", 16), ("m", 7)), "gregorian")
+
+    assert ("date-interval:hmz", DateIntervalValue(start, end)) in _whole(_gang("en_US"), text)
 
 
 def test_callers_choose_currencies_and_units():
