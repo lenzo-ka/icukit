@@ -1420,6 +1420,10 @@ from root) to rebuild a locale's names.
 
 ### Constants and type aliases
 
+#### `cldr_locale` (constant)
+
+`<functools._lru_cache_wrapper>`
+
 #### `cldr_symbol_names` (constant)
 
 `<functools._lru_cache_wrapper>`

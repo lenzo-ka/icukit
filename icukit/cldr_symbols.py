@@ -19,7 +19,7 @@ from pathlib import Path
 
 import icu
 
-__all__ = ["cldr_symbol_names", "icu_cldr_version", "snapshot_cldr_version"]
+__all__ = ["cldr_locale", "cldr_symbol_names", "icu_cldr_version", "snapshot_cldr_version"]
 
 _DATA_DIR = Path(__file__).parent / "data" / "cldr_symbols"
 _REMOVED = "∅∅∅"
@@ -62,12 +62,57 @@ def icu_cldr_version() -> str:
         return ""
 
 
+@cache
+def _likely_script(language: str) -> str:
+    """The script ICU's likely subtags give ``language`` ("Hans" for zh); empty if none."""
+    try:
+        return icu.Locale(language).addLikelySubtags().getScript()
+    except icu.ICUError:
+        return ""
+
+
+@cache
+def cldr_locale(locale: str) -> str:
+    """``locale`` as CLDR names the locale whose data it reads ("zh_TW": "zh_Hant_TW").
+
+    ICU's alias resolution first ("iw": "he", "sh": "sr_Latn"), then the script ICU's
+    likely subtags give it, kept only where it is not the language's own likely script:
+    zh_TW is Traditional (zh_Hant_TW) and sr_ME Latin (sr_Latn_ME), while en_GB stays
+    en_GB, so that its parentLocales entry (en_001) applies. The region and variant are
+    the locale's own.
+    """
+    if locale in ("", "root", "und"):
+        return "root"
+    canonical = icu.Locale.createCanonical(locale)
+    language = canonical.getLanguage()
+    if not language or language == "und":
+        return "root"
+    try:
+        script = icu.Locale(canonical.getName()).addLikelySubtags().getScript()
+    except icu.ICUError:
+        script = canonical.getScript()
+    parts = [language]
+    if script and script != _likely_script(language):
+        parts.append(script)
+    parts += [part for part in (canonical.getCountry(), canonical.getVariant()) if part]
+    return "_".join(parts)
+
+
 def _parent(locale: str) -> str | None:
-    """The locale ``locale`` inherits from, CLDR's way; None for root."""
+    """The locale ``locale`` inherits from, CLDR's way; None for root.
+
+    CLDR's parentLocales where they name the locale; otherwise a language and a script
+    that is not the language's likely one inherit from root (CLDR's "nonlikelyScript"
+    rule: ru_Latn does not take ru's Cyrillic names), and any other locale from itself
+    with its last subtag removed.
+    """
     parents = _parents()[1]
     if locale in parents:
         return parents[locale]
     if "_" in locale:
+        parts = locale.split("_")
+        if len(parts) == 2 and len(parts[1]) == 4 and parts[1] != _likely_script(parts[0]):
+            return "root"
         return locale.rsplit("_", 1)[0]
     return None if locale == "root" else "root"
 
@@ -102,13 +147,13 @@ def cldr_symbol_names(locale: str) -> tuple[tuple[str, str, tuple[str, ...]], ..
 
     ``name`` is CLDR's text-to-speech name ("ampersand"), empty where CLDR gives only
     keywords; ``keywords`` are CLDR's, in its order. Resolved through CLDR's locale
-    inheritance, in code point order. Empty for a locale CLDR names no symbols in, or
-    when the snapshot is missing.
+    inheritance from the CLDR locale ``locale`` names (see :func:`cldr_locale`), in code
+    point order. Empty for a locale CLDR names no symbols in, or when the snapshot is
+    missing.
     """
-    name = icu.Locale(locale).getName() or "root"
     rows = []
     for cp, (tts, keywords) in sorted(
-        _resolved(name).items(), key=lambda item: [ord(c) for c in item[0]]
+        _resolved(cldr_locale(locale)).items(), key=lambda item: [ord(c) for c in item[0]]
     ):
         words = tuple(word.strip() for word in keywords.split("|") if word.strip())
         rows.append((cp, tts, words))
