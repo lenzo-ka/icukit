@@ -24,12 +24,20 @@ Kinds:
     * ``relative-unit``: relative-time unit abbreviations ("hr.", "mo") with the long
       ones ("hours", "months");
     * ``territory``: region codes ("US", "EU", "UN") and CLDR's short territory names
-      ("UK") with the territory's names ("United States", "European Union").
+      ("UK") with the territory's names ("United States", "European Union");
+    * ``symbol``: symbols that are not emoji ("&", "±", "→", "©") with CLDR's names for
+      them in the language, its text-to-speech name first ("ampersand"), then its
+      keywords ("and", "et"). ICU names only currency and unit symbols and % ‰ ‱ per
+      locale, and those stay listed under their own kinds as well; these come from a
+      snapshot of CLDR's annotations (see :mod:`icukit.cldr_symbols`), so their
+      ``width`` is "cldr" and their ``source`` "cldr" ("cldr-<version>", naming the
+      snapshot's CLDR, when ICU's own CLDR is another).
 
 ``key`` names what the surface stands for in ICU's terms: a unit identifier, a month
 or weekday number (ICU's, Sunday 1), an era index, a zone's long name (one
 abbreviation serves many zone IDs), an ISO 4217 code, a power of ten, a relative
-unit, or a region code. ``expansions`` are ICU's long forms, singular and
+unit, a region code, or a symbol's code points ("U+0026"). ``expansions`` are ICU's
+long forms, singular and
 plural where they differ, in the order ICU gave them; empty where ICU writes no longer
 form (English "AM"). The locales read are the locale's language's, or the ones a
 caller chooses, as for the readers.
@@ -48,6 +56,7 @@ from functools import cache
 
 import icu
 
+from .cldr_symbols import cldr_symbol_names, icu_cldr_version, snapshot_cldr_version
 from .recognize import (
     _language_day_periods,
     _language_eras,
@@ -76,6 +85,7 @@ ABBREVIATION_KINDS = (
     "compact",
     "relative-unit",
     "territory",
+    "symbol",
 )
 
 _SPACES = "    "
@@ -507,6 +517,32 @@ def _territory_rows(locale: str, names: tuple[str, ...] | None) -> tuple[IcuAbbr
     return table.rows()
 
 
+def _symbol_source() -> str:
+    """ "cldr", or "cldr-<version>" (the snapshot's) when ICU's CLDR is another.
+
+    The snapshot is read from a pinned CLDR release, and ICU's data from its own. When
+    the two differ (a newer ICU under an older snapshot), the names are still given,
+    since a symbol's name rarely changes between releases, but each row says which
+    CLDR it came from, where a consumer that keeps rows sees it; a warning would be
+    printed once and lost. Never an error: the rest of the list does not depend on it.
+    """
+    snapshot = snapshot_cldr_version()
+    if snapshot and snapshot == icu_cldr_version():
+        return "cldr"
+    return f"cldr-{snapshot or 'unknown'}"
+
+
+@cache
+def _symbol_rows(locale: str, names: tuple[str, ...] | None) -> tuple[IcuAbbreviation, ...]:
+    table = _Table()
+    source = _symbol_source()
+    for name in _language_locales(locale, names):
+        for symbol, tts, keywords in cldr_symbol_names(name):
+            key = " ".join(f"U+{ord(c):04X}" for c in symbol)
+            table.add(symbol, "symbol", key, "cldr", [tts, *keywords], source)
+    return table.rows()
+
+
 _GENERATORS = {
     "unit": lambda locale, names: tuple(r for r in _unit_rows(locale, names) if r.kind == "unit"),
     "per-unit": lambda locale, names: tuple(
@@ -521,6 +557,7 @@ _GENERATORS = {
     "compact": _compact_rows,
     "relative-unit": _relative_rows,
     "territory": _territory_rows,
+    "symbol": _symbol_rows,
 }
 
 
