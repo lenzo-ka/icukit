@@ -12,12 +12,14 @@ from ...unicode import (
     NFD,
     NFKC,
     NFKD,
+    char_from_name,
     decode_unicode_escapes,
     encode_unicode_escapes,
     get_block_characters,
     get_category_characters,
     get_char_info,
     get_char_name,
+    get_char_names,
     is_normalized,
     list_blocks,
     list_categories,
@@ -60,6 +62,16 @@ Examples:
   icukit unicode name -t 'α'
   icukit unicode name -t '😀'
 
+  # Get the formal name alias, the extended name, or all three names
+  icukit unicode name -t 'Ƣ' --choice alias      # LATIN CAPITAL LETTER GHA
+  icukit unicode name -t '\\u0007' --choice extended  # <control-0007>
+  icukit unicode name -t 'Ƣ' --choice all
+
+  # Look up a character by name (formal name, alias, or extended name)
+  icukit unicode lookup -t 'GREEK SMALL LETTER ALPHA'
+  icukit unicode lookup -t 'latin capital letter gha'
+  icukit unicode lookup -t '<control-0007>' --json
+
   # Get character info using escape sequences
   icukit unicode info -t '\\u03B1'      # Greek alpha
   icukit unicode info -t 'U+1F600'      # Grinning face emoji
@@ -67,6 +79,9 @@ Examples:
 
   # Get full character info
   icukit unicode info -t 'α' --json
+
+  # Add the alias and extended-name columns to the TSV
+  icukit unicode info -t 'Ƣ' --all-names
 
   # List Unicode categories, blocks, or normalization forms
   icukit unicode list
@@ -112,6 +127,12 @@ Examples:
                     "help": "Get Unicode character name(s)",
                     "func": cls.cmd_name,
                     "configure": cls._configure_name,
+                },
+                "lookup": {
+                    "aliases": ["fromname", "from-name"],
+                    "help": "Look up characters by Unicode name",
+                    "func": cls.cmd_lookup,
+                    "configure": cls._configure_lookup,
                 },
                 "info": {
                     "aliases": ["i", "char"],
@@ -177,12 +198,42 @@ Examples:
     def _configure_name(cls, parser):
         """Configure name subcommand."""
         cls._add_input_options(parser)
+        parser.add_argument(
+            "-c",
+            "--choice",
+            choices=["unicode", "alias", "extended", "all"],
+            default="unicode",
+            help="Which name: unicode (the formal name), alias (the formal name alias, "
+            "empty where there is none), extended (names every code point, e.g. "
+            "<control-0007>), or all (one column each). Default: unicode",
+        )
+        cls._add_output_options(parser)
+
+    @classmethod
+    def _configure_lookup(cls, parser):
+        """Configure lookup subcommand."""
+        cls._add_input_options(parser)
+        parser.add_argument(
+            "-c",
+            "--choice",
+            choices=["any", "unicode", "alias", "extended"],
+            default="any",
+            help="Which names to search: any (all of them), unicode (formal names), "
+            "alias (formal name aliases), or extended (formal names and labels like "
+            "<control-0007>). ICU matches without regard to case. Default: any",
+        )
         cls._add_output_options(parser)
 
     @classmethod
     def _configure_info(cls, parser):
         """Configure info subcommand."""
         cls._add_input_options(parser)
+        parser.add_argument(
+            "--all-names",
+            action="store_true",
+            help="Add the alias and extended_name columns to TSV output "
+            "(JSON output always has them)",
+        )
         cls._add_output_options(parser)
 
     @classmethod
@@ -261,21 +312,67 @@ Examples:
         as_json = getattr(args, "json", False)
         no_header = getattr(args, "no_header", False)
 
+        choice = getattr(args, "choice", "unicode")
+
         data = []
         for char in text:
             try:
-                name = get_char_name(char)
-                data.append({"char": char, "codepoint": f"U+{ord(char):04X}", "name": name})
+                row = {"char": char, "codepoint": f"U+{ord(char):04X}"}
+                if choice == "all":
+                    names = get_char_names(char)
+                    row.update(
+                        name=names["unicode"],
+                        alias=names["alias"],
+                        extended_name=names["extended"],
+                    )
+                else:
+                    row["name"] = get_char_name(char, choice)
+                data.append(row)
             except ValueError:
                 pass
 
-        print_output(
-            data,
-            as_json=as_json,
-            columns=["char", "codepoint", "name"],
-            headers=not no_header,
-        )
+        columns = ["char", "codepoint", "name"]
+        if choice == "all":
+            columns += ["alias", "extended_name"]
+        print_output(data, as_json=as_json, columns=columns, headers=not no_header)
         return 0
+
+    @classmethod
+    def cmd_lookup(cls, args):
+        """Look up characters by Unicode name, one name per line."""
+        as_json = getattr(args, "json", False)
+        no_header = getattr(args, "no_header", False)
+        choice = getattr(args, "choice", "any")
+
+        data = []
+        status = 0
+        for line in cls._read_lines(args):
+            name = line.strip()
+            if not name:
+                continue
+            try:
+                char = char_from_name(name, choice)
+            except ValueError as e:
+                print(f"Error: {e}", file=sys.stderr)
+                status = 1
+                continue
+            data.append(
+                {
+                    "query": name,
+                    "char": char,
+                    "codepoint": f"U+{ord(char):04X}",
+                    "name": get_char_name(char, "extended"),
+                }
+            )
+
+        if data or as_json:
+            print_output(
+                data,
+                as_json=as_json,
+                columns=["query", "char", "codepoint", "name"],
+                headers=not no_header,
+            )
+        return status
 
     @classmethod
     def cmd_info(cls, args):
@@ -294,6 +391,8 @@ Examples:
                 pass
 
         columns = ["char", "codepoint", "name", "category", "script"]
+        if getattr(args, "all_names", False):
+            columns += ["alias", "extended_name"]
         print_output(data, as_json=as_json, columns=columns, headers=not no_header)
         return 0
 
