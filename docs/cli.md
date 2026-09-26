@@ -2314,11 +2314,13 @@ Examples:
 
 ### `icukit unicode lookup` (aliases: from-name, fromname)
 
+Look up the character each input line names, one name per line. Whitespace around a name is trimmed and blank lines are skipped; escapes are not decoded. ICU matches without regard to case. ICU carries only Unicode's correction aliases (LATIN CAPITAL LETTER GHA for U+01A2), not the control or abbreviation aliases (BEL, ALERT, NBSP, LINE FEED). An unknown name is reported on stderr, as given, and the exit status is 1.
+
 **Options:**
 
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-c, --choice`: Which names to search: any (all of them), unicode (formal names), alias (formal name aliases), or extended (formal names and labels like <control-0007>). ICU matches without regard to case. Default: any (default: `any`)
+- `-c, --choice`: Which names to search: any (all of them), unicode (formal names), alias (Unicode's correction aliases only), or extended (formal names and labels like <control-0007>). Default: any (default: `any`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)

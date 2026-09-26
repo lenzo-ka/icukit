@@ -7008,6 +7008,7 @@ Returns:
 Raises:
     ValueError: If no character has that name among the names searched, or choice
         is not one of the four.
+    TypeError: If name is not a str.
 
 Example:
     >>> char_from_name('GREEK SMALL LETTER ALPHA')

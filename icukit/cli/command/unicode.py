@@ -212,6 +212,14 @@ Examples:
     @classmethod
     def _configure_lookup(cls, parser):
         """Configure lookup subcommand."""
+        parser.description = (
+            "Look up the character each input line names, one name per line. Whitespace "
+            "around a name is trimmed and blank lines are skipped; escapes are not "
+            "decoded. ICU matches without regard to case. ICU carries only Unicode's "
+            "correction aliases (LATIN CAPITAL LETTER GHA for U+01A2), not the control "
+            "or abbreviation aliases (BEL, ALERT, NBSP, LINE FEED). An unknown name is "
+            "reported on stderr, as given, and the exit status is 1."
+        )
         cls._add_input_options(parser)
         parser.add_argument(
             "-c",
@@ -219,8 +227,8 @@ Examples:
             choices=["any", "unicode", "alias", "extended"],
             default="any",
             help="Which names to search: any (all of them), unicode (formal names), "
-            "alias (formal name aliases), or extended (formal names and labels like "
-            "<control-0007>). ICU matches without regard to case. Default: any",
+            "alias (Unicode's correction aliases only), or extended (formal names and "
+            "labels like <control-0007>). Default: any",
         )
         cls._add_output_options(parser)
 
@@ -352,13 +360,13 @@ Examples:
                 continue
             try:
                 char = char_from_name(name, choice)
-            except ValueError as e:
-                print(f"Error: {e}", file=sys.stderr)
+            except ValueError:
+                print(f"Error: Unknown character name: {line!r}", file=sys.stderr)
                 status = 1
                 continue
             data.append(
                 {
-                    "query": name,
+                    "query": line,
                     "char": char,
                     "codepoint": f"U+{ord(char):04X}",
                     "name": get_char_name(char, "extended"),

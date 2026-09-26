@@ -368,6 +368,7 @@ def char_from_name(name: str, choice: str = "any") -> str:
     Raises:
         ValueError: If no character has that name among the names searched, or choice
             is not one of the four.
+        TypeError: If name is not a str.
 
     Example:
         >>> char_from_name('GREEK SMALL LETTER ALPHA')
@@ -379,10 +380,12 @@ def char_from_name(name: str, choice: str = "any") -> str:
         >>> char_from_name('<control-0007>')
         '\\x07'
     """
+    if not isinstance(name, str):
+        raise TypeError(f"Character name must be a str, not {type(name).__name__}")
     name_choices = _name_choice(choice, _CHAR_FROM_NAME_CHOICES)
     try:
         encoded = name.encode("utf-8")
-    except (AttributeError, UnicodeEncodeError):
+    except UnicodeEncodeError:
         raise ValueError(f"Unknown character name: {name!r}") from None
     for name_choice in name_choices:
         try:

@@ -284,6 +284,11 @@ class TestCharNameChoices:
         with pytest.raises(ValueError, match="Unknown character name"):
             char_from_name(name)
 
+    @pytest.mark.parametrize("name", [None, 123, b"GREEK SMALL LETTER ALPHA"])
+    def test_non_str_name(self, name):
+        with pytest.raises(TypeError, match="must be a str"):
+            char_from_name(name)
+
     def test_char_from_name_invalid_choice(self):
         with pytest.raises(ValueError, match="Invalid name choice"):
             char_from_name("GREEK SMALL LETTER ALPHA", "formal")
@@ -542,8 +547,9 @@ class TestUnicodeNameCli:
     def test_info_columns_are_unchanged_without_all_names(self):
         result = _run_unicode_cli("info", "-t", "Ƣ")
         assert result.returncode == 0, result.stderr
-        header = result.stdout.splitlines()[0]
+        header, row = result.stdout.splitlines()
         assert header.split("\t") == ["char", "codepoint", "name", "category", "script"]
+        assert row.split("\t") == ["Ƣ", "U+01A2", "LATIN CAPITAL LETTER OI", "Lu", "Latin"]
 
     def test_info_all_names(self):
         result = _run_unicode_cli("info", "-H", "-t", "Ƣ", "--all-names")
@@ -580,3 +586,26 @@ class TestUnicodeNameCli:
         assert result.returncode == 1
         assert "Unknown character name: 'NO SUCH CHARACTER'" in result.stderr
         assert result.stdout == "GRINNING FACE\t😀\tU+1F600\tGRINNING FACE\n"
+
+    def test_lookup_trims_but_keeps_the_query_as_given(self):
+        result = _run_unicode_cli("lookup", "-j", "-t", "  grinning face \n  NO SUCH  ")
+        assert result.returncode == 1
+        assert "Unknown character name: '  NO SUCH  '" in result.stderr
+        data = json.loads(result.stdout)
+        assert [row["query"] for row in data] == ["  grinning face "]
+        assert data[0]["char"] == "😀"
+
+    def test_lookup_does_not_decode_escapes(self):
+        result = _run_unicode_cli("lookup", "-t", r"\x41")
+        assert result.returncode == 1
+        assert "Unknown character name: '\\\\x41'" in result.stderr
+
+    def test_lookup_every_name_unknown(self):
+        text = "NO SUCH CHARACTER\nNOR THIS"
+        result = _run_unicode_cli("lookup", "-j", "-t", text)
+        assert result.returncode == 1
+        assert json.loads(result.stdout) == []
+        result = _run_unicode_cli("lookup", "-t", text)
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert result.stderr.count("Unknown character name") == 2

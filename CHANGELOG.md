@@ -21,9 +21,12 @@
   `<unassigned-D7A4>`); `get_char_names(char)` returns all three.
   `char_from_name(name, choice="any")` looks up the character a formal name, alias, or
   extended name names, matching without regard to case as ICU does and raising
-  `ValueError` on an unknown name. `get_char_info` gains `alias` and `extended_name`.
-  On the CLI, `ik unicode name --choice {unicode,alias,extended,all}`,
-  `ik unicode lookup` (one name per line; exit status 1 if a name is unknown), and
+  `ValueError` on an unknown name (`TypeError` on a name that is not a `str`). ICU
+  carries only Unicode's correction aliases, not the control or abbreviation aliases
+  (`BEL`, `ALERT`, `NBSP`, `LINE FEED`), so neither direction knows those.
+  `get_char_info` gains `alias` and `extended_name`. On the CLI,
+  `ik unicode name --choice {unicode,alias,extended,all}`, `ik unicode lookup` (one
+  name per line, whitespace around it trimmed; exit status 1 if a name is unknown), and
   `ik unicode info --all-names`, which adds the two name columns to the TSV (its
   default columns are unchanged). The JSON output of `ik unicode info`, `block`, and
   `category` carries the two new keys always.
