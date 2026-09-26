@@ -129,6 +129,8 @@ flexible_detectors("en_US", locales=()).detect("12 kilometres")  # number:decima
 
 # The short forms ICU writes, with their expansions
 icu_abbreviations("en_US", kinds=("unit",))  # (..., IcuAbbreviation(surface='m/s²', ...), ...)
+# Symbols by CLDR's names in the language, read from a snapshot of CLDR's annotations
+icu_abbreviations("de_DE", kinds=("symbol",))  # (..., IcuAbbreviation(surface='&', ...), ...)
 ```
 
 Offsets are code points. `date_detectors(locale, skeletons)` and `number_detectors(locale, currencies=...)` build smaller sets by hand.

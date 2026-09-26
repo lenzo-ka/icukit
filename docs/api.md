@@ -1406,6 +1406,38 @@ Example:
     >>> 'Western' in greg['description']
     True
 
+## icukit.cldr_symbols
+
+CLDR's per-locale names of symbols ("&": "ampersand", "Et-Zeichen", "esperluette").
+
+ICU names currency and unit symbols and % ‰ ‱ per locale, but other characters only in
+English, by their Unicode names, and it does not ship CLDR's annotations, where the
+per-locale names live. This module reads them from a snapshot of those annotations
+(``data/cldr_symbols``), made by ``tools/cldr_symbol_names.py`` from a pinned CLDR
+release whose version, URL, and checksum each file's header records. The snapshot
+holds the symbols that are not emoji, each with its text-to-speech name and keywords,
+and for each CLDR locale only what differs from what the locale inherits; the lookup
+here resolves the same inheritance CLDR does (en_GB from en_001, en_001 from en, en
+from root) to rebuild a locale's names.
+
+### Constants and type aliases
+
+#### `cldr_locale` (constant)
+
+`<functools._lru_cache_wrapper>`
+
+#### `cldr_symbol_names` (constant)
+
+`<functools._lru_cache_wrapper>`
+
+#### `icu_cldr_version` (constant)
+
+`<functools._lru_cache_wrapper>`
+
+### `snapshot_cldr_version() -> 'str'`
+
+The CLDR version the snapshot was made from ("48"); empty without a snapshot.
+
 ## icukit.collator
 
 Locale-aware string collation and sorting.
@@ -3457,12 +3489,20 @@ Kinds:
     * ``relative-unit``: relative-time unit abbreviations ("hr.", "mo") with the long
       ones ("hours", "months");
     * ``territory``: region codes ("US", "EU", "UN") and CLDR's short territory names
-      ("UK") with the territory's names ("United States", "European Union").
+      ("UK") with the territory's names ("United States", "European Union");
+    * ``symbol``: symbols that are not emoji ("&", "±", "→", "©") with CLDR's names for
+      them in the language, its text-to-speech name first ("ampersand"), then its
+      keywords ("and", "et"). ICU names only currency and unit symbols and % ‰ ‱ per
+      locale, and those stay listed under their own kinds as well; these come from a
+      snapshot of CLDR's annotations (see :mod:`icukit.cldr_symbols`), so their
+      ``width`` is "cldr" and their ``source`` "cldr" ("cldr-<version>", naming the
+      snapshot's CLDR, when ICU's own CLDR is another).
 
 ``key`` names what the surface stands for in ICU's terms: a unit identifier, a month
 or weekday number (ICU's, Sunday 1), an era index, a zone's long name (one
 abbreviation serves many zone IDs), an ISO 4217 code, a power of ten, a relative
-unit, or a region code. ``expansions`` are ICU's long forms, singular and
+unit, a region code, or a symbol's code points ("U+0026"). ``expansions`` are ICU's
+long forms, singular and
 plural where they differ, in the order ICU gave them; empty where ICU writes no longer
 form (English "AM"). The locales read are the locale's language's, or the ones a
 caller chooses, as for the readers.
@@ -3476,7 +3516,7 @@ Example:
 
 #### `ABBREVIATION_KINDS` (constant)
 
-`('unit', 'per-unit', 'month', 'weekday', 'era', 'day-period', 'time-zone', 'currency', 'compact', 'relative-unit', 'territory')`
+`('unit', 'per-unit', 'month', 'weekday', 'era', 'day-period', 'time-zone', 'currency', 'compact', 'relative-unit', 'territory', 'symbol')`
 
 ### class `IcuAbbreviation`
 

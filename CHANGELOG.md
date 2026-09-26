@@ -4,6 +4,14 @@
 
 ### Added
 
+- `icu_abbreviations` lists a new kind, `symbol`: the symbols that are not emoji ("&",
+  "±", "→", "©") with CLDR's names for them in the language, the text-to-speech name
+  first ("ampersand", German "Et-Zeichen"), then the keywords, keyed by code point
+  ("U+0026"). ICU does not ship CLDR's annotations, so they are read from a snapshot of
+  the CLDR release ICU's data is built from, made by `tools/cldr_symbol_names.py` and
+  pinned by version and checksum; a locale inherits the names it does not give, as in
+  CLDR. When ICU's own CLDR is another release, the rows still come, with `source`
+  naming the snapshot's CLDR ("cldr-48") in place of "cldr".
 - `icukit detect` runs the flexible and opt-in readers. `--flexible` adds
   `flexible_detectors` (accounting and negative currency, mixed measures, other decimal
   styles, zoned times), `--guarded` adds the readings the default readers refuse on
