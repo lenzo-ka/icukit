@@ -177,6 +177,8 @@ ik unicode info -t "Aé"
 ik unicode lookup -t "GREEK SMALL LETTER ALPHA"
 ```
 
+From Python: `char_from_name("GREEK SMALL LETTER ALPHA")` returns `"α"`, and `get_char_names("Ƣ")["alias"]` returns `"LATIN CAPITAL LETTER GHA"`.
+
 Run `ik help` or `ik <command> --help` for detailed usage information.
 
 ## Supported Python Versions
@@ -192,3 +194,5 @@ Run `ik help` or `ik <command> --help` for detailed usage information.
 ## License
 
 BSD 2-Clause License
+
+The CLDR data bundled in `icukit/data/cldr_symbols` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/cldr_symbols/LICENSE).

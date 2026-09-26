@@ -261,6 +261,9 @@ def main() -> int:
     parents = read_parents(archive.read("common/supplemental/supplementalData.xml"))
     deltas = extract(files, parents)
     write(deltas, parents, args.out)
+    # The data is Unicode's, under the Unicode License v3: its notice, verbatim from the
+    # release, ships beside it.
+    (args.out / "LICENSE").write_bytes(archive.read("LICENSE"))
     total = sum(len(d) for d in deltas.values())
     print(f"{len(deltas)} locales, {total} symbol entries -> {args.out}", file=sys.stderr)
     return 0
