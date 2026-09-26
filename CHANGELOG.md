@@ -41,6 +41,13 @@
 
 ### Changed
 
+- `detector_key` is a 4-tuple, `(type, class, locale, locales)`, where it was the
+  3-tuple `(type, locale, chosen locales)`: code that unpacks a key or builds one to
+  compare needs the new shape. `DetectorSet.with_` no longer replaces a member of the
+  same type and another reader class; both are kept (see Fixed).
+- The wheel and sdist carry the Unicode License v3 notice for the bundled CLDR data,
+  `icukit/data/cldr_symbols/LICENSE`, verbatim from the CLDR 48 release, and the
+  package metadata states its own license as the SPDX expression `BSD-2-Clause`.
 - The date-interval readers, in both `generated_detectors` and `flexible_detectors`,
   include each zoned skeleton's counterpart in the other zone family: CLDR gives interval
   patterns for the generic zone (`hmv`) alone, and ICU writes a specific-zone skeleton

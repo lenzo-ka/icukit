@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=77.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -9,7 +9,10 @@ description = "ICU toolkit - library and CLI for Unicode and internationalizatio
 authors = [
     {name = "Kevin Lenzo", email = "kevinlenzo@gmail.com"}
 ]
-license = {text = "BSD-2-Clause"}
+license = "BSD-2-Clause"
+# The CLDR data in icukit/data/cldr_symbols is Unicode, Inc.'s, under the Unicode
+# License v3; its notice ships beside the data and among the distribution's licenses.
+license-files = ["LICENSE", "icukit/data/cldr_symbols/LICENSE"]
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["icu", "unicode", "i18n", "internationalization", "localization", "text", "collation", "formatting"]
@@ -81,6 +84,7 @@ icukit = [
     "data/exceptions/*.json",
     "data/unit_surfaces/*.tsv",
     "data/cldr_symbols/*.tsv",
+    "data/cldr_symbols/LICENSE",
 ]
 
 [tool.pytest.ini_options]
