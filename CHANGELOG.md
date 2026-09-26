@@ -56,6 +56,12 @@
 
 ### Fixed
 
+- The API reference documents `cldr_locale`, `cldr_symbol_names`, and
+  `icu_cldr_version` as functions, with their signatures and docstrings. Cached
+  functions were listed as constants whose value was `<functools._lru_cache_wrapper>`.
+- `detector_key` names explicitly chosen locales the way ICU does, so a reader given
+  `locales=("en-GB",)` or `("en_gb",)` keys as one given `("en_GB",)`, and every locale
+  of the language spelled with hyphens keys as `locales=None`.
 - `detector_key` keys a reader by its class and by the locales it actually reads, so a
   language-wide flexible reader left at `locales=None` and a strict single-locale reader
   of the same type are two members of a `DetectorSet`. They shared a key, and `with_`

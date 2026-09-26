@@ -27,6 +27,18 @@ _SOURCE = (
 )
 
 
+@pytest.mark.skipif(
+    not icu.ICU_VERSION.startswith("78."),
+    reason="pins ICU 78's CLDR (48); another ICU carries another CLDR",
+)
+def test_icu_78_reads_cldr_48_and_its_rows_are_plain_cldr():
+    """Pinned, not derived: ``_SOURCE`` uses the implementation's own two functions."""
+    assert icu_cldr_version() == "48"
+    rows = icu_abbreviations("en_US", kinds=["symbol"])
+    assert rows
+    assert {row.source for row in rows} == {"cldr"}
+
+
 def _symbol(locale, surface, **options):
     rows = [
         row

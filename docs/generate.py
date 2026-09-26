@@ -56,6 +56,11 @@ def get_class_info(cls) -> dict[str, Any]:
     return info
 
 
+def is_function(obj: Any) -> bool:
+    """Whether ``obj`` is a function, seen through any wrapper (``functools.cache``)."""
+    return inspect.isfunction(inspect.unwrap(obj)) if callable(obj) else False
+
+
 def get_function_info(func) -> dict[str, Any]:
     """Extract function documentation."""
     sig = ""
@@ -220,7 +225,7 @@ def extract_lib_docs() -> dict[str, Any]:
             obj = getattr(module, name)
             if inspect.isclass(obj):
                 classes.append(get_class_info(obj))
-            elif inspect.isfunction(obj):
+            elif is_function(obj):
                 functions.append(get_function_info(obj))
             else:
                 data.append(get_data_info(name, obj, source_assignments.get(name, {})))
@@ -258,7 +263,7 @@ def extract_lib_docs() -> dict[str, Any]:
             origin = ""
         if inspect.isclass(obj):
             kind = "class"
-        elif inspect.isfunction(obj):
+        elif is_function(obj):
             kind = "function"
         else:
             kind = module_entries.get(
