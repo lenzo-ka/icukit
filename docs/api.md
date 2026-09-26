@@ -1420,19 +1420,29 @@ and for each CLDR locale only what differs from what the locale inherits; the lo
 here resolves the same inheritance CLDR does (en_GB from en_001, en_001 from en, en
 from root) to rebuild a locale's names.
 
-### Constants and type aliases
+### `cldr_locale(locale: 'str') -> 'str'`
 
-#### `cldr_locale` (constant)
+``locale`` as CLDR names the locale whose data it reads ("zh_TW": "zh_Hant_TW").
 
-`<functools._lru_cache_wrapper>`
+ICU's alias resolution first ("iw": "he", "sh": "sr_Latn"), then the script ICU's
+likely subtags give it, kept only where it is not the language's own likely script:
+zh_TW is Traditional (zh_Hant_TW) and sr_ME Latin (sr_Latn_ME), while en_GB stays
+en_GB, so that its parentLocales entry (en_001) applies. The region and variant are
+the locale's own.
 
-#### `cldr_symbol_names` (constant)
+### `cldr_symbol_names(locale: 'str') -> 'tuple[tuple[str, str, tuple[str, ...]], ...]'`
 
-`<functools._lru_cache_wrapper>`
+``(symbol, name, keywords)`` for each symbol CLDR names in ``locale``.
 
-#### `icu_cldr_version` (constant)
+``name`` is CLDR's text-to-speech name ("ampersand"), empty where CLDR gives only
+keywords; ``keywords`` are CLDR's, in its order. Resolved through CLDR's locale
+inheritance from the CLDR locale ``locale`` names (see :func:`cldr_locale`), in code
+point order. Empty for a locale CLDR names no symbols in, or when the snapshot is
+missing.
 
-`<functools._lru_cache_wrapper>`
+### `icu_cldr_version() -> 'str'`
+
+The CLDR version of ICU's own data (root's ``Version``); empty if unreadable.
 
 ### `snapshot_cldr_version() -> 'str'`
 

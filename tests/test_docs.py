@@ -143,6 +143,19 @@ def test_an_assignment_docstring_still_wins_over_a_comment(tmp_path):
     assert _generator().get_source_assignments(module)["SAMPLE"]["doc"] == "The docstring."
 
 
+def test_a_cached_function_is_documented_as_a_function():
+    """``functools.cache`` hides a function from ``inspect.isfunction``; see through it."""
+    api = API_DOC.read_text(encoding="utf-8")
+
+    assert "_lru_cache_wrapper" not in api
+    assert "### `icu_cldr_version() -> 'str'`" in api
+    generate = _generator()
+    functions = generate.extract_lib_docs()["modules"]["cldr_symbols"]["functions"]
+    names = {entry["name"]: entry for entry in functions}
+    assert {"cldr_locale", "cldr_symbol_names", "icu_cldr_version"} <= set(names)
+    assert names["icu_cldr_version"]["doc"]
+
+
 def test_documentation_generation_is_idempotent(tmp_path):
     command = [sys.executable, str(ROOT / "docs" / "generate.py"), "--output", str(tmp_path)]
     subprocess.run(command, cwd=ROOT, check=True)

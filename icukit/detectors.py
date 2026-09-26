@@ -1213,8 +1213,10 @@ def _read_locales(detector: Detector) -> tuple[str, ...] | None:
     if chosen is None:
         return _every_locale_of_language(locale)
     if isinstance(chosen, str):
-        return (chosen,)
-    return tuple(sorted(str(name) for name in chosen))
+        chosen = (chosen,)
+    # Named the way the default resolution names them (ICU's getName), so "en-GB" and
+    # "en_gb" key as the "en_GB" that locales=None reads.
+    return tuple(sorted({icu.Locale(str(name)).getName() for name in chosen}))
 
 
 @functools.cache

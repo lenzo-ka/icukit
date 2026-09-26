@@ -183,6 +183,15 @@ def test_a_custom_readers_locales_give_a_stable_key():
     assert detector_key(_Custom({"en_US", "en_GB"}))[3] == ("en_GB", "en_US")
 
 
+def test_an_explicit_locale_is_keyed_by_its_canonical_name():
+    assert detector_key(_Custom(("en-GB",))) == detector_key(_Custom(("en_GB",)))
+    assert detector_key(_Custom(["en_gb", "EN-us"]))[3] == ("en_GB", "en_US")
+    default = FlexibleMeasureDetector("en_US", "kilometer")
+    spelled = [name.replace("_", "-") for name in default_locales("en")]
+    hand_built = FlexibleMeasureDetector("en_US", "kilometer", locales=spelled)
+    assert detector_key(hand_built) == detector_key(default)
+
+
 @pytest.mark.parametrize("locales", [None, ()])
 def test_a_strict_and_a_flexible_reader_of_one_type_are_two_members(locales):
     strict = NumberDetector("en_US", "currency", "USD")
