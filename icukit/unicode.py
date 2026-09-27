@@ -402,8 +402,7 @@ def get_char_aliases(char: str) -> list[dict[str, str]]:
     correction = get_char_name(char, "alias")
     aliases = [{"alias": correction, "type": "correction"}] if correction else []
     for alias, kind in _snapshot_aliases_of().get(ord(char), ()):
-        if alias != correction:
-            aliases.append({"alias": alias, "type": kind})
+        aliases.append({"alias": alias, "type": kind})
     return aliases
 
 

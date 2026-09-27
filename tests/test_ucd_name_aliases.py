@@ -199,6 +199,10 @@ def test_the_tool_checks_that_icu_carries_exactly_the_corrections(tool):
         tool.check_icu([("0007", "BEL", "correction")])
     with pytest.raises(SystemExit, match="exactly the correction aliases"):
         tool.check_icu([("01A2", "LATIN CAPITAL LETTER GHA", "abbreviation")])
+    # Any name ICU knows, not only its aliases: a formal name, an extended label.
+    for name in ("LATIN SMALL LETTER A", "<control-0007>"):
+        with pytest.raises(SystemExit, match="exactly the correction aliases"):
+            tool.check_icu([("0007", name, "abbreviation")])
 
 
 def test_the_tool_refuses_a_bad_checksum(tool, tmp_path):

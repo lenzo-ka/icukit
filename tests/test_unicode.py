@@ -568,6 +568,19 @@ class TestUnicodeNameCli:
             ["U+FEFF", "ZWNBSP", "abbreviation"],
         ]
 
+    @pytest.mark.parametrize(
+        ("args", "stdout"),
+        [
+            ((), "char\tcodepoint\talias\ttype\n"),
+            (("-H",), ""),
+            (("-j",), "[]\n"),
+        ],
+    )
+    def test_name_aliases_of_text_without_any(self, args, stdout):
+        result = _run_unicode_cli("name", "-t", "AB", "--choice", "aliases", *args)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout == stdout
+
     def test_info_columns_are_unchanged_without_all_names(self):
         result = _run_unicode_cli("info", "-t", "Ƣ")
         assert result.returncode == 0, result.stderr

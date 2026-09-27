@@ -365,6 +365,12 @@ Examples:
             columns += ["alias", "extended_name", "aliases"]
         elif choice == "aliases":
             columns = ["char", "codepoint", "alias", "type"]
+            if not data and not as_json:
+                # Input without aliases: the header alone, as TSV. The formatter renders
+                # an empty list as JSON ("[]"), which is right for JSON output only.
+                if not no_header:
+                    print("\t".join(columns))
+                return 0
         print_output(data, as_json=as_json, columns=columns, headers=not no_header)
         return 0
 

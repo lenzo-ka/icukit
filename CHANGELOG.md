@@ -24,6 +24,12 @@
   info`, `block`, and `category` carries `aliases` always. `get_char_name(char,
   "alias")` still gives the correction alone, as before.
 
+### Changed
+
+- The TSV output of `ik unicode name --choice all` and `ik unicode info --all-names` has
+  one more column, `aliases`, after the others: the columns before it are where they
+  were, but a consumer that checks the number of columns sees six and eight.
+
 ## [0.8.0] - 2026-09-26
 
 ### Added

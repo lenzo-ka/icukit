@@ -196,3 +196,5 @@ Run `ik help` or `ik <command> --help` for detailed usage information.
 BSD 2-Clause License
 
 The CLDR data bundled in `icukit/data/cldr_symbols` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/cldr_symbols/LICENSE).
+
+The UCD data bundled in `icukit/data/ucd_name_aliases` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/ucd_name_aliases/LICENSE).

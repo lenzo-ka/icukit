@@ -10,8 +10,9 @@ This tool reads the others from the pinned UCD file, once, and writes what
 
 The split is measured, not assumed: the tool runs only under an ICU of the same
 Unicode version as the pinned file, and checks there that ICU resolves every
-correction alias, in both directions, and none of the others. The output depends on
-the two pinned files alone, so a rerun reproduces it byte for byte.
+correction alias, in both directions, and none of the others under any of its name
+choices (formal names, aliases, and extended labels). The output depends on the two
+pinned files alone, so a rerun reproduces it byte for byte.
 
 The data is Unicode's, under the Unicode License v3, whose text is written beside it.
 
@@ -82,22 +83,40 @@ def read_aliases(text: str) -> list[tuple[str, str, str]]:
     return rows
 
 
+_CHOICES = (
+    icu.UCharNameChoice.UNICODE_CHAR_NAME,
+    icu.UCharNameChoice.CHAR_NAME_ALIAS,
+    icu.UCharNameChoice.EXTENDED_CHAR_NAME,
+)
+
+
+def _icu_finds(alias: str, choice) -> int:
+    try:
+        return icu.Char.charFromName(alias.encode("ascii"), choice)
+    except (icu.ICUError, ValueError):
+        return -1
+
+
 def _icu_resolves(code_point: str, alias: str) -> bool:
+    """Whether ICU has ``alias`` as the code point's alias, in both directions."""
     char = chr(int(code_point, 16))
     choice = icu.UCharNameChoice.CHAR_NAME_ALIAS
-    try:
-        found = icu.Char.charFromName(alias.encode("ascii"), choice)
-    except (icu.ICUError, ValueError):
-        found = -1
-    return found == ord(char) and icu.Char.charName(char, choice) == alias
+    return _icu_finds(alias, choice) == ord(char) and icu.Char.charName(char, choice) == alias
+
+
+def _icu_knows(alias: str) -> bool:
+    """Whether ICU finds any character by ``alias``, under any of its name choices."""
+    return any(_icu_finds(alias, choice) != -1 for choice in _CHOICES)
 
 
 def check_icu(rows: list[tuple[str, str, str]]) -> None:
-    """Refuse unless ICU resolves exactly the correction aliases (see the docstring)."""
+    """Refuse unless ICU resolves exactly the correction aliases (see the docstring):
+    each correction as its code point's alias, and none of the others as any name."""
     wrong = [
         f"U+{code_point} {alias} ({kind})"
         for code_point, alias, kind in rows
-        if _icu_resolves(code_point, alias) != (kind == ICU_TYPE)
+        if (_icu_resolves(code_point, alias) if kind == ICU_TYPE else _icu_knows(alias))
+        != (kind == ICU_TYPE)
     ]
     if wrong:
         raise SystemExit(
