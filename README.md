@@ -22,7 +22,7 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 
 - **Transliteration**: Convert between scripts (Latin to Cyrillic, Hangul to Latin, etc.)
 - **Normalization**: NFC, NFD, NFKC, NFKD Unicode normalization forms
-- **Character Names**: Formal names, name aliases, and extended names of every code point, and lookup from a name to its character
+- **Character Names**: Formal names, name aliases of every type (corrections, control names, abbreviations), and extended names of every code point, and lookup from a name or alias to its character
 - **Text Segmentation**: Break text into words, sentences, lines, or grapheme clusters
 - **Unicode Regex**: Full Unicode-aware regular expressions with script and property support
 
@@ -177,7 +177,7 @@ ik unicode info -t "Aé"
 ik unicode lookup -t "GREEK SMALL LETTER ALPHA"
 ```
 
-From Python: `char_from_name("GREEK SMALL LETTER ALPHA")` returns `"α"`, and `get_char_names("Ƣ")["alias"]` returns `"LATIN CAPITAL LETTER GHA"`.
+From Python: `char_from_name("GREEK SMALL LETTER ALPHA")` returns `"α"`, `char_from_name("NBSP")` returns `"\xa0"`, `get_char_names("Ƣ")["alias"]` returns `"LATIN CAPITAL LETTER GHA"`, and `get_char_aliases("\x07")` lists `ALERT` (a `control` alias) and `BEL` (an `abbreviation`).
 
 Run `ik help` or `ik <command> --help` for detailed usage information.
 

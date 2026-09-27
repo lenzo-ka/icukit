@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Added
+
+- Every formal name alias Unicode defines, of all five types in `NameAliases.txt`:
+  `correction`, `control`, `alternate`, `figment`, and `abbreviation`. ICU carries the
+  corrections alone, so `BEL`, `ALERT`, `LINE FEED`, `NBSP`, `BYTE ORDER MARK`, and `ZWJ`
+  resolved in neither direction; the other four types are now read from a snapshot of
+  the UCD file of ICU's Unicode version, made by `tools/ucd_name_aliases.py` and pinned
+  by URL and checksum, with the Unicode License v3 notice beside it in the wheel and
+  sdist. The corrections stay ICU's. `get_char_aliases(char)` lists a character's
+  aliases with their types (`[{"alias": "ALERT", "type": "control"}, {"alias": "BEL",
+  "type": "abbreviation"}]` for U+0007); `char_from_name` finds a character by any of
+  them, with `choice="any"` (the default) or `"alias"`, without regard to ASCII case as
+  ICU matches; `get_char_info` gains `aliases`. `icukit.ucd_name_aliases` gives the rows
+  and the snapshot's and ICU's Unicode versions: under an ICU of a later Unicode every
+  alias of the snapshot still holds (Unicode never changes or removes one), and under an
+  earlier one the aliases of code points ICU has not assigned are left out. On the CLI,
+  `ik unicode name --choice aliases` prints one row per alias with its type, `ik unicode
+  lookup` knows every alias, and `--choice all` and `ik unicode info --all-names` add an
+  `aliases` column (`ALERT (control),BEL (abbreviation)`); the JSON output of `ik unicode
+  info`, `block`, and `category` carries `aliases` always. `get_char_name(char,
+  "alias")` still gives the correction alone, as before.
+
 ## [0.8.0] - 2026-09-26
 
 ### Added

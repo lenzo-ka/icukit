@@ -240,6 +240,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`decode_unicode_escapes`](#icukitunicode) — function, `icukit.unicode`
 - [`encode_unicode_escapes`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_name`](#icukitunicode) — function, `icukit.unicode`
+- [`get_char_aliases`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_names`](#icukitunicode) — function, `icukit.unicode`
 - [`char_from_name`](#icukitunicode) — function, `icukit.unicode`
 - [`get_char_category`](#icukitunicode) — function, `icukit.unicode`
@@ -6959,6 +6960,49 @@ Args:
 Returns:
     Transliterated text.
 
+## icukit.ucd_name_aliases
+
+Unicode's formal name aliases that ICU does not carry ("BEL", "ALERT", "NBSP", "ZWJ").
+
+Unicode gives some characters formal name aliases (``NameAliases.txt`` in the UCD), of
+five types: ``correction``, ``control``, ``alternate``, ``figment`` and
+``abbreviation``. ICU's name data carries the corrections alone, which
+:mod:`icukit.unicode` reads from ICU; this module reads the other four types from a
+snapshot of the UCD file (``data/ucd_name_aliases``), made by
+``tools/ucd_name_aliases.py`` from the file of ICU's Unicode version, pinned by URL and
+checksum, which the snapshot's header records.
+
+Unicode's stability policy never changes or removes a formal name alias once
+published, so under an ICU of a later Unicode the snapshot's aliases all still hold,
+and only the aliases published since are missing. Under an ICU of an earlier Unicode,
+the aliases of code points that ICU does not know as assigned are left out, so that
+no alias names a character ICU does not have.
+
+### Constants and type aliases
+
+#### `ALIAS_TYPES` (constant)
+
+`('correction', 'control', 'alternate', 'figment', 'abbreviation')`
+
+The types of formal name alias, in the order ``NameAliases.txt`` defines them.
+
+### `icu_unicode_version() -> 'str'`
+
+The Unicode version of ICU's data ("17.0").
+
+### `snapshot_unicode_version() -> 'str'`
+
+The Unicode version of the snapshot's ``NameAliases.txt`` ("17.0.0"); empty
+without a snapshot.
+
+### `ucd_name_aliases() -> 'tuple[tuple[int, str, str], ...]'`
+
+``(code point, alias, type)`` for each alias in the snapshot, in the file's order.
+
+The snapshot holds every type but ``correction``, which ICU carries. Under an ICU of
+an earlier Unicode than the snapshot's, the aliases of code points ICU does not know
+as assigned are left out. Empty when the snapshot is missing.
+
 ## icukit.unicode
 
 Unicode text normalization and character properties.
@@ -6968,7 +7012,7 @@ query Unicode character properties like names and categories.
 
 Key Features:
     * Normalize text to NFC, NFD, NFKC, NFKD forms
-    * Get Unicode character names, name aliases and extended names
+    * Get Unicode character names, name aliases (of every type) and extended names
     * Look up a character by its name
     * Get character categories and properties
     * Check normalization status
@@ -7041,8 +7085,10 @@ hyphens. ``choice`` selects the names searched:
 
 * ``unicode`` -- formal names, including the algorithmic ones such as
   ``HANGUL SYLLABLE GAG`` and ``CJK UNIFIED IDEOGRAPH-4F60``.
-* ``alias`` -- formal name aliases only, such as ``LATIN CAPITAL LETTER GHA``;
-  the correction aliases alone, as :func:`get_char_name` describes.
+* ``alias`` -- formal name aliases only, of every type :func:`get_char_aliases`
+  lists: ``LATIN CAPITAL LETTER GHA`` (a correction, ICU's), ``ALERT``, ``BEL``,
+  ``NBSP``, ``BYTE ORDER MARK``. The types ICU does not carry are read from a
+  snapshot of the UCD, and matched as ICU matches, without regard to ASCII case.
 * ``extended`` -- formal names and the labels :func:`get_char_name` gives for
   ``extended``, such as ``<control-0007>``.
 * ``any`` (the default) -- all of the above. Unicode keeps names and aliases in
@@ -7068,6 +7114,8 @@ Example:
     >>> char_from_name('LATIN CAPITAL LETTER GHA')
     'Ƣ'
     >>> char_from_name('<control-0007>')
+    '\x07'
+    >>> char_from_name('bel')
     '\x07'
 
 ### `decode_unicode_escapes(text: 'str') -> 'str'`
@@ -7121,6 +7169,44 @@ Returns:
 Raises:
     ValueError: If category code is invalid.
 
+### `get_char_aliases(char: 'str') -> 'list[dict[str, str]]'`
+
+Get every formal name alias of a character, with its type.
+
+Unicode's formal name aliases (``NameAliases.txt``) are of five types, and a code
+point can have several, of several types:
+
+* ``correction`` -- a corrected name, as :func:`get_char_name` gives for ``alias``
+  (``LATIN CAPITAL LETTER GHA`` for U+01A2);
+* ``control`` -- the ISO 6429 and other common names of a control (``ALERT``,
+  ``LINE FEED``);
+* ``alternate`` -- a widely used other name of a format character
+  (``BYTE ORDER MARK``);
+* ``figment`` -- a label for a C1 control that no standard approved
+  (``PADDING CHARACTER``);
+* ``abbreviation`` -- a common abbreviation (``BEL``, ``NBSP``, ``ZWJ``, ``VS1``).
+
+The corrections are ICU's. ICU carries no other type, so those come from a snapshot
+of the UCD file of ICU's Unicode version (see :mod:`icukit.ucd_name_aliases`).
+
+Args:
+    char: A single character.
+
+Returns:
+    A list of dicts, one per alias, each with the ``alias`` and its ``type``: the
+    correction first and the rest in the UCD file's order; empty where there is none.
+
+Raises:
+    ValueError: If input is not a single character.
+
+Example:
+    >>> get_char_aliases('\x07')
+    [{'alias': 'ALERT', 'type': 'control'}, {'alias': 'BEL', 'type': 'abbreviation'}]
+    >>> get_char_aliases('Ƣ')
+    [{'alias': 'LATIN CAPITAL LETTER GHA', 'type': 'correction'}]
+    >>> get_char_aliases('A')
+    []
+
 ### `get_char_category(char: 'str') -> 'str'`
 
 Get the Unicode general category of a character.
@@ -7160,7 +7246,8 @@ Returns:
     Dict with character info: codepoint, name, category, script, etc. ``name`` is
     the formal name, ``alias`` the formal name alias (empty where there is none),
     and ``extended_name`` the extended name, which names every code point, as
-    :func:`get_char_name` describes each.
+    :func:`get_char_name` describes each; ``aliases`` is every formal name alias
+    with its type, as :func:`get_char_aliases` lists them.
 
 Raises:
     ValueError: If input is not a single character.
@@ -7185,10 +7272,11 @@ ICU keeps three names for a code point, and ``choice`` selects one:
   unassigned code point.
 * ``alias`` -- the formal name alias Unicode published to correct a mistaken name,
   such as ``LATIN CAPITAL LETTER GHA`` for U+01A2, whose formal name
-  ``LATIN CAPITAL LETTER OI`` stays fixed by the stability policy. ICU carries only
-  these corrections, not the other kinds of alias in ``NameAliases.txt`` (``BEL``,
-  ``ALERT``, ``NBSP`` and the like). Empty where there is none, which is almost
-  everywhere.
+  ``LATIN CAPITAL LETTER OI`` stays fixed by the stability policy: ICU's alias,
+  the one that supersedes the name. Empty where there is none, which is almost
+  everywhere. The other types of alias (``ALERT`` and ``BEL`` for U+0007,
+  ``NBSP`` for U+00A0), of which a code point can have several, are in
+  :func:`get_char_aliases`.
 * ``extended`` -- the formal name where there is one, and otherwise a label that
   names the code point by its type, such as ``<control-0007>``,
   ``<noncharacter-FFFF>`` or ``<unassigned-D7A4>``. Never empty.

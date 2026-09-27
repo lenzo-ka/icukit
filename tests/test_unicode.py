@@ -262,6 +262,8 @@ class TestCharNameChoices:
             ("LATIN CAPITAL LETTER GHA", "extended"),
             ("LATIN CAPITAL LETTER OI", "alias"),
             ("<control-0007>", "unicode"),
+            ("BEL", "unicode"),
+            ("BEL", "extended"),
         ],
     )
     def test_each_choice_searches_only_its_names(self, name, choice):
@@ -277,7 +279,8 @@ class TestCharNameChoices:
             "GREEK SMALL LETTER  ALPHA",
             "GREEK SMALL LETTER ÅLPHA",
             "\ud800",
-            "BEL",  # a control alias, which ICU does not carry
+            "ſOH",  # U+017F uppercases to S, but only ASCII case is folded, as in ICU
+            " BEL",
         ],
     )
     def test_unknown_name(self, name):
@@ -537,11 +540,32 @@ class TestUnicodeNameCli:
         result = _run_unicode_cli("name", "-t", "Ƣ", "--choice", "all")
         assert result.returncode == 0, result.stderr
         header, row = result.stdout.splitlines()
-        assert header.split("\t") == ["char", "codepoint", "name", "alias", "extended_name"]
+        assert header.split("\t") == [
+            "char",
+            "codepoint",
+            "name",
+            "alias",
+            "extended_name",
+            "aliases",
+        ]
         assert row.split("\t")[2:] == [
             "LATIN CAPITAL LETTER OI",
             "LATIN CAPITAL LETTER GHA",
             "LATIN CAPITAL LETTER OI",
+            "LATIN CAPITAL LETTER GHA (correction)",
+        ]
+
+    def test_name_aliases(self):
+        result = _run_unicode_cli("name", "-t", r"\u0007A\uFEFF", "--choice", "aliases")
+        assert result.returncode == 0, result.stderr
+        header, *rows = result.stdout.splitlines()
+        assert header.split("\t") == ["char", "codepoint", "alias", "type"]
+        assert [row.split("\t")[1:] for row in rows] == [
+            ["U+0007", "ALERT", "control"],
+            ["U+0007", "BEL", "abbreviation"],
+            ["U+FEFF", "BYTE ORDER MARK", "alternate"],
+            ["U+FEFF", "BOM", "abbreviation"],
+            ["U+FEFF", "ZWNBSP", "abbreviation"],
         ]
 
     def test_info_columns_are_unchanged_without_all_names(self):
@@ -554,10 +578,16 @@ class TestUnicodeNameCli:
     def test_info_all_names(self):
         result = _run_unicode_cli("info", "-H", "-t", "Ƣ", "--all-names")
         assert result.returncode == 0, result.stderr
-        assert result.stdout.rstrip("\n").split("\t")[-2:] == [
+        assert result.stdout.rstrip("\n").split("\t")[-3:] == [
             "LATIN CAPITAL LETTER GHA",
             "LATIN CAPITAL LETTER OI",
+            "LATIN CAPITAL LETTER GHA (correction)",
         ]
+
+    def test_info_all_names_lists_every_alias(self):
+        result = _run_unicode_cli("info", "-H", "-t", r"\u0007", "--all-names")
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.rstrip("\n").split("\t")[-1] == "ALERT (control),BEL (abbreviation)"
 
     def test_info_json_has_the_names(self):
         result = _run_unicode_cli("info", "-j", "-t", r"\u0007")
@@ -565,14 +595,18 @@ class TestUnicodeNameCli:
         info = json.loads(result.stdout)[0]
         assert info["alias"] == ""
         assert info["extended_name"] == "<control-0007>"
+        assert info["aliases"] == [
+            {"alias": "ALERT", "type": "control"},
+            {"alias": "BEL", "type": "abbreviation"},
+        ]
 
     def test_lookup(self):
-        text = "GREEK SMALL LETTER ALPHA\nlatin capital letter gha\n<control-0007>"
+        text = "GREEK SMALL LETTER ALPHA\nlatin capital letter gha\n<control-0007>\nnbsp"
         result = _run_unicode_cli("lookup", "-j", "-t", text)
         assert result.returncode == 0, result.stderr
         data = json.loads(result.stdout)
-        assert [row["char"] for row in data] == ["α", "Ƣ", "\x07"]
-        assert [row["codepoint"] for row in data] == ["U+03B1", "U+01A2", "U+0007"]
+        assert [row["char"] for row in data] == ["α", "Ƣ", "\x07", "\xa0"]
+        assert [row["codepoint"] for row in data] == ["U+03B1", "U+01A2", "U+0007", "U+00A0"]
         assert data[1]["query"] == "latin capital letter gha"
         assert data[1]["name"] == "LATIN CAPITAL LETTER OI"
 
