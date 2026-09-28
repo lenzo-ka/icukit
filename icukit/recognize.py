@@ -6970,7 +6970,7 @@ def _minus_before(text: str, start: int) -> bool:
 
 
 def _negated(value: NumberValue | MeasureValue) -> NumberValue | MeasureValue:
-    return replace(value, decimal=format(-Decimal(value.decimal), "f"))
+    return replace(value, decimal=format(Decimal(value.decimal).copy_negate(), "f"))
 
 
 def _in_chain(
@@ -7333,8 +7333,8 @@ class FlexibleNumberRangeDetector:
             separator = text[left.end : right.start]
             if (
                 separator in self._shared_negative_separators
-                and Decimal(start_value.decimal) < 0
-                and Decimal(end_value.decimal) > 0
+                and Decimal(start_value.decimal).is_signed()
+                and not Decimal(end_value.decimal).is_signed()
             ):
                 end_value = _negated(end_value)
             yield ValueDetection(

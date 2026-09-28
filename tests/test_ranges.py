@@ -68,6 +68,13 @@ def _amounts(value) -> tuple[Decimal, Decimal]:
     return Decimal(value.start.decimal), Decimal(value.end.decimal)
 
 
+def _assert_decimal_matches_double(actual: Decimal, expected: float) -> None:
+    expected_decimal = Decimal(str(expected))
+    assert actual == expected_decimal
+    if expected_decimal.is_zero():
+        assert actual.is_signed() == expected_decimal.is_signed()
+
+
 def _numbers(locale: str) -> list:
     return [FlexibleNumberDetector(locale), FlexiblePercentDetector(locale)]
 
@@ -97,6 +104,28 @@ def test_icus_shared_and_independent_negative_sign_shapes_keep_their_values():
     assert _whole(reader, independent)[0]["value"] == NumberRangeValue(
         NumberValue("-3"), NumberValue("1")
     )
+
+
+@pytest.mark.parametrize("locale", ("ar_EG", "en_US"))
+@pytest.mark.parametrize(("start", "end"), [(-0.0, -1.0), (-0.5, -1.0)])
+def test_a_negative_range_starting_below_or_at_zero_keeps_icus_endpoint_signs(locale, start, end):
+    text = icu.NumberRangeFormatter.withLocale(icu.Locale(locale)).formatDoubleRange(start, end)
+    (found,) = _whole(FlexibleNumberRangeDetector(locale), text)
+    actual_start, actual_end = _amounts(found["value"])
+
+    _assert_decimal_matches_double(actual_start, start)
+    _assert_decimal_matches_double(actual_end, end)
+
+
+@pytest.mark.parametrize("locale", ("ar_EG", "en_US"))
+@pytest.mark.parametrize(("start", "end"), [(-1.0, -0.0), (-3.0, 0.0)])
+def test_a_range_ending_at_zero_keeps_icus_endpoint_signs(locale, start, end):
+    text = icu.NumberRangeFormatter.withLocale(icu.Locale(locale)).formatDoubleRange(start, end)
+    (found,) = _whole(FlexibleNumberRangeDetector(locale), text)
+    actual_start, actual_end = _amounts(found["value"])
+
+    _assert_decimal_matches_double(actual_start, start)
+    _assert_decimal_matches_double(actual_end, end)
 
 
 @pytest.mark.parametrize("locale", LOCALES)
