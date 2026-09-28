@@ -69,6 +69,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`MONTH_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`SHORT_YEAR_ERA_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`WEEKDAY_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -2267,7 +2268,22 @@ A year from a ``y`` field is read only in four or more digits, as ICU writes eve
 year from 1000 on; a shorter one cannot be told from a count after a month ("June
 200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
 
-#### `DateDetector(locale: 'str', skeleton: 'str', tz: 'str' = 'GMT') -> 'None'`
+An era field (``G``, any width) is read where the pattern writes it, in the locale's
+own calendar (the Buddhist era in ``th``, the Persian in ``fa``), as ICU formats it;
+it is captured as ``era`` and valued ``("G", era)``, ICU's era index, beside the year
+of that era ("Mar 15, 2024 BC" is ``(("G", 0), ("y", 2024), ...)``). The year
+beside an era keeps the four-digit floor: a short number before a short era is as
+often a count before a unit or a clock ("100 م" is 100 meters in Arabic, "5 م" five
+PM, "7 AD units"), and every locale's default calendar writes today's year in four
+digits.
+
+``short_years=True`` builds the guarded reader of exactly the readings that floor
+refuses: a pattern with an era, read with a year of one to three digits ("Mar 15,
+44 BC" is ``(("G", 0), ("y", 44), ...)``, the year as written, never widened to a
+century). Its type is ``date:short-year:<skeleton>``, beside the text-date reader's
+``date:short-year``, and a pattern without an era refuses it.
+
+#### `DateDetector(locale: 'str', skeleton: 'str', tz: 'str' = 'GMT', *, short_years: 'bool' = False) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -3048,7 +3064,7 @@ inverter. Abbreviations use their typed lexicon.
 
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -3072,6 +3088,14 @@ DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
 #### `SCIENTIFIC_NUMBER_FAMILY` (constant)
 
 `<icukit.engine.Family>`
+
+#### `SHORT_YEAR_ERA_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+The skeletons whose patterns write an era, each read with a year of one to three
+digits, which the default skeleton readers refuse (see DateDetector); the type is
+date:short-year:<skeleton>, one reader per skeleton as in the default family.
 
 #### `SHORT_YEAR_FAMILY` (constant)
 

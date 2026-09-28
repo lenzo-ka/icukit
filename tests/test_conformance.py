@@ -201,3 +201,10 @@ def test_negative_mutation_controls_discriminate_value_captures_and_spec():
         compare_expected(detection, surface, value, captures, wrong_spec, surface).reason
         == "spec-mismatch"
     )
+
+
+@pytest.mark.parametrize("locale", ["th_TH", "fa_IR", "en_US"])
+@pytest.mark.parametrize("skeleton", ["y", "Gy", "GyMMMd", "GGGGyMMMMd"])
+def test_the_oracle_knows_the_era_field(locale, skeleton):
+    cell = Cell(locale, "date", skeleton, "2026-01-03T15:45:00Z", "embedded")
+    assert classify(cell).reason == "recovered"

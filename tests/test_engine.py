@@ -48,9 +48,12 @@ def test_unmodeled_skeletons_are_reported_and_skipped():
     report = generated_detectors_report("en_US")
     skipped = {item.spec for item in report.skipped}
 
-    assert {"Gy", "yQQQ", "yw", "Bh"} <= skipped
-    assert not ({"date:Gy", "date:yQQQ", "date:yw", "date:Bh"} & set(report.detectors.names()))
-    assert DATE_TIME_SKELETON_FAMILY.invert("Gy", "en_US") is None
+    assert {"yQQQ", "yw", "Bh"} <= skipped
+    assert not ({"date:yQQQ", "date:yw", "date:Bh"} & set(report.detectors.names()))
+    assert DATE_TIME_SKELETON_FAMILY.invert("yQQQ", "en_US") is None
+    # The era is modeled: "Gy" and its kin are generated, not skipped.
+    assert {"date:Gy", "date:GyMMMd"} <= set(report.detectors.names())
+    assert DATE_TIME_SKELETON_FAMILY.invert("Gy", "en_US") is not None
     assert all(item.reason for item in report.skipped)
 
 
@@ -133,9 +136,9 @@ def test_localized_literal_skeletons_are_not_wrongly_skipped():
     assert hit["text"] == surface  # reformat == surface still holds through the literals
     assert dict(hit["value"].fields) == {"y": 2024, "M": 3, "d": 24}
 
-    # Era/quarter/etc. remain correctly refused even in this locale.
+    # Quarter/week/etc. remain correctly refused even in this locale.
     report = generated_detectors_report("ja_JP")
-    assert any(item.spec == "Gy" for item in report.skipped)
+    assert any(item.spec == "yQQQ" for item in report.skipped)
 
 
 def test_generation_is_deterministic_and_deduplicated():

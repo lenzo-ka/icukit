@@ -82,6 +82,7 @@ __all__ = [
     "MONTH_NAME_FAMILY",
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
+    "SHORT_YEAR_ERA_FAMILY",
     "SHORT_YEAR_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
     "WEEKDAY_NAME_FAMILY",
@@ -460,6 +461,28 @@ SHORT_YEAR_FAMILY = _guarded_family(
     "the locale's textual date patterns write no year",
 )
 
+
+def _short_year_era_invert(spec: Spec, locale: str) -> Detector | None:
+    return _short_year_era_probe(spec, locale).detector
+
+
+def _short_year_era_probe(spec: Spec, locale: str) -> _Probe:
+    try:
+        return _Probe(DateDetector(locale, str(spec), short_years=True))
+    except ValueError as error:
+        return _Probe(None, str(error))
+
+
+# The skeletons whose patterns write an era, each read with a year of one to three
+# digits, which the default skeleton readers refuse (see DateDetector); the type is
+# date:short-year:<skeleton>, one reader per skeleton as in the default family.
+SHORT_YEAR_ERA_FAMILY = Family(
+    "short-year-era",
+    _date_time_skeletons,
+    _short_year_era_invert,
+    lambda spec, locale: _short_year_era_probe(spec, locale).reason,
+)
+
 # note: A measure family belongs here once its ICU surfaces have an introspective
 # inverter. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
@@ -480,6 +503,7 @@ GUARDED_FAMILIES = (
     MONTH_NAME_FAMILY,
     WEEKDAY_NAME_FAMILY,
     SHORT_YEAR_FAMILY,
+    SHORT_YEAR_ERA_FAMILY,
     BARE_HOUR_FAMILY,
 )
 
@@ -491,6 +515,7 @@ _FAMILY_PROBES = (
     (SCIENTIFIC_NUMBER_FAMILY, _scientific_probe),
     (SPELLOUT_NUMBER_FAMILY, _spellout_probe),
     (LONE_SPELLOUT_NUMBER_FAMILY, _lone_spellout_probe),
+    (SHORT_YEAR_ERA_FAMILY, _short_year_era_probe),
 )
 
 
