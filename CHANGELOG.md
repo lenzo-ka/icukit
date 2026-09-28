@@ -23,6 +23,24 @@
   `aliases` column (`ALERT (control),BEL (abbreviation)`); the JSON output of `ik unicode
   info`, `block`, and `category` carries `aliases` always. `get_char_name(char,
   "alias")` still gives the correction alone, as before.
+- `DateDetector` reads the era field `G`, in every width, where the locale's pattern
+  writes it, in the locale's own calendar, as ICU formats it: "Mar 15, 2024 BC",
+  "3/5/2024 AD", th's Buddhist "พ.ศ. 2567", and the Persian "AP ۱۴۰۲ Esfand ۱۵" of lrc
+  and mzn. The value carries `("G", era)`, ICU's era index, beside the year of that era;
+  the era is captured as `era` with its width (`short`, `wide`, `narrow`). An era is
+  read only where the pattern puts it, never alone. th, lrc, mzn, and ps, whose plain
+  year pattern carries an era, no longer fail to build `DateDetector(locale, "y")`, and
+  `generated_detectors` now holds the `G` skeletons (`Gy`, `GyMMMd`, `GyMd`, ...) of
+  every locale. The year beside an era keeps the four-digit floor, since a short number
+  before a short era is as often a count or a clock ("100 م" meters and "5 م" PM in
+  Arabic, "7 AD units"); every locale's default calendar writes today's year in four
+  digits. The refusal for an uninvertible pattern no longer lists the era among the
+  unsupported fields, and the conformance oracle knows the era field.
+- `DateDetector(locale, skeleton, short_years=True)` and the guarded
+  `SHORT_YEAR_ERA_FAMILY` (in `GUARDED_FAMILIES`) read what that floor refuses: a
+  pattern with an era, with a year of one to three digits, typed
+  `date:short-year:<skeleton>`. "Mar 15, 44 BC" is `(("G", 0), ("y", 44), ...)`, the
+  year as written, never 2044.
 - Ranges are read as ICU writes them. `FlexibleNumberRangeDetector` reads two amounts
   joined by a separator ICU's `NumberRangeFormatter` writes in some locale of the
   language ("3–5", ja_JP "3～5", es_ES "3-5"), read off ICU's own number spans, with or
