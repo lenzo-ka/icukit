@@ -66,18 +66,13 @@
   `FlexibleDateIntervalDetector(locale, skeleton, short_years=True)` and the guarded
   `SHORT_YEAR_INTERVAL_FAMILY` read exactly those, typed
   `date-interval:short-year:<skeleton>`, the year as written ("44–45" is 44 to 45).
-- A range written with a hyphen-minus where ICU writes another separator is a guarded
-  reading, since a hyphen also joins codes, ISBNs, part numbers, and dates:
-  `number:range-hyphen` ("1914-1918"), from `NUMBER_RANGE_HYPHEN_FAMILY` in
-  `GUARDED_FAMILIES`, and `measure:range-hyphen` ("10-15 kg") where the set reads
-  measures; and `FlexibleYearRangeDetector`, in `GUARDED_FAMILIES`, reads year ranges
-  as the `y` interval reader does with the hyphen in place of ICU's separator, a
-  shortened second year written out ("1914-1918", "1893-94", `date-interval:y-hyphen`),
-  and ICU's separator before a shortened year ("1893–94", `date-interval:y-abbreviated`).
-  No endpoint is one number of a run joined by a hyphen, colon, slash, or period
-  ("14-3-3", "2024-03-05", an ISBN), and "-1918" in "1914-1918" still reads as a
-  negative number beside the range. Where ICU writes a hyphen-minus itself (es_ES), the
-  default reader reads it and the report names the hyphen reader as skipped.
+- No range endpoint is one number of a run joined by a separator, a hyphen, a colon, a
+  slash, or a period ("1–2–3", "14-3-3", "2024-03-05", "2:07–4:07", an ISBN), and a
+  U+2212 minus sign before a range keeps its sign ("−3–5"). A hyphen-minus is read as a
+  range separator only where ICU writes it as one (es_ES "3-5"), so English "1914-1918"
+  is no range. A shortened second year, which ICU writes nowhere, is not read as a
+  range of years: "1893–94" reads only as a range of numbers, 1893 to 94. Reading
+  either as years is left to the caller.
 
 ### Changed
 

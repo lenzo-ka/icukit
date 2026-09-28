@@ -1,4 +1,4 @@
-"""Ranges are read as ICU writes them, and a hyphen-minus range is a guarded reading.
+"""Ranges are read as ICU writes them, and a hyphen-minus only where ICU writes one.
 
 Every surface a default reader is held to here is ICU's own: a range formatted by
 ``NumberRangeFormatter`` or a year interval by ``DateIntervalFormat``, in the ICU the
@@ -19,7 +19,6 @@ from icukit import (
     NumberValue,
     detection_to_dict,
     flexible_detectors,
-    flexible_detectors_report,
     generated_detectors,
     number_detectors,
     range_detectors,
@@ -32,8 +31,6 @@ from icukit.recognize import (
     FlexibleNumberDetector,
     FlexibleNumberRangeDetector,
     FlexiblePercentDetector,
-    FlexibleYearRangeDetector,
-    _locale_digit_map,
 )
 
 LOCALES = ("en_US", "de_DE", "fr_FR", "ja_JP", "es_ES", "zh_CN", "ru_RU", "hi_IN", "ar_EG")
@@ -162,7 +159,6 @@ def test_the_default_set_reads_icus_ranges_and_keeps_the_endpoints():
     names = set(gang.names())
 
     assert {"number:range", "measure:range", "number:approximately"} <= names
-    assert not {"number:range-hyphen", "measure:range-hyphen"} & names
     found = {(d["type"], d["text"]) for d in gang.detect("10–15 kg")}
     # Each endpoint's own reading is kept beside the range.
     assert {("measure:range", "10–15 kg"), ("number:decimal", "10")} <= found
@@ -199,7 +195,7 @@ def test_the_default_set_reads_ranges_in_icus_own_form():
 
     assert {"number:range", "number:approximately", "date-interval:y"} <= names
     # The generated set reads no currency or measure, so no range of one.
-    assert not {"measure:range", "number:range-hyphen", "date-interval:y-hyphen"} & names
+    assert "measure:range" not in names
     found = {(d["type"], d["text"]) for d in gang.detect("in 1914–1918, 3–5 kg, $3–5, ~3")}
     assert {
         ("date-interval:y", "1914–1918"),
@@ -264,13 +260,9 @@ def test_a_unicode_minus_sign_before_a_range_keeps_its_sign():
 
 def test_a_short_year_interval_is_a_guarded_reading():
     guarded = generated_detectors("en_US", (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))
-    found = {(d["type"], d["text"]) for d in guarded.detect("in 44–45 and 1914-1918")}
+    found = {(d["type"], d["text"]) for d in guarded.detect("in 44–45")}
 
-    assert {
-        ("date-interval:short-year:y", "44–45"),
-        ("number:range-hyphen", "1914-1918"),
-        ("date-interval:y-hyphen", "1914-1918"),
-    } <= found
+    assert ("date-interval:short-year:y", "44–45") in found
     assert ("date-interval:y", "44–45") not in found
     short = FlexibleDateIntervalDetector("en_US", "y", short_years=True)
     assert [d["value"] for d in _whole(short, "44–45")] == [
@@ -288,119 +280,67 @@ def test_a_lone_numeric_field_other_than_the_year_has_no_interval_reader():
     assert not {"d", "M", "H"} & skeletons
 
 
-# ------------------------------------------------------------------------ guarded hyphen
+# ------------------------------------------------------------------------ hyphen-minus
 
 
-def _years(first: int, last: int) -> DateIntervalValue:
-    return DateIntervalValue(
-        DateTimeValue((("y", first),), "gregorian"), DateTimeValue((("y", last),), "gregorian")
-    )
+def _is_range(detection) -> bool:
+    kind = detection["type"]
+    return kind.startswith("date-interval") or ":range" in kind or "hyphen" in kind
 
 
-@pytest.mark.parametrize(
-    ("text", "first", "last"),
-    [
-        ("1914-1918", 1914, 1918),
-        ("1893-94", 1893, 1894),
-        ("1998-02", 1998, 2002),
-        ("2003-4", 2003, 2004),
-    ],
-)
-def test_a_hyphen_year_range_is_a_guarded_reading(text, first, last):
-    (found,) = _whole(FlexibleYearRangeDetector("en_US"), text)
-
-    assert found["type"] == "date-interval:y-hyphen"
-    assert found["value"] == _years(first, last)
-    if len(text) < 9:
-        assert found["captures"][-1].form == "abbreviated"
-
-
-def test_icus_separator_with_a_shortened_year_is_a_guarded_reading():
-    separator = FlexibleYearRangeDetector("en_US", form="abbreviated")._written[0]
-    text = f"1893{separator}94"
-    (found,) = _whole(FlexibleYearRangeDetector("en_US", form="abbreviated"), text)
-
-    assert found["type"] == "date-interval:y-abbreviated"
-    assert found["value"] == _years(1893, 1894)
+HYPHEN_GANGS = {
+    "default": lambda: generated_detectors("en_US"),
+    "guarded": lambda: generated_detectors("en_US", (*DEFAULT_FAMILIES, *GUARDED_FAMILIES)),
+    "flexible-guarded": lambda: flexible_detectors("en_US", guarded=True),
+}
 
 
 @pytest.mark.parametrize(
-    "text", ["2024-03", "2024-03-05", "14-3-3", "555-1234", "1918-1914", "3-5"]
+    "gang_id",
+    HYPHEN_GANGS,
 )
-def test_a_hyphen_that_is_not_a_year_range_is_not_read_as_one(text):
-    assert FlexibleYearRangeDetector("en_US").detect(text) == []
+def test_a_hyphen_minus_is_no_range_where_icu_writes_another_separator(gang_id):
+    found = HYPHEN_GANGS[gang_id]().detect("in 1914-1918, 10-15 kg, 1893-94, 1893–94")
+
+    ranges = {(d["type"], d["text"]) for d in found if _is_range(d)}
+    # ICU writes "1893–94" as a range of numbers, falling; never as years.
+    assert ranges <= {("number:range", "1893–94")}
 
 
-def test_a_hyphen_number_range_keeps_the_negative_reading_beside_it():
-    reader = FlexibleNumberRangeDetector("en_US", form="range-hyphen")
-    (found,) = _whole(reader, "1624-1713")
+def test_a_hyphenated_single_date_is_not_classified_as_a_range():
+    text = "2008-09-30"
+    detections = {gang_id: gang().detect(text) for gang_id, gang in HYPHEN_GANGS.items()}
 
-    assert found["type"] == "number:range-hyphen"
-    assert found["value"] == NumberRangeValue(NumberValue("1624"), NumberValue("1713"))
-    negatives = [d["text"] for d in FlexibleNumberDetector("en_US").detect("1624-1713")]
-    assert "-1713" in negatives
-
-
-@pytest.mark.parametrize(
-    "text", ["ISBN 978-0-385-30414-5", "14-3-3", "on 2024-03-05", "+1-800-555-0199", "-5"]
-)
-def test_a_run_of_hyphen_joined_numbers_is_not_a_range(text):
-    assert FlexibleNumberRangeDetector("en_US", form="range-hyphen").detect(text) == []
-
-
-def test_a_hyphen_measure_range_is_a_guarded_reading():
-    reader = FlexibleNumberRangeDetector(
-        "en_US", [FlexibleMeasureDetector("en_US", "kilogram")], form="range-hyphen"
-    )
-    (found,) = _whole(reader, "10-15 kg")
-
-    assert found["type"] == "measure:range-hyphen"
-    assert found["value"] == NumberRangeValue(
-        MeasureValue("10", "kilogram"), MeasureValue("15", "kilogram")
-    )
+    assert all(not any(_is_range(found) for found in result) for result in detections.values())
+    # The named flexible-guarded gang makes this a live single-date control: it reads
+    # the entire hyphenated surface as one date, while no gang mistakes it for a range.
+    dates = [
+        found
+        for found in detections["flexible-guarded"]
+        if found["type"] == "date:flexible" and (found["start"], found["end"]) == (0, len(text))
+    ]
+    assert len(dates) == 1
+    found = dates[0]
+    assert not isinstance(found["value"], DateIntervalValue)
+    assert dict(found["value"].fields) == {"y": 2008, "M": 9, "d": 30}
 
 
 def test_where_icu_writes_a_hyphen_minus_the_default_reader_reads_it():
     hyphen = _range("es_ES", 3, 5)
     if "-" not in hyphen:
         pytest.skip("ICU writes es_ES another range separator")
-    report = flexible_detectors_report("es_ES", currencies=(), units=(), guarded=True)
+    found = {(d["type"], d["text"]) for d in generated_detectors("es_ES").detect(hyphen)}
 
-    assert FlexibleNumberRangeDetector("es_ES", form="range-hyphen").has_marks is False
-    assert "number:range-hyphen" not in report.detectors.names()
-    assert any(skipped.spec == "number:range-hyphen" for skipped in report.skipped)
-    assert _whole(FlexibleNumberRangeDetector("es_ES"), hyphen)[0]["type"] == "number:range"
-
-
-def test_the_guarded_set_adds_the_hyphen_readers():
-    gang = flexible_detectors("en_US", guarded=True)
-    names = set(gang.names())
-
-    assert {
-        "number:range-hyphen",
-        "measure:range-hyphen",
-        "date-interval:y-hyphen",
-        "date-interval:y-abbreviated",
-    } <= names
-    assert {"date-interval:y-hyphen", "date-interval:y-abbreviated"} <= set(
-        generated_detectors("en_US", GUARDED_FAMILIES).names()
-    )
-    found = {(d["type"], d["text"]) for d in gang.detect("in 1914-1918")}
-    assert {
-        ("number:range-hyphen", "1914-1918"),
-        ("date-interval:y-hyphen", "1914-1918"),
-        ("number:decimal", "-1918"),
-    } <= found
+    assert ("number:range", hyphen) in found
+    # The endpoint's own reading is not touched: "-5" still reads as a negative number.
+    assert "-5" in [d["text"] for d in FlexibleNumberDetector("es_ES").detect(hyphen)]
 
 
-def test_a_shortened_year_is_written_out_in_the_digits_it_is_written_in():
-    digits = _locale_digit_map("ar_EG")
-    native = "".join(sorted(digits, key=digits.__getitem__))
-    reader = FlexibleYearRangeDetector("ar_EG", form="abbreviated")
-    if not reader.has_marks:
-        pytest.skip("ICU writes ar_EG no year interval separator")
-    separator = reader._written[0]
-    text = f"{native[1]}{native[8]}{native[9]}{native[3]}{separator}{native[9]}{native[4]}"
-
-    values = [found["value"] for found in _whole(reader, text)]
-    assert [(v.start.fields, v.end.fields) for v in values] == [((("y", 1893),), (("y", 1894),))]
+@pytest.mark.parametrize(
+    "text", ["ISBN 978-0-385-30414-5", "14-3-3", "el 2024-03-05", "+1-800-555-0199", "-5"]
+)
+def test_a_run_of_hyphen_joined_numbers_is_not_a_range(text):
+    reader = FlexibleNumberRangeDetector("es_ES")
+    if "-" not in reader._marks:
+        pytest.skip("ICU writes es_ES another range separator")
+    assert reader.detect(text) == []

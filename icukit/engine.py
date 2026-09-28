@@ -56,7 +56,6 @@ from .recognize import (
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
     FlexibleWeekdayNameDetector,
-    FlexibleYearRangeDetector,
     LetterNameDetector,
     PluralNumeralDetector,
     SingleLetterWordDetector,
@@ -86,14 +85,11 @@ __all__ = [
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
     "NUMBER_RANGE_FAMILY",
-    "NUMBER_RANGE_HYPHEN_FAMILY",
     "SHORT_YEAR_ERA_FAMILY",
     "SHORT_YEAR_FAMILY",
     "SHORT_YEAR_INTERVAL_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
     "WEEKDAY_NAME_FAMILY",
-    "YEAR_RANGE_ABBREVIATED_FAMILY",
-    "YEAR_RANGE_HYPHEN_FAMILY",
     "SkippedSpec",
     "flexible_detectors",
     "flexible_detectors_report",
@@ -512,20 +508,6 @@ SHORT_YEAR_FAMILY = _guarded_family(
     "the locale's textual date patterns write no year",
 )
 
-YEAR_RANGE_HYPHEN_FAMILY = _guarded_family(
-    "y-hyphen",
-    lambda locale: FlexibleYearRangeDetector(locale, form="hyphen"),
-    lambda detector: detector.has_marks,
-    "ICU writes the locale no year interval with a separator",
-)
-
-YEAR_RANGE_ABBREVIATED_FAMILY = _guarded_family(
-    "y-abbreviated",
-    lambda locale: FlexibleYearRangeDetector(locale, form="abbreviated"),
-    lambda detector: detector.has_marks,
-    "ICU writes the locale no year interval with a separator",
-)
-
 
 def _short_year_era_invert(spec: Spec, locale: str) -> Detector | None:
     return _short_year_era_probe(spec, locale).detector
@@ -574,6 +556,11 @@ SHORT_YEAR_INTERVAL_FAMILY = Family(
 )
 
 
+# Why a range reader is not built: ICU writes the locale no separator or sign for the
+# form (a range's separator, or the approximately sign).
+_NO_MARK = "ICU writes the locale no separator or sign for the form"
+
+
 def _range_family(name: str, forms: tuple[str, ...]) -> Family:
     """A family of one number range reader per form, over a number and a percent reader.
 
@@ -589,7 +576,7 @@ def _range_family(name: str, forms: tuple[str, ...]) -> Family:
         except (icu.ICUError, ValueError) as error:
             return _Probe(None, str(error))
         if not reader.has_marks:
-            return _Probe(None, "ICU writes a hyphen-minus itself, read by the range reader")
+            return _Probe(None, _NO_MARK)
         return _Probe(reader)
 
     return Family(
@@ -601,7 +588,6 @@ def _range_family(name: str, forms: tuple[str, ...]) -> Family:
 
 
 NUMBER_RANGE_FAMILY = _range_family("number-range", ("range", "approximately"))
-NUMBER_RANGE_HYPHEN_FAMILY = _range_family("number-range-hyphen", ("range-hyphen",))
 
 # note: A measure family belongs here once its ICU surfaces have an introspective
 # inverter. Abbreviations use their typed lexicon.
@@ -627,9 +613,6 @@ GUARDED_FAMILIES = (
     SHORT_YEAR_ERA_FAMILY,
     BARE_HOUR_FAMILY,
     SHORT_YEAR_INTERVAL_FAMILY,
-    YEAR_RANGE_HYPHEN_FAMILY,
-    YEAR_RANGE_ABBREVIATED_FAMILY,
-    NUMBER_RANGE_HYPHEN_FAMILY,
 )
 
 _FAMILY_PROBES = (
@@ -965,8 +948,6 @@ def _flexible_families(
                 "ICU's best pattern for the j skeleton has no hour field",
             ),
             SHORT_YEAR_INTERVAL_FAMILY,
-            YEAR_RANGE_HYPHEN_FAMILY,
-            YEAR_RANGE_ABBREVIATED_FAMILY,
         ]
     return tuple(families)
 
@@ -982,41 +963,38 @@ def range_detectors(
     locale: str,
     detectors: DetectorSet,
     *,
-    guarded: bool = False,
     locales: Iterable[str] | None = None,
 ) -> DetectorSet:
     """The number range readers over the amount readers ``detectors`` holds.
 
     A range's endpoints follow the set: one reader over its number, percent, and
     currency readers, strict or flexible (``number:range``), and one over its measure
-    readers (``measure:range``), each also reading the approximately form; ``guarded``
-    adds each one's hyphen-minus form. So a set that reads a currency or a unit reads its
-    ranges ("$3–5", "10–15 kg"), and one that does not, does not. Add them with
+    readers (``measure:range``), each also reading the approximately form. So a set that
+    reads a currency or a unit reads its ranges ("$3–5", "10–15 kg"), and one that does
+    not, does not. Add them with
     ``detectors.with_(*range_detectors(locale, detectors).detectors)``: each replaces the
     set's own reader of its type, a generated set's ``number:range`` among them.
     """
-    readers, _ = _range_readers(locale, detectors, _locale_selection(locale, locales), guarded)
+    readers, _ = _range_readers(locale, detectors, _locale_selection(locale, locales))
     return DetectorSet(tuple(readers))
 
 
 def _range_readers(
-    locale: str, detectors: DetectorSet, locales: tuple[str, ...] | None, guarded: bool
+    locale: str, detectors: DetectorSet, locales: tuple[str, ...] | None
 ) -> tuple[list[Detector], list[SkippedSpec]]:
     """:func:`range_detectors`, and each form ICU gives no separator, as skipped."""
-    forms = ("range", "approximately", *(("range-hyphen",) if guarded else ()))
     readers: list[Detector] = []
     skipped: list[SkippedSpec] = []
     for kinds in _RANGE_ENDPOINTS:
         endpoints = [detector for detector in detectors.detectors if type(detector) in kinds]
         if not endpoints:
             continue
-        for form in forms:
+        for form in ("range", "approximately"):
             reader = FlexibleNumberRangeDetector(locale, endpoints, form=form, locales=locales)
             if reader.has_marks:
                 readers.append(reader)
             else:
-                reason = "ICU writes a hyphen-minus itself, read by the range reader"
-                skipped.append(SkippedSpec(f"number-{form}", reader.type, reason))
+                skipped.append(SkippedSpec(f"number-{form}", reader.type, _NO_MARK))
     return readers, skipped
 
 
@@ -1040,7 +1018,7 @@ def flexible_detectors_report(
         guarded,
     )
     report = generated_detectors_report(locale, families)
-    readers, skipped = _range_readers(locale, report.detectors, selection, guarded)
+    readers, skipped = _range_readers(locale, report.detectors, selection)
     return GenerationReport(report.detectors.with_(*readers), (*report.skipped, *skipped))
 
 
@@ -1088,8 +1066,7 @@ def flexible_detectors(
     ``locales`` chooses the other locales of the language the language-wide readers
     read, and the locales the currencies and units are chosen from (every one by
     default). ``guarded`` adds the readers of the readings the default readers refuse on
-    purpose (:data:`GUARDED_FAMILIES`), each under its own type, and the range readers'
-    hyphen-minus form (``number:range-hyphen``, ``measure:range-hyphen``). A member that cannot be
+    purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
     built is left out; :func:`flexible_detectors_report` names it and why.
 
     The set is costlier than :func:`generated_detectors`: building it takes seconds (most

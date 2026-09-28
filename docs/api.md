@@ -29,7 +29,6 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleShortYearDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleWeekdayNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumberRangeDetector`](#icukitrecognize) — class, `icukit.recognize`
-- [`FlexibleYearRangeDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`AlphanumericRunsValue`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateTimeDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -76,14 +75,11 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`NUMBER_RANGE_FAMILY`](#icukitengine) — constant, `icukit.engine`
-- [`NUMBER_RANGE_HYPHEN_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_ERA_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_INTERVAL_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`WEEKDAY_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
-- [`YEAR_RANGE_ABBREVIATED_FAMILY`](#icukitengine) — constant, `icukit.engine`
-- [`YEAR_RANGE_HYPHEN_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`Family`](#icukitengine) — class, `icukit.engine`
 - [`DateIntervalSpec`](#icukitdetectors) — class, `icukit.detectors`
 - [`DateIntervalValue`](#icukitdetectors) — class, `icukit.detectors`
@@ -2474,8 +2470,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 The locale and form of a number-range or approximately candidate.
 
-``form`` is ``"range"`` (a separator ICU's ``NumberRangeFormatter`` writes),
-``"range-hyphen"`` (a hyphen-minus where ICU writes another separator), or
+``form`` is ``"range"`` (a separator ICU's ``NumberRangeFormatter`` writes) or
 ``"approximately"``. ``collapse`` is ``"unit"`` when one side's unit is shared with
 the other ("$3–5"), else ``"none"``; ``mark`` is the separator or the approximately
 sign as written, without the spaces around it.
@@ -3111,7 +3106,7 @@ inverter. Abbreviations use their typed lexicon.
 
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -3129,10 +3124,6 @@ DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
 `<icukit.engine.Family>`
 
 #### `NUMBER_RANGE_FAMILY` (constant)
-
-`<icukit.engine.Family>`
-
-#### `NUMBER_RANGE_HYPHEN_FAMILY` (constant)
 
 `<icukit.engine.Family>`
 
@@ -3169,14 +3160,6 @@ the type is date-interval:short-year:<skeleton>.
 `<icukit.engine.Family>`
 
 #### `WEEKDAY_NAME_FAMILY` (constant)
-
-`<icukit.engine.Family>`
-
-#### `YEAR_RANGE_ABBREVIATED_FAMILY` (constant)
-
-`<icukit.engine.Family>`
-
-#### `YEAR_RANGE_HYPHEN_FAMILY` (constant)
 
 `<icukit.engine.Family>`
 
@@ -3242,8 +3225,7 @@ A reader that takes a parameter is built for each value chosen from ICU:
 ``locales`` chooses the other locales of the language the language-wide readers
 read, and the locales the currencies and units are chosen from (every one by
 default). ``guarded`` adds the readers of the readings the default readers refuse on
-purpose (:data:`GUARDED_FAMILIES`), each under its own type, and the range readers'
-hyphen-minus form (``number:range-hyphen``, ``measure:range-hyphen``). A member that cannot be
+purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
 built is left out; :func:`flexible_detectors_report` names it and why.
 
 The set is costlier than :func:`generated_detectors`: building it takes seconds (most
@@ -3267,15 +3249,15 @@ Derive all invertible detectors introspectively registered for ``locale``.
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
-### `range_detectors(locale: 'str', detectors: 'DetectorSet', *, guarded: 'bool' = False, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
+### `range_detectors(locale: 'str', detectors: 'DetectorSet', *, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
 
 The number range readers over the amount readers ``detectors`` holds.
 
 A range's endpoints follow the set: one reader over its number, percent, and
 currency readers, strict or flexible (``number:range``), and one over its measure
-readers (``measure:range``), each also reading the approximately form; ``guarded``
-adds each one's hyphen-minus form. So a set that reads a currency or a unit reads its
-ranges ("$3–5", "10–15 kg"), and one that does not, does not. Add them with
+readers (``measure:range``), each also reading the approximately form. So a set that
+reads a currency or a unit reads its ranges ("$3–5", "10–15 kg"), and one that does
+not, does not. Add them with
 ``detectors.with_(*range_detectors(locale, detectors).detectors)``: each replaces the
 set's own reader of its type, a generated set's ``number:range`` among them.
 
@@ -5448,19 +5430,14 @@ are the "start" and "end" amounts, each with its value, and the "separator".
 
 ``form`` chooses what the reader reads, under its own type ``<group>:<form>``:
 
-* ``"range"`` -- the separators ICU writes (``number:range``, ``measure:range``).
-* ``"range-hyphen"`` -- a hyphen-minus where ICU writes another separator
-  ("1914-1918", "10-15 kg"). It is a guarded reading, since a hyphen also joins
-  codes, ISBNs, and part numbers. A falling or level pair is read too, as ICU
-  writes one: a score ("3-2") is read "to" as a range is. Where ICU writes a
-  hyphen-minus itself (es_ES "3-5"), ``"range"`` reads it, and this reader has no
-  separator (:attr:`has_marks` is false).
+* ``"range"`` -- the separators ICU writes (``number:range``, ``measure:range``),
+  a hyphen-minus only where ICU writes one (es_ES "3-5").
 * ``"approximately"`` -- one amount after ICU's approximately sign ("~3", "≈3",
   "約3"), an :class:`~icukit.detectors.ApproximateValue`. A sign that is the
   locale's minus sign is left out. Where ICU writes the sign after a currency
   symbol ("US$~3.00" in some locales), that form is not read.
 
-The endpoints' own readings are not touched: "1914-1918" still reads "-1918" as a
+The endpoints' own readings are not touched: es_ES "3-5" still reads "-5" as a
 negative number beside the range. No endpoint is one number of a longer run
 joined by a separator, a hyphen, a colon, a slash, or a period ("14-3-3",
 "2:07–4:07"). An endpoint is looked for within 48 characters of the separator.
@@ -5667,39 +5644,6 @@ replaces the other. A zone name that names several zones is read once per zone
 
 A zone is read as ICU writes it that day: "10:00 PM IST" is Irish summer time on
 July 5 but not on January 5. ``fields`` are a date's ``(letter, value)`` pairs.
-
-### class `FlexibleYearRangeDetector`
-
-Recognize a range of years in a form ICU never writes, as a guarded reading.
-
-``form`` is ``"hyphen"`` (type ``date-interval:y-hyphen``): two years joined by a
-hyphen-minus where ICU's year interval writes another separator ("1914-1918", and
-its second year shortened, "1893-94"); or ``"abbreviated"``
-(``date-interval:y-abbreviated``): ICU's own separator with the second year
-shortened to its last one or two digits ("1893–94", "1933–4"). Each is read as the
-:class:`FlexibleDateIntervalDetector` of skeleton ``y`` reads ICU's own form, with
-ICU's separator in place of the hyphen and the second year written out, so ICU's
-year interval pattern and its gate decide the reading; the value is its
-:class:`~icukit.detectors.DateIntervalValue`, and the shortened year's "end" capture
-has the form ``"abbreviated"``. The shortened year is hand-rolled, since CLDR has no
-pattern for it: the first year's leading digits before it, or the next decade's or
-century's where that is not later ("1998-02" is 1998 to 2002), and two digits only
-where they end the range within half a century ("2024-03" is not 2024 to 2103).
-
-Both are guarded: a hyphen also joins codes and ISO dates, and a digit or two after
-a separator may be anything. A range must rise, a hyphen joins two years of one width
-of four digits or more, the interval reader's year floor ("555-1234" is not a range
-of years), and no year is one number of a longer run ("2024-03-05"). Where ICU
-writes a hyphen-minus itself between years, the ``"hyphen"`` reader reads only the
-shortened second year.
-
-#### `FlexibleYearRangeDetector(locale: 'str', *, form: 'str' = 'hyphen') -> 'None'`
-
-Initialize self.  See help(type(self)) for accurate signature.
-
-#### `detect(text: 'str') -> 'list[ValueDetection]'`
-
-Return the year ranges of ``text`` in source order.
 
 ### class `LetterNameDetector`
 
