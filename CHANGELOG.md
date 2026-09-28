@@ -31,11 +31,13 @@
   read only where the pattern puts it, never alone. th, lrc, mzn, and ps, whose plain
   year pattern carries an era, no longer fail to build `DateDetector(locale, "y")`, and
   `generated_detectors` now holds the `G` skeletons (`Gy`, `GyMMMd`, `GyMd`, ...) of
-  every locale. The year beside an era keeps the four-digit floor, since a short number
+  every locale. The year beside an era keeps the four-digit floor where ICU writes the
+  current year of that locale's calendar in four or more digits, since a short number
   before a short era is as often a count or a clock ("100 م" meters and "5 م" PM in
-  Arabic, "7 AD units"); every locale's default calendar writes today's year in four
-  digits. The refusal for an uninvertible pattern no longer lists the era among the
-  unsupported fields, and the conformance oracle knows the era field.
+  Arabic, "7 AD units"). Calendars whose current era naturally has a short year, such
+  as Japanese and ROC calendars, read ICU's canonical short era year by default. The
+  refusal for an uninvertible pattern no longer lists the era among the unsupported
+  fields, and the conformance oracle knows the era field.
 - `DateDetector(locale, skeleton, short_years=True)` and the guarded
   `SHORT_YEAR_ERA_FAMILY` (in `GUARDED_FAMILIES`) read what that floor refuses: a
   pattern with an era, with a year of one to three digits, typed
@@ -55,19 +57,24 @@
   `measure:range`), which `ik detect --currency` and `--measure` add, and
   `flexible_detectors` reads ranges over its own readers. Each also reads ICU's
   approximately form ("~3", `number:approximately`, an `ApproximateValue`). A range
-  reader builds its endpoint readers on its first read of a range. The interval
-  reader's skeletons now include those CLDR gives interval formats for, so a year
-  interval reads ("1624 – 1713", `date-interval:y`); a lone numeric day, month, or hour
-  is left out, since its interval is a plain number range. A range of years alone must
-  rise and is not one pair of a longer run ("1914–1918–1945"). The endpoints' own
-  readings stay beside a range.
+  reader builds its endpoint readers on its first read of a range. Where ICU writes one
+  leading minus for two negative endpoints (ar_EG "؜-٣–١"), its scope is recovered
+  from ICU's formatted negative range; ICU's spaced opposite-sign form remains -3 to
+  1. A helper bare-number reader can complete a collapsed currency or measure endpoint,
+  but no longer lets a currency-only or measure-only set invent a bare range or
+  approximate number. The interval reader's skeletons now include those CLDR gives
+  interval formats for, so a year interval reads ("1624 – 1713", `date-interval:y`); a
+  lone numeric day, month, or hour is left out, since its interval is a plain number
+  range. A range of years alone must rise and is not one pair of a longer run
+  ("1914–1918–1945"). The endpoints' own readings stay beside a range.
 - `FlexibleDateIntervalDetector` keeps the four-digit year floor `DateDetector` keeps:
   a `y` year under four digits ("March 5 – 7, 344") is not read by default, and
   `FlexibleDateIntervalDetector(locale, skeleton, short_years=True)` and the guarded
   `SHORT_YEAR_INTERVAL_FAMILY` read exactly those, typed
   `date-interval:short-year:<skeleton>`, the year as written ("44–45" is 44 to 45).
 - No range endpoint is one number of a run joined by a separator, a hyphen, a colon, a
-  slash, or a period ("1–2–3", "14-3-3", "2024-03-05", "2:07–4:07", an ISBN), and a
+  slash, or a period ("1–2–3" with or without spaces, "14-3-3", "2024-03-05",
+  "2:07–4:07", an ISBN), and a
   U+2212 minus sign before a range keeps its sign ("−3–5"). A hyphen-minus is read as a
   range separator only where ICU writes it as one (es_ES "3-5"), so English "1914-1918"
   is no range. A shortened second year, which ICU writes nowhere, is not read as a
@@ -76,6 +83,9 @@
 
 ### Changed
 
+- Generated date detectors also include fully zero-padded complete numeric-date
+  patterns where ICU's pattern generator makes them distinct from its enumerated
+  unpadded pattern, so en_US `MM/dd/y` is read from the derived `yMMdd` skeleton.
 - The TSV output of `ik unicode name --choice all` and `ik unicode info --all-names` has
   one more column, `aliases`, after the others: the columns before it are where they
   were, but a consumer that checks the number of columns sees six and eight.

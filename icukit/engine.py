@@ -164,7 +164,20 @@ ABBREVIATION_FAMILY = Family(
 
 def _date_time_skeletons(locale: str) -> Iterable[Spec]:
     generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
-    return sorted(generator.getSkeletons())
+    skeletons = set(generator.getSkeletons())
+    # ICU may enumerate only the unpadded complete numeric date skeleton even though
+    # its pattern generator gives a distinct pattern when every numeric month/day field
+    # is requested at width two (en_US yMd -> M/d/y, widened -> MM/dd/y). Derive that
+    # request from ICU's own complete numeric skeletons and keep it only when ICU gives
+    # it a distinct pattern. This is CLDR skeleton grammar, not a locale inventory.
+    for skeleton in tuple(skeletons):
+        letters = set(skeleton)
+        if letters != {"y", "M", "d"} or skeleton.count("M") != 1 or skeleton.count("d") != 1:
+            continue
+        padded = skeleton.replace("M", "MM").replace("d", "dd")
+        if generator.getBestPattern(padded) != generator.getBestPattern(skeleton):
+            skeletons.add(padded)
+    return sorted(skeletons)
 
 
 def _date_time_invert(spec: Spec, locale: str) -> Detector | None:

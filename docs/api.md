@@ -2279,18 +2279,20 @@ Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
 The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
 date specification fixes GMT so date-only parsing cannot acquire host-zone behavior.
 
-A year from a ``y`` field is read only in four or more digits, as ICU writes every
-year from 1000 on; a shorter one cannot be told from a count after a month ("June
-200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
+A year from a ``y`` field is read only in four or more digits when this locale's
+calendar writes its current year that way; a shorter one cannot be told from a
+count after a month ("June 200", "August 9", "3/4"). Calendars whose current era
+naturally has a short year, such as Japanese and ROC calendars, keep that canonical
+short year. A ``yy`` field keeps its two digits.
 
 An era field (``G``, any width) is read where the pattern writes it, in the locale's
 own calendar (the Buddhist era in ``th``, the Persian in ``fa``), as ICU formats it;
 it is captured as ``era`` and valued ``("G", era)``, ICU's era index, beside the year
 of that era ("Mar 15, 2024 BC" is ``(("G", 0), ("y", 2024), ...)``). The year
-beside an era keeps the four-digit floor: a short number before a short era is as
-often a count before a unit or a clock ("100 م" is 100 meters in Arabic, "5 م" five
-PM, "7 AD units"), and every locale's default calendar writes today's year in four
-digits.
+beside an era keeps the four-digit floor only when ICU writes the current year of
+that locale's calendar in four or more digits: a short number before a short era is
+as often a count before a unit or a clock ("100 م" is 100 meters in Arabic, "5 م"
+five PM, "7 AD units").
 
 ``short_years=True`` builds the guarded reader of exactly the readings that floor
 refuses: a pattern with an era, read with a year of one to three digits ("Mar 15,
