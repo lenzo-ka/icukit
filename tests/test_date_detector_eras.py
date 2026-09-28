@@ -66,6 +66,33 @@ def test_a_short_year_beside_an_era_is_the_guarded_readers():
     assert guarded.detect(long) == []
 
 
+@pytest.mark.parametrize(
+    ("locale", "skeleton"),
+    [
+        ("ja_JP@calendar=japanese", "Gy"),
+        ("ja_JP@calendar=japanese", "GyMMMd"),
+        ("ja_JP@calendar=japanese", "GGGGGyMd"),
+        ("zh_TW@calendar=roc", "GyMMMd"),
+    ],
+)
+def test_a_calendar_with_a_short_current_era_year_reads_icus_whole_date(locale, skeleton):
+    detector = DateDetector(locale, skeleton)
+    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
+    surface = detector._df.format(calendar.getTime())
+    position = icu.FieldPosition(icu.DateFormat.kYearField)
+    detector._df.format(calendar.getTime(), position)
+    written_year = surface[position.getBeginIndex() : position.getEndIndex()]
+    if sum(icu.Char.isdigit(char) for char in written_year) >= 4:
+        pytest.skip(f"this ICU writes {locale} current year with at least four digits")
+
+    (found,) = [
+        hit for hit in detector.detect(surface) if (hit["start"], hit["end"]) == (0, len(surface))
+    ]
+    fields = dict(found["value"].fields)
+    assert fields["G"] == calendar.get(icu.Calendar.ERA)
+    assert fields["y"] == calendar.get(icu.Calendar.YEAR)
+
+
 def test_the_guarded_short_year_reader_needs_an_era():
     with pytest.raises(ValueError):
         DateDetector("en", "yMMMd", short_years=True)

@@ -528,18 +528,20 @@ class DateDetector:
     The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
     date specification fixes GMT so date-only parsing cannot acquire host-zone behavior.
 
-    A year from a ``y`` field is read only in four or more digits, as ICU writes every
-    year from 1000 on; a shorter one cannot be told from a count after a month ("June
-    200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
+    A year from a ``y`` field is read only in four or more digits when this locale's
+    calendar writes its current year that way; a shorter one cannot be told from a
+    count after a month ("June 200", "August 9", "3/4"). Calendars whose current era
+    naturally has a short year, such as Japanese and ROC calendars, keep that canonical
+    short year. A ``yy`` field keeps its two digits.
 
     An era field (``G``, any width) is read where the pattern writes it, in the locale's
     own calendar (the Buddhist era in ``th``, the Persian in ``fa``), as ICU formats it;
     it is captured as ``era`` and valued ``("G", era)``, ICU's era index, beside the year
     of that era ("Mar 15, 2024 BC" is ``(("G", 0), ("y", 2024), ...)``). The year
-    beside an era keeps the four-digit floor: a short number before a short era is as
-    often a count before a unit or a clock ("100 م" is 100 meters in Arabic, "5 م" five
-    PM, "7 AD units"), and every locale's default calendar writes today's year in four
-    digits.
+    beside an era keeps the four-digit floor only when ICU writes the current year of
+    that locale's calendar in four or more digits: a short number before a short era is
+    as often a count before a unit or a clock ("100 م" is 100 meters in Arabic, "5 م"
+    five PM, "7 AD units").
 
     ``short_years=True`` builds the guarded reader of exactly the readings that floor
     refuses: a pattern with an era, read with a year of one to three digits ("Mar 15,
@@ -592,12 +594,20 @@ class DateDetector:
                 f"fields are not supported"
             )
         self._has_era = "G" in _letters
+        current = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
+        year_position = icu.FieldPosition(icu.DateFormat.kYearField)
+        current_surface = self._df.format(current.getTime(), year_position)
+        current_year = current_surface[year_position.getBeginIndex() : year_position.getEndIndex()]
+        self._year_floor = sum(icu.Char.isdigit(char) for char in current_year) >= 4
         if short_years and not (
-            self._has_era and any(f.letter == "y" and f.width != 2 for f in self._fields)
+            self._year_floor
+            and self._has_era
+            and any(f.letter == "y" and f.width != 2 for f in self._fields)
         ):
             raise ValueError(
-                f"DateDetector reads a short year only in a 'y' field beside an era, and "
-                f"{self.pattern!r} (skeleton {skeleton!r}) has no such pair"
+                f"DateDetector reads a guarded short year only where ICU writes the "
+                f"calendar's current 'y' year in at least four digits beside an era, and "
+                f"{self.pattern!r} (skeleton {skeleton!r}) has no such field"
             )
         # ICU parses two digits in a one-letter year field into the century around
         # today ("44 BC" as 2044 BC), which is right where the year alone must be a
@@ -712,17 +722,20 @@ class DateDetector:
             if (
                 field.letter == "y"
                 and field.width != 2
+                and self._year_floor
                 and (end_cp - begin_cp < 4) != (self.short_years)
             ):
                 # ICU's "y" writes a year in as many digits as it has: four for every
                 # year from 1000 on, and one to three below it ("June 200", "3/4"). The
                 # reformat check cannot tell those from a count after a month ("in June
                 # 200 cases", "August 9"), so a year under four digits is not read here,
-                # a hand-rolled limit; "yy" keeps its two digits, which ICU writes for
-                # every year. An era beside the year does not lift the limit by default:
-                # a short era follows a count or a clock as readily ("100 م" meters, "5
-                # م" PM, "7 AD units"). The guarded short-year reader reads exactly
-                # those refused years, beside an era, and nothing else.
+                # a hand-rolled limit. It applies only where this formatter writes its
+                # calendar's current year in four or more digits; calendars with a
+                # naturally short current era year keep ICU's canonical output. "yy"
+                # keeps its two digits, which ICU writes for every year. A short era can
+                # follow a count or a clock as readily ("100 م" meters, "5 م" PM, "7 AD
+                # units"), so the guarded reader gets exactly the short years refused by
+                # an active floor, beside an era, and nothing else.
                 return None
             captures.append(
                 Capture(

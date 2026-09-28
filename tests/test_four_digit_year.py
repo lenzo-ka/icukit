@@ -113,13 +113,6 @@ def _date_coverage_cases():
                             reason="unguarded flexible readers do not yet read ICU's yM text",
                         )
                     )
-                if (locale, kind, skeleton) == ("en_US", "default", "yMMdd"):
-                    marks.append(
-                        pytest.mark.xfail(
-                            strict=True,
-                            reason=("the generated en_US set omits ICU's distinct yMMdd pattern"),
-                        )
-                    )
                 cases.append(
                     pytest.param(
                         locale,

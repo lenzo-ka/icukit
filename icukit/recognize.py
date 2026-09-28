@@ -6799,6 +6799,37 @@ def _range_separators(name: str) -> frozenset[str]:
 
 
 @cache
+def _range_shared_negative_separators(name: str) -> frozenset[str]:
+    """The exact separators for which ICU scopes one leading minus over both ends.
+
+    Some locales write ``(-3, -1)`` with one sign (ar_EG ``؜-٣–١``), while the same
+    endpoints with opposite signs use a spaced separator. Compare ICU's range with its
+    independently formatted positive and negative endpoints; no sign or locale data is
+    kept here by hand.
+    """
+    locale = icu.Locale(name)
+    formatter = icu.NumberRangeFormatter.withLocale(locale)
+    formatted = formatter.formatIntRangeToValue(-3, -1)
+    text = str(formatted)
+    spans = _range_spans(formatted)
+    if 0 not in spans or 1 not in spans:
+        return frozenset()
+    numbers = icu.NumberFormatter.withLocale(locale)
+    negative_start = str(numbers.formatInt(-3))
+    negative_end = str(numbers.formatInt(-1))
+    positive_end = str(numbers.formatInt(1))
+    first_end = spans[0][1]
+    second_start = spans[1][0]
+    if (
+        negative_end != positive_end
+        and text[:first_end] == negative_start
+        and text[second_start:] == positive_end
+    ):
+        return frozenset({text[first_end:second_start]})
+    return frozenset()
+
+
+@cache
 def _range_collapse_sides(name: str, key: tuple[str, str]) -> frozenset[str]:
     """The sides that keep the unit where ICU writes a range of ``key``'s unit once.
 
@@ -6903,6 +6934,30 @@ def _runs_on(text: str, start: int, end: int, marks: Iterable[str]) -> bool:
 _MINUS_SIGN = "\N{MINUS SIGN}"
 
 
+@cache
+def _range_minus_signs(name: str) -> frozenset[str]:
+    """The signs a negative endpoint may have before its digits in ``name``.
+
+    Keep ICU's symbol and the complete prefix ICU actually formats: in locales with a
+    directional mark these are not necessarily the same string. U+2212 and the
+    hyphen-minus are the two additional signs the range reader already accommodates.
+    """
+    locale = icu.Locale(name)
+    symbols = icu.DecimalFormatSymbols(locale)
+    signs = {
+        _HYPHEN_MINUS,
+        _MINUS_SIGN,
+        symbols.getSymbol(icu.DecimalFormatSymbols.kMinusSignSymbol),
+    }
+    negative = str(icu.NumberFormatter.withLocale(locale).formatInt(-1))
+    digit = next(
+        (index for index, character in enumerate(negative) if icu.Char.isdigit(character)), 0
+    )
+    if digit:
+        signs.add(negative[:digit])
+    return frozenset(sign for sign in signs if sign)
+
+
 def _minus_before(text: str, start: int) -> bool:
     """Whether a U+2212 minus sign, which a number reader of a locale whose own minus is
     the hyphen-minus does not read, signs the amount at ``start`` ("−3–5")."""
@@ -6918,29 +6973,71 @@ def _negated(value: NumberValue | MeasureValue) -> NumberValue | MeasureValue:
     return replace(value, decimal=format(-Decimal(value.decimal), "f"))
 
 
-def _in_chain(text: str, left_edge: int, right_edge: int, marks: Iterable[str]) -> bool:
+def _in_chain(
+    text: str,
+    left_edge: int,
+    right_edge: int,
+    marks: Iterable[str],
+    minus_signs: Iterable[str],
+) -> bool:
     """Whether the separator between ``left_edge`` and ``right_edge`` joins one pair of a
-    run of numbers ("1–2–3", "14-3-3"): the digits before it follow a separator or a
-    hyphen after a digit, or the digits after it run into one before a digit.
+    run of numbers ("1–2–3", "14-3-3", "1 – 2 – 3"). A join tight against the
+    neighboring digits counts as before. A spaced neighbor counts only when this pair's
+    separator is itself spaced and the neighbor, including its spaces, is exactly the same
+    separator text. Thus prose joins do not hide the range in "7 – 3–5" or "1–2 – 3".
 
     Checked before any side is read, so a long run costs a scan, not a read per link.
     """
     joins = {_HYPHEN_MINUS, *marks}
+    signs = sorted(minus_signs, key=len, reverse=True)
+    separator = text[left_edge:right_edge]
+    spaced_separator = separator if any(_is_space(character) for character in separator) else None
+
+    def before_sign(index: int) -> int:
+        for sign in signs:
+            before = index - len(sign)
+            if before >= 0 and text.startswith(sign, before):
+                return before
+        return index
+
+    def after_sign(index: int) -> int:
+        for sign in signs:
+            if text.startswith(sign, index):
+                return index + len(sign)
+        return index
+
+    def digit_after(index: int) -> bool:
+        signed = after_sign(index)
+        return signed < len(text) and icu.Char.isdigit(text[signed])
+
     start = left_edge
     while start > 0 and icu.Char.isdigit(text[start - 1]):
         start -= 1
     if start < left_edge:
+        start = before_sign(start)
         for j in joins:
             before = start - len(j)
             if before >= 1 and text.startswith(j, before) and icu.Char.isdigit(text[before - 1]):
                 return True
-    end = right_edge
+        if spaced_separator is not None:
+            before = start - len(spaced_separator)
+            if (
+                before >= 1
+                and text.startswith(spaced_separator, before)
+                and icu.Char.isdigit(text[before - 1])
+            ):
+                return True
+    end = after_sign(right_edge)
     while end < len(text) and icu.Char.isdigit(text[end]):
         end += 1
     if right_edge < end < len(text):
         for j in joins:
             after = end + len(j)
-            if text.startswith(j, end) and after < len(text) and icu.Char.isdigit(text[after]):
+            if text.startswith(j, end) and digit_after(after):
+                return True
+        if spaced_separator is not None:
+            after = end + len(spaced_separator)
+            if text.startswith(spaced_separator, end) and digit_after(after):
                 return True
     return False
 
@@ -7113,7 +7210,11 @@ class FlexibleNumberRangeDetector:
             symbols = icu.DecimalFormatSymbols(icu.Locale(locale))
             marks -= {symbols.getSymbol(icu.DecimalFormatSymbols.kMinusSignSymbol), _HYPHEN_MINUS}
         self._marks = tuple(sorted(marks, key=lambda mark: (-len(mark), mark)))
+        self._minus_signs = frozenset().union(*(_range_minus_signs(name) for name in self._names))
         self._sides: dict[tuple[str, str], frozenset[str]] = {}
+        self._shared_negative_separators = frozenset().union(
+            *(_range_shared_negative_separators(name) for name in self._names)
+        )
 
     def _default_endpoints(self) -> tuple[object, ...]:
         return (self._bare_reader(), FlexiblePercentDetector(self.locale, locales=self.locales))
@@ -7132,6 +7233,12 @@ class FlexibleNumberRangeDetector:
                 raise ValueError(f"a {self.group} range reader got {groups} endpoint readers")
             self._endpoints = endpoints
         return self._endpoints
+
+    def _reads_bare_endpoints(self) -> bool:
+        """Whether the supplied set itself has a plain-number endpoint reader."""
+        return any(
+            reader.type == FlexibleNumberDetector.type for reader in self._endpoint_readers()
+        )
 
     @property
     def has_marks(self) -> bool:
@@ -7181,7 +7288,7 @@ class FlexibleNumberRangeDetector:
         locale of the language.
         """
         if left.key == right.key:
-            if left.key == _BARE and self.group != "number":
+            if left.key == _BARE and not self._reads_bare_endpoints():
                 return None
             return left.value, right.value, "none"
         if (
@@ -7202,7 +7309,7 @@ class FlexibleNumberRangeDetector:
         left_edge, right_edge = _side_edges(text, mark_start, mark_end)
         if left_edge == 0 or right_edge == len(text):
             return
-        if _in_chain(text, left_edge, right_edge, self._marks):
+        if _in_chain(text, left_edge, right_edge, self._marks, self._minus_signs):
             return  # "1–2–3", "14-3-3": no side is read, however long the run
         window_start = _window_start(text, left_edge)
         window_end = _window_end(text, right_edge)
@@ -7223,6 +7330,13 @@ class FlexibleNumberRangeDetector:
             if _minus_before(text, left.start):
                 left = replace(left, start=left.start - 1)
                 start_value = _negated(start_value)
+            separator = text[left.end : right.start]
+            if (
+                separator in self._shared_negative_separators
+                and Decimal(start_value.decimal) < 0
+                and Decimal(end_value.decimal) > 0
+            ):
+                end_value = _negated(end_value)
             yield ValueDetection(
                 text=text[left.start : right.end],
                 start=left.start,
@@ -7237,7 +7351,7 @@ class FlexibleNumberRangeDetector:
                         "separator",
                         left.end,
                         right.start,
-                        text[left.end : right.start],
+                        separator,
                         form="symbol",
                     ),
                     Capture(
@@ -7255,7 +7369,7 @@ class FlexibleNumberRangeDetector:
         if right_edge == len(text) or not _has_digit(text[right_edge:window_end]):
             return
         for side in self._read_sides(text, right_edge, window_end, at_end=False):
-            if side.key == _BARE and self.group != "number":
+            if side.key == _BARE and not self._reads_bare_endpoints():
                 continue
             yield ValueDetection(
                 text=text[mark_start : side.end],

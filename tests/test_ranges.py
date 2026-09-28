@@ -14,6 +14,7 @@ from icukit import (
     ApproximateValue,
     DateIntervalValue,
     DateTimeValue,
+    DetectorSet,
     MeasureValue,
     NumberRangeValue,
     NumberValue,
@@ -45,6 +46,18 @@ def _range(locale: str, low: int, high: int, unit=None, collapse: str = "AUTO") 
     return formatter.formatIntRange(low, high)
 
 
+def _range_with_endpoint_spans(locale: str, low: int, high: int):
+    formatted = icu.NumberRangeFormatter.withLocale(icu.Locale(locale)).formatIntRangeToValue(
+        low, high
+    )
+    positions = {}
+    position = icu.ConstrainedFieldPosition()
+    position.constrainCategory(icu.UFieldCategory.NUMBER_RANGE_SPAN)
+    while formatted.nextPosition(position):
+        positions[position.getField()] = (position.getStart(), position.getLimit())
+    return str(formatted), positions
+
+
 def _whole(detector, text: str):
     return [
         found for found in detector.detect(text) if (found["start"], found["end"]) == (0, len(text))
@@ -63,15 +76,27 @@ def _numbers(locale: str) -> list:
 @pytest.mark.parametrize(("low", "high"), [(3, 5), (1000, 2000), (-3, -1)])
 def test_a_plain_range_reads_as_icu_writes_it(locale, low, high):
     text = _range(locale, low, high)
-    minus = icu.NumberFormatter.withLocale(icu.Locale(locale)).formatInt(-1)[:-1]
-    if low < 0 and text.count(minus) < 2:
-        # ICU writes the shared sign once ("-3–1" for -3 to -1), which reads as -3 to 1.
-        pytest.skip(f"ICU writes {locale} one minus sign for both ends: {text!r}")
     (found,) = _whole(FlexibleNumberRangeDetector(locale), text)
 
     assert found["type"] == "number:range"
     assert found["value"] == NumberRangeValue(NumberValue(str(low)), NumberValue(str(high)))
     assert [capture.name for capture in found["captures"]] == ["start", "separator", "end"]
+
+
+def test_icus_shared_and_independent_negative_sign_shapes_keep_their_values():
+    locale = "ar_EG"
+    shared = _range(locale, -3, -1)
+    independent = _range(locale, -3, 1)
+    if shared == independent:
+        pytest.skip("this ICU does not distinguish shared and independent sign scope")
+    reader = FlexibleNumberRangeDetector(locale)
+
+    assert _whole(reader, shared)[0]["value"] == NumberRangeValue(
+        NumberValue("-3"), NumberValue("-1")
+    )
+    assert _whole(reader, independent)[0]["value"] == NumberRangeValue(
+        NumberValue("-3"), NumberValue("1")
+    )
 
 
 @pytest.mark.parametrize("locale", LOCALES)
@@ -224,6 +249,31 @@ def test_a_ranges_endpoints_follow_the_reader_set():
     assert [d.type for d in gang.detectors].count("number:range") == 1
 
 
+def test_a_currency_only_sets_ranges_do_not_invent_plain_number_endpoints():
+    currency = FlexibleCurrencyDetector("en_US", "USD")
+    currency_only = DetectorSet([currency])
+    currency_only = currency_only.with_(*range_detectors("en_US", currency_only).detectors)
+    plain = _range("en_US", 3, 5)
+    approximate = (
+        icu.NumberRangeFormatter.withLocale(icu.Locale("en_US"))
+        .identityFallback(icu.UNumberRangeIdentityFallback.APPROXIMATELY)
+        .formatIntRange(3, 3)
+    )
+    currency_text = _range("en_US", 3, 5, icu.CurrencyUnit("USD"), "ALL")
+
+    assert _whole(currency_only, plain) == []
+    assert _whole(currency_only, approximate) == []
+    assert any(
+        found["value"].start.currency == found["value"].end.currency == "USD"
+        for found in _whole(currency_only, currency_text)
+    )
+
+    numbers = DetectorSet([FlexibleNumberDetector("en_US")])
+    numbers = numbers.with_(*range_detectors("en_US", numbers).detectors)
+    assert _whole(numbers, plain)
+    assert _whole(numbers, approximate)
+
+
 def test_a_range_reader_builds_its_endpoints_on_its_first_read():
     built = []
 
@@ -242,6 +292,64 @@ def test_a_run_of_numbers_is_rejected_before_any_side_is_read():
     reader._read_sides = None  # a side read would fail
 
     assert reader.detect("1–2–3–4–5–6–7–8–9 " * 100) == []
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_a_spaced_chain_using_icus_separator_is_not_a_range(locale):
+    text, positions = _range_with_endpoint_spans(locale, -3, -1)
+    if set(positions) != {0, 1}:
+        pytest.skip("ICU reports no two endpoint spans for the formatted range")
+    separator = text[positions[0][1] : positions[1][0]]
+    if not any(character.isspace() for character in separator):
+        pytest.skip(f"ICU writes {locale} no spaced range separator")
+    number = icu.NumberFormatter.withLocale(icu.Locale(locale))
+    chain = separator.join(str(number.formatInt(value)) for value in (1, 2, 3))
+    negative_chain = separator.join(str(number.formatInt(value)) for value in (-5, -3, -1))
+    reader = FlexibleNumberRangeDetector(locale)
+
+    assert _whole(reader, text)
+    assert reader.detect(chain) == []
+    assert reader.detect(negative_chain) == []
+
+
+def test_a_spaced_chain_with_negative_endpoints_is_not_two_ranges():
+    assert FlexibleNumberRangeDetector("en_US").detect("-5 – -3 – -1") == []
+
+
+def test_a_spaced_chain_with_a_negative_middle_endpoint_is_not_two_ranges():
+    assert FlexibleNumberRangeDetector("en_US").detect("1 – -2 – 3") == []
+
+
+def test_an_unspaced_chain_with_negative_endpoints_is_not_a_range():
+    assert FlexibleNumberRangeDetector("en_US").detect("-3–-1–-5") == []
+
+
+def test_a_spaced_prose_join_does_not_hide_an_unspaced_icu_range():
+    range_text, positions = _range_with_endpoint_spans("en_US", 3, 5)
+    if set(positions) != {0, 1}:
+        pytest.skip("ICU reports no two endpoint spans for the formatted range")
+    separator = range_text[positions[0][1] : positions[1][0]]
+    if any(character.isspace() for character in separator):
+        pytest.skip("ICU writes en_US no unspaced range separator")
+    prose_separator = " - "
+    if prose_separator == separator:
+        pytest.skip("the prose separator is not distinct from ICU's range separator")
+    prefix = str(icu.NumberFormatter.withLocale(icu.Locale("en_US")).formatInt(7))
+    text = f"{prefix}{prose_separator}{range_text}"
+
+    assert [found["text"] for found in FlexibleNumberRangeDetector("en_US").detect(text)] == [
+        range_text
+    ]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("page 7 – 3–5", "3–5"), ("in 2019 - 10–15 kg", "10–15"), ("1–2 – 3", "1–2")],
+)
+def test_a_spaced_prose_join_does_not_hide_named_en_us_ranges(text, expected):
+    assert [found["text"] for found in FlexibleNumberRangeDetector("en_US").detect(text)] == [
+        expected
+    ]
 
 
 def test_a_year_range_rises_and_is_not_one_pair_of_a_run():
