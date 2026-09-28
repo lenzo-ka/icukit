@@ -1,10 +1,12 @@
-"""A four-digit number read in a date is its year, never its month or day.
+"""A four-digit number read in a numeric date is its year, never its month or day.
 
 This covers generated default readers, unguarded flexible readers alone, and generated
 default readers combined with guarded flexible readers. Date readings expose field
 captures at absolute source offsets. Date-interval readings instead expose absolute
 ``start``, ``separator``, and ``end`` side captures, so each year is tied to the value
 of the side containing it. No month or day capture may cover a four-digit run.
+
+Textual-month, weekday, and era patterns are out of scope.
 """
 
 from functools import cache
@@ -13,10 +15,21 @@ import icu
 import pytest
 
 from icukit import DateIntervalValue, flexible_detectors, generated_detectors
-from icukit.detectors import DateDetector
-from icukit.recognize import FlexibleDateDetector, FlexibleDateIntervalDetector
 
 LOCALES = ("en_US", "en_GB", "de_DE")
+DATE_SKELETONS = ("yMd", "yM", "yMMdd")
+INTERVAL_SKELETON = "y"
+
+# This is the intended contract, not a list inferred from the readers that happen to
+# exist. ``yMMdd`` applies only where ICU gives it a pattern distinct from ``yMd`` and
+# ``yM``. All three configurations are intended to read ICU's numeric date shapes and
+# its year interval shape.
+EXPECTED_ICU_COVERAGE = {
+    "default": {"dates": DATE_SKELETONS, "intervals": (INTERVAL_SKELETON,)},
+    "flexible": {"dates": DATE_SKELETONS, "intervals": (INTERVAL_SKELETON,)},
+    "flexible-guarded": {"dates": DATE_SKELETONS, "intervals": (INTERVAL_SKELETON,)},
+}
+
 FIXTURE_TEXTS = (
     "12/1918",
     "1918/12",
@@ -31,28 +44,6 @@ YEAR_FIELDS = frozenset({"y", "Y", "u", "r", "U"})
 DAY_OR_MONTH = frozenset({"M", "L", "d"})
 
 
-def _pattern_runs(pattern: str) -> tuple[tuple[str, int], ...]:
-    """Return ICU pattern-letter runs, ignoring quoted literals."""
-    runs, index, quoted = [], 0, False
-    while index < len(pattern):
-        if pattern[index] == "'":
-            if index + 1 < len(pattern) and pattern[index + 1] == "'":
-                index += 2
-                continue
-            quoted = not quoted
-            index += 1
-            continue
-        if quoted or not pattern[index].isalpha():
-            index += 1
-            continue
-        end = index + 1
-        while end < len(pattern) and pattern[end] == pattern[index]:
-            end += 1
-        runs.append((pattern[index], end - index))
-        index = end
-    return tuple(runs)
-
-
 def _calendar(locale: str, year: int, month: int, day: int):
     calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
     calendar.clear()
@@ -60,30 +51,39 @@ def _calendar(locale: str, year: int, month: int, day: int):
     return calendar
 
 
-def _numeric_year_pattern(pattern: str) -> bool:
-    runs = _pattern_runs(pattern)
-    return any(letter == "y" and width != 2 for letter, width in runs) and not any(
-        letter in {"G", "E", "e", "c"} or (letter in {"M", "L"} and width >= 3)
-        for letter, width in runs
-    )
+@cache
+def _icu_date_cases(locale: str) -> tuple[tuple[str, str, str], ...]:
+    """Return fixed-skeleton ICU patterns and texts, independently of icukit readers."""
+    generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
+    instant = _calendar(locale, 1918, 12, 9).getTime()
+    cases = []
+    patterns = set()
+    for skeleton in DATE_SKELETONS:
+        pattern = generator.getBestPattern(skeleton)
+        if skeleton == "yMMdd" and pattern in patterns:
+            continue
+        formatter = icu.SimpleDateFormat(pattern, icu.Locale(locale))
+        formatter.setTimeZone(icu.TimeZone.getGMT())
+        cases.append((skeleton, pattern, formatter.format(instant)))
+        patterns.add(pattern)
+    return tuple(cases)
 
 
 @cache
-def _generated_date_texts(locale: str) -> tuple[str, ...]:
-    instant = _calendar(locale, 1918, 12, 9).getTime()
-    texts = []
-    for detector in generated_detectors(locale).detectors:
-        if not isinstance(detector, DateDetector) or not _numeric_year_pattern(detector.pattern):
-            continue
-        formatter = icu.SimpleDateFormat(detector.pattern, icu.Locale(locale))
-        formatter.setTimeZone(icu.TimeZone.getGMT())
-        texts.append(formatter.format(instant))
-    return tuple(dict.fromkeys(texts))
+def _icu_interval_text(locale: str) -> str:
+    start = _calendar(locale, 1914, 7, 1).getTime()
+    end = _calendar(locale, 1918, 7, 1).getTime()
+    formatter = icu.DateIntervalFormat.createInstance(INTERVAL_SKELETON, icu.Locale(locale))
+    return formatter.format(icu.DateInterval(start, end))
 
 
 TEXTS = tuple(
     dict.fromkeys(
-        (*FIXTURE_TEXTS, *(text for locale in LOCALES for text in _generated_date_texts(locale)))
+        (
+            *FIXTURE_TEXTS,
+            *(text for locale in LOCALES for _, _, text in _icu_date_cases(locale)),
+            *(_icu_interval_text(locale) for locale in LOCALES),
+        )
     )
 )
 
@@ -98,59 +98,49 @@ def _reader_set(locale: str, kind: str):
     return gang
 
 
-def _icu_date_round_trips(locale: str, pattern: str, text: str) -> bool:
-    formatter = icu.SimpleDateFormat(pattern, icu.Locale(locale))
-    formatter.setTimeZone(icu.TimeZone.getGMT())
-    formatter.setLenient(False)
-    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
-    calendar.clear()
-    source = icu.UnicodeString(text)
-    position = icu.ParsePosition(0)
-    formatter.parse(source, calendar, position)
-    return (
-        position.getErrorIndex() == -1
-        and position.getIndex() == source.length()
-        and formatter.format(calendar.getTime()) == text
-    )
+def _date_coverage_cases():
+    cases = []
+    for locale in LOCALES:
+        for kind, coverage in EXPECTED_ICU_COVERAGE.items():
+            for skeleton, pattern, text in _icu_date_cases(locale):
+                if skeleton not in coverage["dates"]:
+                    continue
+                marks = []
+                if kind == "flexible" and skeleton == "yM":
+                    marks.append(
+                        pytest.mark.xfail(
+                            strict=True,
+                            reason="unguarded flexible readers do not yet read ICU's yM text",
+                        )
+                    )
+                if (locale, kind, skeleton) == ("en_US", "default", "yMMdd"):
+                    marks.append(
+                        pytest.mark.xfail(
+                            strict=True,
+                            reason=("the generated en_US set omits ICU's distinct yMMdd pattern"),
+                        )
+                    )
+                cases.append(
+                    pytest.param(
+                        locale,
+                        kind,
+                        skeleton,
+                        pattern,
+                        text,
+                        marks=marks,
+                        id=f"{locale}-{kind}-{skeleton}",
+                    )
+                )
+    return cases
 
 
-@cache
-def _icu_interval_texts(locale: str, skeletons: tuple[str, ...]) -> frozenset[str]:
-    start = _calendar(locale, 1914, 7, 1).getTime()
-    end = _calendar(locale, 1918, 7, 1).getTime()
-    texts = set()
-    for skeleton in skeletons:
-        formatter = icu.DateIntervalFormat.createInstance(skeleton, icu.Locale(locale))
-        texts.add(formatter.format(icu.DateInterval(start, end)))
-    return frozenset(texts)
-
-
-@cache
-def _must_read_texts(locale: str, kind: str) -> frozenset[str]:
-    # The bare flexible set does not contain the generated set, so its obligation is
-    # derived independently from the ICU patterns and skeletons its own readers expose.
-    detectors = _reader_set(locale, kind).detectors
-    if kind == "flexible-guarded":
-        detectors = generated_detectors(locale).detectors
-    patterns = {
-        detector.pattern
-        for detector in detectors
-        if isinstance(detector, (DateDetector, FlexibleDateDetector))
-    }
-    skeletons = tuple(
-        dict.fromkeys(
-            detector.skeleton
-            for detector in detectors
-            if isinstance(detector, FlexibleDateIntervalDetector)
-        )
-    )
-    interval_texts = _icu_interval_texts(locale, skeletons)
-    return frozenset(
-        text
-        for text in TEXTS
-        if text in interval_texts
-        or any(_icu_date_round_trips(locale, pattern, text) for pattern in patterns)
-    )
+def _interval_coverage_cases():
+    return [
+        pytest.param(locale, kind, id=f"{locale}-{kind}-{INTERVAL_SKELETON}")
+        for locale in LOCALES
+        for kind, coverage in EXPECTED_ICU_COVERAGE.items()
+        if INTERVAL_SKELETON in coverage["intervals"]
+    ]
 
 
 def _four_digit_runs(text: str) -> list[tuple[int, int]]:
@@ -181,7 +171,6 @@ def _year_values(value) -> set[int]:
 @pytest.mark.parametrize("kind", ["default", "flexible", "flexible-guarded"])
 @pytest.mark.parametrize("locale", LOCALES)
 def test_a_four_digit_number_is_only_ever_the_year(locale, kind, text):
-    read = False
     runs = _four_digit_runs(text)
     for found in _reader_set(locale, kind).detect(text):
         if not found["type"].startswith("date"):
@@ -190,7 +179,6 @@ def test_a_four_digit_number_is_only_ever_the_year(locale, kind, text):
         for run_start, run_end in runs:
             if run_end <= start or run_start >= end:
                 continue
-            read = True
             number = int(text[run_start:run_end])
             where = (locale, kind, text, found["type"], found["text"])
             assert start <= run_start and run_end <= end, where
@@ -226,5 +214,44 @@ def test_a_four_digit_number_is_only_ever_the_year(locale, kind, text):
                 if capture.name in DAY_OR_MONTH:
                     assert capture.end <= run_start or capture.start >= run_end, where
 
-    if text in _must_read_texts(locale, kind):
-        assert read, (locale, kind, text)
+
+@pytest.mark.parametrize(("locale", "kind", "skeleton", "pattern", "text"), _date_coverage_cases())
+def test_each_configuration_reads_its_expected_icu_date_whole(
+    locale, kind, skeleton, pattern, text
+):
+    whole_dates = [
+        found
+        for found in _reader_set(locale, kind).detect(text)
+        if found["type"].startswith("date")
+        and not isinstance(found["value"], DateIntervalValue)
+        and (found["start"], found["end"]) == (0, len(text))
+    ]
+
+    assert whole_dates, (locale, kind, skeleton, pattern, text)
+
+
+@pytest.mark.parametrize(("locale", "kind"), _interval_coverage_cases())
+def test_each_interval_configuration_reads_icus_year_interval_whole(locale, kind):
+    text = _icu_interval_text(locale)
+    witnesses = [
+        found
+        for found in _reader_set(locale, kind).detect(text)
+        if isinstance(found["value"], DateIntervalValue)
+        and (found["start"], found["end"]) == (0, len(text))
+    ]
+
+    assert witnesses, (locale, kind, INTERVAL_SKELETON, text)
+    found = witnesses[0]
+    value = found["value"]
+    assert dict(value.start.fields)["y"] == 1914
+    assert dict(value.end.fields)["y"] == 1918
+
+    starts = [capture for capture in found["captures"] if capture.name == "start"]
+    ends = [capture for capture in found["captures"] if capture.name == "end"]
+    assert len(starts) == len(ends) == 1
+    start_side, end_side = starts[0], ends[0]
+    assert start_side.end <= end_side.start
+
+    runs = {int(text[start:end]): (start, end) for start, end in _four_digit_runs(text)}
+    assert start_side.start <= runs[1914][0] and runs[1914][1] <= start_side.end
+    assert end_side.start <= runs[1918][0] and runs[1918][1] <= end_side.end

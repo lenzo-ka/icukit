@@ -288,21 +288,19 @@ def _is_range(detection) -> bool:
     return kind.startswith("date-interval") or ":range" in kind or "hyphen" in kind
 
 
-HYPHEN_GANGS = (
-    lambda: generated_detectors("en_US"),
-    lambda: generated_detectors("en_US", (*DEFAULT_FAMILIES, *GUARDED_FAMILIES)),
-    lambda: flexible_detectors("en_US", guarded=True),
-)
-HYPHEN_GANG_IDS = ("default", "guarded", "flexible-guarded")
+HYPHEN_GANGS = {
+    "default": lambda: generated_detectors("en_US"),
+    "guarded": lambda: generated_detectors("en_US", (*DEFAULT_FAMILIES, *GUARDED_FAMILIES)),
+    "flexible-guarded": lambda: flexible_detectors("en_US", guarded=True),
+}
 
 
 @pytest.mark.parametrize(
-    "gang",
+    "gang_id",
     HYPHEN_GANGS,
-    ids=HYPHEN_GANG_IDS,
 )
-def test_a_hyphen_minus_is_no_range_where_icu_writes_another_separator(gang):
-    found = gang().detect("in 1914-1918, 10-15 kg, 1893-94, 1893–94")
+def test_a_hyphen_minus_is_no_range_where_icu_writes_another_separator(gang_id):
+    found = HYPHEN_GANGS[gang_id]().detect("in 1914-1918, 10-15 kg, 1893-94, 1893–94")
 
     ranges = {(d["type"], d["text"]) for d in found if _is_range(d)}
     # ICU writes "1893–94" as a range of numbers, falling; never as years.
@@ -310,12 +308,21 @@ def test_a_hyphen_minus_is_no_range_where_icu_writes_another_separator(gang):
 
 
 def test_a_hyphenated_single_date_is_not_classified_as_a_range():
-    detections = [gang().detect("2008-09-30") for gang in HYPHEN_GANGS]
+    text = "2008-09-30"
+    detections = {gang_id: gang().detect(text) for gang_id, gang in HYPHEN_GANGS.items()}
 
-    assert all(not any(_is_range(found) for found in result) for result in detections)
-    # The generated-only sets do not accept this noncanonical en_US surface, but the
-    # flexible set does, making this a live single-date control rather than a total miss.
-    assert any(found["type"].startswith("date") for result in detections for found in result)
+    assert all(not any(_is_range(found) for found in result) for result in detections.values())
+    # The named flexible-guarded gang makes this a live single-date control: it reads
+    # the entire hyphenated surface as one date, while no gang mistakes it for a range.
+    dates = [
+        found
+        for found in detections["flexible-guarded"]
+        if found["type"] == "date:flexible" and (found["start"], found["end"]) == (0, len(text))
+    ]
+    assert len(dates) == 1
+    found = dates[0]
+    assert not isinstance(found["value"], DateIntervalValue)
+    assert dict(found["value"].fields) == {"y": 2008, "M": 9, "d": 30}
 
 
 def test_where_icu_writes_a_hyphen_minus_the_default_reader_reads_it():
