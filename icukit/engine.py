@@ -85,8 +85,13 @@ __all__ = [
     "MONTH_NAME_FAMILY",
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
+    "MEASURE_RANGE_FAMILY",
+    "MEASURE_RANGE_HYPHEN_FAMILY",
+    "NUMBER_RANGE_FAMILY",
+    "NUMBER_RANGE_HYPHEN_FAMILY",
     "SHORT_YEAR_ERA_FAMILY",
     "SHORT_YEAR_FAMILY",
+    "SHORT_YEAR_INTERVAL_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
     "WEEKDAY_NAME_FAMILY",
     "YEAR_RANGE_ABBREVIATED_FAMILY",
@@ -544,6 +549,88 @@ SHORT_YEAR_ERA_FAMILY = Family(
     lambda spec, locale: _short_year_era_probe(spec, locale).reason,
 )
 
+
+def _short_year_interval_invert(spec: Spec, locale: str) -> Detector | None:
+    return _short_year_interval_probe(spec, locale).detector
+
+
+def _short_year_interval_probe(spec: Spec, locale: str) -> _Probe:
+    try:
+        detector = FlexibleDateIntervalDetector(locale, str(spec), short_years=True)
+    except (icu.ICUError, ValueError) as error:
+        return _Probe(None, str(error))
+    if not detector.has_patterns:
+        return _Probe(None, f"no invertible interval pattern for skeleton {str(spec)!r}")
+    return _Probe(detector)
+
+
+# The interval skeletons whose patterns write a "y" year, each read with a year of one to
+# three digits, which the default interval readers refuse ("3–5" is not years 3 to 5);
+# the type is date-interval:short-year:<skeleton>.
+SHORT_YEAR_INTERVAL_FAMILY = Family(
+    "short-year-interval",
+    _date_interval_skeletons,
+    _short_year_interval_invert,
+    lambda spec, locale: _short_year_interval_probe(spec, locale).reason,
+)
+
+
+@cache
+def _range_endpoints(locale: str) -> tuple[tuple[Detector, ...], tuple[Detector, ...]]:
+    """The endpoint readers of the generated number range readers of ``locale``.
+
+    The number, percent, and currency readers (``number:range``) and the measure readers
+    (``measure:range``). The generated set holds no currency or measure reader of its
+    own, so these are chosen narrowly, for what it costs to build them: the currency ICU
+    gives ``locale`` and the units CLDR's unit preferences give its own region, each
+    read in ``locale``'s own forms. :func:`flexible_detectors` reads ranges over its own,
+    wider readers.
+    """
+    own = (locale,)
+    numbers: list[Detector] = [FlexibleNumberDetector(locale), FlexiblePercentDetector(locale)]
+    code = icu.NumberFormat.createCurrencyInstance(icu.Locale(locale)).getCurrency()
+    if code and code != _NO_CURRENCY:
+        try:
+            numbers.append(FlexibleCurrencyDetector(locale, code, locales=own))
+        except (icu.ICUError, ValueError):
+            pass
+    measures: list[Detector] = []
+    for unit in _preferred_units(locale, own):
+        try:
+            measures.append(FlexibleMeasureDetector(locale, unit, locales=own))
+        except (icu.ICUError, ValueError):
+            pass
+    return tuple(numbers), tuple(measures)
+
+
+def _range_family(name: str, kind: int, forms: tuple[str, ...]) -> Family:
+    """A family of one number range reader per form, over :func:`_range_endpoints`."""
+
+    def probe(spec: Spec, locale: str) -> _Probe:
+        endpoints = _range_endpoints(locale)[kind]
+        if not endpoints:
+            return _Probe(None, "no endpoint reader was built")
+        try:
+            reader = FlexibleNumberRangeDetector(locale, endpoints, form=str(spec))
+        except (icu.ICUError, ValueError) as error:
+            return _Probe(None, str(error))
+        if not reader.has_marks:
+            return _Probe(None, "ICU writes a hyphen-minus itself, read by the range reader")
+        return _Probe(reader)
+
+    return Family(
+        name,
+        lambda locale: forms,
+        lambda spec, locale: probe(spec, locale).detector,
+        lambda spec, locale: probe(spec, locale).reason,
+    )
+
+
+NUMBER_RANGE_FAMILY = _range_family("number-range", 0, ("range", "approximately"))
+MEASURE_RANGE_FAMILY = _range_family("measure-range", 1, ("range", "approximately"))
+NUMBER_RANGE_HYPHEN_FAMILY = _range_family("number-range-hyphen", 0, ("range-hyphen",))
+MEASURE_RANGE_HYPHEN_FAMILY = _range_family("measure-range-hyphen", 1, ("range-hyphen",))
+
 # note: A measure family belongs here once its ICU surfaces have an introspective
 # inverter. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
@@ -554,6 +641,8 @@ DEFAULT_FAMILIES = (
     RELATIVE_DATE_FAMILY,
     SCIENTIFIC_NUMBER_FAMILY,
     SPELLOUT_NUMBER_FAMILY,
+    NUMBER_RANGE_FAMILY,
+    MEASURE_RANGE_FAMILY,
 )
 
 # The readings the default readers refuse on purpose, each under its own type; not in
@@ -566,8 +655,11 @@ GUARDED_FAMILIES = (
     SHORT_YEAR_FAMILY,
     SHORT_YEAR_ERA_FAMILY,
     BARE_HOUR_FAMILY,
+    SHORT_YEAR_INTERVAL_FAMILY,
     YEAR_RANGE_HYPHEN_FAMILY,
     YEAR_RANGE_ABBREVIATED_FAMILY,
+    NUMBER_RANGE_HYPHEN_FAMILY,
+    MEASURE_RANGE_HYPHEN_FAMILY,
 )
 
 _FAMILY_PROBES = (
@@ -579,6 +671,7 @@ _FAMILY_PROBES = (
     (SPELLOUT_NUMBER_FAMILY, _spellout_probe),
     (LONE_SPELLOUT_NUMBER_FAMILY, _lone_spellout_probe),
     (SHORT_YEAR_ERA_FAMILY, _short_year_era_probe),
+    (SHORT_YEAR_INTERVAL_FAMILY, _short_year_interval_probe),
 )
 
 
@@ -901,6 +994,7 @@ def _flexible_families(
                 lambda detector: detector.letter is not None,
                 "ICU's best pattern for the j skeleton has no hour field",
             ),
+            SHORT_YEAR_INTERVAL_FAMILY,
             YEAR_RANGE_HYPHEN_FAMILY,
             YEAR_RANGE_ABBREVIATED_FAMILY,
         ]

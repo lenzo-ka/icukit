@@ -22,7 +22,7 @@ from icukit import (
     flexible_detectors_report,
     generated_detectors,
 )
-from icukit.engine import GUARDED_FAMILIES, _date_interval_skeletons
+from icukit.engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, _date_interval_skeletons
 from icukit.recognize import (
     FlexibleCurrencyDetector,
     FlexibleDateIntervalDetector,
@@ -189,6 +189,49 @@ def test_a_year_interval_reads_as_icu_writes_it(locale):
     assert found["value"] == DateIntervalValue(
         DateTimeValue((("y", 1624),), kind), DateTimeValue((("y", 1713),), kind)
     )
+
+
+def test_the_default_set_reads_ranges_in_icus_own_form():
+    gang = generated_detectors("en_US")
+    names = set(gang.names())
+
+    assert {
+        "number:range",
+        "number:approximately",
+        "measure:range",
+        "measure:approximately",
+        "date-interval:y",
+    } <= names
+    assert not {"number:range-hyphen", "date-interval:y-hyphen"} & names
+    found = {(d["type"], d["text"]) for d in gang.detect("in 1914–1918, 3–5 kg, $3–5, ~3")}
+    assert {
+        ("date-interval:y", "1914–1918"),
+        ("number:range", "1914–1918"),
+        ("measure:range", "3–5 kg"),
+        ("number:range", "$3–5"),
+        ("number:approximately", "~3"),
+    } <= found
+    # A year under four digits is the guarded short-year reading, not a default one.
+    assert not any(t.startswith("date-interval") for t, text in found if text == "3–5")
+
+
+def test_a_short_year_interval_is_a_guarded_reading():
+    guarded = generated_detectors("en_US", (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))
+    found = {(d["type"], d["text"]) for d in guarded.detect("in 44–45 and 1914-1918")}
+
+    assert {
+        ("date-interval:short-year:y", "44–45"),
+        ("number:range-hyphen", "1914-1918"),
+        ("date-interval:y-hyphen", "1914-1918"),
+    } <= found
+    assert ("date-interval:y", "44–45") not in found
+    short = FlexibleDateIntervalDetector("en_US", "y", short_years=True)
+    assert [d["value"] for d in _whole(short, "44–45")] == [
+        DateIntervalValue(
+            DateTimeValue((("y", 44),), "gregorian"), DateTimeValue((("y", 45),), "gregorian")
+        )
+    ]
+    assert _whole(short, "1914–1918") == []
 
 
 def test_a_lone_numeric_field_other_than_the_year_has_no_interval_reader():

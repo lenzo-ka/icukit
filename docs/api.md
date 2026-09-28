@@ -74,8 +74,13 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`MONTH_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`MEASURE_RANGE_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`MEASURE_RANGE_HYPHEN_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`NUMBER_RANGE_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`NUMBER_RANGE_HYPHEN_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_ERA_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_FAMILY`](#icukitengine) — constant, `icukit.engine`
+- [`SHORT_YEAR_INTERVAL_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`WEEKDAY_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`YEAR_RANGE_ABBREVIATED_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -3100,14 +3105,14 @@ values it chooses from ICU; ``guarded=True`` adds the guarded readers.
 
 #### `DEFAULT_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 note: A measure family belongs here once its ICU surfaces have an introspective
 inverter. Abbreviations use their typed lexicon.
 
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -3120,7 +3125,23 @@ DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
 
 `<icukit.engine.Family>`
 
+#### `MEASURE_RANGE_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `MEASURE_RANGE_HYPHEN_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
 #### `MONTH_NAME_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `NUMBER_RANGE_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+#### `NUMBER_RANGE_HYPHEN_FAMILY` (constant)
 
 `<icukit.engine.Family>`
 
@@ -3143,6 +3164,14 @@ date:short-year:<skeleton>, one reader per skeleton as in the default family.
 #### `SHORT_YEAR_FAMILY` (constant)
 
 `<icukit.engine.Family>`
+
+#### `SHORT_YEAR_INTERVAL_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
+The interval skeletons whose patterns write a "y" year, each read with a year of one to
+three digits, which the default interval readers refuse ("3–5" is not years 3 to 5);
+the type is date-interval:short-year:<skeleton>.
 
 #### `SPELLOUT_NUMBER_FAMILY` (constant)
 
@@ -3235,11 +3264,11 @@ The flexible readers for ``locale``, and every spec that could not be built.
 
 See :func:`flexible_detectors`.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'), Family(name='measure-range'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'), Family(name='measure-range'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -5283,7 +5312,16 @@ offset, which has none, keeps ICU's custom ID, "GMT-08:00"). Zone text another
 locale of the language writes, or that names different zones in its locales, is
 read once per zone, each gated in its own zone (see :meth:`_read`).
 
-#### `FlexibleDateIntervalDetector(locale: 'str', skeleton: 'str') -> 'None'`
+A year from a ``y`` field is read only in four or more digits, as
+:class:`~icukit.detectors.DateDetector` reads it: a shorter one cannot be told from
+a count ("3–5", "pp. 12–15" in the year interval). Since the gate holds each side
+to ICU's own rendering, a year under four digits is a year under 1000. A ``yy``
+field keeps its two digits. ``short_years=True`` builds the guarded reader of
+exactly the readings that floor refuses, typed ``date-interval:short-year:<skeleton>``
+(as ``date:short-year:<skeleton>`` is the date reader's); a skeleton whose pattern
+has no ``y`` field refuses it.
+
+#### `FlexibleDateIntervalDetector(locale: 'str', skeleton: 'str', *, short_years: 'bool' = False) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -5641,9 +5679,10 @@ where they end the range within half a century ("2024-03" is not 2024 to 2103).
 
 Both are guarded: a hyphen also joins codes and ISO dates, and a digit or two after
 a separator may be anything. A range must rise, a hyphen joins two years of one width
-of three digits or more ("555-1234" is not a range of years), and no year is one
-number of a longer run ("2024-03-05"). Where ICU writes a hyphen-minus itself between years,
-the ``"hyphen"`` reader reads only the shortened second year.
+of four digits or more, the interval reader's year floor ("555-1234" is not a range
+of years), and no year is one number of a longer run ("2024-03-05"). Where ICU
+writes a hyphen-minus itself between years, the ``"hyphen"`` reader reads only the
+shortened second year.
 
 #### `FlexibleYearRangeDetector(locale: 'str', *, form: 'str' = 'hyphen') -> 'None'`
 

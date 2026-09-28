@@ -30,7 +30,9 @@ Recognize typed values in running text. Offsets are half-open Unicode code-point
 indices. The default set covers dates, date intervals, compact numbers, relative
 dates, scientific numbers, spellout numbers, abbreviations, decimals, and percents.
 Dates with an era are read in ICU's own forms, with four-digit years ("Mar 5, 2024
-BC"). Currencies and measures require explicit --currency and --measure options.
+BC"). Ranges are read as ICU writes them ("3–5", "$3–5", "10–15 kg", "~3", and
+years "1914–1918"). Currencies and measures require explicit --currency and --measure
+options.
 
 --flexible adds the flexible readers, which read the forms text writes beyond ICU's
 own: negative and accounting currency, mixed measures, other decimal styles, dates
@@ -38,7 +40,7 @@ with eras in other layouts, times with zone names, and the currencies and units 
 chooses for the locale's language. It reads every locale of the language unless
 --locales chooses them, and takes seconds to build. --guarded adds the readings the
 default readers refuse on purpose ("one" alone, "May" alone as a month, "Mar 15,
-44 BC" in ICU's own form).
+44 BC" in ICU's own form, years "44–45", and a hyphen-minus range, "1914-1918").
 
 Overlapping candidates for a span are expected: recognition deposits a candidate
 forest, and downstream consumers perform disambiguation.

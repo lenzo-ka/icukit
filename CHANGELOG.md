@@ -48,17 +48,27 @@
   that unit onto the other side ("$3–5", "10–15 kg", "10–15%") or write it too ("$3.00
   – $5.00"). The value is a `NumberRangeValue` of two whole amounts (`NumberValue` or
   `MeasureValue`), captured as "start", "separator", and "end", with a
-  `NumberRangeSpec`. `flexible_detectors` builds one over its number, percent, and
-  currency readers (`number:range`) and one over its measure readers (`measure:range`),
-  and each also reads ICU's approximately form ("~3", `number:approximately`, an
-  `ApproximateValue`). The interval reader's skeletons now include those CLDR gives
-  interval formats for, so a year interval reads ("1624 – 1713", `date-interval:y`); a
-  lone numeric day, month, or hour is left out, since its interval is a plain number
-  range. The endpoints' own readings stay beside a range.
+  `NumberRangeSpec`. They are read by default: `DEFAULT_FAMILIES` gains
+  `NUMBER_RANGE_FAMILY` (`number:range`, over a number, a percent, and the locale's own
+  currency reader) and `MEASURE_RANGE_FAMILY` (`measure:range`, over the units CLDR's
+  unit preferences give the locale's own region), so plain `ik detect` reads them; and
+  `flexible_detectors` builds the same types over its own, wider number, percent,
+  currency, and measure readers. Each also reads ICU's approximately form ("~3",
+  `number:approximately`, an `ApproximateValue`). The interval reader's skeletons now
+  include those CLDR gives interval formats for, so a year interval reads ("1624 –
+  1713", `date-interval:y`); a lone numeric day, month, or hour is left out, since its
+  interval is a plain number range. The endpoints' own readings stay beside a range.
+- `FlexibleDateIntervalDetector` keeps the four-digit year floor `DateDetector` keeps:
+  a `y` year under four digits ("3–5" as years 3 to 5, "March 5 – 7, 44") is not read
+  by default, and `FlexibleDateIntervalDetector(locale, skeleton, short_years=True)` and
+  the guarded `SHORT_YEAR_INTERVAL_FAMILY` read exactly those, typed
+  `date-interval:short-year:<skeleton>`, the year as written.
 - A range written with a hyphen-minus where ICU writes another separator is a guarded
   reading, since a hyphen also joins codes, ISBNs, part numbers, and dates:
-  `number:range-hyphen` and `measure:range-hyphen` ("1914-1918", "10-15 kg"), with
-  `guarded=True`; and `FlexibleYearRangeDetector`, in `GUARDED_FAMILIES`, reads year
+  `number:range-hyphen` and `measure:range-hyphen` ("1914-1918", "10-15 kg"), from
+  `NUMBER_RANGE_HYPHEN_FAMILY` and `MEASURE_RANGE_HYPHEN_FAMILY` in `GUARDED_FAMILIES`
+  and with `flexible_detectors(guarded=True)`; and `FlexibleYearRangeDetector`, in
+  `GUARDED_FAMILIES`, reads year
   ranges as the `y` interval reader does with the hyphen in place of ICU's separator,
   a shortened second year written out ("1914-1918", "1893-94", `date-interval:y-hyphen`),
   and ICU's separator before a shortened year ("1893–94", `date-interval:y-abbreviated`).

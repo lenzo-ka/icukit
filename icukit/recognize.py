@@ -43,6 +43,7 @@ from .detectors import (
     _DateField,
     _is_pattern_letter,
     _pattern_runs,
+    _widen_years,
     _word_edges,
     _word_interior_offsets,
 )
@@ -1399,18 +1400,31 @@ class FlexibleDateIntervalDetector:
     offset, which has none, keeps ICU's custom ID, "GMT-08:00"). Zone text another
     locale of the language writes, or that names different zones in its locales, is
     read once per zone, each gated in its own zone (see :meth:`_read`).
+
+    A year from a ``y`` field is read only in four or more digits, as
+    :class:`~icukit.detectors.DateDetector` reads it: a shorter one cannot be told from
+    a count ("3–5", "pp. 12–15" in the year interval). Since the gate holds each side
+    to ICU's own rendering, a year under four digits is a year under 1000. A ``yy``
+    field keeps its two digits. ``short_years=True`` builds the guarded reader of
+    exactly the readings that floor refuses, typed ``date-interval:short-year:<skeleton>``
+    (as ``date:short-year:<skeleton>`` is the date reader's); a skeleton whose pattern
+    has no ``y`` field refuses it.
     """
 
     group = "date-interval"
 
-    def __init__(self, locale: str, skeleton: str) -> None:
+    def __init__(self, locale: str, skeleton: str, *, short_years: bool = False) -> None:
         self.locale = locale
         self.skeleton = skeleton
-        self.type = f"date-interval:{skeleton}"
+        self.short_years = short_years
+        self.type = (
+            f"date-interval:short-year:{skeleton}" if short_years else f"date-interval:{skeleton}"
+        )
         icu_locale = icu.Locale(locale)
         interval_info = icu.DateIntervalInfo(icu_locale)
         matchers = []
         seen: set[tuple[str, str, str]] = set()
+        self._year_floor = False
         for calendar_field in _INTERVAL_FIELDS:
             pattern = interval_info.getIntervalPattern(skeleton, calendar_field)
             if pattern:
@@ -1428,11 +1442,22 @@ class FlexibleDateIntervalDetector:
             zones = {run for run in (_zone_run(part1), _zone_run(part2)) if run is not None}
             if len(zones) > 1:
                 continue  # one interval is written in one zone, with one zone field
+            self._year_floor |= any(
+                letter == "y" and count != 2
+                for letter, count in (*_pattern_runs(part1), *_pattern_runs(part2))
+            )
+            # ICU parses a one-letter year of two digits into the century around today
+            # ("44" as 2044); the short-year reader parses through "yyy", which ICU
+            # reads at face value, as DateDetector's era reader does. The gate still
+            # holds each side to ICU's rendering of the pattern itself.
+            parse1, parse2 = (
+                (_widen_years(part1), _widen_years(part2)) if short_years else parts[::2]
+            )
             matchers.append(
                 (
-                    icu.SimpleDateFormat(part1, icu_locale),
+                    icu.SimpleDateFormat(parse1, icu_locale),
                     separator,
-                    icu.SimpleDateFormat(part2, icu_locale),
+                    icu.SimpleDateFormat(parse2, icu_locale),
                     _interval_fields(part1),
                     _interval_fields(part2),
                     (part1, part2),
@@ -1446,11 +1471,24 @@ class FlexibleDateIntervalDetector:
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._spec = DateIntervalSpec(locale, skeleton)
         self._dif = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
+        if short_years and not self._year_floor:
+            raise ValueError(
+                f"FlexibleDateIntervalDetector reads a short year only in a 'y' field, and "
+                f"skeleton {skeleton!r} has none in {locale!r}"
+            )
 
     @property
     def has_patterns(self) -> bool:
         """Whether ICU yielded at least one modeled, splittable interval recipe."""
         return bool(self._matchers)
+
+    def _short_year(self, value: DateIntervalValue) -> bool:
+        """Whether an endpoint's year is written in under four digits (under 1000)."""
+        return any(
+            name == "y" and year < 1000
+            for endpoint in (value.start, value.end)
+            for name, year in endpoint.fields
+        )
 
     def _parse_position(self, formatter, text, start, cp_to_u16, dating):
         # The side is parsed on a GMT calendar, never in the process default zone: GMT
@@ -1883,7 +1921,12 @@ class FlexibleDateIntervalDetector:
         def match(source: str, start: int):
             return self._match(source, start, offset_maps)
 
-        return _detect_flexible_alternatives(text, self.locale, self.type, match)
+        found = _detect_flexible_alternatives(text, self.locale, self.type, match)
+        if not self._year_floor:
+            return found
+        # A hand-rolled limit, as DateDetector's: ICU's "y" writes a year under 1000 in
+        # under four digits, which a count writes too ("3–5"); see the class docstring.
+        return [item for item in found if self._short_year(item["value"]) == self.short_years]
 
 
 @cache
@@ -7171,9 +7214,10 @@ class FlexibleYearRangeDetector:
 
     Both are guarded: a hyphen also joins codes and ISO dates, and a digit or two after
     a separator may be anything. A range must rise, a hyphen joins two years of one width
-    of three digits or more ("555-1234" is not a range of years), and no year is one
-    number of a longer run ("2024-03-05"). Where ICU writes a hyphen-minus itself between years,
-    the ``"hyphen"`` reader reads only the shortened second year.
+    of four digits or more, the interval reader's year floor ("555-1234" is not a range
+    of years), and no year is one number of a longer run ("2024-03-05"). Where ICU
+    writes a hyphen-minus itself between years, the ``"hyphen"`` reader reads only the
+    shortened second year.
     """
 
     group = "date-interval"
@@ -7209,7 +7253,7 @@ class FlexibleYearRangeDetector:
 
     @staticmethod
     def _same_width(text: str, left_edge: int, right_edge: int) -> bool:
-        """Whether both years are written in one width of at least three digits.
+        """Whether both years are written in one width of at least four digits.
 
         Hand-rolled, as the hyphen form's guard: ICU writes a year of any width, but
         "3-5" and a phone number's "555-1234" are not years. A year the pattern writes
@@ -7222,7 +7266,7 @@ class FlexibleYearRangeDetector:
         while end < len(text) and icu.Char.isdigit(text[end]):
             end += 1
         first, second = left_edge - start, end - right_edge
-        return second >= 3 and first in (0, second)
+        return second >= 4 and first in (0, second)
 
     def _shortened(self, text: str, left_edge: int, right_edge: int) -> tuple[int, str] | None:
         """The second year written out, where a digit or two after the separator shorten it."""
