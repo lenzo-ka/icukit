@@ -545,11 +545,17 @@ class DateDetector:
         # today ("44 BC" as 2044 BC), which is right where the year alone must be a
         # recent one, and wrong where an era dates it. A pattern with an era parses
         # through the same pattern with each "y" widened to "yyy", which ICU reads at
-        # face value; the surface is still checked against the pattern itself.
+        # face value; the surface is still checked against the pattern itself. That
+        # parser is also strict: a lenient one lets the era go missing, and then reads
+        # on from a bare number through whatever follows it (ta's "G y-MM-dd, EEE"
+        # takes "1,234.56 ச" as year 1 and a weekday), ending inside a grapheme, which
+        # the scan must refuse. ICU writes every date it formats in a form it parses
+        # strictly, so no canonical surface is lost.
         self._parser = self._df
         if self._has_era:
             self._parser = icu.SimpleDateFormat(_widen_years(self.pattern), icu.Locale(locale))
             self._parser.setTimeZone(icu.TimeZone.getGMT())
+            self._parser.setLenient(False)
         # A weekday with no year ("Tue, 3/5") names a date in some year the text does not
         # give; ICU resolves a year-less parse in 1970, where 5 March is a Thursday.
         self._yearless_weekday = bool(_letters & {"E", "e", "c"}) and "y" not in _letters

@@ -90,3 +90,10 @@ def test_the_refusal_no_longer_names_the_era():
         DateDetector("en", "yQQQ")
     assert "era" not in str(error.value)
     assert "quarter" in str(error.value)
+
+
+def test_a_number_without_the_era_is_not_parsed_as_a_date():
+    # A lenient parse let the era go missing and ran from "1" into the Tamil letters,
+    # ending inside a grapheme; the text holds no date of this pattern.
+    detector = DateDetector("ta", "GyMEd")
+    assert detector.detect("1,234.56 சிங்கப்பூர் டாலர்கள்") == []
