@@ -294,8 +294,7 @@ class RelativeDateSpec:
 class NumberRangeSpec:
     """The locale and form of a number-range or approximately candidate.
 
-    ``form`` is ``"range"`` (a separator ICU's ``NumberRangeFormatter`` writes),
-    ``"range-hyphen"`` (a hyphen-minus where ICU writes another separator), or
+    ``form`` is ``"range"`` (a separator ICU's ``NumberRangeFormatter`` writes) or
     ``"approximately"``. ``collapse`` is ``"unit"`` when one side's unit is shared with
     the other ("$3–5"), else ``"none"``; ``mark`` is the separator or the approximately
     sign as written, without the spaces around it.

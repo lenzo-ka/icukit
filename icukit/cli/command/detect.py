@@ -46,7 +46,7 @@ with eras in other layouts, times with zone names, and the currencies and units 
 chooses for the locale's language. It reads every locale of the language unless
 --locales chooses them, and takes seconds to build. --guarded adds the readings the
 default readers refuse on purpose ("one" alone, "May" alone as a month, "Mar 15,
-44 BC" in ICU's own form, years "44–45", and a hyphen-minus range, "1914-1918").
+44 BC" in ICU's own form, and years "44–45").
 
 Overlapping candidates for a span are expected: recognition deposits a candidate
 forest, and downstream consumers perform disambiguation.
@@ -203,7 +203,7 @@ Examples:
             if currencies or units:
                 # A range's endpoints follow the readers: with a currency or a unit, its
                 # ranges ("$3–5", "10–15 kg") are read too.
-                ranges = range_detectors(locale, detectors, guarded=guarded)
+                ranges = range_detectors(locale, detectors)
                 detectors = detectors.with_(*ranges.detectors)
         if skeletons:
             detectors = detectors.with_(*date_detectors(locale, skeletons).detectors)

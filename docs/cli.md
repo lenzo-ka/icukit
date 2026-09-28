@@ -670,7 +670,7 @@ with eras in other layouts, times with zone names, and the currencies and units 
 chooses for the locale's language. It reads every locale of the language unless
 --locales chooses them, and takes seconds to build. --guarded adds the readings the
 default readers refuse on purpose ("one" alone, "May" alone as a month, "Mar 15,
-44 BC" in ICU's own form, years "44–45", and a hyphen-minus range, "1914-1918").
+44 BC" in ICU's own form, and years "44–45").
 
 Overlapping candidates for a span are expected: recognition deposits a candidate
 forest, and downstream consumers perform disambiguation.

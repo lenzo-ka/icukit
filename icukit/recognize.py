@@ -70,7 +70,6 @@ __all__ = [
     "FlexibleSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
-    "FlexibleYearRangeDetector",
     "LetterNameDetector",
     "SingleLetterWordDetector",
 ]
@@ -6735,9 +6734,8 @@ def _detect_flexible(
 
 # --------------------------------------------------------------------------- ranges
 
-# A text writes a hyphen-minus for a range ("1914-1918", "10-15 kg") where ICU writes
-# another separator. Only the guarded range readers read it: a hyphen also joins codes
-# ("14-3-3"), ISBNs and part numbers, and writes a negative sign.
+# A hyphen-minus joins codes ("14-3-3"), ISBNs, part numbers, and ISO dates, and writes a
+# negative sign. A range reader reads it as a separator only where ICU writes it as one.
 _HYPHEN_MINUS = "-"
 # How far a range reader looks on either side of its separator for the endpoints.
 _RANGE_WINDOW = 48
@@ -7057,25 +7055,20 @@ class FlexibleNumberRangeDetector:
 
     ``form`` chooses what the reader reads, under its own type ``<group>:<form>``:
 
-    * ``"range"`` -- the separators ICU writes (``number:range``, ``measure:range``).
-    * ``"range-hyphen"`` -- a hyphen-minus where ICU writes another separator
-      ("1914-1918", "10-15 kg"). It is a guarded reading, since a hyphen also joins
-      codes, ISBNs, and part numbers. A falling or level pair is read too, as ICU
-      writes one: a score ("3-2") is read "to" as a range is. Where ICU writes a
-      hyphen-minus itself (es_ES "3-5"), ``"range"`` reads it, and this reader has no
-      separator (:attr:`has_marks` is false).
+    * ``"range"`` -- the separators ICU writes (``number:range``, ``measure:range``),
+      a hyphen-minus only where ICU writes one (es_ES "3-5").
     * ``"approximately"`` -- one amount after ICU's approximately sign ("~3", "≈3",
       "約3"), an :class:`~icukit.detectors.ApproximateValue`. A sign that is the
       locale's minus sign is left out. Where ICU writes the sign after a currency
       symbol ("US$~3.00" in some locales), that form is not read.
 
-    The endpoints' own readings are not touched: "1914-1918" still reads "-1918" as a
+    The endpoints' own readings are not touched: es_ES "3-5" still reads "-5" as a
     negative number beside the range. No endpoint is one number of a longer run
     joined by a separator, a hyphen, a colon, a slash, or a period ("14-3-3",
     "2:07–4:07"). An endpoint is looked for within 48 characters of the separator.
     """
 
-    _FORMS = ("range", "range-hyphen", "approximately")
+    _FORMS = ("range", "approximately")
 
     def __init__(
         self,
@@ -7115,8 +7108,6 @@ class FlexibleNumberRangeDetector:
         written = frozenset().union(*(_range_separators(name) for name in self._names))
         if form == "range":
             marks = written
-        elif form == "range-hyphen":
-            marks = frozenset() if _HYPHEN_MINUS in written else frozenset({_HYPHEN_MINUS})
         else:
             marks = frozenset().union(*(_approximately_signs(name) for name in self._names))
             symbols = icu.DecimalFormatSymbols(icu.Locale(locale))
@@ -7287,191 +7278,4 @@ class FlexibleNumberRangeDetector:
             for detection in read(text, mark_start, mark_end, mark):
                 key = (detection["start"], detection["end"], detection["value"])
                 found.setdefault(key, detection)
-        return sorted(found.values(), key=lambda item: (item["start"], item["end"]))
-
-
-def _digit_value(character: str) -> int:
-    return icu.Char.digit(character, 10)
-
-
-class FlexibleYearRangeDetector:
-    """Recognize a range of years in a form ICU never writes, as a guarded reading.
-
-    ``form`` is ``"hyphen"`` (type ``date-interval:y-hyphen``): two years joined by a
-    hyphen-minus where ICU's year interval writes another separator ("1914-1918", and
-    its second year shortened, "1893-94"); or ``"abbreviated"``
-    (``date-interval:y-abbreviated``): ICU's own separator with the second year
-    shortened to its last one or two digits ("1893–94", "1933–4"). Each is read as the
-    :class:`FlexibleDateIntervalDetector` of skeleton ``y`` reads ICU's own form, with
-    ICU's separator in place of the hyphen and the second year written out, so ICU's
-    year interval pattern and its gate decide the reading; the value is its
-    :class:`~icukit.detectors.DateIntervalValue`, and the shortened year's "end" capture
-    has the form ``"abbreviated"``. The shortened year is hand-rolled, since CLDR has no
-    pattern for it: the first year's leading digits before it, or the next decade's or
-    century's where that is not later ("1998-02" is 1998 to 2002), and two digits only
-    where they end the range within half a century ("2024-03" is not 2024 to 2103).
-
-    Both are guarded: a hyphen also joins codes and ISO dates, and a digit or two after
-    a separator may be anything. A range must rise, a hyphen joins two years of one width
-    of four digits or more, the interval reader's year floor ("555-1234" is not a range
-    of years), and no year is one number of a longer run ("2024-03-05"). Where ICU
-    writes a hyphen-minus itself between years, the ``"hyphen"`` reader reads only the
-    shortened second year.
-    """
-
-    group = "date-interval"
-    _FORMS = ("hyphen", "abbreviated")
-
-    def __init__(self, locale: str, *, form: str = "hyphen") -> None:
-        if form not in self._FORMS:
-            raise ValueError(f"unknown year range form: {form!r}")
-        self.locale = locale
-        self.form = form
-        self.type = f"date-interval:y-{form}"
-        self._interval = FlexibleDateIntervalDetector(locale, "y")
-        written = {_range_mark(matcher[1]) for matcher in self._interval._matchers} - {""}
-        self._written = tuple(sorted(written, key=lambda mark: (-len(mark), mark)))
-        if form == "hyphen":
-            self._marks = (_HYPHEN_MINUS,)
-            self._full = bool(self._written) and _HYPHEN_MINUS not in written
-        else:
-            self._marks = self._written
-            self._full = False
-        digits = _locale_digit_map(locale)
-        self._digits = "".join(sorted(digits, key=digits.__getitem__))
-
-    @property
-    def has_marks(self) -> bool:
-        """Whether ICU writes the locale a year interval with a separator to read."""
-        return bool(self._written)
-
-    def _render(self, value: int, like: str) -> str:
-        """``value`` in the digits of ``like`` (ASCII or the locale's)."""
-        digits = "0123456789" if all("0" <= c <= "9" for c in like) else self._digits
-        return "".join(digits[int(digit)] for digit in str(value))
-
-    @staticmethod
-    def _same_width(text: str, left_edge: int, right_edge: int) -> bool:
-        """Whether both years are written in one width of at least four digits.
-
-        Hand-rolled, as the hyphen form's guard: ICU writes a year of any width, but
-        "3-5" and a phone number's "555-1234" are not years. A year the pattern writes
-        with a suffix ("1914年") is measured on its second side alone.
-        """
-        start = left_edge
-        while start > 0 and icu.Char.isdigit(text[start - 1]):
-            start -= 1
-        end = right_edge
-        while end < len(text) and icu.Char.isdigit(text[end]):
-            end += 1
-        first, second = left_edge - start, end - right_edge
-        return second >= 4 and first in (0, second)
-
-    def _shortened(self, text: str, left_edge: int, right_edge: int) -> tuple[int, str] | None:
-        """The second year written out, where a digit or two after the separator shorten it."""
-        end = right_edge
-        while end < len(text) and icu.Char.isdigit(text[end]):
-            end += 1
-        width = end - right_edge
-        if width not in (1, 2) or (end < len(text) and _is_word_character(text[end])):
-            return None
-        start = left_edge
-        while start > 0 and icu.Char.isdigit(text[start - 1]):
-            start -= 1
-        if left_edge - start < 3:
-            return None
-        first = int("".join(str(_digit_value(c)) for c in text[start:left_edge]))
-        last = int("".join(str(_digit_value(c)) for c in text[right_edge:end]))
-        scale = 10**width
-        year = first - first % scale + last
-        if year <= first:
-            year += scale
-        if width == 2 and year - first >= scale // 2:
-            return None  # "2024-03" is a month, not 2024 to 2103
-        return end, self._render(year, text[start:left_edge])
-
-    def _read(self, text: str, replacements: list[tuple[int, int, str]], end_at: int | None):
-        """The ``y`` interval readings with ``replacements`` made, in ``text``'s offsets."""
-        window_start = _window_start(text, replacements[0][0])
-        window_end = _window_end(text, replacements[-1][1])
-        pieces, cursor, moves = [], window_start, []
-        written_length = 0
-        for old_start, old_end, new in replacements:
-            pieces.append(text[cursor:old_start])
-            written_length += old_start - cursor
-            moves.append((old_start, old_end, written_length, written_length + len(new)))
-            pieces.append(new)
-            written_length += len(new)
-            cursor = old_end
-        pieces.append(text[cursor:window_end])
-        written = "".join(pieces)
-
-        def back(offset: int) -> int:
-            delta = window_start
-            for old_start, old_end, new_start, new_end in moves:
-                if offset <= new_start:
-                    break
-                if offset < new_end:
-                    return old_start
-                delta = old_end - new_end
-            return offset + delta
-
-        separator_at = moves[0][2]
-        shortened = end_at is not None
-        for reading in self._interval.detect(written):
-            if not reading["start"] < separator_at < reading["end"]:
-                continue
-            if end_at is not None and reading["end"] != moves[-1][3]:
-                continue
-            start, end = back(reading["start"]), back(reading["end"])
-            value = reading["value"]
-            first, last = dict(value.start.fields).get("y"), dict(value.end.fields).get("y")
-            if first is None or last is None or not first < last:
-                continue
-            if _runs_on(text, start, end, self._marks):
-                continue
-            captures = tuple(
-                replace(
-                    capture,
-                    start=back(capture.start),
-                    end=back(capture.end),
-                    text=text[back(capture.start) : back(capture.end)],
-                    form="abbreviated" if shortened and capture.name == "end" else capture.form,
-                )
-                for capture in reading["captures"]
-            )
-            yield ValueDetection(
-                text=text[start:end],
-                start=start,
-                end=end,
-                type=self.type,
-                value=value,
-                captures=captures,
-                spec=reading["spec"],
-            )
-
-    def detect(self, text: str) -> list[ValueDetection]:
-        """Return the year ranges of ``text`` in source order."""
-        if not self._written:
-            return []
-        separator = self._written[0]
-        found: dict[tuple[int, int, object], ValueDetection] = {}
-        for mark_start, mark_end, _mark in _mark_spans(text, self._marks):
-            left_edge, right_edge = _side_edges(text, mark_start, mark_end)
-            if left_edge == 0 or right_edge == len(text):
-                continue
-            if not icu.Char.isdigit(text[right_edge]):
-                continue
-            attempts = []
-            if self._full and self._same_width(text, left_edge, right_edge):
-                attempts.append(([(mark_start, mark_end, separator)], None))
-            shortened = self._shortened(text, left_edge, right_edge)
-            if shortened is not None:
-                end, year = shortened
-                replacements = [(mark_start, mark_end, separator), (right_edge, end, year)]
-                attempts.append((replacements, end))
-            for replacements, end_at in attempts:
-                for detection in self._read(text, replacements, end_at):
-                    key = (detection["start"], detection["end"], detection["value"])
-                    found.setdefault(key, detection)
         return sorted(found.values(), key=lambda item: (item["start"], item["end"]))

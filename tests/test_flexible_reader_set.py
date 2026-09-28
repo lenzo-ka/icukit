@@ -41,11 +41,10 @@ GUARDED_CLASSES = {
     "FlexibleMonthNameDetector",
     "FlexibleShortYearDateDetector",
     "FlexibleWeekdayNameDetector",
-    "FlexibleYearRangeDetector",
 }
 
 # The measure range readers' types, which name no unit.
-RANGE_TYPES = {"measure:range", "measure:approximately", "measure:range-hyphen"}
+RANGE_TYPES = {"measure:range", "measure:approximately"}
 
 # The units every one of the three locales reads: the world's preferences, ICU's duration
 # and digital types, and the runs of CLDR's duration order.
