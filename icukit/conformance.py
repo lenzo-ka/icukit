@@ -160,6 +160,7 @@ def _date_setup(cell: Cell):
     calendar.setTime(instant)
     fields = []
     field_map = {
+        "G": icu.Calendar.ERA,
         "y": icu.Calendar.YEAR,
         "M": icu.Calendar.MONTH,
         "d": icu.Calendar.DATE,
@@ -167,8 +168,8 @@ def _date_setup(cell: Cell):
         "m": icu.Calendar.MINUTE,
     }
     runs = _pattern_runs(pattern)
-    letter_names = {"y": "y", "M": "M", "L": "M", "d": "d", "H": "H", "m": "m"}
-    order = {"y": 0, "M": 1, "d": 2, "H": 3, "m": 4}
+    letter_names = {"G": "G", "y": "y", "M": "M", "L": "M", "d": "d", "H": "H", "m": "m"}
+    order = {"G": -1, "y": 0, "M": 1, "d": 2, "H": 3, "m": 4}
     present = sorted(
         {letter_names[letter] for letter, _ in runs if letter in letter_names},
         key=order.__getitem__,
@@ -177,6 +178,7 @@ def _date_setup(cell: Cell):
         raw = calendar.get(field_map[name])
         fields.append((name, raw + 1 if name == "M" else raw))
     form_names = {
+        "G": "G",
         "y": "y",
         "M": "M",
         "L": "M",
@@ -193,8 +195,11 @@ def _date_setup(cell: Cell):
             form = "numeric"
             if letter in {"M", "L", "E", "e", "c"} and width >= 3:
                 form = {3: "short", 4: "wide"}.get(width, "narrow")
+            elif letter == "G":
+                form = _era_form(width)
             forms.append((form_names[letter], form))
-    forms.sort(key=lambda item: {"y": 0, "M": 1, "d": 2, "weekday": 3, "H": 4, "m": 5}[item[0]])
+    form_order = {"G": -1, "y": 0, "M": 1, "d": 2, "weekday": 3, "H": 4, "m": 5}
+    forms.sort(key=lambda item: form_order[item[0]])
     expected = DateTimeValue(tuple(fields), calendar.getType())
     spec = DateFormatSpec(
         cell.locale,
@@ -208,8 +213,14 @@ def _date_setup(cell: Cell):
     return detector, surface, expected, spec, captures
 
 
+def _era_form(width: int) -> str:
+    """CLDR pattern grammar: G to GGG the abbreviated era, GGGG the wide, GGGGG the narrow."""
+    return {4: "wide", 5: "narrow"}.get(width, "short")
+
+
 def _date_captures(formatter, instant, calendar, surface, runs) -> tuple[Capture, ...]:
     field_data = {
+        "G": ("era", icu.Calendar.ERA, icu.DateFormat.kEraField, True),
         "y": ("y", icu.Calendar.YEAR, icu.DateFormat.kYearField, True),
         "M": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
         "L": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
@@ -242,6 +253,8 @@ def _date_captures(formatter, instant, calendar, surface, runs) -> tuple[Capture
         form = "numeric"
         if letter in {"M", "L", "E", "e", "c"} and width >= 3:
             form = {3: "short", 4: "wide"}.get(width, "narrow")
+        elif letter == "G":
+            form = _era_form(width)
         captures.append(Capture(name, begin, end, surface[begin:end], value, form))
     captures.sort(key=lambda capture: (capture.start, capture.end))
     return tuple(captures)

@@ -495,19 +495,31 @@ class DateDetector:
     An era field (``G``, any width) is read where the pattern writes it, in the locale's
     own calendar (the Buddhist era in ``th``, the Persian in ``fa``), as ICU formats it;
     it is captured as ``era`` and valued ``("G", era)``, ICU's era index, beside the year
-    of that era ("Mar 15, 44 BC" is ``(("G", 0), ("y", 44), ...)``). An era marks its
-    year a year, so a pattern with one reads a year in any number of digits.
+    of that era ("Mar 15, 2024 BC" is ``(("G", 0), ("y", 2024), ...)``). The year
+    beside an era keeps the four-digit floor: a short number before a short era is as
+    often a count before a unit or a clock ("100 م" is 100 meters in Arabic, "5 م" five
+    PM, "7 AD units"), and every locale's default calendar writes today's year in four
+    digits.
+
+    ``short_years=True`` builds the guarded reader of exactly the readings that floor
+    refuses: a pattern with an era, read with a year of one to three digits ("Mar 15,
+    44 BC" is ``(("G", 0), ("y", 44), ...)``, the year as written, never widened to a
+    century). Its type is ``date:short-year:<skeleton>``, beside the text-date reader's
+    ``date:short-year``, and a pattern without an era refuses it.
     """
 
     group = "date"
 
-    def __init__(self, locale: str, skeleton: str, tz: str = "GMT") -> None:
+    def __init__(
+        self, locale: str, skeleton: str, tz: str = "GMT", *, short_years: bool = False
+    ) -> None:
         if tz != "GMT":
             raise ValueError("DateDetector currently requires tz='GMT'")
         self.locale = locale
         self.skeleton = skeleton
         self.tz = tz
-        self.type = f"date:{skeleton}"
+        self.short_years = short_years
+        self.type = f"date:short-year:{skeleton}" if short_years else f"date:{skeleton}"
         generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
         self.pattern = generator.getBestPattern(skeleton)
         # A skeleton this locale's generator cannot express yields an empty pattern,
@@ -539,8 +551,14 @@ class DateDetector:
                 f"(skeleton {skeleton!r}); 12-hour/day-period, quarter, week, and time-zone "
                 f"fields are not supported"
             )
-        # An era in the pattern marks its year a year, however few digits it has.
         self._has_era = "G" in _letters
+        if short_years and not (
+            self._has_era and any(f.letter == "y" and f.width != 2 for f in self._fields)
+        ):
+            raise ValueError(
+                f"DateDetector reads a short year only in a 'y' field beside an era, and "
+                f"{self.pattern!r} (skeleton {skeleton!r}) has no such pair"
+            )
         # ICU parses two digits in a one-letter year field into the century around
         # today ("44 BC" as 2044 BC), which is right where the year alone must be a
         # recent one, and wrong where an era dates it. A pattern with an era parses
@@ -654,16 +672,17 @@ class DateDetector:
             if (
                 field.letter == "y"
                 and field.width != 2
-                and not self._has_era
-                and end_cp - begin_cp < 4
+                and (end_cp - begin_cp < 4) != (self.short_years)
             ):
                 # ICU's "y" writes a year in as many digits as it has: four for every
                 # year from 1000 on, and one to three below it ("June 200", "3/4"). The
                 # reformat check cannot tell those from a count after a month ("in June
                 # 200 cases", "August 9"), so a year under four digits is not read here,
                 # a hand-rolled limit; "yy" keeps its two digits, which ICU writes for
-                # every year. An era the pattern writes marks a short year a year ("44
-                # BC", "15 AD"), so a pattern with one reads it in any number of digits.
+                # every year. An era beside the year does not lift the limit by default:
+                # a short era follows a count or a clock as readily ("100 م" meters, "5
+                # م" PM, "7 AD units"). The guarded short-year reader reads exactly
+                # those refused years, beside an era, and nothing else.
                 return None
             captures.append(
                 Capture(

@@ -45,20 +45,58 @@ def test_a_gang_with_an_era_pattern_builds(locale):
     assert "date:y" in gang.names()
 
 
-def test_a_year_before_the_common_era_keeps_its_value():
+@pytest.mark.parametrize("year", [2024, 1066])
+def test_a_four_digit_year_before_the_common_era_reads_by_default(year):
     detector = DateDetector("en", "GyMMMd")
-    surface, _ = _surface(detector, era=0, year=44, month=2, day=15)
+    surface, _ = _surface(detector, era=0, year=year, month=2, day=15)
     hits = [d for d in detector.detect(surface) if d["text"] == surface]
+    assert [dict(d["value"].fields) for d in hits] == [{"G": 0, "y": year, "M": 3, "d": 15}]
+
+
+def test_a_short_year_beside_an_era_is_the_guarded_readers():
+    default = DateDetector("en", "GyMMMd")
+    guarded = DateDetector("en", "GyMMMd", short_years=True)
+    assert guarded.type == "date:short-year:GyMMMd"
+    short, _ = _surface(default, era=0, year=44, month=2, day=15)
+    assert default.detect(short) == []
+    hits = [d for d in guarded.detect(short) if d["text"] == short]
+    # The year as written: 44 BC, never widened to 2044.
     assert [dict(d["value"].fields) for d in hits] == [{"G": 0, "y": 44, "M": 3, "d": 15}]
+    long, _ = _surface(default, era=0, year=2024, month=2, day=15)
+    assert guarded.detect(long) == []
 
 
-def test_a_short_year_reads_only_with_its_era():
-    with_era = DateDetector("en", "GyMd")
-    surface, _ = _surface(with_era, era=1, year=7)
-    assert [dict(d["value"].fields)["y"] for d in with_era.detect(surface)] == [7]
-    bare = DateDetector("en", "yMd")
-    surface, _ = _surface(bare, era=1, year=7)
-    assert bare.detect(surface) == []
+def test_the_guarded_short_year_reader_needs_an_era():
+    with pytest.raises(ValueError):
+        DateDetector("en", "yMMMd", short_years=True)
+
+
+# A short number before a short era is as often a count or a clock: 100 meters and five
+# PM in Arabic, and the like.
+@pytest.mark.parametrize(
+    "locale, text, surface",
+    [
+        ("ar", "طوله 100 م", "100 م"),
+        ("ar", "الساعة 5 م", "5 م"),
+        ("id", "jaraknya 5 M", "5 M"),
+        ("en", "I have 7 AD units", "7 AD"),
+        ("en", "Route 99 BC", "99 BC"),
+        ("en", "the AD campaign ran 3 AD spots", "3 AD"),
+    ],
+)
+def test_a_short_number_before_an_era_is_a_date_only_when_guarded(locale, text, surface):
+    from icukit.engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, generated_detectors
+
+    def dates(families):
+        gang = generated_detectors(locale, families)
+        return {d["text"] for d in gang.detect(text) if d["type"].startswith("date")}
+
+    # Only where this ICU writes the era as the text does.
+    era = icu.SimpleDateFormat("G", icu.Locale(locale))
+    if surface.split()[-1] not in list(era.getDateFormatSymbols().getEras()):
+        pytest.skip("this ICU writes the locale's era otherwise")
+    assert dates(DEFAULT_FAMILIES) == set()
+    assert surface in dates((*DEFAULT_FAMILIES, *GUARDED_FAMILIES))
 
 
 @pytest.mark.parametrize("skeleton", ["GyMMMd", "GGGGyMMMMd", "GGGGGyMd"])
