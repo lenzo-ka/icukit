@@ -9,7 +9,13 @@ import sys
 import icu
 
 from ...detectors import date_detectors, number_detectors
-from ...engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, flexible_detectors, generated_detectors
+from ...engine import (
+    DEFAULT_FAMILIES,
+    GUARDED_FAMILIES,
+    flexible_detectors,
+    generated_detectors,
+    range_detectors,
+)
 from ...formatters import format_json, format_tsv
 from ...recognize import FlexibleMeasureDetector, _iso_currency_codes
 from ...serialize import detection_to_dict, detections_to_json
@@ -30,7 +36,9 @@ Recognize typed values in running text. Offsets are half-open Unicode code-point
 indices. The default set covers dates, date intervals, compact numbers, relative
 dates, scientific numbers, spellout numbers, abbreviations, decimals, and percents.
 Dates with an era are read in ICU's own forms, with four-digit years ("Mar 5, 2024
-BC"). Currencies and measures require explicit --currency and --measure options.
+BC"). Ranges are read as ICU writes them: of numbers and percents ("3–5", "10–15%",
+"~3") and of years ("1914–1918"). Currencies and measures require explicit --currency
+and --measure options, and with them their ranges are read too ("$3–5", "10–15 kg").
 
 --flexible adds the flexible readers, which read the forms text writes beyond ICU's
 own: negative and accounting currency, mixed measures, other decimal styles, dates
@@ -38,7 +46,7 @@ with eras in other layouts, times with zone names, and the currencies and units 
 chooses for the locale's language. It reads every locale of the language unless
 --locales chooses them, and takes seconds to build. --guarded adds the readings the
 default readers refuse on purpose ("one" alone, "May" alone as a month, "Mar 15,
-44 BC" in ICU's own form).
+44 BC" in ICU's own form, years "44–45", and a hyphen-minus range, "1914-1918").
 
 Overlapping candidates for a span are expected: recognition deposits a candidate
 forest, and downstream consumers perform disambiguation.
@@ -156,6 +164,51 @@ Examples:
             units.append(identifier)
         return locales, currencies, units
 
+    @staticmethod
+    def reader_set(
+        locale,
+        *,
+        guarded=False,
+        flexible=False,
+        locales=None,
+        currencies=(),
+        units=(),
+        skeletons=None,
+    ):
+        """The readers ``icukit detect`` reads with, for its options."""
+        families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if guarded else DEFAULT_FAMILIES
+        detectors = generated_detectors(locale, families)
+        # The strict readers. A strict currency reader is built only for a --currency
+        # code; under --flexible its reading stands beside the flexible set's (with
+        # --currency USD, the "$12.50" inside "($12.50)"). The flexible set's decimal and
+        # percent readers read every number the strict ones would, so under --flexible
+        # those are left out.
+        plain = not flexible
+        numbers = number_detectors(locale, decimal=plain, percent=plain, currencies=currencies)
+        detectors = detectors.with_(*numbers.detectors)
+        if flexible:
+            # The flexible set reads the units asked for (or ICU's choice) itself, so the
+            # per-unit measure readers below would only repeat its readings; it reads
+            # the ranges of its own amounts.
+            flexible_set = flexible_detectors(
+                locale,
+                locales=locales,
+                currencies=currencies or None,
+                units=units or None,
+                guarded=guarded,
+            )
+            detectors = detectors.with_(*flexible_set.detectors)
+        else:
+            detectors = detectors.with_(*(FlexibleMeasureDetector(locale, unit) for unit in units))
+            if currencies or units:
+                # A range's endpoints follow the readers: with a currency or a unit, its
+                # ranges ("$3–5", "10–15 kg") are read too.
+                ranges = range_detectors(locale, detectors, guarded=guarded)
+                detectors = detectors.with_(*ranges.detectors)
+        if skeletons:
+            detectors = detectors.with_(*date_detectors(locale, skeletons).detectors)
+        return detectors
+
     @classmethod
     def run(cls, args):
         """Recognize and render typed candidates."""
@@ -169,40 +222,22 @@ Examples:
             text = args.text
         else:
             text = cls._read_input(args)
-        families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if args.guarded else DEFAULT_FAMILIES
-        detectors = generated_detectors(args.locale, families)
-        # The strict readers. A strict currency reader is built only for a --currency
-        # code; under --flexible its reading stands beside the flexible set's (with
-        # --currency USD, the "$12.50" inside "($12.50)"). The flexible set's decimal and
-        # percent readers read every number the strict ones would, so under --flexible
-        # those are left out.
-        plain = not args.flexible
-        numbers = number_detectors(args.locale, decimal=plain, percent=plain, currencies=currencies)
-        detectors = detectors.with_(*numbers.detectors)
-        if args.flexible:
-            if locales is None:
-                language = icu.Locale(args.locale).getLanguage()
-                print(
-                    f"icukit detect: building the flexible readers for every locale of "
-                    f"{language!r}; pass --locales to narrow",
-                    file=sys.stderr,
-                )
-            # The flexible set reads the units asked for (or ICU's choice) itself, so the
-            # per-unit measure readers below would only repeat its readings.
-            flexible = flexible_detectors(
-                args.locale,
-                locales=locales,
-                currencies=currencies or None,
-                units=units or None,
-                guarded=args.guarded,
+        if args.flexible and locales is None:
+            language = icu.Locale(args.locale).getLanguage()
+            print(
+                f"icukit detect: building the flexible readers for every locale of "
+                f"{language!r}; pass --locales to narrow",
+                file=sys.stderr,
             )
-            detectors = detectors.with_(*flexible.detectors)
-        else:
-            detectors = detectors.with_(
-                *(FlexibleMeasureDetector(args.locale, unit) for unit in units)
-            )
-        if args.skeleton:
-            detectors = detectors.with_(*date_detectors(args.locale, args.skeleton).detectors)
+        detectors = cls.reader_set(
+            args.locale,
+            guarded=args.guarded,
+            flexible=args.flexible,
+            locales=locales,
+            currencies=currencies,
+            units=units,
+            skeletons=args.skeleton,
+        )
         # A strict and a flexible reader can give the same reading ("$5.00" as USD 5.00);
         # print it once. Distinct readings of one span are all kept.
         seen = set()

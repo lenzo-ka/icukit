@@ -35,6 +35,10 @@ GUARDED_TYPES = {
     "date:weekday-name",
     "date:short-year",
     "time:bare-hour",
+    "date-interval:y-hyphen",
+    "date-interval:y-abbreviated",
+    "date-interval:short-year:y",
+    "number:range-hyphen",
 }
 
 

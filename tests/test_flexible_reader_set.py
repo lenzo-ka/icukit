@@ -41,7 +41,11 @@ GUARDED_CLASSES = {
     "FlexibleMonthNameDetector",
     "FlexibleShortYearDateDetector",
     "FlexibleWeekdayNameDetector",
+    "FlexibleYearRangeDetector",
 }
+
+# The measure range readers' types, which name no unit.
+RANGE_TYPES = {"measure:range", "measure:approximately", "measure:range-hyphen"}
 
 # The units every one of the three locales reads: the world's preferences, ICU's duration
 # and digital types, and the runs of CLDR's duration order.
@@ -227,7 +231,9 @@ def test_the_units_are_exactly_those_chosen_for_the_locale(locale):
     units = {
         name.split(":", 1)[1]
         for name in _gang(locale).names()
-        if name.startswith("measure:") and name != "measure:duration:numeric"
+        if name.startswith("measure:")
+        and name != "measure:duration:numeric"
+        and name not in RANGE_TYPES
     }
 
     assert units == EXPECTED_UNITS[locale]
@@ -404,6 +410,8 @@ def test_callers_choose_currencies_and_units():
         "measure:hertz",
         "measure:pound-and-ounce",
         "measure:duration:numeric",
+        "measure:range",
+        "measure:approximately",
     }
 
 
@@ -463,6 +471,8 @@ def test_the_existing_sets_are_unchanged():
         "number:currency-name:USD",
     )
     generated = generated_detectors("en_US")
+    # The range readers read ICU's own ranges of numbers by default, and no measure's.
+    assert {"number:range", "number:approximately"} <= set(generated.names())
     assert not {"measure", "time", "fraction", "ordinal"} & {d.group for d in generated.detectors}
     assert not any(
         isinstance(detector, (recognize.FlexibleCurrencyDetector, NumberDetector))

@@ -49,6 +49,7 @@ from .breaker import break_grapheme_spans, break_word_spans
 from .detect import Detection
 
 __all__ = [
+    "ApproximateValue",
     "Capture",
     "CompactFormatSpec",
     "DateFormatSpec",
@@ -64,6 +65,8 @@ __all__ = [
     "UnitValue",
     "NumberFormatSpec",
     "NumberDetector",
+    "NumberRangeSpec",
+    "NumberRangeValue",
     "NumberValue",
     "RelativeDateSpec",
     "RelativeDateValue",
@@ -160,6 +163,27 @@ class RelativeDateValue:
     offset: int
     unit: str
     direction: str
+
+
+@dataclass(frozen=True)
+class NumberRangeValue:
+    """A recovered (start, end) range of two amounts, as ICU's NumberRangeFormatter writes.
+
+    Each endpoint is a :class:`NumberValue` (a number, a percent's ratio, or a currency
+    amount) or a :class:`MeasureValue`. A side written without its unit ("$3–5",
+    "10–15 kg", where ICU collapses the unit onto one side) carries the unit the other
+    side writes, so both endpoints are whole amounts.
+    """
+
+    start: NumberValue | MeasureValue
+    end: NumberValue | MeasureValue
+
+
+@dataclass(frozen=True)
+class ApproximateValue:
+    """An amount written with an approximately sign ICU writes ("~3", "≈3", "約3")."""
+
+    value: NumberValue | MeasureValue
 
 
 # --------------------------------------------------------------------------- captures
@@ -264,6 +288,23 @@ class RelativeDateSpec:
     """The locale used to generate a relative-date phrase."""
 
     locale: str
+
+
+@dataclass(frozen=True)
+class NumberRangeSpec:
+    """The locale and form of a number-range or approximately candidate.
+
+    ``form`` is ``"range"`` (a separator ICU's ``NumberRangeFormatter`` writes),
+    ``"range-hyphen"`` (a hyphen-minus where ICU writes another separator), or
+    ``"approximately"``. ``collapse`` is ``"unit"`` when one side's unit is shared with
+    the other ("$3–5"), else ``"none"``; ``mark`` is the separator or the approximately
+    sign as written, without the spaces around it.
+    """
+
+    locale: str
+    form: str
+    collapse: str
+    mark: str
 
 
 # --------------------------------------------------------------------------- detection

@@ -9,6 +9,7 @@ from dataclasses import fields, is_dataclass
 
 from .abbreviation_recognize import AbbreviationExpansion, AbbreviationSpec, AbbreviationValue
 from .detectors import (
+    ApproximateValue,
     Capture,
     CompactFormatSpec,
     DateFormatSpec,
@@ -18,6 +19,8 @@ from .detectors import (
     MeasureFormatSpec,
     MeasureValue,
     NumberFormatSpec,
+    NumberRangeSpec,
+    NumberRangeValue,
     NumberValue,
     RelativeDateSpec,
     RelativeDateValue,
@@ -38,6 +41,8 @@ _KINDS = {
     DateIntervalValue: "date_interval",
     NumberValue: "number",
     MeasureValue: "measure",
+    NumberRangeValue: "number_range",
+    ApproximateValue: "approximate",
     RelativeDateValue: "relative_date",
     AbbreviationValue: "abbreviation",
     AbbreviationExpansion: "abbreviation_expansion",
@@ -49,6 +54,7 @@ _KINDS = {
     SpelloutFormatSpec: _snake_case(SpelloutFormatSpec.__name__),
     MeasureFormatSpec: _snake_case(MeasureFormatSpec.__name__),
     RelativeDateSpec: _snake_case(RelativeDateSpec.__name__),
+    NumberRangeSpec: _snake_case(NumberRangeSpec.__name__),
     AbbreviationSpec: _snake_case(AbbreviationSpec.__name__),
 }
 

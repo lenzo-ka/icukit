@@ -9,7 +9,8 @@ expansion is intentionally not an invertible formatter operation.
 :data:`DEFAULT_FAMILIES` is the default gang. :data:`GUARDED_FAMILIES` generates the
 readers of the readings the default readers refuse on purpose -- a lone "one" or
 "first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
-with a two- or three-digit year -- each under its own type, so a consumer that wants
+with a two- or three-digit year, a year range ICU never writes ("1914-1918",
+"1893–94") -- each under its own type, so a consumer that wants
 every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
@@ -27,7 +28,7 @@ from functools import cache
 
 import icu
 
-from .detectors import DateDetector, Detector, DetectorSet
+from .detectors import DateDetector, Detector, DetectorSet, NumberDetector
 from .recognize import (
     AlphanumericRunsDetector,
     FlexibleBareHourDetector,
@@ -44,6 +45,7 @@ from .recognize import (
     FlexibleMixedMeasureDetector,
     FlexibleMonthNameDetector,
     FlexibleNumberDetector,
+    FlexibleNumberRangeDetector,
     FlexibleNumericDurationDetector,
     FlexibleOrdinalDetector,
     FlexiblePercentDetector,
@@ -54,6 +56,7 @@ from .recognize import (
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
     FlexibleWeekdayNameDetector,
+    FlexibleYearRangeDetector,
     LetterNameDetector,
     PluralNumeralDetector,
     SingleLetterWordDetector,
@@ -82,15 +85,21 @@ __all__ = [
     "MONTH_NAME_FAMILY",
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
+    "NUMBER_RANGE_FAMILY",
+    "NUMBER_RANGE_HYPHEN_FAMILY",
     "SHORT_YEAR_ERA_FAMILY",
     "SHORT_YEAR_FAMILY",
+    "SHORT_YEAR_INTERVAL_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
     "WEEKDAY_NAME_FAMILY",
+    "YEAR_RANGE_ABBREVIATED_FAMILY",
+    "YEAR_RANGE_HYPHEN_FAMILY",
     "SkippedSpec",
     "flexible_detectors",
     "flexible_detectors_report",
     "generated_detectors",
     "generated_detectors_report",
+    "range_detectors",
 ]
 
 Spec = object
@@ -192,15 +201,57 @@ DATE_TIME_SKELETON_FAMILY = Family(
 _ZONE_COUNTERPART = str.maketrans("vz", "zv")
 
 
+def _bundle_keys(bundle: icu.ResourceBundle) -> list[str]:
+    bundle.resetIterator()
+    keys = []
+    while bundle.hasNext():
+        keys.append(bundle.getNext().getKey())
+    return keys
+
+
+def _is_lone_number_skeleton(skeleton: str) -> bool:
+    """Whether ``skeleton`` is one numeric field other than the year ("d", "M", "H")."""
+    return len(set(skeleton)) == 1 and len(skeleton) <= 2 and skeleton[0] != "y"
+
+
+def _cldr_interval_skeletons(locale: str) -> set[str]:
+    """The skeletons CLDR gives interval formats for, in ``locale`` and the locales it
+    inherits from, in its calendar.
+
+    The pattern generator does not list them all: "y" ("1624 – 1713") is CLDR's and
+    not the generator's. A lone numeric field other than the year ("d", "M", "H") is
+    left out: its interval writes two bare numbers ("3–5"), which the number range
+    readers read, so it would give every such range a day, month, or hour reading.
+    """
+    icu_locale = icu.Locale(locale)
+    calendar = icu.Calendar.createInstance(icu_locale).getType()
+    parts = icu_locale.getName().split("_")
+    names = ["_".join(parts[:count]) for count in range(len(parts), 0, -1)] + ["root"]
+    found: set[str] = set()
+    for name in dict.fromkeys(names):
+        try:
+            formats = (
+                icu.ResourceBundle("", icu.Locale(name))
+                .get("calendar")
+                .get(calendar)
+                .get("intervalFormats")
+            )
+        except icu.ICUError:
+            continue
+        found.update(_bundle_keys(formats))
+    found.discard("fallback")
+    return {skeleton for skeleton in found if not _is_lone_number_skeleton(skeleton)}
+
+
 def _date_interval_skeletons(locale: str) -> Iterable[Spec]:
-    # The pattern generator's skeletons, and for each one with a time zone field, its
-    # counterpart in the other zone family at the same width (hmv and hmz). CLDR gives
-    # interval patterns for the generic zone (v) alone, and ICU's interval formatter
-    # writes a specific-zone (z) skeleton through them, so "2:07 – 4:07 PM EDT" has a
-    # skeleton of its own only this way; the probe keeps the counterparts ICU gives
-    # patterns for.
+    # The pattern generator's skeletons and those CLDR gives interval formats for, and
+    # for each one with a time zone field, its counterpart in the other zone family at
+    # the same width (hmv and hmz). CLDR gives interval patterns for the generic zone
+    # (v) alone, and ICU's interval formatter writes a specific-zone (z) skeleton
+    # through them, so "2:07 – 4:07 PM EDT" has a skeleton of its own only this way;
+    # the probe keeps the counterparts ICU gives patterns for.
     generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
-    skeletons = set(generator.getSkeletons())
+    skeletons = set(generator.getSkeletons()) | _cldr_interval_skeletons(locale)
     skeletons |= {
         skeleton.translate(_ZONE_COUNTERPART)
         for skeleton in tuple(skeletons)
@@ -461,6 +512,20 @@ SHORT_YEAR_FAMILY = _guarded_family(
     "the locale's textual date patterns write no year",
 )
 
+YEAR_RANGE_HYPHEN_FAMILY = _guarded_family(
+    "y-hyphen",
+    lambda locale: FlexibleYearRangeDetector(locale, form="hyphen"),
+    lambda detector: detector.has_marks,
+    "ICU writes the locale no year interval with a separator",
+)
+
+YEAR_RANGE_ABBREVIATED_FAMILY = _guarded_family(
+    "y-abbreviated",
+    lambda locale: FlexibleYearRangeDetector(locale, form="abbreviated"),
+    lambda detector: detector.has_marks,
+    "ICU writes the locale no year interval with a separator",
+)
+
 
 def _short_year_era_invert(spec: Spec, locale: str) -> Detector | None:
     return _short_year_era_probe(spec, locale).detector
@@ -483,6 +548,61 @@ SHORT_YEAR_ERA_FAMILY = Family(
     lambda spec, locale: _short_year_era_probe(spec, locale).reason,
 )
 
+
+def _short_year_interval_invert(spec: Spec, locale: str) -> Detector | None:
+    return _short_year_interval_probe(spec, locale).detector
+
+
+def _short_year_interval_probe(spec: Spec, locale: str) -> _Probe:
+    try:
+        detector = FlexibleDateIntervalDetector(locale, str(spec), short_years=True)
+    except (icu.ICUError, ValueError) as error:
+        return _Probe(None, str(error))
+    if not detector.has_patterns:
+        return _Probe(None, f"no invertible interval pattern for skeleton {str(spec)!r}")
+    return _Probe(detector)
+
+
+# The interval skeletons whose patterns write a "y" year, each read with a year of one to
+# three digits, which the default interval readers refuse ("3–5" is not years 3 to 5);
+# the type is date-interval:short-year:<skeleton>.
+SHORT_YEAR_INTERVAL_FAMILY = Family(
+    "short-year-interval",
+    _date_interval_skeletons,
+    _short_year_interval_invert,
+    lambda spec, locale: _short_year_interval_probe(spec, locale).reason,
+)
+
+
+def _range_family(name: str, forms: tuple[str, ...]) -> Family:
+    """A family of one number range reader per form, over a number and a percent reader.
+
+    The generated set reads no currency or measure without a caller's choice, so its
+    ranges are those of numbers and percents; a set that reads currencies or measures
+    reads their ranges too (see :func:`range_detectors`). The endpoint readers are built
+    on the reader's first read of a range.
+    """
+
+    def probe(spec: Spec, locale: str) -> _Probe:
+        try:
+            reader = FlexibleNumberRangeDetector(locale, form=str(spec))
+        except (icu.ICUError, ValueError) as error:
+            return _Probe(None, str(error))
+        if not reader.has_marks:
+            return _Probe(None, "ICU writes a hyphen-minus itself, read by the range reader")
+        return _Probe(reader)
+
+    return Family(
+        name,
+        lambda locale: forms,
+        lambda spec, locale: probe(spec, locale).detector,
+        lambda spec, locale: probe(spec, locale).reason,
+    )
+
+
+NUMBER_RANGE_FAMILY = _range_family("number-range", ("range", "approximately"))
+NUMBER_RANGE_HYPHEN_FAMILY = _range_family("number-range-hyphen", ("range-hyphen",))
+
 # note: A measure family belongs here once its ICU surfaces have an introspective
 # inverter. Abbreviations use their typed lexicon.
 DEFAULT_FAMILIES = (
@@ -493,6 +613,7 @@ DEFAULT_FAMILIES = (
     RELATIVE_DATE_FAMILY,
     SCIENTIFIC_NUMBER_FAMILY,
     SPELLOUT_NUMBER_FAMILY,
+    NUMBER_RANGE_FAMILY,
 )
 
 # The readings the default readers refuse on purpose, each under its own type; not in
@@ -505,6 +626,10 @@ GUARDED_FAMILIES = (
     SHORT_YEAR_FAMILY,
     SHORT_YEAR_ERA_FAMILY,
     BARE_HOUR_FAMILY,
+    SHORT_YEAR_INTERVAL_FAMILY,
+    YEAR_RANGE_HYPHEN_FAMILY,
+    YEAR_RANGE_ABBREVIATED_FAMILY,
+    NUMBER_RANGE_HYPHEN_FAMILY,
 )
 
 _FAMILY_PROBES = (
@@ -516,6 +641,7 @@ _FAMILY_PROBES = (
     (SPELLOUT_NUMBER_FAMILY, _spellout_probe),
     (LONE_SPELLOUT_NUMBER_FAMILY, _lone_spellout_probe),
     (SHORT_YEAR_ERA_FAMILY, _short_year_era_probe),
+    (SHORT_YEAR_INTERVAL_FAMILY, _short_year_interval_probe),
 )
 
 
@@ -838,8 +964,60 @@ def _flexible_families(
                 lambda detector: detector.letter is not None,
                 "ICU's best pattern for the j skeleton has no hour field",
             ),
+            SHORT_YEAR_INTERVAL_FAMILY,
+            YEAR_RANGE_HYPHEN_FAMILY,
+            YEAR_RANGE_ABBREVIATED_FAMILY,
         ]
     return tuple(families)
+
+
+# The endpoint readers of the number range readers, by the group of each range reader.
+_RANGE_ENDPOINTS = (
+    (FlexibleNumberDetector, FlexiblePercentDetector, FlexibleCurrencyDetector, NumberDetector),
+    (FlexibleMeasureDetector,),
+)
+
+
+def range_detectors(
+    locale: str,
+    detectors: DetectorSet,
+    *,
+    guarded: bool = False,
+    locales: Iterable[str] | None = None,
+) -> DetectorSet:
+    """The number range readers over the amount readers ``detectors`` holds.
+
+    A range's endpoints follow the set: one reader over its number, percent, and
+    currency readers, strict or flexible (``number:range``), and one over its measure
+    readers (``measure:range``), each also reading the approximately form; ``guarded``
+    adds each one's hyphen-minus form. So a set that reads a currency or a unit reads its
+    ranges ("$3–5", "10–15 kg"), and one that does not, does not. Add them with
+    ``detectors.with_(*range_detectors(locale, detectors).detectors)``: each replaces the
+    set's own reader of its type, a generated set's ``number:range`` among them.
+    """
+    readers, _ = _range_readers(locale, detectors, _locale_selection(locale, locales), guarded)
+    return DetectorSet(tuple(readers))
+
+
+def _range_readers(
+    locale: str, detectors: DetectorSet, locales: tuple[str, ...] | None, guarded: bool
+) -> tuple[list[Detector], list[SkippedSpec]]:
+    """:func:`range_detectors`, and each form ICU gives no separator, as skipped."""
+    forms = ("range", "approximately", *(("range-hyphen",) if guarded else ()))
+    readers: list[Detector] = []
+    skipped: list[SkippedSpec] = []
+    for kinds in _RANGE_ENDPOINTS:
+        endpoints = [detector for detector in detectors.detectors if type(detector) in kinds]
+        if not endpoints:
+            continue
+        for form in forms:
+            reader = FlexibleNumberRangeDetector(locale, endpoints, form=form, locales=locales)
+            if reader.has_marks:
+                readers.append(reader)
+            else:
+                reason = "ICU writes a hyphen-minus itself, read by the range reader"
+                skipped.append(SkippedSpec(f"number-{form}", reader.type, reason))
+    return readers, skipped
 
 
 def flexible_detectors_report(
@@ -861,7 +1039,9 @@ def flexible_detectors_report(
         None if units is None else tuple(units),
         guarded,
     )
-    return generated_detectors_report(locale, families)
+    report = generated_detectors_report(locale, families)
+    readers, skipped = _range_readers(locale, report.detectors, selection, guarded)
+    return GenerationReport(report.detectors.with_(*readers), (*report.skipped, *skipped))
 
 
 def flexible_detectors(
@@ -879,10 +1059,17 @@ def flexible_detectors(
     currency-name, measure, mixed-measure, numeric-duration, numeric-date, text-date,
     date-time, time, relative-date, and date-interval (each skeleton ICU gives an
     interval, a zoned one in both the generic and the specific zone family, hmv and
-    hmz) readers, and the letter-name, single-letter-word, and alphanumeric-run
-    readers. Where :func:`generated_detectors` builds a reader too, the two are the same
-    member, so ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)``
-    is the strict and flexible readers together.
+    hmz) readers, the letter-name, single-letter-word, and alphanumeric-run readers,
+    and the number range readers over the set's own number, percent, and currency
+    readers (``number:range``, ``number:approximately``) and over its measure readers
+    (``measure:range``, ``measure:approximately``). Where :func:`generated_detectors`
+    builds a reader of the same type, class, and locales, the two share a key (see
+    :func:`~icukit.detectors.detector_key`) and the one added last stands, so
+    ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)`` is the
+    strict and flexible readers together. Most such pairs are one reader built twice;
+    the range readers are not: the generated ``number:range`` reads over a number and a
+    percent reader, and the flexible one that replaces it over the set's own number,
+    percent, and currency readers.
 
     A reader that takes a parameter is built for each value chosen from ICU:
 
@@ -901,7 +1088,8 @@ def flexible_detectors(
     ``locales`` chooses the other locales of the language the language-wide readers
     read, and the locales the currencies and units are chosen from (every one by
     default). ``guarded`` adds the readers of the readings the default readers refuse on
-    purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
+    purpose (:data:`GUARDED_FAMILIES`), each under its own type, and the range readers'
+    hyphen-minus form (``number:range-hyphen``, ``measure:range-hyphen``). A member that cannot be
     built is left out; :func:`flexible_detectors_report` names it and why.
 
     The set is costlier than :func:`generated_detectors`: building it takes seconds (most
