@@ -2267,6 +2267,12 @@ A year from a ``y`` field is read only in four or more digits, as ICU writes eve
 year from 1000 on; a shorter one cannot be told from a count after a month ("June
 200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
 
+An era field (``G``, any width) is read where the pattern writes it, in the locale's
+own calendar (the Buddhist era in ``th``, the Persian in ``fa``), as ICU formats it;
+it is captured as ``era`` and valued ``("G", era)``, ICU's era index, beside the year
+of that era ("Mar 15, 44 BC" is ``(("G", 0), ("y", 44), ...)``). An era marks its
+year a year, so a pattern with one reads a year in any number of digits.
+
 #### `DateDetector(locale: 'str', skeleton: 'str', tz: 'str' = 'GMT') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.

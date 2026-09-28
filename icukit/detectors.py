@@ -383,6 +383,10 @@ def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
 
 
 def _date_form(letter: str, width: int) -> str:
+    if letter == "G":
+        # CLDR pattern grammar: one to three G write the abbreviated era, four the
+        # wide, five the narrow.
+        return {4: "wide", 5: "narrow"}.get(width, "short")
     if letter in {"M", "L", "E", "e", "c"} and width >= 3:
         return {3: "short", 4: "wide"}.get(width, "narrow")
     return "numeric"
@@ -410,10 +414,40 @@ def _pattern_field_id(letter: str) -> int:
     return -1
 
 
+def _widen_years(pattern: str) -> str:
+    """``pattern`` with each unquoted one-letter ``y`` widened to ``yyy``.
+
+    CLDR pattern grammar, not locale data: ICU applies its two-digit-year window to a
+    year field of one or two letters. ``yy`` is left alone, since it always writes two
+    digits and the window is the only reading of them.
+    """
+    out: list[str] = []
+    quoted = False
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "'":
+            quoted = not quoted
+            out.append(char)
+            index += 1
+            continue
+        if quoted or char != "y":
+            out.append(char)
+            index += 1
+            continue
+        end = index
+        while end < len(pattern) and pattern[end] == "y":
+            end += 1
+        out.append("yyy" if end - index == 1 else pattern[index:end])
+        index = end
+    return "".join(out)
+
+
 def _date_fields(pattern: str) -> tuple[_DateField, ...]:
     # This is CLDR pattern grammar, not locale data. Calendar values and displayed names
     # are obtained from the formatter/calendar at runtime.
     mapping = {
+        "G": ("G", icu.Calendar.ERA, icu.DateFormat.kEraField, True),
         "y": ("y", icu.Calendar.YEAR, icu.DateFormat.kYearField, True),
         "M": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
         "L": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
@@ -444,7 +478,7 @@ def _date_fields(pattern: str) -> tuple[_DateField, ...]:
                 value_field,
             )
         )
-    order = {"y": 0, "M": 1, "d": 2, "weekday": 3, "H": 4, "h": 4, "m": 5, "s": 6}
+    order = {"G": -1, "y": 0, "M": 1, "d": 2, "weekday": 3, "H": 4, "h": 4, "m": 5, "s": 6}
     return tuple(sorted(found, key=lambda field: order[field.name]))
 
 
@@ -457,6 +491,12 @@ class DateDetector:
     A year from a ``y`` field is read only in four or more digits, as ICU writes every
     year from 1000 on; a shorter one cannot be told from a count after a month ("June
     200", "August 9", "3/4"). A ``yy`` field keeps its two digits.
+
+    An era field (``G``, any width) is read where the pattern writes it, in the locale's
+    own calendar (the Buddhist era in ``th``, the Persian in ``fa``), as ICU formats it;
+    it is captured as ``era`` and valued ``("G", era)``, ICU's era index, beside the year
+    of that era ("Mar 15, 44 BC" is ``(("G", 0), ("y", 44), ...)``). An era marks its
+    year a year, so a pattern with one reads a year in any number of digits.
     """
 
     group = "date"
@@ -486,19 +526,30 @@ class DateDetector:
         self._fields = _date_fields(self.pattern)
         # Refuse a skeleton whose best pattern carries a field this detector cannot make
         # invertible, rather than emit a value that cannot reproduce the surface. The
-        # 24-hour clock (H/k) and dates are fully modeled; the 12-hour clock needs a
-        # day-period field whose value modeling is deferred, and era/quarter/week/
-        # time-zone fields are out of scope. A day-period letter (a/b/B) is exactly what
-        # makes "3:45 PM" non-invertible from bare (h, m).
-        _modeled = {"y", "M", "L", "d", "H", "k", "m", "s", "E", "e", "c"}
+        # 24-hour clock (H/k), dates, and the era (G) are fully modeled; the 12-hour
+        # clock needs a day-period field whose value modeling is deferred, and
+        # quarter/week/time-zone fields are out of scope. A day-period letter (a/b/B) is
+        # exactly what makes "3:45 PM" non-invertible from bare (h, m).
+        _modeled = {"G", "y", "M", "L", "d", "H", "k", "m", "s", "E", "e", "c"}
         _letters = {letter for letter, _ in _pattern_runs(self.pattern)}
         _unmodeled = sorted(_letters - _modeled)
         if _unmodeled:
             raise ValueError(
                 f"DateDetector cannot invert pattern field(s) {_unmodeled} in {self.pattern!r} "
-                f"(skeleton {skeleton!r}); 12-hour/day-period, era, quarter, week, and time-zone "
+                f"(skeleton {skeleton!r}); 12-hour/day-period, quarter, week, and time-zone "
                 f"fields are not supported"
             )
+        # An era in the pattern marks its year a year, however few digits it has.
+        self._has_era = "G" in _letters
+        # ICU parses two digits in a one-letter year field into the century around
+        # today ("44 BC" as 2044 BC), which is right where the year alone must be a
+        # recent one, and wrong where an era dates it. A pattern with an era parses
+        # through the same pattern with each "y" widened to "yyy", which ICU reads at
+        # face value; the surface is still checked against the pattern itself.
+        self._parser = self._df
+        if self._has_era:
+            self._parser = icu.SimpleDateFormat(_widen_years(self.pattern), icu.Locale(locale))
+            self._parser.setTimeZone(icu.TimeZone.getGMT())
         # A weekday with no year ("Tue, 3/5") names a date in some year the text does not
         # give; ICU resolves a year-less parse in 1970, where 5 March is a Thursday.
         self._yearless_weekday = bool(_letters & {"E", "e", "c"}) and "y" not in _letters
@@ -511,7 +562,7 @@ class DateDetector:
             # A leap year, so "Sat, 2/29" keeps its day rather than rolling to 1 March.
             calendar.set(icu.Calendar.YEAR, 1972)
         position = icu.ParsePosition(start_u16)
-        self._df.parse(text, calendar, position)
+        self._parser.parse(text, calendar, position)
         if position.getErrorIndex() != -1 or position.getIndex() <= start_u16:
             return None
         end = position.getIndex()
@@ -594,18 +645,23 @@ class DateDetector:
             end_u16 = start_u16 + position.getEndIndex()
             begin_cp = u16_to_cp[begin_u16]
             end_cp = u16_to_cp[end_u16]
-            if field.letter == "y" and field.width != 2 and end_cp - begin_cp < 4:
+            if (
+                field.letter == "y"
+                and field.width != 2
+                and not self._has_era
+                and end_cp - begin_cp < 4
+            ):
                 # ICU's "y" writes a year in as many digits as it has: four for every
                 # year from 1000 on, and one to three below it ("June 200", "3/4"). The
                 # reformat check cannot tell those from a count after a month ("in June
                 # 200 cases", "August 9"), so a year under four digits is not read here,
                 # a hand-rolled limit; "yy" keeps its two digits, which ICU writes for
-                # every year. An era would mark a short year a year, but this detector
-                # refuses a pattern with an era field (see __init__), so none reaches here.
+                # every year. An era the pattern writes marks a short year a year ("44
+                # BC", "15 AD"), so a pattern with one reads it in any number of digits.
                 return None
             captures.append(
                 Capture(
-                    field.name,
+                    "era" if field.name == "G" else field.name,
                     begin_cp,
                     end_cp,
                     surface[begin_cp - start_cp : end_cp - start_cp],
