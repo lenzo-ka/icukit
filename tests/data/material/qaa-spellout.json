@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "kind": "rbnf-spellout",
+  "locale": "qaa",
+  "rules": [
+    "%spellout-cardinal:",
+    "-x: minus >>;",
+    "0: zero; 1: one; 2: two; 3: three; 4: four; 5: five; 6: six; 7: seven; 8: eight; 9: nine;",
+    "10: ten; 11: eleven; 12: twelve; 13: thirteen; 14: fourteen; 15: fifteen; 16: sixteen; 17: seventeen; 18: eighteen; 19: nineteen;",
+    "20: twenty[->>]; 30: thirty[->>]; 40: forty[->>]; 50: fifty[->>]; 60: sixty[->>]; 70: seventy[->>]; 80: eighty[->>]; 90: ninety[->>];",
+    "100: << hundred[ >>];",
+    "1000: << thousand[ >>];",
+    "1000000: << million[ >>];",
+    "1000000000: << billion[ >>];",
+    "1000000000000: << trillion[ >>];",
+    "1000000000000000: =#,##0=;"
+  ],
+  "provenance": {
+    "source": "icukit test fixture",
+    "license": "CC0-1.0",
+    "note": "Synthetic conformance material: English-shaped rules under the private-use language code qaa. Not a description of any language."
+  },
+  "witnesses": [
+    {
+      "id": "qaa-w1",
+      "text": "one hundred forty-five goats",
+      "text_sha256": "ddd14c7c9d7316d5334ff2e0bcab1ca5b9114abcb6c0103bc6254cdaa24a629c",
+      "locale": "qaa",
+      "labels": [{ "start": 0, "end": 22, "text": "one hundred forty-five", "class": "number:spellout", "scheme": "icukit-type" }],
+      "x-icukit": { "values": [{ "start": 0, "end": 22, "type": "number:spellout", "value": { "kind": "number", "decimal": "145", "currency": null } }] }
+    },
+    {
+      "id": "qaa-w2",
+      "text": "twenty-three",
+      "locale": "qaa",
+      "labels": [{ "start": 0, "end": 12, "class": "number:spellout", "scheme": "icukit-type" }],
+      "x-icukit": { "values": [{ "start": 0, "end": 12, "type": "number:spellout", "value": { "kind": "number", "decimal": "23", "currency": null } }] }
+    }
+  ],
+  "near_misses": [
+    { "id": "qaa-n1", "text": "hundred forty-five", "locale": "qaa", "type": "number:spellout" }
+  ]
+}

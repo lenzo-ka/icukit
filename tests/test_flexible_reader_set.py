@@ -43,6 +43,9 @@ GUARDED_CLASSES = {
     "FlexibleWeekdayNameDetector",
 }
 
+# Readers that require explicit caller data never join the default flexible gang.
+OPT_IN_CLASSES = {"MaterialSpelloutDetector"}
+
 # The measure range readers' types, which name no unit.
 RANGE_TYPES = {"measure:range", "measure:approximately"}
 
@@ -222,7 +225,7 @@ def _classes(gang) -> set[str]:
 
 @pytest.mark.parametrize("locale", LOCALES)
 def test_the_set_holds_each_flexible_reader_and_no_guarded_one(locale):
-    assert _classes(_gang(locale)) == _reader_classes() - GUARDED_CLASSES
+    assert _classes(_gang(locale)) == _reader_classes() - GUARDED_CLASSES - OPT_IN_CLASSES
 
 
 @pytest.mark.parametrize("locale", LOCALES)
@@ -294,7 +297,7 @@ def test_guarded_readers_join_on_request_and_every_type_leads_with_its_group(loc
     )
 
     assert (locale == "ja_JP") == bool(absent)
-    assert _classes(gang) == _reader_classes() - absent
+    assert _classes(gang) == _reader_classes() - absent - OPT_IN_CLASSES
     for detector in gang.detectors:
         assert detector.type.split(":")[0] == detector.group, detector.type
 

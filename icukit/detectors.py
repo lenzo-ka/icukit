@@ -275,6 +275,13 @@ class SpelloutFormatSpec:
 
 
 @dataclass(frozen=True)
+class MaterialSpelloutFormatSpec(SpelloutFormatSpec):
+    """A user-material spell-out recipe, identified by its content digest."""
+
+    material_digest: str
+
+
+@dataclass(frozen=True)
 class MeasureFormatSpec:
     """The locale, canonical ICU unit, and width used for a measure candidate."""
 

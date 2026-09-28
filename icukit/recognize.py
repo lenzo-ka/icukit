@@ -28,6 +28,7 @@ from .detectors import (
     DateIntervalSpec,
     DateIntervalValue,
     DateTimeValue,
+    MaterialSpelloutFormatSpec,
     MeasureFormatSpec,
     MeasureValue,
     NumberFormatSpec,
@@ -68,6 +69,7 @@ __all__ = [
     "FlexibleRelativeDateDetector",
     "FlexibleScientificDetector",
     "FlexibleSpelloutDetector",
+    "MaterialSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
     "LetterNameDetector",
@@ -4606,15 +4608,24 @@ class FlexibleSpelloutDetector:
     group = "number"
     type = "number:spellout"
 
+    def _formatter_and_ruleset(self, locale: str) -> tuple[icu.RuleBasedNumberFormat, str]:
+        return _spellout_formatter_and_ruleset(locale)
+
+    def _available_rulesets(self, locale: str) -> tuple[str, ...]:
+        return _spellout_rulesets(locale)
+
+    def _format_spec(self) -> SpelloutFormatSpec:
+        return SpelloutFormatSpec(self.locale, self._ruleset)
+
     def __init__(self, locale: str, *, ruleset: str | None = None) -> None:
         self.locale = locale
-        self._rbnf, self._ruleset = _spellout_formatter_and_ruleset(locale)
+        self._rbnf, self._ruleset = self._formatter_and_ruleset(locale)
         if ruleset is not None and ruleset != self._ruleset:
-            if ruleset not in _spellout_rulesets(locale):
+            if ruleset not in self._available_rulesets(locale):
                 raise ValueError(f"no spellout rule set {ruleset!r} in {locale!r}")
             self._ruleset = ruleset
             self.type = "number:spellout:" + ruleset.lstrip("%").removeprefix("spellout-")
-        self._spec = SpelloutFormatSpec(locale, self._ruleset)
+        self._spec = self._format_spec()
         values = (
             *range(1001),
             *(
@@ -4804,6 +4815,31 @@ class FlexibleSpelloutDetector:
             return self._match(source, start, token_end, guard)
 
         return _detect_flexible(text, self.locale, self.type, self._spec, match)
+
+
+class MaterialSpelloutDetector(FlexibleSpelloutDetector):
+    """Recognize spell-out rules supplied by a validated locale material file."""
+
+    def __init__(self, locale: str, material, *, ruleset: str | None = None) -> None:
+        from .material import locale_descends_from
+
+        if not locale_descends_from(locale, material.locale):
+            raise ValueError(
+                f"material for {material.locale!r} does not apply to locale {locale!r}"
+            )
+        self.material = material
+        self.material_digest = material.digest
+        super().__init__(locale, ruleset=ruleset)
+
+    def _formatter_and_ruleset(self, locale: str) -> tuple[icu.RuleBasedNumberFormat, str]:
+        formatter = icu.RuleBasedNumberFormat(self.material.rules, icu.Locale(locale))
+        return formatter, self.material.rulesets[0]
+
+    def _available_rulesets(self, locale: str) -> tuple[str, ...]:
+        return self.material.rulesets
+
+    def _format_spec(self) -> MaterialSpelloutFormatSpec:
+        return MaterialSpelloutFormatSpec(self.locale, self._ruleset, self.material_digest)
 
 
 class FlexibleLoneSpelloutDetector(FlexibleSpelloutDetector):

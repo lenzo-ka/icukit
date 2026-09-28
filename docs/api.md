@@ -293,6 +293,10 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`ExceptionLoadError`](#icukiterrors) — class, `icukit.errors`
 - [`RuleRefusal`](#icukiterrors) — class, `icukit.errors`
 - [`RuleLoadError`](#icukiterrors) — class, `icukit.errors`
+- [`LocaleMaterial`](#icukitmaterial) — class, `icukit.material`
+- [`MaterialLoadError`](#icukitmaterial) — class, `icukit.material`
+- [`MaterialRefusal`](#icukitmaterial) — class, `icukit.material`
+- [`load_locale_material`](#icukitmaterial) — function, `icukit.material`
 - [`are_confusable`](#icukitspoof) — function, `icukit.spoof`
 - [`get_confusable_type`](#icukitspoof) — function, `icukit.spoof`
 - [`get_skeleton`](#icukitspoof) — function, `icukit.spoof`
@@ -4418,6 +4422,52 @@ Example:
     >>> info['region']
     'CN'
 
+## icukit.material
+
+Load witness-checked locale material supplied by an application at runtime.
+
+### Constants and type aliases
+
+#### `LABEL_KEYS` (constant)
+
+`frozenset({'class', 'end', 'scheme', 'start', 'text'})`
+
+#### `REQUIRED_WITNESS_KEYS` (constant)
+
+`frozenset({'id', 'locale', 'text'})`
+
+#### `VALUE_KEYS` (constant)
+
+`frozenset({'end', 'start', 'text', 'type', 'value'})`
+
+#### `WITNESS_KEYS` (constant)
+
+`frozenset({'id', 'labels', 'locale', 'text', 'text_sha256', 'x-icukit'})`
+
+### class `LocaleMaterial`
+
+Immutable, validated locale material identified by its content digest.
+
+#### `LocaleMaterial(kind: 'str', locale: 'str', digest: 'str', rules: 'str', rulesets: 'tuple[str, ...]', provenance: 'Mapping[str, str]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `MaterialLoadError`
+
+Every refusal found while transactionally loading locale material.
+
+#### `MaterialLoadError(refusals: 'list[MaterialRefusal] | tuple[MaterialRefusal, ...]') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `MaterialRefusal`
+
+One reason a locale material file was refused.
+
+### `load_locale_material(material: 'Mapping[str, object] | str | os.PathLike[str]', /) -> 'LocaleMaterial'`
+
+Parse, validate, witness-check, and atomically return locale material.
+
 ## icukit.measure
 
 Locale-aware unit measurement formatting.
@@ -5666,6 +5716,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return isolated letter-name candidates in source order.
+
+### class `MaterialSpelloutDetector`
+
+Recognize spell-out rules supplied by a validated locale material file.
+
+#### `MaterialSpelloutDetector(locale: 'str', material, *, ruleset: 'str | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping spelled-out cardinals in source order.
 
 ### class `PluralNumeralDetector`
 
