@@ -23,6 +23,31 @@
   `aliases` column (`ALERT (control),BEL (abbreviation)`); the JSON output of `ik unicode
   info`, `block`, and `category` carries `aliases` always. `get_char_name(char,
   "alias")` still gives the correction alone, as before.
+- Ranges are read as ICU writes them. `FlexibleNumberRangeDetector` reads two amounts
+  joined by a separator ICU's `NumberRangeFormatter` writes in some locale of the
+  language ("3–5", ja_JP "3～5", es_ES "3-5"), read off ICU's own number spans, with or
+  without spaces around it; a side may leave its unit to the other where ICU collapses
+  that unit onto the other side ("$3–5", "10–15 kg", "10–15%") or write it too ("$3.00
+  – $5.00"). The value is a `NumberRangeValue` of two whole amounts (`NumberValue` or
+  `MeasureValue`), captured as "start", "separator", and "end", with a
+  `NumberRangeSpec`. `flexible_detectors` builds one over its number, percent, and
+  currency readers (`number:range`) and one over its measure readers (`measure:range`),
+  and each also reads ICU's approximately form ("~3", `number:approximately`, an
+  `ApproximateValue`). The interval reader's skeletons now include those CLDR gives
+  interval formats for, so a year interval reads ("1624 – 1713", `date-interval:y`); a
+  lone numeric day, month, or hour is left out, since its interval is a plain number
+  range. The endpoints' own readings stay beside a range.
+- A range written with a hyphen-minus where ICU writes another separator is a guarded
+  reading, since a hyphen also joins codes, ISBNs, part numbers, and dates:
+  `number:range-hyphen` and `measure:range-hyphen` ("1914-1918", "10-15 kg"), with
+  `guarded=True`; and `FlexibleYearRangeDetector`, in `GUARDED_FAMILIES`, reads year
+  ranges as the `y` interval reader does with the hyphen in place of ICU's separator,
+  a shortened second year written out ("1914-1918", "1893-94", `date-interval:y-hyphen`),
+  and ICU's separator before a shortened year ("1893–94", `date-interval:y-abbreviated`).
+  No endpoint is one number of a run joined by a hyphen, colon, slash, or period
+  ("14-3-3", "2024-03-05", an ISBN), and "-1918" in "1914-1918" still reads as a
+  negative number beside the range. Where ICU writes a hyphen-minus itself (es_ES), the
+  default reader reads it and the report names the hyphen reader as skipped.
 
 ### Changed
 
