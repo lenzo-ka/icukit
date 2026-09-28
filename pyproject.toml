@@ -10,9 +10,14 @@ authors = [
     {name = "Kevin Lenzo", email = "kevinlenzo@gmail.com"}
 ]
 license = "BSD-2-Clause"
-# The CLDR data in icukit/data/cldr_symbols is Unicode, Inc.'s, under the Unicode
-# License v3; its notice ships beside the data and among the distribution's licenses.
-license-files = ["LICENSE", "icukit/data/cldr_symbols/LICENSE"]
+# The CLDR data in icukit/data/cldr_symbols and the UCD data in
+# icukit/data/ucd_name_aliases are Unicode, Inc.'s, under the Unicode License v3; its
+# notice ships beside each and among the distribution's licenses.
+license-files = [
+    "LICENSE",
+    "icukit/data/cldr_symbols/LICENSE",
+    "icukit/data/ucd_name_aliases/LICENSE",
+]
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["icu", "unicode", "i18n", "internationalization", "localization", "text", "collation", "formatting"]
@@ -85,6 +90,8 @@ icukit = [
     "data/unit_surfaces/*.tsv",
     "data/cldr_symbols/*.tsv",
     "data/cldr_symbols/LICENSE",
+    "data/ucd_name_aliases/*.tsv",
+    "data/ucd_name_aliases/LICENSE",
 ]
 
 [tool.pytest.ini_options]

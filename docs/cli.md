@@ -2210,14 +2210,18 @@ Examples:
   icukit unicode name -t 'α'
   icukit unicode name -t '😀'
 
-  # Get the formal name alias, the extended name, or all three names
+  # Get the formal name alias, the extended name, or all the names
   icukit unicode name -t 'Ƣ' --choice alias      # LATIN CAPITAL LETTER GHA
   icukit unicode name -t '\u0007' --choice extended  # <control-0007>
   icukit unicode name -t 'Ƣ' --choice all
 
+  # List every formal name alias, one per row, with its type
+  icukit unicode name -t '\u0007' --choice aliases  # ALERT control, BEL abbreviation
+
   # Look up a character by name (formal name, alias, or extended name)
   icukit unicode lookup -t 'GREEK SMALL LETTER ALPHA'
   icukit unicode lookup -t 'latin capital letter gha'
+  icukit unicode lookup -t 'NBSP'
   icukit unicode lookup -t '<control-0007>' --json
 
   # Get character info using escape sequences
@@ -2228,7 +2232,7 @@ Examples:
   # Get full character info
   icukit unicode info -t 'α' --json
 
-  # Add the alias and extended-name columns to the TSV
+  # Add the alias, extended-name, and aliases columns to the TSV
   icukit unicode info -t 'Ƣ' --all-names
 
   # List Unicode categories, blocks, or normalization forms
@@ -2298,7 +2302,7 @@ Examples:
 
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `--all-names`: Add the alias and extended_name columns to TSV output (JSON output always has them) (default: `False`)
+- `--all-names`: Add the alias, extended_name, and aliases columns to TSV output (JSON output always has them) (default: `False`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
@@ -2314,13 +2318,13 @@ Examples:
 
 ### `icukit unicode lookup` (aliases: from-name, fromname)
 
-Look up the character each input line names, one name per line. Whitespace around a name is trimmed and blank lines are skipped; escapes are not decoded. ICU matches without regard to case. ICU carries only Unicode's correction aliases (LATIN CAPITAL LETTER GHA for U+01A2), not the control or abbreviation aliases (BEL, ALERT, NBSP, LINE FEED). An unknown name is reported on stderr, as given, and the exit status is 1.
+Look up the character each input line names, one name per line. Whitespace around a name is trimmed and blank lines are skipped; escapes are not decoded. Names match without regard to case, as ICU matches them. Every type of formal name alias is known: corrections (LATIN CAPITAL LETTER GHA for U+01A2) and control, alternate, figment, and abbreviation aliases (ALERT, BEL, NBSP, BYTE ORDER MARK). An unknown name is reported on stderr, as given, and the exit status is 1.
 
 **Options:**
 
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-c, --choice`: Which names to search: any (all of them), unicode (formal names), alias (Unicode's correction aliases only), or extended (formal names and labels like <control-0007>). Default: any (default: `any`)
+- `-c, --choice`: Which names to search: any (all of them), unicode (formal names), alias (formal name aliases of every type), or extended (formal names and labels like <control-0007>). Default: any (default: `any`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
@@ -2331,7 +2335,7 @@ Look up the character each input line names, one name per line. Whitespace aroun
 
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
-- `-c, --choice`: Which name: unicode (the formal name), alias (the formal name alias, empty where there is none), extended (names every code point, e.g. <control-0007>), or all (one column each). Default: unicode (default: `unicode`)
+- `-c, --choice`: Which name: unicode (the formal name), alias (the correction alias, empty where there is none), extended (names every code point, e.g. <control-0007>), all (one column each, and an aliases column), or aliases (every formal name alias of every type, one row each, with its type: correction, control, alternate, figment, abbreviation). Default: unicode (default: `unicode`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
