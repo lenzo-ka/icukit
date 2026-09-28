@@ -69,9 +69,10 @@
 - No range endpoint is one number of a run joined by a separator, a hyphen, a colon, a
   slash, or a period ("1–2–3", "14-3-3", "2024-03-05", "2:07–4:07", an ISBN), and a
   U+2212 minus sign before a range keeps its sign ("−3–5"). A hyphen-minus is read as a
-  range separator only where ICU writes it as one (es_ES "3-5"); the forms ICU writes
-  nowhere ("1914-1918" in English, a shortened second year, "1893–94") are left to the
-  caller.
+  range separator only where ICU writes it as one (es_ES "3-5"), so English "1914-1918"
+  is no range. A shortened second year, which ICU writes nowhere, is not read as a
+  range of years: "1893–94" reads only as a range of numbers, 1893 to 94. Reading
+  either as years is left to the caller.
 
 ### Changed
 

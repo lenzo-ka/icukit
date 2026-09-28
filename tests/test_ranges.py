@@ -284,7 +284,8 @@ def test_a_lone_numeric_field_other_than_the_year_has_no_interval_reader():
 
 
 def _is_range(detection) -> bool:
-    return detection["type"].startswith("date-interval") or detection["type"].endswith(":range")
+    kind = detection["type"]
+    return kind.startswith("date-interval") or ":range" in kind or "hyphen" in kind
 
 
 @pytest.mark.parametrize(

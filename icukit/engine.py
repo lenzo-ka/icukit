@@ -556,8 +556,8 @@ SHORT_YEAR_INTERVAL_FAMILY = Family(
 )
 
 
-# Why a range reader is not built: ICU writes the locale's language no separator or
-# approximately sign for its form.
+# Why a range reader is not built: ICU writes the locale no separator or sign for the
+# form (a range's separator, or the approximately sign).
 _NO_MARK = "ICU writes the locale no separator or sign for the form"
 
 
