@@ -1922,11 +1922,29 @@ class FlexibleDateIntervalDetector:
             return self._match(source, start, offset_maps)
 
         found = _detect_flexible_alternatives(text, self.locale, self.type, match)
+        found = [item for item in found if self._year_range_holds(text, item)]
         if not self._year_floor:
             return found
         # A hand-rolled limit, as DateDetector's: ICU's "y" writes a year under 1000 in
         # under four digits, which a count writes too ("3–5"); see the class docstring.
         return [item for item in found if self._short_year(item["value"]) == self.short_years]
+
+    def _year_range_holds(self, text: str, item: ValueDetection) -> bool:
+        """Whether a range of years alone rises and is not one pair of a longer run.
+
+        Hand-rolled, as the number range readers' guards: a pair of bare years is
+        written as ICU writes a number range, so "1918–1914" and the "1914–1918" of
+        "1914–1918–1945" are a pair of numbers, not an interval. An interval with a
+        month or day is left to ICU's gate.
+        """
+        start, end = item["value"].start.fields, item["value"].end.fields
+        if {name for name, _ in (*start, *end)} - {"y", "G"}:
+            return True
+        start, end = dict(start), dict(end)
+        if start.get("G") == end.get("G") and not start.get("y", 0) < end.get("y", 0):
+            return False
+        marks = {_range_mark(matcher[1]) for matcher in self._matchers} - {""}
+        return not _runs_on(text, item["start"], item["end"], marks)
 
 
 @cache
@@ -6884,6 +6902,51 @@ def _runs_on(text: str, start: int, end: int, marks: Iterable[str]) -> bool:
     return before or joined or after
 
 
+_MINUS_SIGN = "\N{MINUS SIGN}"
+
+
+def _minus_before(text: str, start: int) -> bool:
+    """Whether a U+2212 minus sign, which a number reader of a locale whose own minus is
+    the hyphen-minus does not read, signs the amount at ``start`` ("−3–5")."""
+    return (
+        start >= 1
+        and text[start - 1] == _MINUS_SIGN
+        and icu.Char.isdigit(text[start])
+        and (start < 2 or not _is_word_character(text[start - 2]))
+    )
+
+
+def _negated(value: NumberValue | MeasureValue) -> NumberValue | MeasureValue:
+    return replace(value, decimal=format(-Decimal(value.decimal), "f"))
+
+
+def _in_chain(text: str, left_edge: int, right_edge: int, marks: Iterable[str]) -> bool:
+    """Whether the separator between ``left_edge`` and ``right_edge`` joins one pair of a
+    run of numbers ("1–2–3", "14-3-3"): the digits before it follow a separator or a
+    hyphen after a digit, or the digits after it run into one before a digit.
+
+    Checked before any side is read, so a long run costs a scan, not a read per link.
+    """
+    joins = {_HYPHEN_MINUS, *marks}
+    start = left_edge
+    while start > 0 and icu.Char.isdigit(text[start - 1]):
+        start -= 1
+    if start < left_edge:
+        for j in joins:
+            before = start - len(j)
+            if before >= 1 and text.startswith(j, before) and icu.Char.isdigit(text[before - 1]):
+                return True
+    end = right_edge
+    while end < len(text) and icu.Char.isdigit(text[end]):
+        end += 1
+    if right_edge < end < len(text):
+        for j in joins:
+            after = end + len(j)
+            if text.startswith(j, end) and after < len(text) and icu.Char.isdigit(text[after]):
+                return True
+    return False
+
+
 def _mark_spans(text: str, marks: tuple[str, ...]) -> list[tuple[int, int, str]]:
     """Every occurrence of the marks in ``text``, the longest mark where two overlap."""
     found: list[tuple[int, int, str]] = []
@@ -7017,24 +7080,36 @@ class FlexibleNumberRangeDetector:
     def __init__(
         self,
         locale: str,
-        endpoints: Iterable[object] | None = None,
+        endpoints: Iterable[object] | Callable[[], Iterable[object]] | None = None,
         *,
         form: str = "range",
         locales: Iterable[str] | None = None,
+        group: str | None = None,
     ) -> None:
+        """``endpoints`` may be a callable returning them, called on the first
+        :meth:`detect`, so a set that never reads a range never builds them; ``group``
+        then names their group, which the type carries."""
         if form not in self._FORMS:
             raise ValueError(f"unknown range form: {form!r}")
         self.locale = locale
         self.locales = _locale_selection(locale, locales)
         self.form = form
-        self._bare = FlexibleNumberDetector(locale, locales=self.locales)
+        self._bare: FlexibleNumberDetector | None = None
+        self._endpoints: tuple[object, ...] | None = None
         if endpoints is None:
-            endpoints = (self._bare, FlexiblePercentDetector(locale, locales=self.locales))
-        self._endpoints = tuple(endpoints)
-        groups = {endpoint.group for endpoint in self._endpoints}
-        if len(groups) != 1:
-            raise ValueError(f"a range reader's endpoint readers share one group: {groups}")
-        (self.group,) = groups
+            endpoints = self._default_endpoints
+            group = group or "number"
+        if callable(endpoints):
+            if group is None:
+                raise ValueError("a range reader built from a callable needs its group")
+            self._endpoint_factory = endpoints
+        else:
+            self._endpoints = tuple(endpoints)
+            groups = {endpoint.group for endpoint in self._endpoints}
+            if len(groups) != 1 or (group is not None and groups != {group}):
+                raise ValueError(f"a range reader's endpoint readers share one group: {groups}")
+            (group,) = groups
+        self.group = group
         self.type = f"{self.group}:{form}"
         self._names = _language_locales(locale, self.locales)
         written = frozenset().union(*(_range_separators(name) for name in self._names))
@@ -7044,9 +7119,28 @@ class FlexibleNumberRangeDetector:
             marks = frozenset() if _HYPHEN_MINUS in written else frozenset({_HYPHEN_MINUS})
         else:
             marks = frozenset().union(*(_approximately_signs(name) for name in self._names))
-            marks -= {self._bare._minus, _HYPHEN_MINUS}
+            symbols = icu.DecimalFormatSymbols(icu.Locale(locale))
+            marks -= {symbols.getSymbol(icu.DecimalFormatSymbols.kMinusSignSymbol), _HYPHEN_MINUS}
         self._marks = tuple(sorted(marks, key=lambda mark: (-len(mark), mark)))
         self._sides: dict[tuple[str, str], frozenset[str]] = {}
+
+    def _default_endpoints(self) -> tuple[object, ...]:
+        return (self._bare_reader(), FlexiblePercentDetector(self.locale, locales=self.locales))
+
+    def _bare_reader(self) -> FlexibleNumberDetector:
+        if self._bare is None:
+            self._bare = FlexibleNumberDetector(self.locale, locales=self.locales)
+        return self._bare
+
+    def _endpoint_readers(self) -> tuple[object, ...]:
+        """The endpoint readers, built on first use where a callable gives them."""
+        if self._endpoints is None:
+            endpoints = tuple(self._endpoint_factory())
+            groups = {endpoint.group for endpoint in endpoints}
+            if groups - {self.group}:
+                raise ValueError(f"a {self.group} range reader got {groups} endpoint readers")
+            self._endpoints = endpoints
+        return self._endpoints
 
     @property
     def has_marks(self) -> bool:
@@ -7067,7 +7161,7 @@ class FlexibleNumberRangeDetector:
         cut_before = start > 0 and not _is_space(text[start - 1])
         cut_after = end < len(text) and not _is_space(text[end])
         found: dict[tuple[int, int, object], _RangeSide] = {}
-        for reader in (*self._endpoints, self._bare):
+        for reader in (*self._endpoint_readers(), self._bare_reader()):
             for detection in reader.detect(segment):
                 if at_end:
                     if detection["end"] != len(segment) or (cut_before and detection["start"] == 0):
@@ -7117,6 +7211,8 @@ class FlexibleNumberRangeDetector:
         left_edge, right_edge = _side_edges(text, mark_start, mark_end)
         if left_edge == 0 or right_edge == len(text):
             return
+        if _in_chain(text, left_edge, right_edge, self._marks):
+            return  # "1–2–3", "14-3-3": no side is read, however long the run
         window_start = _window_start(text, left_edge)
         window_end = _window_end(text, right_edge)
         if not _has_digit(text[window_start:left_edge]) or not _has_digit(
@@ -7133,6 +7229,9 @@ class FlexibleNumberRangeDetector:
             if pair is None or _runs_on(text, left.start, right.end, self._marks):
                 continue
             start_value, end_value, collapse = pair
+            if _minus_before(text, left.start):
+                left = replace(left, start=left.start - 1)
+                start_value = _negated(start_value)
             yield ValueDetection(
                 text=text[left.start : right.end],
                 start=left.start,

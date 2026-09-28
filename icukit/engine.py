@@ -28,7 +28,7 @@ from functools import cache
 
 import icu
 
-from .detectors import DateDetector, Detector, DetectorSet
+from .detectors import DateDetector, Detector, DetectorSet, NumberDetector
 from .recognize import (
     AlphanumericRunsDetector,
     FlexibleBareHourDetector,
@@ -85,8 +85,6 @@ __all__ = [
     "MONTH_NAME_FAMILY",
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
-    "MEASURE_RANGE_FAMILY",
-    "MEASURE_RANGE_HYPHEN_FAMILY",
     "NUMBER_RANGE_FAMILY",
     "NUMBER_RANGE_HYPHEN_FAMILY",
     "SHORT_YEAR_ERA_FAMILY",
@@ -101,6 +99,7 @@ __all__ = [
     "flexible_detectors_report",
     "generated_detectors",
     "generated_detectors_report",
+    "range_detectors",
 ]
 
 Spec = object
@@ -575,43 +574,18 @@ SHORT_YEAR_INTERVAL_FAMILY = Family(
 )
 
 
-@cache
-def _range_endpoints(locale: str) -> tuple[tuple[Detector, ...], tuple[Detector, ...]]:
-    """The endpoint readers of the generated number range readers of ``locale``.
+def _range_family(name: str, forms: tuple[str, ...]) -> Family:
+    """A family of one number range reader per form, over a number and a percent reader.
 
-    The number, percent, and currency readers (``number:range``) and the measure readers
-    (``measure:range``). The generated set holds no currency or measure reader of its
-    own, so these are chosen narrowly, for what it costs to build them: the currency ICU
-    gives ``locale`` and the units CLDR's unit preferences give its own region, each
-    read in ``locale``'s own forms. :func:`flexible_detectors` reads ranges over its own,
-    wider readers.
+    The generated set reads no currency or measure without a caller's choice, so its
+    ranges are those of numbers and percents; a set that reads currencies or measures
+    reads their ranges too (see :func:`range_detectors`). The endpoint readers are built
+    on the reader's first read of a range.
     """
-    own = (locale,)
-    numbers: list[Detector] = [FlexibleNumberDetector(locale), FlexiblePercentDetector(locale)]
-    code = icu.NumberFormat.createCurrencyInstance(icu.Locale(locale)).getCurrency()
-    if code and code != _NO_CURRENCY:
-        try:
-            numbers.append(FlexibleCurrencyDetector(locale, code, locales=own))
-        except (icu.ICUError, ValueError):
-            pass
-    measures: list[Detector] = []
-    for unit in _preferred_units(locale, own):
-        try:
-            measures.append(FlexibleMeasureDetector(locale, unit, locales=own))
-        except (icu.ICUError, ValueError):
-            pass
-    return tuple(numbers), tuple(measures)
-
-
-def _range_family(name: str, kind: int, forms: tuple[str, ...]) -> Family:
-    """A family of one number range reader per form, over :func:`_range_endpoints`."""
 
     def probe(spec: Spec, locale: str) -> _Probe:
-        endpoints = _range_endpoints(locale)[kind]
-        if not endpoints:
-            return _Probe(None, "no endpoint reader was built")
         try:
-            reader = FlexibleNumberRangeDetector(locale, endpoints, form=str(spec))
+            reader = FlexibleNumberRangeDetector(locale, form=str(spec))
         except (icu.ICUError, ValueError) as error:
             return _Probe(None, str(error))
         if not reader.has_marks:
@@ -626,10 +600,8 @@ def _range_family(name: str, kind: int, forms: tuple[str, ...]) -> Family:
     )
 
 
-NUMBER_RANGE_FAMILY = _range_family("number-range", 0, ("range", "approximately"))
-MEASURE_RANGE_FAMILY = _range_family("measure-range", 1, ("range", "approximately"))
-NUMBER_RANGE_HYPHEN_FAMILY = _range_family("number-range-hyphen", 0, ("range-hyphen",))
-MEASURE_RANGE_HYPHEN_FAMILY = _range_family("measure-range-hyphen", 1, ("range-hyphen",))
+NUMBER_RANGE_FAMILY = _range_family("number-range", ("range", "approximately"))
+NUMBER_RANGE_HYPHEN_FAMILY = _range_family("number-range-hyphen", ("range-hyphen",))
 
 # note: A measure family belongs here once its ICU surfaces have an introspective
 # inverter. Abbreviations use their typed lexicon.
@@ -642,7 +614,6 @@ DEFAULT_FAMILIES = (
     SCIENTIFIC_NUMBER_FAMILY,
     SPELLOUT_NUMBER_FAMILY,
     NUMBER_RANGE_FAMILY,
-    MEASURE_RANGE_FAMILY,
 )
 
 # The readings the default readers refuse on purpose, each under its own type; not in
@@ -659,7 +630,6 @@ GUARDED_FAMILIES = (
     YEAR_RANGE_HYPHEN_FAMILY,
     YEAR_RANGE_ABBREVIATED_FAMILY,
     NUMBER_RANGE_HYPHEN_FAMILY,
-    MEASURE_RANGE_HYPHEN_FAMILY,
 )
 
 _FAMILY_PROBES = (
@@ -1003,20 +973,36 @@ def _flexible_families(
 
 # The endpoint readers of the number range readers, by the group of each range reader.
 _RANGE_ENDPOINTS = (
-    (FlexibleNumberDetector, FlexiblePercentDetector, FlexibleCurrencyDetector),
+    (FlexibleNumberDetector, FlexiblePercentDetector, FlexibleCurrencyDetector, NumberDetector),
     (FlexibleMeasureDetector,),
 )
+
+
+def range_detectors(
+    locale: str,
+    detectors: DetectorSet,
+    *,
+    guarded: bool = False,
+    locales: Iterable[str] | None = None,
+) -> DetectorSet:
+    """The number range readers over the amount readers ``detectors`` holds.
+
+    A range's endpoints follow the set: one reader over its number, percent, and
+    currency readers, strict or flexible (``number:range``), and one over its measure
+    readers (``measure:range``), each also reading the approximately form; ``guarded``
+    adds each one's hyphen-minus form. So a set that reads a currency or a unit reads its
+    ranges ("$3–5", "10–15 kg"), and one that does not, does not. Add them with
+    ``detectors.with_(*range_detectors(locale, detectors).detectors)``: each replaces the
+    set's own reader of its type, a generated set's ``number:range`` among them.
+    """
+    readers, _ = _range_readers(locale, detectors, _locale_selection(locale, locales), guarded)
+    return DetectorSet(tuple(readers))
 
 
 def _range_readers(
     locale: str, detectors: DetectorSet, locales: tuple[str, ...] | None, guarded: bool
 ) -> tuple[list[Detector], list[SkippedSpec]]:
-    """The number range readers over a flexible set's own amount readers.
-
-    One reader of the set's number, percent, and currency readers (``number:range``)
-    and one of its measure readers (``measure:range``), each also reading the
-    approximately form; ``guarded`` adds each one's hyphen-minus form.
-    """
+    """:func:`range_detectors`, and each form ICU gives no separator, as skipped."""
     forms = ("range", "approximately", *(("range-hyphen",) if guarded else ()))
     readers: list[Detector] = []
     skipped: list[SkippedSpec] = []
@@ -1077,9 +1063,13 @@ def flexible_detectors(
     and the number range readers over the set's own number, percent, and currency
     readers (``number:range``, ``number:approximately``) and over its measure readers
     (``measure:range``, ``measure:approximately``). Where :func:`generated_detectors`
-    builds a reader too, the two are the same member, so
+    builds a reader of the same type, class, and locales, the two share a key (see
+    :func:`~icukit.detectors.detector_key`) and the one added last stands, so
     ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)`` is the
-    strict and flexible readers together.
+    strict and flexible readers together. Most such pairs are one reader built twice;
+    the range readers are not: the generated ``number:range`` reads over a number and a
+    percent reader, and the flexible one that replaces it over the set's own number,
+    percent, and currency readers.
 
     A reader that takes a parameter is built for each value chosen from ICU:
 

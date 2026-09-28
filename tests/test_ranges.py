@@ -21,6 +21,8 @@ from icukit import (
     flexible_detectors,
     flexible_detectors_report,
     generated_detectors,
+    number_detectors,
+    range_detectors,
 )
 from icukit.engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, _date_interval_skeletons
 from icukit.recognize import (
@@ -195,24 +197,69 @@ def test_the_default_set_reads_ranges_in_icus_own_form():
     gang = generated_detectors("en_US")
     names = set(gang.names())
 
-    assert {
-        "number:range",
-        "number:approximately",
-        "measure:range",
-        "measure:approximately",
-        "date-interval:y",
-    } <= names
-    assert not {"number:range-hyphen", "date-interval:y-hyphen"} & names
+    assert {"number:range", "number:approximately", "date-interval:y"} <= names
+    # The generated set reads no currency or measure, so no range of one.
+    assert not {"measure:range", "number:range-hyphen", "date-interval:y-hyphen"} & names
     found = {(d["type"], d["text"]) for d in gang.detect("in 1914–1918, 3–5 kg, $3–5, ~3")}
     assert {
         ("date-interval:y", "1914–1918"),
         ("number:range", "1914–1918"),
-        ("measure:range", "3–5 kg"),
-        ("number:range", "$3–5"),
+        ("number:range", "3–5"),
         ("number:approximately", "~3"),
     } <= found
+    assert not {text for _, text in found} & {"3–5 kg", "$3–5"}
     # A year under four digits is the guarded short-year reading, not a default one.
     assert not any(t.startswith("date-interval") for t, text in found if text == "3–5")
+
+
+def test_a_ranges_endpoints_follow_the_reader_set():
+    gang = generated_detectors("en_US").with_(
+        *number_detectors("en_US", currencies=["USD"]).detectors,
+        FlexibleMeasureDetector("en_US", "kilogram"),
+    )
+    gang = gang.with_(*range_detectors("en_US", gang).detectors)
+    found = {(d["type"], d["text"]) for d in gang.detect("3–5 kg, $3.00 – $5.00, 3–5")}
+
+    assert {
+        ("measure:range", "3–5 kg"),
+        ("number:range", "$3.00 – $5.00"),
+        ("number:range", "3–5"),
+    } <= found
+    assert [d.type for d in gang.detectors].count("number:range") == 1
+
+
+def test_a_range_reader_builds_its_endpoints_on_its_first_read():
+    built = []
+
+    def endpoints():
+        built.append(True)
+        return [FlexibleMeasureDetector("en_US", "kilogram")]
+
+    reader = FlexibleNumberRangeDetector("en_US", endpoints, group="measure")
+    assert reader.type == "measure:range" and not built
+    assert reader.detect("no range here") == [] and not built
+    assert [d["text"] for d in reader.detect("3–5 kg")] == ["3–5 kg"] and built == [True]
+
+
+def test_a_run_of_numbers_is_rejected_before_any_side_is_read():
+    reader = FlexibleNumberRangeDetector("en_US")
+    reader._read_sides = None  # a side read would fail
+
+    assert reader.detect("1–2–3–4–5–6–7–8–9 " * 100) == []
+
+
+def test_a_year_range_rises_and_is_not_one_pair_of_a_run():
+    reader = FlexibleDateIntervalDetector("en_US", "y")
+
+    assert [d["text"] for d in reader.detect("1914–1918–1945; 1918–1914; 1939–1945")] == [
+        "1939–1945"
+    ]
+
+
+def test_a_unicode_minus_sign_before_a_range_keeps_its_sign():
+    (found,) = _whole(FlexibleNumberRangeDetector("en_US"), "\N{MINUS SIGN}3–5")
+
+    assert found["value"] == NumberRangeValue(NumberValue("-3"), NumberValue("5"))
 
 
 def test_a_short_year_interval_is_a_guarded_reading():

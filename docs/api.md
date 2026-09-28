@@ -58,6 +58,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`all_detectors`](#icukitdetectors) — function, `icukit.detectors`
 - [`generated_detectors`](#icukitengine) — function, `icukit.engine`
 - [`generated_detectors_report`](#icukitengine) — function, `icukit.engine`
+- [`range_detectors`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors_report`](#icukitengine) — function, `icukit.engine`
 - [`detection_to_dict`](#icukitserialize) — function, `icukit.serialize`
@@ -74,8 +75,6 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`MONTH_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
-- [`MEASURE_RANGE_FAMILY`](#icukitengine) — constant, `icukit.engine`
-- [`MEASURE_RANGE_HYPHEN_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`NUMBER_RANGE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`NUMBER_RANGE_HYPHEN_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_ERA_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -3105,14 +3104,14 @@ values it chooses from ICU; ``guarded=True`` adds the guarded readers.
 
 #### `DEFAULT_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 note: A measure family belongs here once its ICU surfaces have an introspective
 inverter. Abbreviations use their typed lexicon.
 
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -3122,14 +3121,6 @@ DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
 `<icukit.engine.Family>`
 
 #### `LOWERCASE_ROMAN_FAMILY` (constant)
-
-`<icukit.engine.Family>`
-
-#### `MEASURE_RANGE_FAMILY` (constant)
-
-`<icukit.engine.Family>`
-
-#### `MEASURE_RANGE_HYPHEN_FAMILY` (constant)
 
 `<icukit.engine.Family>`
 
@@ -3226,9 +3217,13 @@ hmz) readers, the letter-name, single-letter-word, and alphanumeric-run readers,
 and the number range readers over the set's own number, percent, and currency
 readers (``number:range``, ``number:approximately``) and over its measure readers
 (``measure:range``, ``measure:approximately``). Where :func:`generated_detectors`
-builds a reader too, the two are the same member, so
+builds a reader of the same type, class, and locales, the two share a key (see
+:func:`~icukit.detectors.detector_key`) and the one added last stands, so
 ``generated_detectors(locale).with_(*flexible_detectors(locale).detectors)`` is the
-strict and flexible readers together.
+strict and flexible readers together. Most such pairs are one reader built twice;
+the range readers are not: the generated ``number:range`` reads over a number and a
+percent reader, and the flexible one that replaces it over the set's own number,
+percent, and currency readers.
 
 A reader that takes a parameter is built for each value chosen from ICU:
 
@@ -3264,13 +3259,25 @@ The flexible readers for ``locale``, and every spec that could not be built.
 
 See :func:`flexible_detectors`.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'), Family(name='measure-range'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'))) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'), Family(name='measure-range'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'))) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
+
+### `range_detectors(locale: 'str', detectors: 'DetectorSet', *, guarded: 'bool' = False, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
+
+The number range readers over the amount readers ``detectors`` holds.
+
+A range's endpoints follow the set: one reader over its number, percent, and
+currency readers, strict or flexible (``number:range``), and one over its measure
+readers (``measure:range``), each also reading the approximately form; ``guarded``
+adds each one's hyphen-minus form. So a set that reads a currency or a unit reads its
+ranges ("$3–5", "10–15 kg"), and one that does not, does not. Add them with
+``detectors.with_(*range_detectors(locale, detectors).detectors)``: each replaces the
+set's own reader of its type, a generated set's ``number:range`` among them.
 
 ## icukit.exceptions
 
@@ -5458,9 +5465,11 @@ negative number beside the range. No endpoint is one number of a longer run
 joined by a separator, a hyphen, a colon, a slash, or a period ("14-3-3",
 "2:07–4:07"). An endpoint is looked for within 48 characters of the separator.
 
-#### `FlexibleNumberRangeDetector(locale: 'str', endpoints: 'Iterable[object] | None' = None, *, form: 'str' = 'range', locales: 'Iterable[str] | None' = None) -> 'None'`
+#### `FlexibleNumberRangeDetector(locale: 'str', endpoints: 'Iterable[object] | Callable[[], Iterable[object]] | None' = None, *, form: 'str' = 'range', locales: 'Iterable[str] | None' = None, group: 'str | None' = None) -> 'None'`
 
-Initialize self.  See help(type(self)) for accurate signature.
+``endpoints`` may be a callable returning them, called on the first
+:meth:`detect`, so a set that never reads a range never builds them; ``group``
+then names their group, which the type carries.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 

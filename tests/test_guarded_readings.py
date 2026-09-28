@@ -39,7 +39,6 @@ GUARDED_TYPES = {
     "date-interval:y-abbreviated",
     "date-interval:short-year:y",
     "number:range-hyphen",
-    "measure:range-hyphen",
 }
 
 

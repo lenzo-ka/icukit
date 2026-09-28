@@ -181,8 +181,6 @@ from .engine import (
     GUARDED_FAMILIES,
     LONE_SPELLOUT_NUMBER_FAMILY,
     LOWERCASE_ROMAN_FAMILY,
-    MEASURE_RANGE_FAMILY,
-    MEASURE_RANGE_HYPHEN_FAMILY,
     MONTH_NAME_FAMILY,
     NUMBER_RANGE_FAMILY,
     NUMBER_RANGE_HYPHEN_FAMILY,
@@ -200,6 +198,7 @@ from .engine import (
     flexible_detectors_report,
     generated_detectors,
     generated_detectors_report,
+    range_detectors,
 )
 from .errors import (
     AbbreviationError,
@@ -505,6 +504,7 @@ __all__ = [
     "all_detectors",
     "generated_detectors",
     "generated_detectors_report",
+    "range_detectors",
     "flexible_detectors",
     "flexible_detectors_report",
     "detection_to_dict",
@@ -522,8 +522,6 @@ __all__ = [
     "MONTH_NAME_FAMILY",
     "RELATIVE_DATE_FAMILY",
     "SCIENTIFIC_NUMBER_FAMILY",
-    "MEASURE_RANGE_FAMILY",
-    "MEASURE_RANGE_HYPHEN_FAMILY",
     "NUMBER_RANGE_FAMILY",
     "NUMBER_RANGE_HYPHEN_FAMILY",
     "SHORT_YEAR_ERA_FAMILY",

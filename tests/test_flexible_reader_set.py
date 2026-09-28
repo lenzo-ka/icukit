@@ -471,13 +471,9 @@ def test_the_existing_sets_are_unchanged():
         "number:currency-name:USD",
     )
     generated = generated_detectors("en_US")
-    # The range readers read ICU's own range forms by default, a measure range among them.
-    ranges = [
-        d for d in generated.detectors if isinstance(d, recognize.FlexibleNumberRangeDetector)
-    ]
-    assert {d.type for d in ranges} >= {"number:range", "measure:range"}
-    others = {d.group for d in generated.detectors if d not in ranges}
-    assert not {"measure", "time", "fraction", "ordinal"} & others
+    # The range readers read ICU's own ranges of numbers by default, and no measure's.
+    assert {"number:range", "number:approximately"} <= set(generated.names())
+    assert not {"measure", "time", "fraction", "ordinal"} & {d.group for d in generated.detectors}
     assert not any(
         isinstance(detector, (recognize.FlexibleCurrencyDetector, NumberDetector))
         for detector in generated.detectors
