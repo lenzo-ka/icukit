@@ -244,6 +244,7 @@ def test_b16_material_shape_probe_catches_valid_or_malformed_material(value):
 
 
 def test_b16_distributions_and_package_data_ship_no_locale_material(tmp_path):
+    """Scan data files and JSON-shaped text; Python source is code, reviewed as code."""
     root = Path(__file__).parent.parent
     # uv builds in a development checkout; CI installs the dev extra's ``build``.
     if shutil.which("uv"):
@@ -355,21 +356,61 @@ def test_every_malformed_input_in_the_refusal_sweep_raises_material_load_error(t
                 with pytest.raises(MaterialLoadError):
                     load_locale_material(material)
 
+    cyclic = {}
+    cyclic["self"] = cyclic
     malformed_mappings = (
         {**_fixture(), 1: "non-string top-level key"},
         {**_fixture(), "provenance": {1: "non-string nested key"}},
         {**_fixture(), "provenance": {"source": object()}},
         {**_fixture(), "witnesses": [{"nested": object()}]},
+        cyclic,
     )
     for material in malformed_mappings:
         with pytest.raises(MaterialLoadError):
             load_locale_material(material)
+
+    # A mapping that contains itself, or nests past any real material's depth, is
+    # refused by the walk itself, not by exhausting the caller's stack.
+    deep = _fixture()
+    node = deep["provenance"]
+    for _ in range(100):
+        node["note"] = {}
+        node = node["note"]
+    shared: list = []
+    for _ in range(60):
+        shared = [shared, shared]  # no cycle and 61 deep, but 2**60 values to walk
+    wide = _fixture()
+    wide["provenance"]["note"] = shared
+    for material in (cyclic, deep, wide):
+        with pytest.raises(MaterialLoadError) as caught:
+            load_locale_material(material)
+        assert [refusal.code for refusal in caught.value.refusals] == ["INVALID_JSON"]
+        assert not isinstance(caught.value.__cause__, RecursionError)
 
     non_utf8 = tmp_path / "non-utf8.json"
     non_utf8.write_bytes(b"\xff")
     for path in (non_utf8, tmp_path):
         with pytest.raises(MaterialLoadError):
             load_locale_material(path)
+
+
+def test_a_mapping_is_read_as_plain_json():
+    class Lying(str):
+        def __eq__(self, other):
+            return True
+
+        __hash__ = str.__hash__
+
+        def startswith(self, *args):
+            return True
+
+    material = _fixture()
+    material["locale"] = Lying("qaa")
+    material["provenance"]["source"] = Lying("icukit test fixture")
+    loaded = load_locale_material(material)
+    assert type(loaded.locale) is str
+    assert type(loaded.provenance["source"]) is str
+    assert loaded.digest == DIGEST
 
 
 @pytest.mark.parametrize("text_hash", [None, 0, True, [], {}, "A" * 64, "0" * 63])
@@ -507,6 +548,28 @@ def test_material_detector_spec_serializes_with_digest_and_material_is_hashable(
         material.provenance["source"] = "changed"
 
 
+def test_a_subclass_of_loaded_material_is_refused():
+    loaded = load_locale_material(FIXTURE)
+
+    class Proxy(LocaleMaterial):
+        # Answers every read from the loaded material, so a seal check alone would pass.
+        def __getattribute__(self, name):
+            if name == "__class__":
+                return object.__getattribute__(self, name)
+            return getattr(loaded, name)
+
+    proxy = Proxy(
+        loaded.kind,
+        loaded.locale,
+        loaded.digest,
+        loaded.rules,
+        loaded.rulesets,
+        loaded.provenance,
+    )
+    with pytest.raises(TypeError, match="material must be a LocaleMaterial"):
+        MaterialSpelloutDetector("qaa", proxy)
+
+
 def test_only_loaded_unchanged_material_is_accepted_by_the_reader():
     material = load_locale_material(FIXTURE)
     assert MaterialSpelloutDetector("qaa", material)
@@ -527,6 +590,9 @@ def test_only_loaded_unchanged_material_is_accepted_by_the_reader():
     for item in forged:
         with pytest.raises(ValueError, match="locale material must come from load_locale_material"):
             MaterialSpelloutDetector("qaa", item)
+    object.__setattr__(material, "provenance", MappingProxyType({"source": "changed"}))
+    with pytest.raises(ValueError, match="locale material must come from load_locale_material"):
+        MaterialSpelloutDetector("qaa", material)
     with pytest.raises(TypeError, match="material must be a LocaleMaterial"):
         MaterialSpelloutDetector("qaa", object())
 
