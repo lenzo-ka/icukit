@@ -24,6 +24,7 @@ from tools.provenance import refresh_hashes, validate_repository
 ROOT = Path(__file__).parents[1]
 DATA_REL = Path("icukit/data")
 MANIFEST_REL = DATA_REL / "PROVENANCE.json"
+LICENSE_EXPRESSION = "BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0"
 
 
 def _read_manifest(root: Path) -> dict:
@@ -72,13 +73,24 @@ def _assert_unclassified_corpus_is_rejected(root: Path, relative: str) -> None:
 def _plant_share_alike_file(root: Path, artifact_class: str) -> None:
     data_path = root / DATA_REL / "exceptions/planted.json"
     data_path.write_text("{}\n", encoding="utf-8")
-    notice = "PLANTED-CC-BY-SA-LICENSE"
+    notice = "planted/NOTICE"
+    license_code = "planted/LICENSE"
     notice_path = root / notice
-    notice_path.write_text("Planted CC BY-SA 4.0 test notice.\n", encoding="utf-8")
+    notice_path.parent.mkdir()
+    notice_path.write_text("Planted attribution notice\n\nTest attribution.\n", encoding="utf-8")
+    license_path = root / license_code
+    license_path.write_text(
+        "Attribution-ShareAlike 4.0 International\n\nPlanted legal code.\n",
+        encoding="utf-8",
+    )
     manifest = _read_manifest(root)
     manifest["notices"][notice] = {
         "spdx": "cc-by-sa-4.0",
         "sha256": hashlib.sha256(notice_path.read_bytes()).hexdigest(),
+    }
+    manifest["notices"][license_code] = {
+        "spdx": "cc-by-sa-4.0",
+        "sha256": hashlib.sha256(license_path.read_bytes()).hexdigest(),
     }
     manifest["files"].append(
         {
@@ -92,10 +104,9 @@ def _plant_share_alike_file(root: Path, artifact_class: str) -> None:
     )
     _replace_pyproject(
         root,
-        'license = "BSD-2-Clause AND Unicode-3.0"',
-        'license = "BSD-2-Clause AND Unicode-3.0 AND cc-by-sa-4.0"',
+        '    "LICENSE",\n',
+        f'    "LICENSE",\n    "{license_code}",\n    "{notice}",\n',
     )
-    _replace_pyproject(root, '    "LICENSE",\n', f'    "LICENSE",\n    "{notice}",\n')
     _write_manifest(root, manifest)
 
 
@@ -177,11 +188,6 @@ def test_share_alike_class_requires_notice(tmp_path: Path) -> None:
     manifest, entry = _entry(root, "abbreviations/abbreviations.rng")
     entry.update({"class": "shippable-share-alike", "spdx": "CC-BY-SA-4.0"})
     manifest["notices"]["LICENSE"]["spdx"] = "CC-BY-SA-4.0"
-    _replace_pyproject(
-        root,
-        'license = "BSD-2-Clause AND Unicode-3.0"',
-        'license = "BSD-2-Clause AND Unicode-3.0 AND CC-BY-SA-4.0"',
-    )
     _write_manifest(root, manifest)
     assert any("shippable-share-alike requires a notice" in error for error in _errors(root))
 
@@ -191,11 +197,6 @@ def test_shippable_class_rejects_share_alike_spdx(tmp_path: Path) -> None:
     manifest, entry = _entry(root, "abbreviations/abbreviations.rng")
     entry.update({"spdx": "CC-BY-SA-4.0", "notice": "LICENSE"})
     manifest["notices"]["LICENSE"]["spdx"] = "CC-BY-SA-4.0"
-    _replace_pyproject(
-        root,
-        'license = "BSD-2-Clause AND Unicode-3.0"',
-        'license = "BSD-2-Clause AND Unicode-3.0 AND CC-BY-SA-4.0"',
-    )
     _write_manifest(root, manifest)
     assert any("shippable must not use a share-alike SPDX id" in error for error in _errors(root))
 
@@ -212,11 +213,47 @@ def test_share_alike_class_accepts_lowercase_share_alike_spdx(tmp_path: Path) ->
     assert _errors(root) == []
 
 
+@pytest.mark.parametrize("name", ["NOTICE", "LICENSE"])
+def test_derived_corpus_reference_requires_attribution_and_legal_code(
+    tmp_path: Path, name: str
+) -> None:
+    root = _planted_tree(tmp_path)
+    _plant_share_alike_file(root, "shippable-share-alike")
+    manifest, entry = _entry(root, "exceptions/planted.json")
+    entry["source"] = "derived from en_with_types"
+    entry["corpus_reference"] = {"kind": "derived"}
+    _write_manifest(root, manifest)
+    (root / "planted" / name).unlink()
+    assert f"manifest notice does not exist: planted/{name}" in _errors(root)
+
+
 def test_removing_only_notice_file_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     notice = "icukit/data/ucd_name_aliases/LICENSE"
     (root / notice).unlink()
     assert f"manifest notice does not exist: {notice}" in _errors(root)
+
+
+def test_notice_must_be_nonempty_multiline_text(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    notice = "icukit/data/break_rules/en/NOTICE"
+    path = root / notice
+    path.write_text("literal \\n+ diff fragment", encoding="utf-8")
+    manifest = _read_manifest(root)
+    manifest["notices"][notice]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert f"{notice}: notice must be nonempty multi-line text" in _errors(root)
+
+
+def test_legal_code_first_line_must_be_license_title(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    notice = "icukit/data/break_rules/en/LICENSE"
+    path = root / notice
+    path.write_text("diff fragment\n\nnot legal code\n", encoding="utf-8")
+    manifest = _read_manifest(root)
+    manifest["notices"][notice]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert f"{notice}: legal-code first line must be its license title" in _errors(root)
 
 
 def test_removing_only_license_files_item_is_rejected(tmp_path: Path) -> None:
@@ -327,13 +364,13 @@ def test_bsd_entry_may_use_its_own_bsd_notice(tmp_path: Path) -> None:
 
 def test_missing_bsd_expression_term_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", "Unicode-3.0")
+    _replace_pyproject(root, LICENSE_EXPRESSION, "CC-BY-SA-4.0 AND Unicode-3.0")
     assert "SPDX id is absent from project license expression: BSD-2-Clause" in _errors(root)
 
 
 def test_unused_expression_term_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", "BSD-2-Clause AND Unicode-3.0 AND MIT")
+    _replace_pyproject(root, LICENSE_EXPRESSION, f"{LICENSE_EXPRESSION} AND MIT")
     assert "project license term has no provenance use: MIT" in _errors(root)
 
 
@@ -362,25 +399,25 @@ def test_notice_spdx_must_occur_in_expression(tmp_path: Path) -> None:
 )
 def test_non_conjunction_license_expression_is_rejected(tmp_path: Path, expression: str) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", expression)
+    _replace_pyproject(root, LICENSE_EXPRESSION, expression)
     assert "project license expression must be an AND-only conjunction" in _errors(root)
 
 
 @pytest.mark.parametrize(
     "expression",
     [
-        "(BSD-2-Clause AND Unicode-3.0)",
-        "BSD-2-Clause AND (Unicode-3.0)",
-        "((BSD-2-Clause) AND (Unicode-3.0))",
-        "bsd-2-clause AND unicode-3.0",
-        "BSD-2-Clause AND LicenseRef-OR-internal AND Unicode-3.0",
+        "(BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0)",
+        "BSD-2-Clause AND (CC-BY-SA-4.0) AND (Unicode-3.0)",
+        "((BSD-2-Clause) AND (CC-BY-SA-4.0) AND (Unicode-3.0))",
+        "bsd-2-clause AND cc-by-sa-4.0 AND unicode-3.0",
+        "BSD-2-Clause AND CC-BY-SA-4.0 AND LicenseRef-OR-internal AND Unicode-3.0",
     ],
 )
 def test_supported_license_expression_spellings_are_accepted(
     tmp_path: Path, expression: str
 ) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", expression)
+    _replace_pyproject(root, LICENSE_EXPRESSION, expression)
     if "LicenseRef" in expression:
         manifest = _read_manifest(root)
         notice = "LICENSE-OR-internal"
@@ -398,8 +435,8 @@ def test_duplicate_expression_term_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     _replace_pyproject(
         root,
-        "BSD-2-Clause AND Unicode-3.0",
-        "BSD-2-Clause AND Unicode-3.0 AND BSD-2-Clause",
+        LICENSE_EXPRESSION,
+        f"{LICENSE_EXPRESSION} AND BSD-2-Clause",
     )
     assert "project license expression contains duplicate terms" in _errors(root)
 
@@ -560,6 +597,8 @@ def test_license_files_must_be_an_array_of_strings(tmp_path: Path) -> None:
         root,
         "license-files = [\n"
         '    "LICENSE",\n'
+        '    "icukit/data/break_rules/en/LICENSE",\n'
+        '    "icukit/data/break_rules/en/NOTICE",\n'
         '    "icukit/data/cldr_symbols/LICENSE",\n'
         '    "icukit/data/ucd_name_aliases/LICENSE",\n'
         "]",
@@ -582,7 +621,7 @@ def test_license_files_glob_is_rejected_clearly(tmp_path: Path) -> None:
 
 def test_empty_license_expression_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, 'license = "BSD-2-Clause AND Unicode-3.0"', 'license = ""')
+    _replace_pyproject(root, f'license = "{LICENSE_EXPRESSION}"', 'license = ""')
     assert "project license expression must be a nonempty string" in _errors(root)
 
 
@@ -876,12 +915,10 @@ def test_declared_gzip_json_with_reviewed_share_alike_derivation_passes(
     notice_dir.mkdir()
     notice_path = notice_dir / "NOTICE"
     license_path = notice_dir / "LICENSE"
-    notice_path.write_text("Planted attribution.\n", encoding="utf-8")
-    license_path.write_text("Planted legal code.\n", encoding="utf-8")
-    _replace_pyproject(
-        root,
-        'license = "BSD-2-Clause AND Unicode-3.0"',
-        'license = "BSD-2-Clause AND Unicode-3.0 AND CC-BY-SA-4.0"',
+    notice_path.write_text("Planted attribution.\n\nTest attribution.\n", encoding="utf-8")
+    license_path.write_text(
+        "Attribution-ShareAlike 4.0 International\n\nPlanted legal code.\n",
+        encoding="utf-8",
     )
     _replace_pyproject(
         root,

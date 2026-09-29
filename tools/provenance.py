@@ -42,6 +42,11 @@ CORPUS_IDS = (
 )
 SPDX_TERM = re.compile(r"[A-Za-z0-9][A-Za-z0-9.-]*")
 SHARE_ALIKE = re.compile(r"CC-BY-SA-.+", re.IGNORECASE)
+LICENSE_TITLES = {
+    "bsd-2-clause": "BSD 2-Clause License",
+    "cc-by-sa-4.0": "Attribution-ShareAlike 4.0 International",
+    "unicode-3.0": "UNICODE LICENSE V3",
+}
 
 
 def _sha256(path: Path) -> str:
@@ -475,8 +480,21 @@ def validate_repository(root: Path) -> list[str]:
         notice_path = root / notice
         if not notice_path.is_file():
             errors.append(f"manifest notice does not exist: {notice}")
-        elif notices[notice]["sha256"] != _sha256(notice_path):
-            errors.append(f"{notice}: notice sha256 mismatch")
+        else:
+            try:
+                notice_text = notice_path.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError) as error:
+                errors.append(f"{notice}: notice must be UTF-8 text: {error}")
+            else:
+                lines = notice_text.splitlines()
+                if len(lines) < 2 or not any(line.strip() for line in lines):
+                    errors.append(f"{notice}: notice must be nonempty multi-line text")
+                if PurePosixPath(notice).name == "LICENSE" and lines:
+                    expected_title = LICENSE_TITLES.get(notices[notice]["spdx"].casefold())
+                    if expected_title is None or lines[0].strip() != expected_title:
+                        errors.append(f"{notice}: legal-code first line must be its license title")
+            if notices[notice]["sha256"] != _sha256(notice_path):
+                errors.append(f"{notice}: notice sha256 mismatch")
     for notice in sorted(license_files - set(notices)):
         errors.append(f"license-files item is absent from manifest notices: {notice}")
 

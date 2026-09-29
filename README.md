@@ -200,3 +200,12 @@ BSD 2-Clause License
 The CLDR data bundled in `icukit/data/cldr_symbols` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/cldr_symbols/LICENSE).
 
 The UCD data bundled in `icukit/data/ucd_name_aliases` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/ucd_name_aliases/LICENSE).
+
+The experimental, opt-in `en-tn@1` sentence rules in
+`icukit/data/break_rules/en` are derived from the Google Text Normalization
+English corpus and are distributed under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); their bundled
+`NOTICE` gives attribution and describes the modifications. Validation witnesses
+are synthesized from each rule's predicates, which include lexical values mined
+from the corpus (e.g. `lower` token values); no corpus sentence or row was read
+or copied.

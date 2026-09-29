@@ -4,6 +4,15 @@
 
 ### Added
 
+- Provisionally, under owner choices D2 and D3, the learned English sentence
+  rule base `en-tn@1` ships as an experimental, opt-in CC BY-SA 4.0 artifact;
+  `base="none"` remains the default. The ordered 200-rule artifact is derived
+  from the Google TN English corpus, carries full license, attribution, and
+  measurement receipts, and loads only when its ICU, Unicode, and empty-
+  inventory token-profile identity matches. Its frozen test-pool F1 of
+  0.978025 measures agreement with the corpus splitter on synthetic `glue2`
+  concatenations, not running-text accuracy. The package license expression
+  becomes `BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0`.
 - `SentenceOverride.stream()` returns an experimental `IncrementalSentenceBreaker`
   with prefix-stable `feed`, `pending`, `flush`, and `close`: for any chunking,
   the returned decisions equal the whole-text `decide()`, and a returned decision

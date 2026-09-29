@@ -6999,10 +6999,19 @@ An ICU candidate awaiting stable context, a rule feature, or protection.
 
 Apply opt-in flat rules to ICU sentence candidates.
 
+``en-tn@1`` is a learned, experimental, opt-in English rule base under
+CC BY-SA 4.0. Its reported development and test figures measure agreement
+with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
+not accuracy on naturally occurring running text. The unchanged default is
+always ``base="none"``. Its witnesses are synthesized from each rule's
+predicates, which include lexical values mined from the corpus (e.g.
+``lower`` token values); no corpus sentence or row was read or copied.
+
 Args:
     locale: ICU locale used for both sentence and word boundaries.
-    base: ``"none"`` (the unchanged ICU default), a loaded rule set, or a
-        path to a ``break-rules`` JSON file.
+    base: ``"none"`` (the unchanged ICU default), the opt-in learned base
+        ``"en-tn@1"``, a loaded rule set, or a path to a ``break-rules``
+        JSON file. Unknown names are refused.
     before: Ordered caller rules that force a decision before inventories
         and the base.
     after: Ordered caller rules that may override the base decision.

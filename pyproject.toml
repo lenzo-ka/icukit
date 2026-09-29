@@ -9,12 +9,14 @@ description = "ICU toolkit - library and CLI for Unicode and internationalizatio
 authors = [
     {name = "Kevin Lenzo", email = "kevinlenzo@gmail.com"}
 ]
-license = "BSD-2-Clause AND Unicode-3.0"
+license = "BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0"
 # List the root license and every third-party notice that must ship in both the wheel
 # and sdist. These must be literal paths, not globs. PROVENANCE.json hash-pins each
 # notice, maps it to its SPDX ID, and maps each file under icukit/data to its notice.
 license-files = [
     "LICENSE",
+    "icukit/data/break_rules/en/LICENSE",
+    "icukit/data/break_rules/en/NOTICE",
     "icukit/data/cldr_symbols/LICENSE",
     "icukit/data/ucd_name_aliases/LICENSE",
 ]
@@ -89,6 +91,9 @@ icukit = [
     "data/abbreviations/*.xml",
     "data/abbreviations/*.rng",
     "data/exceptions/*.json",
+    "data/break_rules/en/*.json",
+    "data/break_rules/en/LICENSE",
+    "data/break_rules/en/NOTICE",
     "data/unit_surfaces/*.tsv",
     "data/cldr_symbols/*.tsv",
     "data/cldr_symbols/LICENSE",

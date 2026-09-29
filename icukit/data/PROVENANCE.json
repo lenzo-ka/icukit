@@ -12,6 +12,14 @@
     "icukit/data/ucd_name_aliases/LICENSE": {
       "spdx": "Unicode-3.0",
       "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+    },
+    "icukit/data/break_rules/en/LICENSE": {
+      "spdx": "CC-BY-SA-4.0",
+      "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5"
+    },
+    "icukit/data/break_rules/en/NOTICE": {
+      "spdx": "CC-BY-SA-4.0",
+      "sha256": "3c4dbb0de6e4bacca32caaecd2225135e9e9c14dd168554869250a5c7cdc53d1"
     }
   },
   "files": [
@@ -38,6 +46,50 @@
       "spdx": "BSD-2-Clause",
       "class": "shippable",
       "notice": null
+    },
+    {
+      "path": "break_rules/en/LICENSE",
+      "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5",
+      "source": "Creative Commons Attribution-ShareAlike 4.0 legal code",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE"
+    },
+    {
+      "path": "break_rules/en/NOTICE",
+      "sha256": "3c4dbb0de6e4bacca32caaecd2225135e9e9c14dd168554869250a5c7cdc53d1",
+      "source": "attribution for google/tn-en_with_types and Wikipedia contributors",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "mention",
+        "note": "the notice names the source corpus to provide attribution"
+      }
+    },
+    {
+      "path": "break_rules/en/RECEIPT.json",
+      "sha256": "a2b1222d6f8b5d29d9ea370bb4675f8ae86f7d51a65854fd27a2cab5eb4c5e14",
+      "source": "measurement receipt for google/tn-en_with_types rule derivation",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the receipt records measurements for the derived rule artifact"
+      }
+    },
+    {
+      "path": "break_rules/en/sentence-tn.json",
+      "sha256": "77f7eb05f0feeac2471c4ea8fd7c91d0b285ad90ec0114fef82f7c9311115de6",
+      "source": "google/tn-en_with_types sentence-boundary labels",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the learned en-tn@1 rule artifact is derived from corpus sentence-boundary labels"
+      }
     },
     {
       "path": "cldr_symbols/LICENSE",

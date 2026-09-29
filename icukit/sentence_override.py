@@ -63,6 +63,9 @@ Effect = Literal["break", "no-break", "ambiguous"]
 Layer = Literal["icu", "token", "before", "exceptions", "rules", "after"]
 _OPS = {"in", "not_in", "prefix", "le", "ge"}
 _FEATURES = "icukit.features@1"
+_NAMED_BASES = {
+    "en-tn@1": Path(__file__).with_name("data") / "break_rules" / "en" / "sentence-tn.json"
+}
 _TOKEN_FEATURES = {
     "text",
     "lower",
@@ -1728,10 +1731,19 @@ class IncrementalSentenceBreaker:
 class SentenceOverride:
     """Apply opt-in flat rules to ICU sentence candidates.
 
+    ``en-tn@1`` is a learned, experimental, opt-in English rule base under
+    CC BY-SA 4.0. Its reported development and test figures measure agreement
+    with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
+    not accuracy on naturally occurring running text. The unchanged default is
+    always ``base="none"``. Its witnesses are synthesized from each rule's
+    predicates, which include lexical values mined from the corpus (e.g.
+    ``lower`` token values); no corpus sentence or row was read or copied.
+
     Args:
         locale: ICU locale used for both sentence and word boundaries.
-        base: ``"none"`` (the unchanged ICU default), a loaded rule set, or a
-            path to a ``break-rules`` JSON file.
+        base: ``"none"`` (the unchanged ICU default), the opt-in learned base
+            ``"en-tn@1"``, a loaded rule set, or a path to a ``break-rules``
+            JSON file. Unknown names are refused.
         before: Ordered caller rules that force a decision before inventories
             and the base.
         after: Ordered caller rules that may override the base decision.
@@ -1770,10 +1782,18 @@ class SentenceOverride:
             loaded_base = None
         elif isinstance(base, BreakRuleSet):
             loaded_base = base
-        elif isinstance(base, (str, Path)):
+        elif isinstance(base, str) and base in _NAMED_BASES:
+            loaded_base = load_break_rules(
+                _NAMED_BASES[base], locale=locale, inventories=self.inventories
+            )
+        elif isinstance(base, Path) or (isinstance(base, str) and Path(base).is_file()):
             loaded_base = load_break_rules(base, locale=locale, inventories=self.inventories)
+        elif isinstance(base, str):
+            raise ValueError(f"unknown sentence-override base {base!r}")
         else:
-            raise TypeError("base must be 'none', a BreakRuleSet, or a break-rules JSON path")
+            raise TypeError(
+                "base must be 'none', a named base, a BreakRuleSet, or a break-rules JSON path"
+            )
         self.base = loaded_base
         self.before = tuple(before)
         self.after = tuple(after)
