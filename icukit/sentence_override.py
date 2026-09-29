@@ -122,6 +122,17 @@ class BreakRule(TypedDict):
     Its text, lower-case text, length, shapes, first/last character classes,
     leading-whitespace flag, and run shape are all derived from that same
     truncated run, never from only its final token.
+
+    A forward character position ``c+n`` has horizon equal to the number of
+    right tokens ending at or before that code point, plus one when the code
+    point is inside a right token, with a minimum of one. It is readable when
+    that horizon is at most ``lookahead``. Thus the gap after token ``+k`` is
+    readable at lookahead ``k``, while the first code point of token ``+(k+1)``
+    is ``<BEYOND>``. At or past the end of the text, its horizon is the lesser
+    of eight and one more than the number of right tokens; a readable position
+    returns ``<EOS>``. ``tokens_read`` records this horizon, including ``k``
+    rather than ``k+1`` for a gap after token ``+k``. Every ``c+n`` predicate
+    therefore requires a declared lookahead of at least one.
     """
 
     id: str
@@ -827,6 +838,15 @@ def _token_completion_horizon(
     return max((token["end"], *(cast(int, item) for item in horizons)))
 
 
+def _forward_character_horizon(index: int, text: str, right: Sequence[Token]) -> int:
+    """Return the token horizon of an absolute forward character position."""
+    if index >= len(text):
+        return min(8, len(right) + 1)
+    completed = sum(token["end"] <= index for token in right)
+    containing = any(token["start"] <= index < token["end"] for token in right)
+    return max(1, completed + int(containing))
+
+
 def _observed_feature_value(
     predicate: _CompiledPredicate,
     rule: _CompiledBreakRule,
@@ -906,28 +926,31 @@ def _observed_feature_value(
     distance = int(cast(str, at)[1:])
     index = offset + distance - 1 if distance > 0 else offset + distance
     if distance > 0:
-        horizon_index = pivot + rule.lookahead - 1
-        if horizon_index < len(toks):
-            horizon_tokens = toks[pivot : horizon_index + 1]
-            horizon_token = horizon_tokens[-1]
-            completion_horizons = tuple(
-                _token_completion_horizon(item, text, locale, inventories, closed)
-                for item in horizon_tokens
-            )
-            if any(item is None for item in completion_horizons):
-                raise _FeatureNotYet
-            if index >= horizon_token["end"]:
-                return (
-                    "<BEYOND>",
-                    rule.lookahead,
-                    max(cast(int, item) for item in completion_horizons),
-                )
+        right = toks[pivot:]
+        horizon = _forward_character_horizon(index, text, right)
+        if index >= len(text) and not closed:
+            raise _FeatureNotYet
+        completed_tokens = tuple(token for token in right if token["end"] <= index)
+        completion_horizons = tuple(
+            _token_completion_horizon(item, text, locale, inventories, closed)
+            for item in completed_tokens
+        )
+        if any(item is None for item in completion_horizons):
+            raise _FeatureNotYet
+        read_horizon = max(
+            offset,
+            min(index + 1, len(text)),
+            *(cast(int, item) for item in completion_horizons),
+        )
+        if horizon > rule.lookahead:
+            return "<BEYOND>", rule.lookahead, read_horizon
     if index < 0:
         return "<BOS>", 0, offset
     if index >= len(text):
-        if not closed:
-            raise _FeatureNotYet
-        return "<EOS>", rule.lookahead if distance > 0 else 0, len(text)
+        return "<EOS>", horizon, read_horizon
+    if distance > 0:
+        window = class_window(text, index, before=0, after=1)
+        return _point_feature(window.after[0], predicate.feature), horizon, read_horizon
     containing = next((token for token in toks if token["start"] <= index < token["end"]), None)
     completion_horizon = None
     if containing is not None:

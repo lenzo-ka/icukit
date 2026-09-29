@@ -967,6 +967,50 @@ def test_beyond_is_identical_under_every_two_piece_chunking():
             assert _stream(override, [text[:cut], text[cut:]]) == expected
 
 
+def test_gap_character_horizon_is_identical_under_every_chunking():
+    gap = _rule(
+        "gap",
+        lookahead=1,
+        when=[
+            {"at": "run-1", "f": "shape.cased", "in": ["Xx."]},
+            {"at": "c+2", "f": "text", "in": [" "]},
+        ],
+        match="Mr. A B",
+    )
+    override = SentenceOverride(before=[_loaded(gap)])
+    text = "Mr. A B"
+    expected = override.decide(text)
+    assert (expected[0]["id"], expected[0]["tokens_read"]) == ("gap", 1)
+
+    breaker = override.stream()
+    emitted = breaker.feed("Mr. A ")
+    assert emitted == expected[:1]
+    assert emitted + breaker.feed("B") + breaker.close() == expected
+    _assert_all_chunkings(override, text, seed=9141)
+
+
+def test_beyond_at_next_token_start_is_identical_under_every_chunking():
+    beyond = _rule(
+        "beyond-at-start",
+        lookahead=1,
+        when=[
+            {"at": "run-1", "f": "shape.cased", "in": ["Xx."]},
+            {"at": "c+3", "f": "text", "in": ["<BEYOND>"]},
+        ],
+        match="Mr. A B continues.",
+    )
+    override = SentenceOverride(before=[_loaded(beyond)])
+    text = "Mr. A B continues."
+    expected = override.decide(text)
+    assert (expected[0]["id"], expected[0]["tokens_read"]) == ("beyond-at-start", 1)
+
+    breaker = override.stream()
+    emitted = breaker.feed("Mr. A B")
+    assert emitted == expected[:1]
+    assert emitted + breaker.feed(" continues.") + breaker.close() == expected
+    _assert_all_chunkings(override, text, seed=9142)
+
+
 def test_unavailable_predicate_short_circuits_before_later_falsifier():
     rule = _rule(
         "unavailable-then-false",
