@@ -4,6 +4,16 @@
 
 ### Added
 
+- A generated provenance manifest now records the declared source, license, shipping
+  class, notice, and byte hash of every data file under `icukit/data`. A license guard
+  rejects missing entries and entries changed since last recorded, rejects unknown
+  class labels, rejects data under `icukit/data` whose declared provenance names a
+  known internal corpus, and checks that required notices ship. Each notice file is
+  hash-pinned and labeled with the license it carries. Archive members under
+  `icukit/data` are hash-verified against the manifest and compared between wheel and
+  sdist. The package license expression
+  now includes the Unicode License v3 term that covers its bundled CLDR and UCD
+  snapshots.
 - Every formal name alias Unicode defines, of all five types in `NameAliases.txt`:
   `correction`, `control`, `alternate`, `figment`, and `abbreviation`. ICU carries the
   corrections alone, so `BEL`, `ALERT`, `LINE FEED`, `NBSP`, `BYTE ORDER MARK`, and `ZWJ`
