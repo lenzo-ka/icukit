@@ -446,19 +446,19 @@ def test_icu_prefix_stability_seeded_characterization():
 
 
 def test_crlf_candidate_waits_and_matches_independent_icu_oracle():
-    simple = SentenceOverride().stream()
+    simple = SentenceOverride(base="none").stream()
     simple_streamed = simple.feed("A\r") + simple.feed("\nB") + simple.close()
-    assert simple_streamed == SentenceOverride().decide("A\r\nB")
+    assert simple_streamed == SentenceOverride(base="none").decide("A\r\nB")
 
     text = "😀A\r\nB."
     expected_offsets = [item["end"] for item in Breaker("en_US").break_sentence_spans(text)]
-    breaker = SentenceOverride().stream()
+    breaker = SentenceOverride(base="none").stream()
     first = breaker.feed("😀A\r")
     assert first == []
     assert any(item["waiting_on"] == "icu" for item in breaker.pending())
     streamed = first + breaker.feed("\n") + breaker.feed("B.") + breaker.close()
     assert [item["offset"] for item in streamed] == expected_offsets
-    assert streamed == SentenceOverride().decide(text)
+    assert streamed == SentenceOverride(base="none").decide(text)
 
 
 @pytest.mark.parametrize(
@@ -470,7 +470,7 @@ def test_crlf_candidate_waits_and_matches_independent_icu_oracle():
     ],
 )
 def test_icu_stable_and_token_complete_holds(text):
-    override = SentenceOverride(before=[_loaded(_next_upper())])
+    override = SentenceOverride(base="none", before=[_loaded(_next_upper())])
     expected = override.decide(text)
     for cut in range(len(text) + 1):
         assert _stream(override, [text[:cut], text[cut:]]) == expected
@@ -489,7 +489,7 @@ def test_icu_stable_and_token_complete_holds(text):
         ],
         match="Mr. S arrived.",
     )
-    breaker = SentenceOverride(before=[_loaded(single_letter)]).stream()
+    breaker = SentenceOverride(base="none", before=[_loaded(single_letter)]).stream()
     assert breaker.feed("Mr. S") == []
     assert breaker.feed("mith") == []
 
@@ -505,7 +505,7 @@ def test_emitted_immutable_close_and_earlier_rule_exclusion():
         match="Mr. Smith Jones never.",
     )
     later = _next_upper("later-one")
-    override = SentenceOverride(before=[_loaded(earlier, later)])
+    override = SentenceOverride(base="none", before=[_loaded(earlier, later)])
     breaker = override.stream()
     assert breaker.feed("Mr. Smith J") == []
     assert breaker.pending()[0]["waiting_on"] == "earlier-three"
@@ -531,7 +531,7 @@ def test_candidates_are_emitted_in_offset_order_behind_earlier_pending_rule():
     )
     inventory = _word_only_inventory("arrived.", "arrived-word-only")
     rules = _loaded(earlier, _next_upper("later-one"), inventories=(inventory,))
-    override = SentenceOverride(before=[rules], inventories=[inventory])
+    override = SentenceOverride(base="none", before=[rules], inventories=[inventory])
     breaker = override.stream()
     emitted = breaker.feed("Mr. Smith arrived. N")
     assert emitted == []
@@ -543,14 +543,14 @@ def test_candidates_are_emitted_in_offset_order_behind_earlier_pending_rule():
 
 
 def test_word_only_inventory_waits_for_its_locality_horizon():
-    override = SentenceOverride(inventories=[_word_only_inventory()])
+    override = SentenceOverride(base="none", inventories=[_word_only_inventory()])
     breaker = override.stream()
     assert breaker.feed("Hello. N") == []
     assert breaker.pending()[0]["waiting_on"] == "exceptions"
 
 
 def test_cross_candidate_exact_word_surface_waits_until_complete_or_divergent():
-    override = SentenceOverride(inventories=[_cross_candidate_inventory()])
+    override = SentenceOverride(base="none", inventories=[_cross_candidate_inventory()])
     prefix = "Mr. S"
     completion = "mith arrived."
     full_text = prefix + completion
@@ -585,7 +585,7 @@ def test_word_surface_starting_at_read_token_waits_under_every_chunking():
         match="Mr. Smith arrived.",
     )
     override = SentenceOverride(
-        before=[_loaded(rule, inventories=(inventory,))], inventories=[inventory]
+        base="none", before=[_loaded(rule, inventories=(inventory,))], inventories=[inventory]
     )
     text = "Mr. Smith Jones."
     breaker = override.stream()
@@ -609,7 +609,7 @@ def test_word_surface_starting_after_plus_one_waits_under_every_chunking():
         match="Mr. Alpha Smith arrived.",
     )
     override = SentenceOverride(
-        before=[_loaded(rule, inventories=(inventory,))], inventories=[inventory]
+        base="none", before=[_loaded(rule, inventories=(inventory,))], inventories=[inventory]
     )
     text = "Mr. Alpha Smith Jones."
     breaker = override.stream()
@@ -629,7 +629,9 @@ def test_collation_word_rule_unbounded_prefix_is_refused_by_stream_but_decide_wo
     matches = collation_detect(text, "Mr. Smith", "test", locale="en", strength="primary")
     assert [(item["start"], item["end"]) for item in matches] == [(0, 49)]
 
-    override = SentenceOverride(inventories=[_cross_candidate_inventory(variant="collation")])
+    override = SentenceOverride(
+        base="none", inventories=[_cross_candidate_inventory(variant="collation")]
+    )
     with pytest.raises(
         ValueError,
         match="collation-variant word- or sentence-level exception rules.*whole-text API",
@@ -646,7 +648,7 @@ def test_collation_word_rule_unbounded_prefix_is_refused_by_stream_but_decide_wo
 def test_collation_sentence_rule_is_also_refused_by_stream_but_decide_works():
     text = "Mr. S" + "\N{COMBINING ACUTE ACCENT}" * 40 + "mith arrived."
     override = SentenceOverride(
-        inventories=[_cross_candidate_inventory(variant="collation", level="sentence")]
+        base="none", inventories=[_cross_candidate_inventory(variant="collation", level="sentence")]
     )
     with pytest.raises(ValueError, match="collation-variant word- or sentence-level"):
         override.stream()
@@ -672,7 +674,7 @@ def test_collation_expansion_remains_supported_by_whole_text_decide():
 
 
 def test_completed_conditional_word_surface_waits_until_right_context_is_decided():
-    override = SentenceOverride(inventories=[_conditional_word_inventory()])
+    override = SentenceOverride(base="none", inventories=[_conditional_word_inventory()])
 
     matching = override.stream()
     assert matching.feed("Mr. Smith") == []
@@ -701,7 +703,7 @@ def test_completed_conditional_word_surface_waits_until_right_context_is_decided
 
 
 def test_matching_word_condition_waits_until_adjacent_word_is_stable():
-    override = SentenceOverride(inventories=[_conditional_word_inventory()])
+    override = SentenceOverride(base="none", inventories=[_conditional_word_inventory()])
     breaker = override.stream()
     assert breaker.feed("Mr. Smith arrived") == []
     assert breaker.pending()[0]["waiting_on"] == "exceptions"
@@ -711,7 +713,7 @@ def test_matching_word_condition_waits_until_adjacent_word_is_stable():
 
 
 def test_named_list_condition_waits_for_icu_apostrophe_lookahead():
-    override = SentenceOverride(inventories=[_apostrophe_sentence_inventory()])
+    override = SentenceOverride(base="none", inventories=[_apostrophe_sentence_inventory()])
     breaker = override.stream()
     assert breaker.feed("Mr. Smith arrived'") == []
     assert breaker.pending()[0]["waiting_on"] == "exceptions"
@@ -721,7 +723,7 @@ def test_named_list_condition_waits_for_icu_apostrophe_lookahead():
 
 
 def test_wb4_format_run_named_list_matches_whole_text_under_every_chunking():
-    override = SentenceOverride(inventories=[_conditional_word_inventory()])
+    override = SentenceOverride(base="none", inventories=[_conditional_word_inventory()])
     text = "Mr. Smith arrived'\N{SOFT HYPHEN}s."
     breaker = override.stream()
     assert breaker.feed("Mr. Smith arrived'\N{SOFT HYPHEN}") == []
@@ -754,7 +756,7 @@ def test_wb4_token_reads_match_whole_text_under_every_chunking(text, prefix, exp
         when=[{"at": 1, "f": "text", "in": [expected]}],
         match=witness,
     )
-    override = SentenceOverride(before=[_loaded(rule)])
+    override = SentenceOverride(base="none", before=[_loaded(rule)])
     breaker = override.stream()
     assert breaker.feed(prefix) == []
     streamed = breaker.feed(text[len(prefix) :]) + breaker.close()
@@ -763,7 +765,7 @@ def test_wb4_token_reads_match_whole_text_under_every_chunking(text, prefix, exp
 
 
 def test_real_matcher_handles_close_and_named_list_growth_under_every_chunking():
-    override = SentenceOverride(inventories=[_quoted_mr_sentence_inventory()])
+    override = SentenceOverride(base="none", inventories=[_quoted_mr_sentence_inventory()])
     text = 'I met "Mr." Smithson left.'
     prefix = 'I met "Mr." Smith'
     breaker = override.stream()
@@ -777,7 +779,7 @@ def test_unbounded_right_condition_waits_beyond_maximum_multiword_surface():
     inventory = _unbounded_right_sentence_inventory(
         "Mr. John Smith", "mr-john-smith-before-arrived"
     )
-    override = SentenceOverride(inventories=[inventory])
+    override = SentenceOverride(base="none", inventories=[inventory])
     text = "Mr. John Smith arrived. Next"
     breaker = override.stream()
     assert breaker.feed("Mr. John Smith ") == []
@@ -789,7 +791,7 @@ def test_unbounded_right_condition_waits_beyond_maximum_multiword_surface():
 
 @pytest.mark.parametrize("separator", ["\n", "\t", "\N{PARAGRAPH SEPARATOR}"])
 def test_trailing_whitespace_candidate_waits_for_non_whitespace(separator):
-    override = SentenceOverride()
+    override = SentenceOverride(base="none")
     text = f"Hello{separator}  World."
     breaker = override.stream()
     assert breaker.feed(f"Hello{separator}  ") == []
@@ -799,7 +801,7 @@ def test_trailing_whitespace_candidate_waits_for_non_whitespace(separator):
 
 
 def test_false_sentence_exception_right_condition_does_not_hold_candidate():
-    override = SentenceOverride(inventories=[_lowercase_sentence_inventory()])
+    override = SentenceOverride(base="none", inventories=[_lowercase_sentence_inventory()])
     breaker = override.stream()
     emitted = breaker.feed("Mr. Smith J enough locality follows. ")
     assert [(item["offset"], item["decision"], item["layer"]) for item in emitted] == [
@@ -816,7 +818,7 @@ def test_early_decision_does_not_wait_for_maximum_lookahead():
         when=[{"at": 3, "f": "shape.cased", "in": ["Xxxxx"]}],
         match="Hello. A B Zebra.",
     )
-    breaker = SentenceOverride(before=[_loaded(first, later)]).stream()
+    breaker = SentenceOverride(base="none", before=[_loaded(first, later)]).stream()
     # The feed completes token +1 by observing its whitespace terminator.
     decisions = breaker.feed("Mr. Smith J ")
     assert [(item["offset"], item["id"]) for item in decisions] == [(4, "one-token")]
@@ -830,7 +832,7 @@ def test_other_punctuation_edge_releases_zero_lookahead_rule_without_whitespace(
         when=[{"at": -1, "f": "text", "in": ["!"]}],
         match="A! B",
     )
-    override = SentenceOverride(before=[_loaded(rule)])
+    override = SentenceOverride(base="none", before=[_loaded(rule)])
     text = "A!B!C!D"
     expected = override.decide(text)
     breaker = override.stream()
@@ -846,6 +848,7 @@ def test_other_punctuation_edge_releases_zero_lookahead_rule_without_whitespace(
 def test_decided_before_rule_does_not_wait_for_sentence_inventory_locality():
     inventory = _cross_candidate_inventory(level="sentence")
     override = SentenceOverride(
+        base="none",
         before=[_loaded(_next_upper(), inventories=(inventory,))],
         inventories=[inventory],
     )
@@ -875,6 +878,7 @@ def test_decided_before_rule_waits_for_word_inventory_merge():
         match="Mr. Jones arrived.",
     )
     override = SentenceOverride(
+        base="none",
         before=[_loaded(rule, inventories=(inventory,))],
         inventories=[inventory],
     )
@@ -906,14 +910,14 @@ def test_token_features_are_cached_once_and_cache_flag_is_semantic_noop(monkeypa
         return original(toks, index, text)
 
     monkeypatch.setattr(sentence_override_module, "token_features", counted)
-    cached = SentenceOverride(before=[_loaded(_next_upper())], cache=True)
+    cached = SentenceOverride(base="none", before=[_loaded(_next_upper())], cache=True)
     calls.clear()
     text = "Mr. Smith arrived. Next."
     expected = cached.decide(text)
     calls.clear()
     assert _stream(cached, ["Mr. S", "mith a", "rrived. Next."]) == expected
     assert calls and max(calls.values()) == 1
-    uncached = SentenceOverride(before=[_loaded(_next_upper())], cache=False)
+    uncached = SentenceOverride(base="none", before=[_loaded(_next_upper())], cache=False)
     assert _stream(uncached, ["Mr. S", "mith a", "rrived. Next."]) == expected
 
 
@@ -937,7 +941,7 @@ def test_cache_retains_future_lookbehind_tokens_after_pending_empties(monkeypatc
     )
     loaded = _loaded(rule)
     monkeypatch.setattr(sentence_override_module, "token_features", counted)
-    breaker = SentenceOverride(before=[loaded], cache=True).stream()
+    breaker = SentenceOverride(base="none", before=[loaded], cache=True).stream()
     breaker.feed("A. B.\n\nC ")
     assert [item["offset"] for item in breaker.pending()] == [9]
     assert any(key[2] == "B" for key in breaker._cache.values)
@@ -956,7 +960,7 @@ def test_beyond_is_identical_under_every_two_piece_chunking():
         ],
         match="Mr. A B C D E",
     )
-    override = SentenceOverride(before=[_loaded(beyond)])
+    override = SentenceOverride(base="none", before=[_loaded(beyond)])
     for text in ("Mr. A B C D E", "Mr. Alexander"):
         expected = override.decide(text)
         if text == "Mr. A B C D E":
@@ -977,7 +981,7 @@ def test_gap_character_horizon_is_identical_under_every_chunking():
         ],
         match="Mr. A B",
     )
-    override = SentenceOverride(before=[_loaded(gap)])
+    override = SentenceOverride(base="none", before=[_loaded(gap)])
     text = "Mr. A B"
     expected = override.decide(text)
     assert (expected[0]["id"], expected[0]["tokens_read"]) == ("gap", 1)
@@ -999,7 +1003,7 @@ def test_beyond_at_next_token_start_is_identical_under_every_chunking():
         ],
         match="Mr. A B continues.",
     )
-    override = SentenceOverride(before=[_loaded(beyond)])
+    override = SentenceOverride(base="none", before=[_loaded(beyond)])
     text = "Mr. A B continues."
     expected = override.decide(text)
     assert (expected[0]["id"], expected[0]["tokens_read"]) == ("beyond-at-start", 1)
@@ -1021,7 +1025,7 @@ def test_unavailable_predicate_short_circuits_before_later_falsifier():
         ],
         match="Mr. Smith Jones Zebra.",
     )
-    override = SentenceOverride(before=[_loaded(rule)])
+    override = SentenceOverride(base="none", before=[_loaded(rule)])
     text = "Hello. Alpha X"
     expected = override.decide(text)
     assert _stream(override, [text]) == expected
@@ -1031,18 +1035,18 @@ def test_unavailable_predicate_short_circuits_before_later_falsifier():
 
 def test_streaming_protection_timing_and_watermark_seal():
     span = {"start": 0, "end": 9, "type": "name", "scope": "token"}
-    watermark = SentenceOverride().stream(protection="watermark")
+    watermark = SentenceOverride(base="none").stream(protection="watermark")
     assert watermark.feed("Mr. S") == []
     protected_decisions = watermark.feed("mith", protected=[span], protected_through=9)
     assert protected_decisions[0]["layer"] == "token"
     assert all(item["offset"] != 4 for item in watermark.close())
 
-    unprotected = SentenceOverride().stream()
+    unprotected = SentenceOverride(base="none").stream()
     assert unprotected.feed("Mr. S")[0]["offset"] == 4
     with pytest.raises(LateProtectedSpan):
         unprotected.feed("mith", protected=[span])
 
-    override = SentenceOverride(before=[_loaded(_next_upper())])
+    override = SentenceOverride(base="none", before=[_loaded(_next_upper())])
     none = override.stream()
     assert none.feed("Mr. Smith J")[0]["offset"] == 4
     with pytest.raises(LateProtectedSpan):
@@ -1054,12 +1058,12 @@ def test_streaming_protection_timing_and_watermark_seal():
     got = marked.feed("ones", protected=[protected], protected_through=15) + marked.close()
     assert got == override.decide("Mr. Smith Jones", protected=[protected])
 
-    sealed = SentenceOverride().stream(protection="watermark")
+    sealed = SentenceOverride(base="none").stream(protection="watermark")
     assert sealed.feed("Mr. Smith", protected_through=0) == []
-    assert sealed.close() == SentenceOverride().decide("Mr. Smith")
+    assert sealed.close() == SentenceOverride(base="none").decide("Mr. Smith")
     assert sealed.pending() == []
 
-    flushed = SentenceOverride().stream(protection="watermark")
+    flushed = SentenceOverride(base="none").stream(protection="watermark")
     flushed.feed("Mr. Smith", protected_through=0)
     flushed.flush()
     with pytest.raises(LateProtectedSpan):
@@ -1068,7 +1072,7 @@ def test_streaming_protection_timing_and_watermark_seal():
 
 def test_protected_token_read_horizon_obeys_watermark():
     span = {"start": 0, "end": 9, "type": "name", "scope": "token"}
-    breaker = SentenceOverride().stream(protection="watermark")
+    breaker = SentenceOverride(base="none").stream(protection="watermark")
     assert breaker.feed("Mr. Smith N", protected=[span], protected_through=4) == []
     assert breaker.pending()[0] == {
         "offset": 4,
@@ -1082,7 +1086,9 @@ def test_protected_token_read_horizon_obeys_watermark():
 
 
 def test_inventory_locality_read_horizon_obeys_watermark():
-    override = SentenceOverride(inventories=[_cross_candidate_inventory(level="sentence")])
+    override = SentenceOverride(
+        base="none", inventories=[_cross_candidate_inventory(level="sentence")]
+    )
     text = "Mr. Smith " + "context " * 20
     breaker = override.stream(protection="watermark")
     assert breaker.feed(text, protected_through=4) == []
@@ -1104,7 +1110,7 @@ def _shifted(decisions, offset):
 
 
 def test_flush_starts_a_new_logical_segment():
-    override = SentenceOverride()
+    override = SentenceOverride(base="none")
     breaker = override.stream()
     emitted = breaker.feed("Hello.") + breaker.flush()
     emitted += breaker.feed(" Next. More") + breaker.close()
@@ -1113,7 +1119,7 @@ def test_flush_starts_a_new_logical_segment():
 
 
 def test_flush_discards_segment_local_feature_cache_coordinates():
-    override = SentenceOverride(before=[_loaded(_next_upper())])
+    override = SentenceOverride(base="none", before=[_loaded(_next_upper())])
     breaker = override.stream()
     first = "Mr. Smith"
     emitted = breaker.feed(first) + breaker.flush()
@@ -1123,7 +1129,7 @@ def test_flush_discards_segment_local_feature_cache_coordinates():
 
 
 def test_random_flush_split_matches_two_shifted_whole_text_decisions():
-    override = SentenceOverride()
+    override = SentenceOverride(base="none")
     rng = random.Random(9303)
     atoms = ["Alpha.", '"No."', "beta?", "Gamma!", "😀", "42.", "\r\n", " "]
     for _ in range(100):
@@ -1149,6 +1155,7 @@ def test_every_authored_chunking_matches_whole_text_with_and_without_cache():
     for cache in (True, False):
         for rules in rule_sets:
             override = SentenceOverride(
+                base="none",
                 before=[_loaded(*rules, set_id=f"tests/property-{cache}-{len(rules)}")]
                 if rules
                 else (),
@@ -1182,27 +1189,27 @@ def test_every_authored_chunking_matches_whole_text_with_and_without_cache():
 def test_inventory_regressions_match_whole_text_under_every_authored_chunking():
     cases = [
         (
-            SentenceOverride(inventories=[_cross_candidate_inventory()]),
+            SentenceOverride(base="none", inventories=[_cross_candidate_inventory()]),
             "Mr. Smith arrived.",
             7241,
         ),
         (
-            SentenceOverride(inventories=[_cross_candidate_inventory()]),
+            SentenceOverride(base="none", inventories=[_cross_candidate_inventory()]),
             "Mr. Smyth arrived.",
             7242,
         ),
         (
-            SentenceOverride(inventories=[_lowercase_sentence_inventory()]),
+            SentenceOverride(base="none", inventories=[_lowercase_sentence_inventory()]),
             "Mr. Smith Jones arrived.",
             7243,
         ),
         (
-            SentenceOverride(inventories=[_conditional_word_inventory()]),
+            SentenceOverride(base="none", inventories=[_conditional_word_inventory()]),
             "Mr. Smith arrived.",
             7245,
         ),
         (
-            SentenceOverride(inventories=[_conditional_word_inventory()]),
+            SentenceOverride(base="none", inventories=[_conditional_word_inventory()]),
             "Mr. Smith Jones.",
             7246,
         ),
@@ -1268,7 +1275,7 @@ def test_random_authored_exact_inventories_match_whole_text_under_every_chunking
                 "rules": [rule],
             }
         )
-        override = SentenceOverride(inventories=[inventory])
+        override = SentenceOverride(base="none", inventories=[inventory])
         for text in (
             f"Mr. Smith {positive_tail}",
             f"Mr. Smith {negative_tail}",
@@ -1292,6 +1299,7 @@ def test_random_multiword_exact_surfaces_match_whole_text_under_every_chunking()
             match=f"Mr. {' '.join([*lead, surface_words[0], 'Solo.'])}",
         )
         override = SentenceOverride(
+            base="none",
             before=[_loaded(rule, set_id=f"random-multiword-{index}", inventories=(inventory,))],
             inventories=[inventory],
         )
@@ -1321,6 +1329,7 @@ def test_random_word_inventories_precede_zero_lookahead_left_context_rules():
         )
         rule["witnesses"]["no_match"] = ["One two three. More followed."]
         override = SentenceOverride(
+            base="none",
             before=[
                 _loaded(
                     rule,
@@ -1352,7 +1361,7 @@ def test_random_multiword_unbounded_inventories_obey_chunking_and_watermarks():
             f"random-unbounded-multiword-{index}",
             following,
         )
-        override = SentenceOverride(inventories=[inventory])
+        override = SentenceOverride(base="none", inventories=[inventory])
         separator = rng.choice([" ", "  ", "\t"])
         text = f"{surface}{separator}{following}. Next protected tail "
         _assert_all_chunkings(
@@ -1439,7 +1448,7 @@ def test_random_unicode_prefixes_inventories_and_rules_match_every_chunking():
             set_id=f"tests/random-unicode-{index}",
             inventories=(inventory,),
         )
-        override = SentenceOverride(before=[rules], inventories=[inventory])
+        override = SentenceOverride(base="none", before=[rules], inventories=[inventory])
         # The first cases cover every alphabet member; later cases resample it.
         if index < 2:
             body = "".join(alphabet[index * 7 : (index + 1) * 7])

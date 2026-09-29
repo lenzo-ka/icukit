@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from inspect import signature
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,51 @@ MODEL_PATH = (
     / "sentence-tn-cart.json.gz"
 )
 MODEL_DIGEST = "sha256:a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d"
+
+
+@pytest.mark.parametrize("locale", ["en", "en_US", "en_GB", "en_Latn_US", "en-Latn-GB"])
+def test_english_locale_default_is_named_cartlet_model(locale: str) -> None:
+    default = SentenceOverride(locale)
+    decisions = default.decide("Mr. Smith arrived. Next.")
+
+    assert signature(SentenceOverride).parameters["base"].default is None
+    assert default.identity != SentenceOverride(locale, base="none").identity
+    assert default.base.ref.name == "en-tn-cart@1"
+    assert all(item["layer"] == "model" for item in decisions)
+    assert all(str(item["id"]).startswith("en-tn-cart@1#leaf:") for item in decisions)
+
+
+def test_default_identity_matches_explicit_named_model_for_canonical_locale() -> None:
+    assert SentenceOverride().identity == SentenceOverride(base="en-tn-cart@1").identity
+
+
+def test_non_english_locale_default_is_plain_icu() -> None:
+    text = "M. Dupont est arrivé. Ensuite, il est parti."
+    default = SentenceOverride("fr_FR")
+    plain = SentenceOverride("fr_FR", base="none")
+
+    assert default.identity == plain.identity
+    assert default.decide(text) == plain.decide(text)
+    assert default.spans(text) == plain.spans(text)
+
+
+@pytest.mark.parametrize(
+    ("locale", "base"),
+    [("en_US", "en-tn-cart@1"), ("fr_FR", "none")],
+)
+def test_stream_uses_resolved_locale_default(locale: str, base: str) -> None:
+    text = "Mr. Smith arrived. Next."
+    default = SentenceOverride(locale)
+    explicit = SentenceOverride(locale, base=base)
+
+    default_stream = default.stream()
+    explicit_stream = explicit.stream()
+    streamed = default_stream.feed("Mr. S") + default_stream.feed("mith arrived. Next.")
+    streamed += default_stream.close()
+    explicit_decisions = explicit_stream.feed(text) + explicit_stream.close()
+
+    assert streamed == default.decide(text)
+    assert streamed == explicit_decisions
 
 
 def test_cartlet_model_ref_and_named_base_are_digest_bound() -> None:

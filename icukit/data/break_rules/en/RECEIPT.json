@@ -116,7 +116,7 @@
         "relative_error_reduction_vs_decision_list": 0.14870599882884894,
         "one_sided_95_lower_bound": 0.14704271796754181
       },
-      "criterion": "D1 passed on both detokenizers; dependency recommendation only, owner ruling pending"
+      "criterion": "D1 passed on both detokenizers"
     }
   },
   "license": {

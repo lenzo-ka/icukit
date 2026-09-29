@@ -6880,17 +6880,19 @@ Example:
 
 ## icukit.sentence_override
 
-Experimental whole-text and incremental sentence-break overrides.
+Whole-text and incremental sentence-break overrides.
 
 ICU always supplies the candidate boundaries: this module can retain or
-suppress them, but never add one. ``base="none"`` is the default and is exactly
-ICU's current sentence output. Whole-text and incremental operation share the
-same prefix-aware candidate evaluator.
+suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
+English (language ``en``, with any region or script) and ``"none"`` for every
+other language. Explicit ``base="none"`` is exactly ICU's current sentence
+output. Whole-text and incremental operation share the same prefix-aware
+candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
     >>> [(item["offset"], item["layer"]) for item in override.decide("Hi. Bye.")]
-    [(4, 'icu'), (8, 'icu')]
+    [(4, 'model'), (8, 'model')]
 
 ### class `BreakBoundary`
 
@@ -6957,7 +6959,7 @@ Primary sentence spans plus every boundary left open by a rule.
 
 ### class `CartletModelRef`
 
-A digest- and runtime-bound reference to an experimental cartlet model.
+A digest- and runtime-bound reference to a cartlet model.
 
 Constructing a reference does not import cartlet. The dependency is
 imported only when a :class:`SentenceOverride` uses this reference. Model
@@ -7015,26 +7017,36 @@ An ICU candidate awaiting stable context, a rule feature, or protection.
 
 ### class `SentenceOverride`
 
-Apply opt-in rules or a cartlet model to ICU sentence candidates.
+Apply rules or a cartlet model to ICU sentence candidates.
 
-``en-tn@1`` is a learned, experimental, opt-in English rule base under
+``en-tn@1`` is a learned English rule base under
 CC BY-SA 4.0. Its reported development and test figures measure agreement
 with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
-not accuracy on naturally occurring running text. The unchanged default is
-always ``base="none"``. Its witnesses are synthesized from each rule's
-predicates, which include lexical values mined from the corpus (e.g.
-``lower`` token values); no corpus sentence or row was read or copied.
+not accuracy on naturally occurring running text. Its witnesses are
+synthesized from each rule's predicates, which include lexical values
+mined from the corpus (e.g. ``lower`` token values); no corpus sentence or
+row was read or copied.
 
-``en-tn-cart@1`` is the experimental cartlet counterpart. It is also
-opt-in. Cartlet is an icukit dependency, imported lazily when this path is
-selected.
+The locale-default base is:
+
+================ =================
+Locale language  Default base
+================ =================
+``en``           ``en-tn-cart@1``
+every other      ``none``
+================ =================
+
+Region and script do not change the English default. Pass ``base="none"``
+explicitly for plain ICU sentence boundaries. Cartlet is an icukit
+dependency and is imported lazily only when a cartlet model is selected.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.
-    base: ``"none"`` (the unchanged ICU default), the opt-in learned base
-        ``"en-tn@1"``, the opt-in ``"en-tn-cart@1"`` model, a loaded
-        rule set, a :class:`CartletModelRef`, or a path to a
-        ``break-rules`` JSON file. Unknown names are refused.
+    base: ``None`` selects the locale default in the table above. Otherwise,
+        ``"none"`` selects plain ICU, ``"en-tn@1"`` selects the learned
+        rule base, ``"en-tn-cart@1"`` selects the learned model, and callers
+        may supply a loaded rule set, a :class:`CartletModelRef`, or a path
+        to a ``break-rules`` JSON file. Unknown names are refused.
     before: Ordered caller rules that force a decision before inventories
         and the base.
     after: Ordered caller rules that may override the base decision.
@@ -7043,12 +7055,12 @@ Args:
     cache: Reuse immutable per-token features in incremental evaluation.
 
 Example:
-    >>> SentenceOverride().spans("Hello. Next.") == break_sentence_spans(
+    >>> SentenceOverride(base="none").spans("Hello. Next.") == break_sentence_spans(
     ...     "Hello. Next.", "en_US"
     ... )
     True
 
-#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef" = 'none', before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
+#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 

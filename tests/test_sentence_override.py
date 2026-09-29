@@ -140,7 +140,7 @@ def test_abbreviation_sentence_breaker_fixed_authored_output_unchanged():
 def test_base_none_is_exactly_raw_icu_with_attribution():
     text = "Mr. Smith arrived. Next."
     expected = [span["end"] for span in Breaker("en_US").break_sentence_spans(text)]
-    override = SentenceOverride()
+    override = SentenceOverride(base="none")
     decisions = override.decide(text)
     assert [item["offset"] for item in decisions] == expected
     assert all(
@@ -157,8 +157,8 @@ def test_protected_token_suppresses_inside_candidate_but_hint_needs_rule():
     text = "Mr. Smith arrived."
     token_span = {"start": 0, "end": 9, "type": "name", "scope": "token"}
     hint_span = {**token_span, "scope": "hint"}
-    token = SentenceOverride().decide(text, protected=[token_span])[0]
-    hint = SentenceOverride().decide(text, protected=[hint_span])[0]
+    token = SentenceOverride(base="none").decide(text, protected=[token_span])[0]
+    hint = SentenceOverride(base="none").decide(text, protected=[hint_span])[0]
     assert (token["offset"], token["end"], token["decision"], token["layer"]) == (
         4,
         9,
@@ -180,7 +180,7 @@ def test_protected_token_suppresses_inside_candidate_but_hint_needs_rule():
         no_match=["Hello. Smith arrived."],
     )
     before = _loaded(rule)
-    decision = SentenceOverride(before=[before]).decide(text, protected=[hint_span])[0]
+    decision = SentenceOverride(base="none", before=[before]).decide(text, protected=[hint_span])[0]
     assert (decision["decision"], decision["layer"], decision["id"]) == (
         "no-break",
         "before",
@@ -249,8 +249,13 @@ def test_loader_bounds_beyond_and_real_code_point():
         no_match=["Mr. Alexander"],
     )
     loaded = _loaded(beyond)
-    assert SentenceOverride(before=[loaded]).decide("Mr. A B C D E")[0]["id"] == "test.beyond"
-    assert SentenceOverride(before=[loaded]).decide("Mr. Alexander")[0]["layer"] == "icu"
+    assert (
+        SentenceOverride(base="none", before=[loaded]).decide("Mr. A B C D E")[0]["id"]
+        == "test.beyond"
+    )
+    assert (
+        SentenceOverride(base="none", before=[loaded]).decide("Mr. Alexander")[0]["layer"] == "icu"
+    )
 
     gap = _rule(
         "test.gap",
@@ -261,7 +266,7 @@ def test_loader_bounds_beyond_and_real_code_point():
         match=["Mr. A B"],
         no_match=["Mr. AB B"],
     )
-    in_gap = SentenceOverride(before=[_loaded(gap)]).decide("Mr. A B")[0]
+    in_gap = SentenceOverride(base="none", before=[_loaded(gap)]).decide("Mr. A B")[0]
     assert (in_gap["id"], in_gap["tokens_read"]) == ("test.gap", 1)
 
     end_rule = _rule(
@@ -273,7 +278,7 @@ def test_loader_bounds_beyond_and_real_code_point():
         match=["Done."],
         no_match=["Done. Next."],
     )
-    at_end = SentenceOverride(before=[_loaded(end_rule)]).decide("Done.")[-1]
+    at_end = SentenceOverride(base="none", before=[_loaded(end_rule)]).decide("Done.")[-1]
     assert (at_end["id"], at_end["tokens_read"]) == ("test.end", 1)
 
 
@@ -286,7 +291,7 @@ def test_run_minus_one_stops_at_raw_candidate_inside_unspaced_run():
         match=[{"text": text, "offset": 9, "decision": "no-break"}],
         no_match=['He asked."Then left.'],
     )
-    decision = SentenceOverride(before=[_loaded(truncated)]).decide(text)[0]
+    decision = SentenceOverride(base="none", before=[_loaded(truncated)]).decide(text)[0]
     assert (decision["offset"], decision["id"], decision["tokens_read"]) == (
         9,
         "test.truncated-run",
@@ -330,7 +335,7 @@ def test_run_minus_one_derives_every_feature_from_the_truncated_run():
         match=[{"text": "Mr. Smith arrived.", "offset": 4, "decision": "no-break"}],
         no_match=["Hello. Smith arrived."],
     )
-    decision = SentenceOverride(before=[_loaded(rule)]).decide("Mr. Smith arrived.")[0]
+    decision = SentenceOverride(base="none", before=[_loaded(rule)]).decide("Mr. Smith arrived.")[0]
 
     assert (decision["offset"], decision["decision"], decision["id"]) == (
         4,
@@ -352,7 +357,7 @@ def test_astral_offsets_and_character_predicates_are_code_point_based():
         match=[{"text": text, "offset": 8, "decision": "ambiguous"}],
         no_match=["😀 Hello. Next."],
     )
-    override = SentenceOverride(before=[_loaded(rule)])
+    override = SentenceOverride(base="none", before=[_loaded(rule)])
     decisions = override.decide(text)
     assert [(item["offset"], item["end"]) for item in decisions] == [(8, 7), (13, 13)]
     assert decisions[0]["id"] == "test.astral"
@@ -375,7 +380,10 @@ def test_astral_offsets_and_character_predicates_are_code_point_based():
         match=[{"text": beyond_text, "offset": 6, "decision": "no-break"}],
         no_match=["😀 Mr. Alexander"],
     )
-    assert SentenceOverride(before=[_loaded(beyond)]).decide(beyond_text)[0]["offset"] == 6
+    assert (
+        SentenceOverride(base="none", before=[_loaded(beyond)]).decide(beyond_text)[0]["offset"]
+        == 6
+    )
 
 
 def test_witnesses_execute_and_rule_order_is_observable():
@@ -406,7 +414,7 @@ def test_tokens_read_includes_failed_rules_before_the_match():
         match=["Mr. Smith arrived today."],
         no_match=["Hello. Smith arrived today."],
     )
-    decision = SentenceOverride(before=[_loaded(probing, matching)]).decide(
+    decision = SentenceOverride(base="none", before=[_loaded(probing, matching)]).decide(
         "Mr. Smith arrived today."
     )[0]
     assert (decision["id"], decision["tokens_read"]) == ("match-run", 3)
@@ -453,7 +461,7 @@ def test_loaded_rules_snapshot_mutable_input_and_compile_immutable_operands():
         )
     )
     loaded = load_break_rules(raw)
-    override = SentenceOverride(before=[loaded])
+    override = SentenceOverride(base="none", before=[loaded])
     before = override.decide("Hello. Smith arrived.")
     digest = loaded.digest
 
@@ -609,7 +617,9 @@ def test_ambiguous_rule_deposits_attributed_open_boundary_and_rebuilds_text():
         match=["St. John went."],
         no_match=["Street. John went."],
     )
-    result = SentenceOverride(before=[_loaded(ambiguous)]).segmentations("St. John went.")
+    result = SentenceOverride(base="none", before=[_loaded(ambiguous)]).segmentations(
+        "St. John went."
+    )
     assert result["boundaries"] == [
         {
             "offset": 4,
@@ -626,8 +636,8 @@ def test_ambiguous_rule_deposits_attributed_open_boundary_and_rebuilds_text():
     assert no_break_reading == [text]
     assert break_reading == ["St. ", "John went."]
     assert "".join(no_break_reading) == "".join(break_reading) == text
-    plain = SentenceOverride().segmentations("St. John went.")
-    assert plain["spans"] == SentenceOverride().spans("St. John went.")
+    plain = SentenceOverride(base="none").segmentations("St. John went.")
+    assert plain["spans"] == SentenceOverride(base="none").spans("St. John went.")
     assert plain["boundaries"] == []
 
     abbreviation = AbbreviationSentenceBreaker("en").segmentations("Go N. Then stop.")
@@ -655,7 +665,7 @@ def test_prefix_matches_protected_type_family_only():
         ],
         no_match=["Hello. Smith arrived."],
     )
-    override = SentenceOverride(before=[_loaded(family)])
+    override = SentenceOverride(base="none", before=[_loaded(family)])
     number = [{"start": 0, "end": 9, "type": "number:cardinal", "scope": "hint"}]
     date = [{"start": 0, "end": 9, "type": "date:iso", "scope": "hint"}]
     assert override.decide("Mr. Smith arrived.", protected=number)[0]["id"] == "number-family"
@@ -681,14 +691,14 @@ def test_remaining_flat_predicate_operators(operator, operand, match_text, no_ma
         match=[match_text],
         no_match=[no_match_text],
     )
-    override = SentenceOverride(before=[_loaded(rule)])
+    override = SentenceOverride(base="none", before=[_loaded(rule)])
     assert override.decide(match_text)[0]["id"] == f"test.{operator}"
     assert override.decide(no_match_text)[0]["layer"] == "icu"
 
 
 def test_inventory_acts_at_word_and_sentence_levels_once_and_duplicates_refuse():
     inventory = _inventory()
-    override = SentenceOverride(inventories=[inventory])
+    override = SentenceOverride(base="none", inventories=[inventory])
     decisions = override.decide("I met Dr. Smith today. Next.")
     assert [item["text"] for item in tokens("Dr. Smith", "en_US", inventory=inventory)[:2]] == [
         "Dr.",
@@ -700,10 +710,10 @@ def test_inventory_acts_at_word_and_sentence_levels_once_and_duplicates_refuse()
 
     other = _inventory()
     with pytest.raises(BreakRuleLoadError) as caught:
-        SentenceOverride(inventories=[inventory, other])
+        SentenceOverride(base="none", inventories=[inventory, other])
     assert "DUPLICATE_RULE_ID" in caught.value.reason_codes
     with pytest.raises(BreakRuleLoadError):
-        SentenceOverride(inventories=[inventory, inventory])
+        SentenceOverride(base="none", inventories=[inventory, inventory])
 
 
 def test_word_only_and_sentence_only_inventory_controls_are_independent():
@@ -715,7 +725,7 @@ def test_word_only_and_sentence_only_inventory_controls_are_independent():
         "Dr.",
         "Smith",
     ]
-    word_decision = SentenceOverride(inventories=[word_only]).decide(text)[0]
+    word_decision = SentenceOverride(base="none", inventories=[word_only]).decide(text)[0]
     assert (word_decision["decision"], word_decision["layer"]) == ("break", "icu")
 
     assert [item["text"] for item in tokens(text, "en_US", inventory=sentence_only)[:3]] == [
@@ -723,7 +733,7 @@ def test_word_only_and_sentence_only_inventory_controls_are_independent():
         ".",
         "Smith",
     ]
-    sentence_decision = SentenceOverride(inventories=[sentence_only]).decide(text)[0]
+    sentence_decision = SentenceOverride(base="none", inventories=[sentence_only]).decide(text)[0]
     assert (sentence_decision["decision"], sentence_decision["layer"]) == (
         "no-break",
         "exceptions",
@@ -734,17 +744,17 @@ def test_duplicate_ids_across_rule_layers_refuse():
     first = _loaded(_rule("duplicate"), set_id="tests/one")
     second = _loaded(_rule("duplicate"), set_id="tests/two")
     with pytest.raises(BreakRuleLoadError) as caught:
-        SentenceOverride(before=[first], after=[second])
+        SentenceOverride(base="none", before=[first], after=[second])
     assert "DUPLICATE_RULE_ID" in caught.value.reason_codes
 
     same_name = _loaded(_rule("same-object"), set_id="tests/same")
     with pytest.raises(BreakRuleLoadError):
-        SentenceOverride(before=[same_name], after=[same_name])
+        SentenceOverride(base="none", before=[same_name], after=[same_name])
 
     first_same_id = _loaded(_rule("same-set-rule"), set_id="tests/same-set")
     second_same_id = _loaded(_rule("same-set-rule"), set_id="tests/same-set")
     with pytest.raises(BreakRuleLoadError):
-        SentenceOverride(before=[first_same_id], after=[second_same_id])
+        SentenceOverride(base="none", before=[first_same_id], after=[second_same_id])
 
 
 def test_token_profile_golden_covers_authored_tokenization_policy():
@@ -783,9 +793,9 @@ def test_path_base_and_stream_factory(tmp_path: Path):
     assert override.stream().lookahead == override.lookahead
 
 
-def test_named_en_tn_base_is_opt_in_and_attributes_rules():
+def test_named_en_tn_base_attributes_rules():
     text = "alpha a a a\n(1111). continues"
-    plain = SentenceOverride().decide(text)[0]
+    plain = SentenceOverride(base="none").decide(text)[0]
     learned = SentenceOverride(base="en-tn@1").decide(text)[0]
     assert (plain["layer"], plain["id"], plain["decision"]) == ("icu", None, "break")
     assert (learned["layer"], learned["id"], learned["decision"]) == (

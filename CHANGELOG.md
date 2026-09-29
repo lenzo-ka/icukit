@@ -5,14 +5,11 @@
 ### Added
 
 - `CartletModelRef` and the named `en-tn-cart@1` sentence-break base add an
-  experimental, opt-in cartlet model path. The shipped CC BY-SA 4.0 model is
+  English cartlet model path. The shipped CC BY-SA 4.0 model is
   digest- and runtime-identity-bound and uses a raising lazy feature vector for
-  incremental decisions. Cartlet 0.7 or later is now a required dependency;
-  `base="none"` remains unchanged. CI cannot pass until the owner publishes
-  cartlet 0.7.0 to PyPI.
-- Provisionally, under owner choices D2 and D3, the learned English sentence
-  rule base `en-tn@1` ships as an experimental, opt-in CC BY-SA 4.0 artifact;
-  `base="none"` remains the default. The ordered 200-rule artifact is derived
+  incremental decisions. Cartlet 0.7 or later is now a required dependency.
+- The learned English sentence rule base `en-tn@1` ships as a CC BY-SA 4.0
+  artifact. The ordered 200-rule artifact is derived
   from the Google TN English corpus, carries full license, attribution, and
   measurement receipts, and loads only when its ICU, Unicode, and empty-
   inventory token-profile identity matches. Its frozen test-pool F1 of
@@ -44,8 +41,7 @@
   spans, exception inventories, per-candidate attribution, and lattice output.
   Rule artifacts declare and verify their ICU, Unicode, and explicitly
   versioned tokenizer-profile identity and run candidate- and decision-aware
-  authored witnesses when loaded. The default remains `base="none"`, so
-  existing ICU sentence output is unchanged.
+  authored witnesses when loaded.
 - Experimental `char-classes` and `shape-refinement` locale-material kinds add
   namespaced character classes and extended shape symbols at runtime. They are
   witness-checked, canonically digested, explicitly passed with `material=`, and
@@ -171,6 +167,13 @@
   plurals therefore retain complete surfaces and code-point capture offsets.
 
 ### Changed
+
+- **Behavior change:** `SentenceOverride` now resolves an omitted `base` to
+  `"en-tn-cart@1"` for English locales (language `en`, with any region or
+  script), so its English sentence boundaries may differ from plain ICU.
+  Pass `base="none"` to preserve the former plain-ICU behavior. Every other
+  locale language still defaults to plain ICU; `Breaker`,
+  `AbbreviationSentenceBreaker`, and the `ik break` CLI are unchanged.
 
 - `detector_key` now returns five components. The fifth is the material content digest,
   or `None` for every reader built from ICU or curated data, so readers of one type from

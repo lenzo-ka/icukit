@@ -69,7 +69,7 @@
     },
     {
       "path": "break_rules/en/RECEIPT.json",
-      "sha256": "b30e1ebb516732ae15c12008adca20d59183df20ac7762f29016061a1c3cfe7d",
+      "sha256": "881261b28da0cfcdb911b01f959b1491e8b85b83169dce3595837e07dcdd19a8",
       "source": "measurement receipt for google/tn-en_with_types rule derivation",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
