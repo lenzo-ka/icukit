@@ -170,6 +170,25 @@ else:
     print(material.digest, material.rulesets)
 ```
 
+## Using material
+
+Pass loaded material explicitly when building a gang. Applicable material readers are
+added beside ICU's readers; they do not replace them.
+
+```python
+from icukit.engine import generated_detectors
+from icukit.material import load_locale_material
+
+m = load_locale_material("qaa-spellout.json")
+detectors = generated_detectors("qaa", material=[m])
+```
+
+The command-line equivalent accepts one or more `--material` paths:
+
+```console
+ik detect --locale qaa --material qaa-spellout.json -t 'one hundred forty-five goats'
+```
+
 ## Validation and identity
 
 Loading is transactional. Duplicate JSON keys and non-finite numbers are refused.

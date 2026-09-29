@@ -70,6 +70,7 @@ __all__ = [
     "FlexibleScientificDetector",
     "FlexibleSpelloutDetector",
     "MaterialSpelloutDetector",
+    "MaterialLoneSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
     "LetterNameDetector",
@@ -4823,7 +4824,8 @@ class MaterialSpelloutDetector(FlexibleSpelloutDetector):
     def __init__(self, locale: str, material, *, ruleset: str | None = None) -> None:
         from .material import locale_descends_from
 
-        if not locale_descends_from(locale, material.locale):
+        base_locale = icu.Locale(locale).getBaseName()
+        if not locale_descends_from(base_locale, material.locale):
             raise ValueError(
                 f"material for {material.locale!r} does not apply to locale {locale!r}"
             )
@@ -4868,6 +4870,28 @@ class FlexibleLoneSpelloutDetector(FlexibleSpelloutDetector):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return the lone unit words the spell-out reader refuses, in source order."""
+        return [
+            detection
+            for detection in self._scan(text, guard=False)
+            if detection["text"].casefold() in self._ambiguous_units
+            and not any(character in self._connectors for character in detection["text"])
+        ]
+
+
+class MaterialLoneSpelloutDetector(MaterialSpelloutDetector):
+    """Recognize lone unit words with a validated material's spell-out rules."""
+
+    type = "number:spellout-lone"
+
+    def __init__(self, locale: str, material, *, ruleset: str | None = None) -> None:
+        super().__init__(locale, material, ruleset=ruleset)
+        chosen = self.__dict__.get("type", FlexibleSpelloutDetector.type)
+        self.type = MaterialLoneSpelloutDetector.type + chosen.removeprefix(
+            FlexibleSpelloutDetector.type
+        )
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return the lone unit words the default material reader refuses."""
         return [
             detection
             for detection in self._scan(text, guard=False)

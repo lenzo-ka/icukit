@@ -29,6 +29,7 @@ from functools import cache
 import icu
 
 from .detectors import DateDetector, Detector, DetectorSet, NumberDetector
+from .material import LocaleMaterial, locale_descends_from
 from .recognize import (
     AlphanumericRunsDetector,
     FlexibleBareHourDetector,
@@ -57,6 +58,8 @@ from .recognize import (
     FlexibleTimeDetector,
     FlexibleWeekdayNameDetector,
     LetterNameDetector,
+    MaterialLoneSpelloutDetector,
+    MaterialSpelloutDetector,
     PluralNumeralDetector,
     SingleLetterWordDetector,
     _iso_currency_codes,
@@ -641,10 +644,61 @@ _FAMILY_PROBES = (
 )
 
 
+_MATERIAL_KIND_FAMILIES = {
+    "rbnf-spellout": {
+        SPELLOUT_NUMBER_FAMILY: MaterialSpelloutDetector,
+        LONE_SPELLOUT_NUMBER_FAMILY: MaterialLoneSpelloutDetector,
+    }
+}
+
+
+def _material_readers(
+    locale: str, families: tuple[Family, ...], materials: tuple[LocaleMaterial, ...]
+) -> tuple[list[Detector], list[SkippedSpec]]:
+    """Build applicable material readers for requested families, reporting refusals."""
+    readers: list[Detector] = []
+    skipped: list[SkippedSpec] = []
+    base_locale = icu.Locale(locale).getBaseName()
+    for item in materials:
+        extensions = _MATERIAL_KIND_FAMILIES.get(item.kind)
+        if extensions is None:
+            skipped.append(
+                SkippedSpec(
+                    SPELLOUT_NUMBER_FAMILY.name,
+                    item.digest,
+                    f"material kind {item.kind!r} does not extend a detector family",
+                )
+            )
+            continue
+        if not locale_descends_from(base_locale, item.locale):
+            skipped.append(
+                SkippedSpec(
+                    SPELLOUT_NUMBER_FAMILY.name,
+                    item.digest,
+                    f"material locale {item.locale!r} does not apply to "
+                    f"gang locale {base_locale!r}",
+                )
+            )
+            continue
+        for family, build in extensions.items():
+            if family not in families:
+                continue
+            readers.extend(build(locale, item, ruleset=ruleset) for ruleset in item.rulesets)
+    return readers, skipped
+
+
 def generated_detectors_report(
-    locale: str, families: Iterable[Family] = DEFAULT_FAMILIES
+    locale: str,
+    families: Iterable[Family] = DEFAULT_FAMILIES,
+    *,
+    material: Iterable[LocaleMaterial] = (),
 ) -> GenerationReport:
     """Derive detectors for ``locale`` and report specs that could not be inverted."""
+    families = tuple(families)
+    materials = tuple(material)
+    for item in materials:
+        if not isinstance(item, LocaleMaterial):
+            raise TypeError(f"material must contain LocaleMaterial, got {type(item).__name__}")
     detectors = DetectorSet(())
     skipped: list[SkippedSpec] = []
     for family in families:
@@ -665,12 +719,18 @@ def generated_detectors_report(
                     else "family returned no inverter"
                 )
             skipped.append(SkippedSpec(family.name, spec, reason))
-    return GenerationReport(detectors, tuple(skipped))
+    material_readers, material_skipped = _material_readers(locale, families, materials)
+    return GenerationReport(detectors.with_(*material_readers), (*skipped, *material_skipped))
 
 
-def generated_detectors(locale: str, families: Iterable[Family] = DEFAULT_FAMILIES) -> DetectorSet:
+def generated_detectors(
+    locale: str,
+    families: Iterable[Family] = DEFAULT_FAMILIES,
+    *,
+    material: Iterable[LocaleMaterial] = (),
+) -> DetectorSet:
     """Derive all invertible detectors introspectively registered for ``locale``."""
-    return generated_detectors_report(locale, families).detectors
+    return generated_detectors_report(locale, families, material=material).detectors
 
 
 # --------------------------------------------------------------------------- flexible set
@@ -1018,6 +1078,7 @@ def flexible_detectors_report(
     currencies: Iterable[str] | None = None,
     units: Iterable[str] | None = None,
     guarded: bool = False,
+    material: Iterable[LocaleMaterial] = (),
 ) -> GenerationReport:
     """The flexible readers for ``locale``, and every spec that could not be built.
 
@@ -1030,7 +1091,7 @@ def flexible_detectors_report(
         None if units is None else tuple(units),
         guarded,
     )
-    report = generated_detectors_report(locale, families)
+    report = generated_detectors_report(locale, families, material=material)
     readers, skipped = _range_readers(locale, report.detectors, selection)
     return GenerationReport(report.detectors.with_(*readers), (*report.skipped, *skipped))
 
@@ -1042,6 +1103,7 @@ def flexible_detectors(
     currencies: Iterable[str] | None = None,
     units: Iterable[str] | None = None,
     guarded: bool = False,
+    material: Iterable[LocaleMaterial] = (),
 ) -> DetectorSet:
     """A gang of every flexible (recall) reader of :mod:`icukit.recognize` for ``locale``.
 
@@ -1090,7 +1152,12 @@ def flexible_detectors(
     (about 110 bytes per character each for en_US).
     """
     return flexible_detectors_report(
-        locale, locales=locales, currencies=currencies, units=units, guarded=guarded
+        locale,
+        locales=locales,
+        currencies=currencies,
+        units=units,
+        guarded=guarded,
+        material=material,
     ).detectors
 
 

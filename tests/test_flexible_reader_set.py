@@ -44,7 +44,7 @@ GUARDED_CLASSES = {
 }
 
 # Readers that require explicit caller data never join the default flexible gang.
-OPT_IN_CLASSES = {"MaterialSpelloutDetector"}
+OPT_IN_CLASSES = {"MaterialLoneSpelloutDetector", "MaterialSpelloutDetector"}
 
 # The measure range readers' types, which name no unit.
 RANGE_TYPES = {"measure:range", "measure:approximately"}

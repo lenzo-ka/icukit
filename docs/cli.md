@@ -706,6 +706,7 @@ Examples:
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `--material`: Add validated locale material from PATH (repeatable) (default: `[]`)
 - `--currency`: Add an ISO 4217 currency, in either case (with --flexible, the flexible currency readers read only the currencies given) (default: `[]`)
 - `--measure`: Add an ICU measure unit, single or mixed (with --flexible, the measure readers read only the units given) (default: `[]`)
 - `--flexible`: Add the flexible readers (seconds to build) (default: `False`)
