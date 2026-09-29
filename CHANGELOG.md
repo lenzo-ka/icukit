@@ -14,6 +14,30 @@
   sdist. The package license expression
   now includes the Unicode License v3 term that covers its bundled CLDR and UCD
   snapshots.
+- `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
+  default selection of generated and flexible reader specifications (default locales,
+  currencies, and units, plus guarded families when requested) with its ICU,
+  curated-table, or user material source, including ICU spell-out fallback and
+  reported skip reasons.
+  `available_languages` lists the ICU languages covered. `ik languages` exposes full
+  locale rows or a fast all-language summary, and the generated `docs/languages.md`
+  records the default-family summary for the build's ICU version.
+- `generated_detectors`, `generated_detectors_report`, `flexible_detectors`, and
+  `flexible_detectors_report` accept `material=` and add applicable validated locale
+  material readers beside ICU's readers. `ik detect --material PATH` loads the same
+  material on the command line and may be repeated.
+- `icukit.material` adds the draft locale-material format for application-supplied
+  ICU rules. `load_locale_material` accepts a mapping or UTF-8 JSON path and returns
+  an immutable `LocaleMaterial`, or raises `MaterialLoadError` carrying every
+  `MaterialRefusal`. Its first kind, `rbnf-spellout`, compiles ICU RBNF spell-out
+  rules and refuses the whole file unless its witnesses read and format at their
+  declared extents and its near misses do not read whole. A canonical JSON content
+  digest identifies the material independently of JSON whitespace or key order.
+  `MaterialSpelloutDetector` reads the validated rules, and its
+  `MaterialSpelloutFormatSpec` serializes as `material_spellout_format_spec` with
+  `material_digest`. The format is a draft and not yet stable; icukit ships no locale
+  material. This entry does not join material readers to generated or flexible gangs;
+  that integration comes separately.
 - Every formal name alias Unicode defines, of all five types in `NameAliases.txt`:
   `correction`, `control`, `alternate`, `figment`, and `abbreviation`. ICU carries the
   corrections alone, so `BEL`, `ALERT`, `LINE FEED`, `NBSP`, `BYTE ORDER MARK`, and `ZWJ`
@@ -99,6 +123,10 @@
   plurals therefore retain complete surfaces and code-point capture offsets.
 
 ### Changed
+
+- `detector_key` now returns five components. The fifth is the material content digest,
+  or `None` for every reader built from ICU or curated data, so readers of one type from
+  different materials coexist in a gang.
 
 - Generated date detectors also include fully zero-padded complete numeric-date
   patterns where ICU's pattern generator makes them distinct from its enumerated

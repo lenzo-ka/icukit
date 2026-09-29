@@ -7,6 +7,9 @@ Version: 0.8.0
 Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 
 - [`__version__`](#root-api-index) — constant, `icukit`
+- [`AvailabilityRow`](#icukitavailability) — class, `icukit.availability`
+- [`availability`](#icukitavailability) — function, `icukit.availability`
+- [`available_languages`](#icukitavailability) — function, `icukit.availability`
 - [`FlexibleCompactDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleCurrencyDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleCurrencyNameDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -293,6 +296,10 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`ExceptionLoadError`](#icukiterrors) — class, `icukit.errors`
 - [`RuleRefusal`](#icukiterrors) — class, `icukit.errors`
 - [`RuleLoadError`](#icukiterrors) — class, `icukit.errors`
+- [`LocaleMaterial`](#icukitmaterial) — class, `icukit.material`
+- [`MaterialLoadError`](#icukitmaterial) — class, `icukit.material`
+- [`MaterialRefusal`](#icukitmaterial) — class, `icukit.material`
+- [`load_locale_material`](#icukitmaterial) — function, `icukit.material`
 - [`are_confusable`](#icukitspoof) — function, `icukit.spoof`
 - [`get_confusable_type`](#icukitspoof) — function, `icukit.spoof`
 - [`get_skeleton`](#icukitspoof) — function, `icukit.spoof`
@@ -820,6 +827,35 @@ Example:
     ['A', 'B', 'C', 'D', 'E']
     >>> get_bucket_labels("ja_JP")[:5]
     ['あ', 'か', 'さ', 'た', 'な']
+
+## icukit.availability
+
+Report reader availability for a locale and identify each usable source.
+
+### class `AvailabilityRow`
+
+One enumerated reader specification and the source that contributes to it.
+
+For a ``user`` row, ``provenance`` is the material's own
+``provenance.source``: verbatim user text that icukit does not interpret. icukit
+computes and reports no measured shares.
+
+#### `AvailabilityRow(locale: 'str', family: 'str', spec: 'str', type: 'str | None', source: 'str | None', served_by: 'str | None', material: 'str | None', provenance: 'str | None', reason: 'str | None') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `availability(locale: 'str', *, material: 'Iterable[LocaleMaterial]' = (), guarded: 'bool' = False) -> 'tuple[AvailabilityRow, ...]'`
+
+Report the default generated and flexible selections for ``locale``.
+
+Flexible rows use the default locales, currencies, and units; ``guarded=True``
+includes the guarded families. ICU/CLDR, shipped curated tables, and explicitly
+supplied user material are separate rows. A row with no source means there is no
+usable reader: it was not built, or it was built with nothing to read.
+
+### `available_languages() -> 'tuple[str, ...]'`
+
+Return the distinct ICU language identifiers covered by availability reports.
 
 ## icukit.bidi
 
@@ -2398,9 +2434,10 @@ result :func:`detect` would give). A gang is a value -- there is no mutable glob
 registry; selection and grouping are expressed by composing gangs with
 :meth:`with_` / :meth:`without`.
 
-A member is identified by its type, its reader class, its locale, and the locales it
-reads (see :func:`detector_key`), so an en_US and an en_GB detector of one type share
-a gang, as do a strict and a flexible reader of one type.
+A member is identified by its type, its reader class, its locale, the locales it
+reads, and any user-material content digest (see :func:`detector_key`), so an en_US
+and an en_GB detector of one type share a gang, as do a strict and a flexible reader
+of one type, while same-type readers from different materials coexist.
 
 #### `DetectorSet(detectors: 'tuple[Detector, ...]') -> None`
 
@@ -2589,9 +2626,9 @@ Each detector runs its own scan, so a gang's result equals the merge of running 
 members alone. A single shared scan would be faster; any such scan must give this
 same merge.
 
-### `detector_key(detector: 'Detector') -> 'tuple[str, str, str | None, tuple[str, ...] | None]'`
+### `detector_key(detector: 'Detector') -> 'tuple[str, str, str | None, tuple[str, ...] | None, str | None]'`
 
-A detector's identity in a gang: its type, reader class, locale, and the locales it reads.
+A detector's identity: type, class, locale, read locales, and material digest.
 
 The locales are the ones the reader actually reads: a reader with no choice of
 locales reads its own locale alone, and a language-wide reader left at its default
@@ -2599,7 +2636,9 @@ locales reads its own locale alone, and a language-wide reader left at its defau
 readers share a key only when they are the same kind of reader reading the same
 locales -- a strict currency reader and a flexible one of the same type and locale
 are two members, not one replacing the other -- while a reader built twice, or once
-with ``locales=None`` and once with every locale named, is one member.
+with ``locales=None`` and once with every locale named, is one member. The digest is
+``None`` for ICU and curated readers; material readers carry their content digest so
+same-type readers from distinct materials coexist.
 
 ### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = (), flexible: 'bool' = False) -> 'DetectorSet'`
 
@@ -3189,7 +3228,7 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'DetectorSet'`
+### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 A gang of every flexible (recall) reader of :mod:`icukit.recognize` for ``locale``.
 
@@ -3237,17 +3276,17 @@ of the generated set's, since the currency and measure readers share the numbers
 they read within a text. The shared readings are kept for the 16 texts read last
 (about 110 bytes per character each for en_US).
 
-### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'GenerationReport'`
+### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 The flexible readers for ``locale``, and every spec that could not be built.
 
 See :func:`flexible_detectors`.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -4417,6 +4456,52 @@ Example:
     'Hans'
     >>> info['region']
     'CN'
+
+## icukit.material
+
+Load witness-checked locale material supplied by an application at runtime.
+
+### Constants and type aliases
+
+#### `LABEL_KEYS` (constant)
+
+`frozenset({'class', 'end', 'scheme', 'start', 'text'})`
+
+#### `REQUIRED_WITNESS_KEYS` (constant)
+
+`frozenset({'id', 'locale', 'text'})`
+
+#### `VALUE_KEYS` (constant)
+
+`frozenset({'end', 'start', 'text', 'type', 'value'})`
+
+#### `WITNESS_KEYS` (constant)
+
+`frozenset({'id', 'labels', 'locale', 'text', 'text_sha256', 'x-icukit'})`
+
+### class `LocaleMaterial`
+
+Immutable, validated locale material identified by its content digest.
+
+#### `LocaleMaterial(kind: 'str', locale: 'str', digest: 'str', rules: 'str', rulesets: 'tuple[str, ...]', provenance: 'Mapping[str, str]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `MaterialLoadError`
+
+Every refusal found while transactionally loading locale material.
+
+#### `MaterialLoadError(refusals: 'list[MaterialRefusal] | tuple[MaterialRefusal, ...]') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `MaterialRefusal`
+
+One reason a locale material file was refused.
+
+### `load_locale_material(material: 'Mapping[str, object] | str | os.PathLike[str]', /) -> 'LocaleMaterial'`
+
+Parse, validate, witness-check, and atomically return locale material.
 
 ## icukit.measure
 
@@ -5671,6 +5756,30 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return isolated letter-name candidates in source order.
+
+### class `MaterialLoneSpelloutDetector`
+
+Recognize lone unit words with a validated material's spell-out rules.
+
+#### `MaterialLoneSpelloutDetector(locale: 'str', material, *, ruleset: 'str | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return the lone unit words the default material reader refuses.
+
+### class `MaterialSpelloutDetector`
+
+Recognize spell-out rules supplied by a validated locale material file.
+
+#### `MaterialSpelloutDetector(locale: 'str', material, *, ruleset: 'str | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return greedy, non-overlapping spelled-out cardinals in source order.
 
 ### class `PluralNumeralDetector`
 

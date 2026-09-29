@@ -67,6 +67,7 @@ from .alpha_index import (
     get_bucket_for_name,
     get_bucket_labels,
 )
+from .availability import AvailabilityRow, availability, available_languages
 from .bidi import (
     DIRECTION_LTR,
     DIRECTION_MIXED,
@@ -299,6 +300,7 @@ from .locale import (
     minimize_subtags,
     parse_locale,
 )
+from .material import LocaleMaterial, MaterialLoadError, MaterialRefusal, load_locale_material
 from .measure import (
     WIDTH_NARROW,
     WIDTH_SHORT,
@@ -449,6 +451,9 @@ from .unicode import (
 
 __all__ = [
     "__version__",
+    "AvailabilityRow",
+    "availability",
+    "available_languages",
     "FlexibleCompactDetector",
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
@@ -755,6 +760,10 @@ __all__ = [
     "ExceptionLoadError",
     "RuleRefusal",
     "RuleLoadError",
+    "LocaleMaterial",
+    "MaterialLoadError",
+    "MaterialRefusal",
+    "load_locale_material",
     # Spoof/Confusables
     "are_confusable",
     "get_confusable_type",

@@ -275,6 +275,13 @@ class SpelloutFormatSpec:
 
 
 @dataclass(frozen=True)
+class MaterialSpelloutFormatSpec(SpelloutFormatSpec):
+    """A user-material spell-out recipe, identified by its content digest."""
+
+    material_digest: str
+
+
+@dataclass(frozen=True)
 class MeasureFormatSpec:
     """The locale, canonical ICU unit, and width used for a measure candidate."""
 
@@ -1279,9 +1286,10 @@ class DetectorSet:
     registry; selection and grouping are expressed by composing gangs with
     :meth:`with_` / :meth:`without`.
 
-    A member is identified by its type, its reader class, its locale, and the locales it
-    reads (see :func:`detector_key`), so an en_US and an en_GB detector of one type share
-    a gang, as do a strict and a flexible reader of one type.
+    A member is identified by its type, its reader class, its locale, the locales it
+    reads, and any user-material content digest (see :func:`detector_key`), so an en_US
+    and an en_GB detector of one type share a gang, as do a strict and a flexible reader
+    of one type, while same-type readers from different materials coexist.
     """
 
     detectors: tuple[Detector, ...]
@@ -1322,8 +1330,8 @@ class DetectorSet:
 
 def detector_key(
     detector: Detector,
-) -> tuple[str, str, str | None, tuple[str, ...] | None]:
-    """A detector's identity in a gang: its type, reader class, locale, and the locales it reads.
+) -> tuple[str, str, str | None, tuple[str, ...] | None, str | None]:
+    """A detector's identity: type, class, locale, read locales, and material digest.
 
     The locales are the ones the reader actually reads: a reader with no choice of
     locales reads its own locale alone, and a language-wide reader left at its default
@@ -1331,7 +1339,9 @@ def detector_key(
     readers share a key only when they are the same kind of reader reading the same
     locales -- a strict currency reader and a flexible one of the same type and locale
     are two members, not one replacing the other -- while a reader built twice, or once
-    with ``locales=None`` and once with every locale named, is one member.
+    with ``locales=None`` and once with every locale named, is one member. The digest is
+    ``None`` for ICU and curated readers; material readers carry their content digest so
+    same-type readers from distinct materials coexist.
     """
     reader = type(detector)
     return (
@@ -1339,6 +1349,7 @@ def detector_key(
         f"{reader.__module__}.{reader.__qualname__}",
         getattr(detector, "locale", None),
         _read_locales(detector),
+        getattr(detector, "material_digest", None),
     )
 
 

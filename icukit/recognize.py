@@ -28,6 +28,7 @@ from .detectors import (
     DateIntervalSpec,
     DateIntervalValue,
     DateTimeValue,
+    MaterialSpelloutFormatSpec,
     MeasureFormatSpec,
     MeasureValue,
     NumberFormatSpec,
@@ -68,6 +69,8 @@ __all__ = [
     "FlexibleRelativeDateDetector",
     "FlexibleScientificDetector",
     "FlexibleSpelloutDetector",
+    "MaterialSpelloutDetector",
+    "MaterialLoneSpelloutDetector",
     "FlexibleTimeDetector",
     "FlexibleTextDateDetector",
     "LetterNameDetector",
@@ -230,6 +233,11 @@ class LetterNameDetector:
         self._names = _LETTER_NAMES.get(icu_locale.getLanguage())
         self._z_name = "zed" if icu_locale.getCountry() not in {"", "US"} else "zee"
 
+    @property
+    def has_names(self) -> bool:
+        """Whether the locale's language has a curated letter-name table."""
+        return self._names is not None
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Return isolated letter-name candidates in source order."""
         if self._names is None:
@@ -378,6 +386,11 @@ class PluralNumeralDetector:
         self.locale = locale
         self._suffixes = _PLURAL_NUMERAL_SUFFIXES.get(icu.Locale(locale).getLanguage(), ())
 
+    @property
+    def has_suffixes(self) -> bool:
+        """Whether the locale's language has a curated plural-suffix table."""
+        return bool(self._suffixes)
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Return plural-numeral readings in source order."""
         if not self._suffixes:
@@ -443,6 +456,11 @@ class SingleLetterWordDetector:
     def __init__(self, locale: str) -> None:
         self.locale = locale
         self._words = _SINGLE_LETTER_WORDS.get(icu.Locale(locale).getLanguage(), frozenset())
+
+    @property
+    def has_words(self) -> bool:
+        """Whether the locale's language has a curated single-letter-word table."""
+        return bool(self._words)
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return isolated one-letter word candidates in source order."""
@@ -4606,15 +4624,24 @@ class FlexibleSpelloutDetector:
     group = "number"
     type = "number:spellout"
 
+    def _formatter_and_ruleset(self, locale: str) -> tuple[icu.RuleBasedNumberFormat, str]:
+        return _spellout_formatter_and_ruleset(locale)
+
+    def _available_rulesets(self, locale: str) -> tuple[str, ...]:
+        return _spellout_rulesets(locale)
+
+    def _format_spec(self) -> SpelloutFormatSpec:
+        return SpelloutFormatSpec(self.locale, self._ruleset)
+
     def __init__(self, locale: str, *, ruleset: str | None = None) -> None:
         self.locale = locale
-        self._rbnf, self._ruleset = _spellout_formatter_and_ruleset(locale)
+        self._rbnf, self._ruleset = self._formatter_and_ruleset(locale)
         if ruleset is not None and ruleset != self._ruleset:
-            if ruleset not in _spellout_rulesets(locale):
+            if ruleset not in self._available_rulesets(locale):
                 raise ValueError(f"no spellout rule set {ruleset!r} in {locale!r}")
             self._ruleset = ruleset
             self.type = "number:spellout:" + ruleset.lstrip("%").removeprefix("spellout-")
-        self._spec = SpelloutFormatSpec(locale, self._ruleset)
+        self._spec = self._format_spec()
         values = (
             *range(1001),
             *(
@@ -4810,6 +4837,33 @@ class FlexibleSpelloutDetector:
         return _detect_flexible(text, self.locale, self.type, self._spec, match)
 
 
+class MaterialSpelloutDetector(FlexibleSpelloutDetector):
+    """Recognize spell-out rules supplied by a validated locale material file."""
+
+    def __init__(self, locale: str, material, *, ruleset: str | None = None) -> None:
+        from .material import _require_loaded, locale_descends_from
+
+        material = _require_loaded(material)
+        base_locale = icu.Locale(locale).getBaseName()
+        if not locale_descends_from(base_locale, material.locale):
+            raise ValueError(
+                f"material for {material.locale!r} does not apply to locale {locale!r}"
+            )
+        self.material = material
+        self.material_digest = material.digest
+        super().__init__(locale, ruleset=ruleset)
+
+    def _formatter_and_ruleset(self, locale: str) -> tuple[icu.RuleBasedNumberFormat, str]:
+        formatter = icu.RuleBasedNumberFormat(self.material.rules, icu.Locale(locale))
+        return formatter, self.material.rulesets[0]
+
+    def _available_rulesets(self, locale: str) -> tuple[str, ...]:
+        return self.material.rulesets
+
+    def _format_spec(self) -> MaterialSpelloutFormatSpec:
+        return MaterialSpelloutFormatSpec(self.locale, self._ruleset, self.material_digest)
+
+
 class FlexibleLoneSpelloutDetector(FlexibleSpelloutDetector):
     """Recognize the lone spelled-out unit words the spell-out reader refuses.
 
@@ -4836,6 +4890,28 @@ class FlexibleLoneSpelloutDetector(FlexibleSpelloutDetector):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return the lone unit words the spell-out reader refuses, in source order."""
+        return [
+            detection
+            for detection in self._scan(text, guard=False)
+            if detection["text"].casefold() in self._ambiguous_units
+            and not any(character in self._connectors for character in detection["text"])
+        ]
+
+
+class MaterialLoneSpelloutDetector(MaterialSpelloutDetector):
+    """Recognize lone unit words with a validated material's spell-out rules."""
+
+    type = "number:spellout-lone"
+
+    def __init__(self, locale: str, material, *, ruleset: str | None = None) -> None:
+        super().__init__(locale, material, ruleset=ruleset)
+        chosen = self.__dict__.get("type", FlexibleSpelloutDetector.type)
+        self.type = MaterialLoneSpelloutDetector.type + chosen.removeprefix(
+            FlexibleSpelloutDetector.type
+        )
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return the lone unit words the default material reader refuses."""
         return [
             detection
             for detection in self._scan(text, guard=False)
