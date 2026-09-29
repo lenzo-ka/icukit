@@ -321,7 +321,7 @@ def _mutation_variants(text: str, offset: int):
 
 def _predicate_truths(rule: _CompiledBreakRule, text: str, offset: int) -> tuple[bool, ...] | None:
     toks = tokens(text, "en_US")
-    if offset not in {span["end"] for span in break_sentence_spans(text, "en_US")}:
+    if offset not in {span["end"] for span in break_sentence_spans(text, "en_US", base="none")}:
         return None
     if any(token["start"] < offset < token["end"] for token in toks):
         return None
@@ -340,7 +340,7 @@ def _predicate_truths(rule: _CompiledBreakRule, text: str, offset: int) -> tuple
 
 def _target_matches_anywhere(rule: _CompiledBreakRule, text: str) -> bool:
     toks = tokens(text, "en_US")
-    for span in break_sentence_spans(text, "en_US"):
+    for span in break_sentence_spans(text, "en_US", base="none"):
         offset = span["end"]
         if any(token["start"] < offset < token["end"] for token in toks):
             continue
@@ -378,7 +378,7 @@ def _find_witnesses(rules: list[dict[str, Any]]) -> dict[str, dict[str, object]]
     def try_text(text: str, target_id: str) -> None:
         target_index, target = compiled_by_id[target_id]
         toks = tokens(text, "en_US")
-        offsets = [span["end"] for span in break_sentence_spans(text, "en_US")]
+        offsets = [span["end"] for span in break_sentence_spans(text, "en_US", base="none")]
         for offset in offsets:
             if offset == len(text) or any(token["start"] < offset < token["end"] for token in toks):
                 continue

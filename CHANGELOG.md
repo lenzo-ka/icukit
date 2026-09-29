@@ -168,13 +168,14 @@
 
 ### Changed
 
-- **Behavior change:** `SentenceOverride` now resolves an omitted `base` to
-  `"en-tn-cart@1"` for English locales (language `en`, with any region or
-  script except the `POSIX` variant), so its English sentence boundaries may
-  differ from plain ICU. The `POSIX` variant retains plain ICU because its word
-  tokens differ from the model profile. Pass `base="none"` to preserve the
-  former plain-ICU behavior. Every other locale language still defaults to plain ICU; `Breaker`,
-  `AbbreviationSentenceBreaker`, and the `ik break` CLI are unchanged.
+- **Behavior change:** English sentence output now uses `"en-tn-cart@1"` by
+  default across `Breaker` sentence spans (including its sentence text and
+  tokenization methods and the module-level helpers), `SentenceOverride`, and
+  `ik break` sentence output. This applies to language `en`, with any region or
+  script except the `POSIX` variant. Pass `base="none"` to either Python API or
+  `--base none` to the CLI for the former raw-ICU output. Every other locale
+  language still defaults to raw ICU. `AbbreviationSentenceBreaker` remains
+  the unchanged, separate lexicon-based alternative.
 
 - `detector_key` now returns five components. The fifth is the material content digest,
   or `None` for every reader built from ICU or curated data, so readers of one type from

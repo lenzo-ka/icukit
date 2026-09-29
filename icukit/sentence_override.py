@@ -27,7 +27,7 @@ from typing import Literal, NotRequired, TypedDict, cast
 
 import icu
 
-from .breaker import BreakSpan, break_sentence_spans, break_word_spans
+from .breaker import BreakSpan, _raw_break_sentence_spans, break_word_spans
 from .classes import ClassPoint, char_classes, class_window
 from .errors import BreakRuleLoadError, LateProtectedSpan, OverlappingProtectedSpans, RuleRefusal
 from .exceptions import (
@@ -1384,7 +1384,7 @@ def _run_witnesses(
                 )
                 toks = tokens(text, locale, inventory=combined_inventory, protected=protected_items)
                 decisions = []
-                for span in break_sentence_spans(text, locale):
+                for span in _raw_break_sentence_spans(text, locale):
                     offset = span["end"]
                     containing = next(
                         (token for token in toks if token["start"] < offset < token["end"]),
@@ -1445,7 +1445,7 @@ def _run_witnesses(
 def _inventory_claims(
     inventory: LoadedExceptionInventory, text: str, locale: str
 ) -> dict[int, list[str]]:
-    base = break_sentence_spans(text, locale)
+    base = _raw_break_sentence_spans(text, locale)
     selected = [
         rule
         for rule in inventory._rules
@@ -1767,7 +1767,7 @@ def _decide_core(
     )
     cache = _TokenFeatureCache(True)
     result: list[BreakDecision] = []
-    for span in break_sentence_spans(text, locale):
+    for span in _raw_break_sentence_spans(text, locale):
         observed = _candidate_observed(owner, text, span["end"], protected_items, True, cache)
         if observed.decision is None:
             raise AssertionError("closed candidate remained pending")
@@ -1874,7 +1874,7 @@ class IncrementalSentenceBreaker:
             inventory=combined,
             protected=protected,
         )
-        for span in break_sentence_spans(text, self._owner.locale):
+        for span in _raw_break_sentence_spans(text, self._owner.locale):
             local_offset = span["end"]
             offset = segment_start + local_offset
             if offset in self._emitted:
@@ -2045,8 +2045,9 @@ class SentenceOverride:
         cache: Reuse immutable per-token features in incremental evaluation.
 
     Example:
+        >>> from icukit import break_sentence_spans
         >>> SentenceOverride(base="none").spans("Hello. Next.") == break_sentence_spans(
-        ...     "Hello. Next.", "en_US"
+        ...     "Hello. Next.", "en_US", base="none"
         ... )
         True
     """
@@ -2189,7 +2190,7 @@ class SentenceOverride:
     def spans(self, text: str, /, *, protected: Iterable[ProtectedSpan] = ()) -> list[BreakSpan]:
         """Return the one-best sentence spans; trailing whitespace stays left."""
         decisions = self.decide(text, protected=protected)
-        originals = break_sentence_spans(text, self.locale)
+        originals = _raw_break_sentence_spans(text, self.locale)
         if not originals:
             return []
         result: list[BreakSpan] = []

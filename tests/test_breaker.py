@@ -1,9 +1,18 @@
 """Tests for the breaker module."""
 
+import json
 import subprocess
 import sys
 
-from icukit import Breaker, break_graphemes, break_lines, break_sentences, break_words
+from icukit import (
+    Breaker,
+    SentenceOverride,
+    break_graphemes,
+    break_lines,
+    break_sentence_spans,
+    break_sentences,
+    break_words,
+)
 
 
 def run_cli(*args, input_text=None):
@@ -143,6 +152,81 @@ class TestBreakerClass:
         assert "Hello" in tokenized[0]
         assert "world" in tokenized[0]
 
+    def test_english_default_matches_sentence_override_default(self):
+        text = "The U.S. Supreme Court ruled. Markets moved."
+        assert Breaker("en_US").break_sentence_spans(text) == SentenceOverride("en_US").spans(text)
+        assert break_sentence_spans(text, "en_US") == SentenceOverride("en_US").spans(text)
+
+    def test_base_none_preserves_parent_raw_icu_span_golden(self):
+        text = "The U.S. Supreme Court ruled. Markets moved."
+        expected = [
+            {
+                "text": "The U.S. ",
+                "start": 0,
+                "end": 9,
+                "codepoint_start": 0,
+                "codepoint_end": 9,
+                "utf8_start": 0,
+                "utf8_end": 9,
+                "utf16_start": 0,
+                "utf16_end": 9,
+                "types": [],
+                "statuses": [],
+            },
+            {
+                "text": "Supreme Court ruled. ",
+                "start": 9,
+                "end": 30,
+                "codepoint_start": 9,
+                "codepoint_end": 30,
+                "utf8_start": 9,
+                "utf8_end": 30,
+                "utf16_start": 9,
+                "utf16_end": 30,
+                "types": [],
+                "statuses": [],
+            },
+            {
+                "text": "Markets moved.",
+                "start": 30,
+                "end": 44,
+                "codepoint_start": 30,
+                "codepoint_end": 44,
+                "utf8_start": 30,
+                "utf8_end": 44,
+                "utf16_start": 30,
+                "utf16_end": 44,
+                "types": [],
+                "statuses": [],
+            },
+        ]
+        assert Breaker("en_US", base="none").break_sentence_spans(text) == expected
+        assert break_sentence_spans(text, "en_US", base="none") == expected
+        assert break_sentences(text, "en_US", base="none") == [span["text"] for span in expected]
+
+    def test_non_english_default_and_non_sentence_levels_are_unchanged(self):
+        french = "M. Dupont est arrivé. Ensuite, il est parti."
+        assert Breaker("fr_FR").break_sentence_spans(french) == Breaker(
+            "fr_FR", base="none"
+        ).break_sentence_spans(french)
+
+        text = "The U.S. Supreme Court ruled. Markets moved."
+        default = Breaker("en_US")
+        raw = Breaker("en_US", base="none")
+        assert default.break_word_spans(text) == raw.break_word_spans(text)
+        assert default.break_line_spans(text) == raw.break_line_spans(text)
+        assert default.break_grapheme_spans(text) == raw.break_grapheme_spans(text)
+
+    def test_sentence_override_is_cached_per_locale_and_base(self):
+        from icukit.breaker import _sentence_override
+
+        _sentence_override.cache_clear()
+        try:
+            assert _sentence_override("en_US", None) is _sentence_override("en_US", None)
+            assert _sentence_override("en_US", None) is not _sentence_override("en_US", "en-tn@1")
+        finally:
+            _sentence_override.cache_clear()
+
 
 class TestBreakerCLI:
     """Tests for breaker CLI commands."""
@@ -153,6 +237,24 @@ class TestBreakerCLI:
         assert code == 0
         assert "Hello" in out
         assert "World" in out
+
+    def test_sentence_base_none_preserves_old_cli_output_and_default_uses_model(self):
+        text = "The U.S. Supreme Court ruled. Markets moved."
+        code, raw, err = run_cli("break", "sentences", "--base", "none", "--json", "-t", text)
+        assert (code, err) == (0, "")
+        assert raw == '[\n  "The U.S.",\n  "Supreme Court ruled.",\n  "Markets moved."\n]\n'
+
+        code, learned, err = run_cli("break", "sentences", "--json", "-t", text)
+        assert (code, err) == (0, "")
+        assert learned == '[\n  "The U.S. Supreme Court ruled.",\n  "Markets moved."\n]\n'
+
+        code, raw_tokens, err = run_cli("break", "tokenize", "--base", "none", "--json", "-t", text)
+        assert (code, err) == (0, "")
+        assert len(json.loads(raw_tokens)) == 3
+
+        code, learned_tokens, err = run_cli("break", "tokenize", "--json", "-t", text)
+        assert (code, err) == (0, "")
+        assert len(json.loads(learned_tokens)) == 2
 
     def test_words(self):
         """Test words subcommand."""

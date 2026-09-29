@@ -448,7 +448,11 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `AbbreviationSentenceBreaker`
 
-Post-filter ICU sentence spans using one compiled abbreviation lexicon.
+Post-filter raw ICU sentence spans with a separate abbreviation lexicon.
+
+For English, :class:`Breaker` and :class:`SentenceOverride` use the learned
+model by default. This class remains the explicit lexicon-based alternative;
+``base="none"`` on those APIs gives raw ICU.
 
 #### `AbbreviationSentenceBreaker(locale: 'str' = 'en_US', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
 
@@ -1017,11 +1021,12 @@ Example:
 Text segmentation using ICU BreakIterator.
 
 This module provides text segmentation capabilities for breaking text into
-sentences, words, lines, or grapheme clusters using ICU's BreakIterator.
+sentences, words, lines, or grapheme clusters. ICU supplies every level's
+boundaries; English sentence candidates use the learned model by default.
 Structured span offsets are Python code-point indices into the source text.
 
 Key Features:
-    * Locale-aware sentence segmentation
+    * Locale-aware sentence segmentation with a learned English default
     * Word tokenization with optional punctuation filtering
     * Line break detection
     * Grapheme cluster iteration (user-perceived characters)
@@ -1070,7 +1075,10 @@ span's end boundary.
 Text segmentation using ICU BreakIterator.
 
 A versatile text segmentation tool that can break text into sentences,
-words, lines, or grapheme clusters based on locale-specific rules.
+words, lines, or grapheme clusters based on locale-specific rules. English
+sentence breaking uses the learned model by default; ``base="none"`` keeps
+raw ICU sentence boundaries. Other levels and non-English defaults remain
+ICU behavior.
 
 Example:
     >>> breaker = Breaker('en')
@@ -1079,12 +1087,15 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: 'str' = 'en_US')`
+#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None)`
 
 Initialize a Breaker instance.
 
 Args:
     locale: Locale code for language-specific rules (e.g., 'en', 'en_US', 'ja').
+    base: Sentence base only. ``None`` selects the locale default,
+        ``"none"`` selects raw ICU, and ``"en-tn@1"`` or
+        ``"en-tn-cart@1"`` selects a learned English base.
 
 Raises:
     BreakerError: If the locale is invalid.
@@ -1128,7 +1139,7 @@ Returns:
 
 #### `break_sentence_spans(text: 'str') -> 'list[BreakSpan]'`
 
-Return every sentence segment as a structured span.
+Return sentence spans from the selected locale-default or named base.
 
 #### `break_sentences(text: 'str', skip_empty: 'bool' = True) -> 'list[str]'`
 
@@ -1199,7 +1210,7 @@ Yields:
 
 #### `iter_sentence_spans(text: 'str') -> 'Iterator[BreakSpan]'`
 
-Yield every sentence segment with code-point offsets.
+Yield sentence spans from the selected locale-default or named base.
 
 #### `iter_sentences(text: 'str', skip_empty: 'bool' = True) -> 'Iterator[str]'`
 
@@ -1318,11 +1329,11 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[BreakSpan]'`
 
-Return every sentence segment with code-point offsets.
+Return sentence spans from the locale-default or selected base.
 
-### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True) -> 'list[str]'`
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -1332,6 +1343,8 @@ Args:
     text: The text to segment.
     locale: Locale code for language-specific rules.
     skip_empty: If True, empty sentences are excluded.
+    base: Sentence base; ``None`` selects the locale default and ``"none"``
+        selects raw ICU.
 
 Returns:
     List of sentence strings.
@@ -7057,8 +7070,9 @@ Args:
     cache: Reuse immutable per-token features in incremental evaluation.
 
 Example:
+    >>> from icukit import break_sentence_spans
     >>> SentenceOverride(base="none").spans("Hello. Next.") == break_sentence_spans(
-    ...     "Hello. Next.", "en_US"
+    ...     "Hello. Next.", "en_US", base="none"
     ... )
     True
 

@@ -101,8 +101,8 @@ def _inventory(rule_id="doctor", levels=("word", "sentence")):
 
 def test_existing_icu_and_uli_characterization():
     text = "Mr. Smith went to the U.S. Then he left. I saw Dr. No. It was 3 p.m. today."
-    plain = Breaker("en_US").break_sentence_spans(text)
-    uli = Breaker("en_US@ss=standard").break_sentence_spans(text)
+    plain = Breaker("en_US", base="none").break_sentence_spans(text)
+    uli = Breaker("en_US@ss=standard", base="none").break_sentence_spans(text)
     assert [span["end"] for span in plain] == [4, 27, 41, 51, 55, 75]
     assert [span["end"] for span in uli] == [27, 41, 51, 55, 75]
 
@@ -139,7 +139,7 @@ def test_abbreviation_sentence_breaker_fixed_authored_output_unchanged():
 
 def test_base_none_is_exactly_raw_icu_with_attribution():
     text = "Mr. Smith arrived. Next."
-    expected = [span["end"] for span in Breaker("en_US").break_sentence_spans(text)]
+    expected = [span["end"] for span in Breaker("en_US", base="none").break_sentence_spans(text)]
     override = SentenceOverride(base="none")
     decisions = override.decide(text)
     assert [item["offset"] for item in decisions] == expected
@@ -150,7 +150,7 @@ def test_base_none_is_exactly_raw_icu_with_attribution():
         and item["tokens_read"] == 0
         for item in decisions
     )
-    assert override.spans(text) == Breaker("en_US").break_sentence_spans(text)
+    assert override.spans(text) == Breaker("en_US", base="none").break_sentence_spans(text)
 
 
 def test_protected_token_suppresses_inside_candidate_but_hint_needs_rule():

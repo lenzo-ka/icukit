@@ -430,7 +430,7 @@ def test_icu_prefix_stability_seeded_characterization():
     atoms = ["Alpha.", '"No."', "beta?", "Gamma!", "😀", "42.", "\r", "\n", " "]
     for _ in range(100):
         text = " ".join(rng.choice(atoms) for _ in range(rng.randint(2, 9)))
-        full = [item["end"] for item in Breaker("en_US").break_sentence_spans(text)]
+        full = [item["end"] for item in Breaker("en_US", base="none").break_sentence_spans(text)]
         for cut in range(1, len(text) + 1):
             prefix = text[:cut]
             letters = [index for index, char in enumerate(prefix) if char.isalpha()]
@@ -439,7 +439,7 @@ def test_icu_prefix_stability_seeded_characterization():
             horizon = letters[-1]
             observed = [
                 item["end"]
-                for item in Breaker("en_US").break_sentence_spans(prefix)
+                for item in Breaker("en_US", base="none").break_sentence_spans(prefix)
                 if item["end"] <= horizon
             ]
             assert observed == [offset for offset in full if offset <= horizon]
@@ -451,7 +451,9 @@ def test_crlf_candidate_waits_and_matches_independent_icu_oracle():
     assert simple_streamed == SentenceOverride(base="none").decide("A\r\nB")
 
     text = "😀A\r\nB."
-    expected_offsets = [item["end"] for item in Breaker("en_US").break_sentence_spans(text)]
+    expected_offsets = [
+        item["end"] for item in Breaker("en_US", base="none").break_sentence_spans(text)
+    ]
     breaker = SentenceOverride(base="none").stream()
     first = breaker.feed("😀A\r")
     assert first == []

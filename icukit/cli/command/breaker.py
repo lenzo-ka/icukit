@@ -108,6 +108,17 @@ class BreakerCommand(SubcommandBase):
         )
 
     @classmethod
+    def _add_sentence_base_option(cls, parser):
+        parser.add_argument(
+            "--base",
+            choices=["none", "en-tn@1", "en-tn-cart@1"],
+            default=None,
+            help=(
+                "Sentence base (default: learned model for English except POSIX; raw ICU otherwise)"
+            ),
+        )
+
+    @classmethod
     def add_subparser(cls, subparsers):
         """Add the break command with its subcommands."""
         parser = subparsers.add_parser(
@@ -207,6 +218,7 @@ Examples:
     def _configure_sentences(cls, parser):
         """Configure sentences subcommand."""
         cls._add_locale_option(parser)
+        cls._add_sentence_base_option(parser)
         cls._add_spans_option(parser)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
@@ -267,6 +279,7 @@ Examples:
     def _configure_tokenize(cls, parser):
         """Configure tokenize subcommand."""
         cls._add_locale_option(parser)
+        cls._add_sentence_base_option(parser)
         cls._add_spans_option(parser)
         parser.add_argument(
             "--skip-punctuation",
@@ -392,7 +405,7 @@ Examples:
     @handles_errors(BreakerError)
     def cmd_sentences(cls, args):
         """Break text into sentences; spans retain unstripped source segments."""
-        breaker = Breaker(args.locale)
+        breaker = Breaker(args.locale, base=getattr(args, "base", None))
         cls._validate_provenance(args)
         as_json = getattr(args, "json", False)
         as_jsonl = getattr(args, "jsonl", False)
@@ -559,7 +572,7 @@ Examples:
     @handles_errors(BreakerError)
     def cmd_tokenize(cls, args):
         """Break into sentences then words."""
-        breaker = Breaker(args.locale)
+        breaker = Breaker(args.locale, base=getattr(args, "base", None))
         cls._validate_provenance(args)
         skip_punct = getattr(args, "skip_punctuation", False)
         as_json = getattr(args, "json", False)
