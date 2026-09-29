@@ -5,6 +5,7 @@ Every surface a default reader is held to here is ICU's own: a range formatted b
 suite runs on.
 """
 
+from dataclasses import replace
 from decimal import Decimal
 
 import icu
@@ -244,6 +245,34 @@ def test_an_extended_unicode_minus_is_a_start_sign_capture():
     ]
     assert found["captures"][1].form == "symbol"
     _assert_capture_offsets(text, found)
+
+
+@pytest.mark.parametrize("locale", ["en_US", "ar_EG", "fa_IR"])
+@pytest.mark.parametrize(("low", "high"), [(3.25, 5.5), (-3, 5), (-3, -1)])
+def test_each_endpoint_capture_is_the_endpoint_readers_own(locale, low, high):
+    text = str(icu.NumberRangeFormatter.withLocale(icu.Locale(locale)).formatDoubleRange(low, high))
+    (found,) = _whole(FlexibleNumberRangeDetector(locale), text)
+
+    captures = {capture.name: capture for capture in found["captures"]}
+    assert ("start.sign" in captures) == (low < 0)
+    for side in ("start", "end"):
+        whole = captures[side]
+        (alone,) = [
+            detection
+            for detection in FlexibleNumberDetector(locale).detect(whole.text)
+            if (detection["start"], detection["end"]) == (0, len(whole.text))
+        ]
+        own = [
+            replace(
+                capture,
+                name=f"{side}.{capture.name}",
+                start=whole.start + capture.start,
+                end=whole.start + capture.end,
+            )
+            for capture in alone["captures"]
+        ]
+        prefixed = [c for c in found["captures"] if c.name.startswith(f"{side}.")]
+        assert prefixed == own
 
 
 def test_a_unit_written_first_once_is_captured_only_on_the_start():
