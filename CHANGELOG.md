@@ -50,7 +50,10 @@
   that unit onto the other side ("$3–5", "10–15 kg", "10–15%") or write it too ("$3.00
   – $5.00"). The value is a `NumberRangeValue` of two whole amounts (`NumberValue` or
   `MeasureValue`), captured as "start", "separator", and "end", with a
-  `NumberRangeSpec`. A range's endpoints follow the reader set: `DEFAULT_FAMILIES`
+  `NumberRangeSpec`. Each endpoint's own captures immediately follow it with
+  `start.*` or `end.*` names, and a minus sign the range reads before its start is
+  captured as `start.sign`; approximately readings likewise carry `value.*` captures.
+  A range's endpoints follow the reader set: `DEFAULT_FAMILIES`
   gains `NUMBER_RANGE_FAMILY`, the ranges of numbers and percents (`number:range`), so
   plain `ik detect` reads them; `range_detectors(locale, detectors)` gives the range
   readers over the currency and measure readers a set holds (`number:range`,
@@ -80,6 +83,10 @@
   is no range. A shortened second year, which ICU writes nowhere, is not read as a
   range of years: "1893–94" reads only as a range of numbers, 1893 to 94. Reading
   either as years is left to the caller.
+- ICU parse and field positions are converted from UTF-16 code units before they meet
+  Python string indices in flexible spell-out parsing, date year-floor discovery, and
+  reflective currency-name extraction. Chakma spell-out and Adlam dates and currency
+  plurals therefore retain complete surfaces and code-point capture offsets.
 
 ### Changed
 

@@ -5427,8 +5427,13 @@ ICU writes in some locale of the language ("3–5", ja_JP "3～5"), with or with
 spaces around it. A side may leave its unit to the other where ICU writes a range
 of that unit once ("$3–5", "10–15 kg", "10–15%"; see
 :func:`_range_collapse_sides`), or both may write it ("$3.00 – $5.00"). The value is
-a :class:`~icukit.detectors.NumberRangeValue` of two whole amounts, and the captures
-are the "start" and "end" amounts, each with its value, and the "separator".
+a :class:`~icukit.detectors.NumberRangeValue` of two whole amounts. The captures are
+the "start" and "end" amounts, each with its value, and the "separator"; immediately
+after each endpoint capture are that endpoint reader's own captures, prefixed with
+``"start."`` or ``"end."`` (for example ``"start.integer"``). Where the range reads
+a minus sign before a start its reader read without one, that sign is captured as
+``"start.sign"``. Approximately readings likewise put ``"value.*"`` captures
+immediately after ``"value"``.
 
 ``form`` chooses what the reader reads, under its own type ``<group>:<form>``:
 

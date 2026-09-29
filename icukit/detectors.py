@@ -597,7 +597,12 @@ class DateDetector:
         current = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
         year_position = icu.FieldPosition(icu.DateFormat.kYearField)
         current_surface = self._df.format(current.getTime(), year_position)
-        current_year = current_surface[year_position.getBeginIndex() : year_position.getEndIndex()]
+        _, current_u16_to_cp = boundary_maps(current_surface)
+        current_year = current_surface[
+            current_u16_to_cp[year_position.getBeginIndex()] : current_u16_to_cp[
+                year_position.getEndIndex()
+            ]
+        ]
         self._year_floor = sum(icu.Char.isdigit(char) for char in current_year) >= 4
         if short_years and not (
             self._year_floor

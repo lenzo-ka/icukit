@@ -663,6 +663,8 @@ Dates with an era are read in ICU's own forms, with four-digit years ("Mar 5, 20
 BC"). Ranges are read as ICU writes them: of numbers and percents ("3–5", "10–15%",
 "~3") and of years ("1914–1918"). Currencies and measures require explicit --currency
 and --measure options, and with them their ranges are read too ("$3–5", "10–15 kg").
+Amount ranges keep "start", "separator", and "end" captures and add each endpoint's
+own captures as "start.*" and "end.*"; approximate amounts similarly add "value.*".
 
 --flexible adds the flexible readers, which read the forms text writes beyond ICU's
 own: negative and accounting currency, mixed measures, other decimal styles, dates
