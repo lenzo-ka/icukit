@@ -17,6 +17,7 @@ from ...engine import (
     range_detectors,
 )
 from ...formatters import format_json, format_tsv
+from ...material import MaterialLoadError, load_locale_material
 from ...recognize import FlexibleMeasureDetector, _iso_currency_codes
 from ...serialize import detection_to_dict, detections_to_json
 from ..subcommand_base import SubcommandBase
@@ -83,6 +84,13 @@ Examples:
         )
         cls._add_input_options(parser)
         cls._add_locale_option(parser)
+        parser.add_argument(
+            "--material",
+            action="append",
+            default=[],
+            metavar="PATH",
+            help="Add validated locale material from PATH (repeatable)",
+        )
         parser.add_argument(
             "--currency",
             action="append",
@@ -176,10 +184,11 @@ Examples:
         currencies=(),
         units=(),
         skeletons=None,
+        material=(),
     ):
         """The readers ``icukit detect`` reads with, for its options."""
         families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if guarded else DEFAULT_FAMILIES
-        detectors = generated_detectors(locale, families)
+        detectors = generated_detectors(locale, families, material=material)
         # The strict readers. A strict currency reader is built only for a --currency
         # code; under --flexible its reading stands beside the flexible set's (with
         # --currency USD, the "$12.50" inside "($12.50)"). The flexible set's decimal and
@@ -198,6 +207,7 @@ Examples:
                 currencies=currencies or None,
                 units=units or None,
                 guarded=guarded,
+                material=material,
             )
             detectors = detectors.with_(*flexible_set.detectors)
         else:
@@ -219,6 +229,14 @@ Examples:
         except ValueError as error:
             print(f"icukit detect: {error}", file=sys.stderr)
             return 2
+        materials = []
+        for path in args.material:
+            try:
+                materials.append(load_locale_material(path))
+            except MaterialLoadError as error:
+                for refusal in error.refusals:
+                    print(f"icukit detect: {refusal.code}: {refusal.detail}", file=sys.stderr)
+                return 2
         # Honor an explicit --text "" (distinct from an omitted option, which reads stdin).
         if getattr(args, "text", None) is not None:
             text = args.text
@@ -239,13 +257,22 @@ Examples:
             currencies=currencies,
             units=units,
             skeletons=args.skeleton,
+            material=materials,
         )
         # A strict and a flexible reader can give the same reading ("$5.00" as USD 5.00);
-        # print it once. Distinct readings of one span are all kept.
+        # print it once. Distinct readings of one span are all kept, and a reading from
+        # user material stays beside ICU's same reading, so its spec (and digest) shows.
         seen = set()
         detections = []
         for item in detectors.detect(text):
-            reading = (item["start"], item["end"], item["type"], item["text"], repr(item["value"]))
+            reading = (
+                item["start"],
+                item["end"],
+                item["type"],
+                item["text"],
+                repr(item["value"]),
+                getattr(item["spec"], "material_digest", None),
+            )
             if reading not in seen:
                 seen.add(reading)
                 detections.append(item)

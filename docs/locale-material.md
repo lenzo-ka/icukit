@@ -2,7 +2,7 @@
 
 Locale material is data you supply at runtime for a locale where ICU lacks a capability. This page is its specification: format `icukit-locale-material` version 1, versioned with icukit. icukit loads material only when you pass it, refuses it unless every witness it carries passes, adds its readers beside ICU's without replacing them, ships none, and labels it `user` in every availability report. Version 1 has one kind, `rbnf-spellout`: ICU rule-based number format rule text, exactly as ICU reads it. This format is a draft and not yet stable.
 
-This page specifies the whole contract. The loader and the material reader described here are provided now; adding material readers to reader sets and labeling them in availability reports are not yet provided.
+This page specifies the whole contract. The loader, the material reader, and `material=` on the reader-set builders are provided now; labeling material in availability reports is not yet provided.
 
 ## Version 1 envelope
 
@@ -180,6 +180,25 @@ else:
     print(material.digest, material.rulesets)
 ```
 
+## Using material
+
+Pass loaded material explicitly when building a gang. Applicable material readers are
+added beside ICU's readers; they do not replace them.
+
+```python
+from icukit.engine import generated_detectors
+from icukit.material import load_locale_material
+
+m = load_locale_material("qaa-spellout.json")
+detectors = generated_detectors("qaa", material=[m])
+```
+
+The command-line equivalent accepts one or more `--material` paths:
+
+```console
+ik detect --locale qaa --material qaa-spellout.json -t 'one hundred forty-five goats'
+```
+
 ## Validation and identity
 
 Loading is transactional. Duplicate JSON keys and non-finite numbers are refused.
@@ -218,9 +237,9 @@ Identity is the content digest:
 Whitespace and JSON object-key order therefore do not affect identity; any content
 change does. The format's locale applicability rule follows fallback downward only:
 material for `yo` applies to `yo`, `yo_NG`, and `yo_BJ`, while material for `yo_NG`
-does not apply to `yo`. Future gang integration is specified to add material readers
-beside ICU's readers, and future availability integration is specified to label
-application material as `user`; neither integration is part of this release. No
+does not apply to `yo`. The reader-set builders add material readers beside ICU's
+readers and never in their place; labeling material as `user` in availability reports
+is not yet provided. No
 material is bundled in the wheel or source distribution. Version 1 accepts no
 pronunciation material.
 

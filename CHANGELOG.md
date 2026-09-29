@@ -4,6 +4,10 @@
 
 ### Added
 
+- `generated_detectors`, `generated_detectors_report`, `flexible_detectors`, and
+  `flexible_detectors_report` accept `material=` and add applicable validated locale
+  material readers beside ICU's readers. `ik detect --material PATH` loads the same
+  material on the command line and may be repeated.
 - `icukit.material` adds the draft locale-material format for application-supplied
   ICU rules. `load_locale_material` accepts a mapping or UTF-8 JSON path and returns
   an immutable `LocaleMaterial`, or raises `MaterialLoadError` carrying every
@@ -101,6 +105,10 @@
   plurals therefore retain complete surfaces and code-point capture offsets.
 
 ### Changed
+
+- `detector_key` now returns five components. The fifth is the material content digest,
+  or `None` for every reader built from ICU or curated data, so readers of one type from
+  different materials coexist in a gang.
 
 - Generated date detectors also include fully zero-padded complete numeric-date
   patterns where ICU's pattern generator makes them distinct from its enumerated

@@ -2402,9 +2402,10 @@ result :func:`detect` would give). A gang is a value -- there is no mutable glob
 registry; selection and grouping are expressed by composing gangs with
 :meth:`with_` / :meth:`without`.
 
-A member is identified by its type, its reader class, its locale, and the locales it
-reads (see :func:`detector_key`), so an en_US and an en_GB detector of one type share
-a gang, as do a strict and a flexible reader of one type.
+A member is identified by its type, its reader class, its locale, the locales it
+reads, and any user-material content digest (see :func:`detector_key`), so an en_US
+and an en_GB detector of one type share a gang, as do a strict and a flexible reader
+of one type, while same-type readers from different materials coexist.
 
 #### `DetectorSet(detectors: 'tuple[Detector, ...]') -> None`
 
@@ -2593,9 +2594,9 @@ Each detector runs its own scan, so a gang's result equals the merge of running 
 members alone. A single shared scan would be faster; any such scan must give this
 same merge.
 
-### `detector_key(detector: 'Detector') -> 'tuple[str, str, str | None, tuple[str, ...] | None]'`
+### `detector_key(detector: 'Detector') -> 'tuple[str, str, str | None, tuple[str, ...] | None, str | None]'`
 
-A detector's identity in a gang: its type, reader class, locale, and the locales it reads.
+A detector's identity: type, class, locale, read locales, and material digest.
 
 The locales are the ones the reader actually reads: a reader with no choice of
 locales reads its own locale alone, and a language-wide reader left at its default
@@ -2603,7 +2604,9 @@ locales reads its own locale alone, and a language-wide reader left at its defau
 readers share a key only when they are the same kind of reader reading the same
 locales -- a strict currency reader and a flexible one of the same type and locale
 are two members, not one replacing the other -- while a reader built twice, or once
-with ``locales=None`` and once with every locale named, is one member.
+with ``locales=None`` and once with every locale named, is one member. The digest is
+``None`` for ICU and curated readers; material readers carry their content digest so
+same-type readers from distinct materials coexist.
 
 ### `number_detectors(locale: 'str', *, decimal: 'bool' = True, percent: 'bool' = True, currencies: 'Iterable[str]' = (), flexible: 'bool' = False) -> 'DetectorSet'`
 
@@ -3193,7 +3196,7 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'DetectorSet'`
+### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 A gang of every flexible (recall) reader of :mod:`icukit.recognize` for ``locale``.
 
@@ -3241,17 +3244,17 @@ of the generated set's, since the currency and measure readers share the numbers
 they read within a text. The shared readings are kept for the 16 texts read last
 (about 110 bytes per character each for en_US).
 
-### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'GenerationReport'`
+### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 The flexible readers for ``locale``, and every spec that could not be built.
 
 See :func:`flexible_detectors`.
 
-### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'))) -> 'DetectorSet'`
+### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
-### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range'))) -> 'GenerationReport'`
+### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
@@ -5721,6 +5724,18 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return isolated letter-name candidates in source order.
+
+### class `MaterialLoneSpelloutDetector`
+
+Recognize lone unit words with a validated material's spell-out rules.
+
+#### `MaterialLoneSpelloutDetector(locale: 'str', material, *, ruleset: 'str | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return the lone unit words the default material reader refuses.
 
 ### class `MaterialSpelloutDetector`
 

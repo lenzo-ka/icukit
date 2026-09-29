@@ -8,7 +8,7 @@ import sys
 import tarfile
 import zipfile
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 
 import icu
@@ -262,6 +262,16 @@ def test_b16_distributions_and_package_data_ship_no_locale_material(tmp_path):
     for archive in archives:
         for name, content in _archive_files(archive):
             assert "tests/data/material" not in name
+            archive_parts = PurePosixPath(name).parts
+            # Setuptools includes Python test sources in the sdist by default. They are
+            # reviewable source, not shipped locale-material data; non-Python test files
+            # and every wheel member remain subject to the material scan below.
+            if (
+                archive.suffix == ".gz"
+                and archive_parts[1:2] == ("tests",)
+                and name.endswith(".py")
+            ):
+                continue
             try:
                 text = content.decode("utf-8")
             except UnicodeDecodeError:
