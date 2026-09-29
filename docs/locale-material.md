@@ -2,6 +2,8 @@
 
 Locale material is data you supply at runtime for a locale where ICU lacks a capability. This page is its specification: format `icukit-locale-material` version 1, versioned with icukit. icukit loads material only when you pass it, refuses it unless every witness it carries passes, adds its readers beside ICU's without replacing them, ships none, and labels it `user` in every availability report. Version 1 has one kind, `rbnf-spellout`: ICU rule-based number format rule text, exactly as ICU reads it. This format is a draft and not yet stable.
 
+This release provides the loader and the reader; joining gangs and availability reports are separate changes.
+
 ## Version 1 envelope
 
 A file is one UTF-8 JSON object. Its required keys are `schema_version`, `kind`,
@@ -37,6 +39,10 @@ label nor a value witnesses nothing and is refused. A witness record can be lift
 into a richer internal corpus record by adding keys only; its shared field names and
 semantics do not change.
 
+A label-only witness certifies that its reader finds a reading at the declared extent
+and type; it does not certify a particular value. The cardinal rule set must have at
+least one value witness, which certifies both exact formatting and recovered value.
+
 `near_misses` is an array of objects having exactly `id`, `text`, `locale`, and
 `type`. Its ID and locale follow the witness rules. The type must name one of this
 material's proved readers. A near miss fails when its entire text is read; a partial
@@ -50,6 +56,8 @@ public rule set whose name contains `cardinal`, `ordinal`, or `year` yields a re
 only when a witness names its type. Its type is `number:spellout:<name>`, where
 `<name>` is the rule-set name without its leading `%` and `spellout-`; for example,
 `%spellout-ordinal` yields `number:spellout:ordinal`.
+Two selected public rule sets may not yield the same reader type; such material is
+refused as `AMBIGUOUS_RULESET`, with both rule-set names in the refusal.
 
 The default spell-out reader deliberately does not read a lone word for 0 through 9,
 because those words are often ambiguous in running text, and surrounding words do not
@@ -177,14 +185,15 @@ The complete envelope is checked before semantic checks begin. ICU then compiles
 rules; a public cardinal spell-out rule set must exist and must format 0 through 1000
 to 1001 distinct case-folded strings. Every declared value must format to its exact
 witness extent, and the material reader must find every label and value in the whole
-witness text at that exact extent and type (and recover the declared value). Every
-near miss is read as well. Any failure refuses the whole file, and the exception lists
-every refusal found in that phase.
+witness text at that exact extent and type (and recover the declared value). Formatting
+and reading use each witness's declared locale, including descendant locales. Every near
+miss is read in its declared locale as well. Any failure refuses the whole file, and the
+exception lists every refusal found in that phase.
 
 The refusal codes are `INVALID_JSON`, `INVALID_KEY`, `INVALID_SCHEMA_VERSION`,
 `INVALID_KIND`, `INVALID_LOCALE`, `INVALID_RULES`, `INVALID_PROVENANCE`,
 `INVALID_WITNESS`, `INVALID_NEAR_MISS`, `RBNF_SYNTAX`,
-`NO_CARDINAL_RULESET`, `NOT_INJECTIVE`, `NO_WITNESS`,
+`NO_CARDINAL_RULESET`, `AMBIGUOUS_RULESET`, `NOT_INJECTIVE`, `NO_WITNESS`,
 `WITNESS_FORMAT_FAILED`, `WITNESS_READ_FAILED`, and `NEAR_MISS_READ`.
 
 Identity is the content digest:
@@ -205,8 +214,10 @@ Identity is the content digest:
 ```
 
 Whitespace and JSON object-key order therefore do not affect identity; any content
-change does. Locale material is add-only beside ICU's readers. Application follows
-locale fallback downward only: material for `yo` applies to `yo`, `yo_NG`, and
-`yo_BJ`, while material for `yo_NG` does not apply to `yo`. No material is bundled in
-the wheel or source distribution, and availability reports label application material
-as `user`. Version 1 accepts no pronunciation material.
+change does. The format's locale applicability rule follows fallback downward only:
+material for `yo` applies to `yo`, `yo_NG`, and `yo_BJ`, while material for `yo_NG`
+does not apply to `yo`. Future gang integration is specified to add material readers
+beside ICU's readers, and future availability integration is specified to label
+application material as `user`; neither integration is part of this release. No
+material is bundled in the wheel or source distribution. Version 1 accepts no
+pronunciation material.

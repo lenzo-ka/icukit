@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import math
 import os
 import re
+import secrets
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
 from hashlib import sha256
 from types import MappingProxyType
@@ -39,6 +42,7 @@ _LOCALE_RE = re.compile(
     r"(?:_(?:[A-Z]{2}|[0-9]{3})?(?:_[A-Z0-9]{4,8})+|_(?:[A-Z]{2}|[0-9]{3}))?"
 )
 _INTEGER_RE = re.compile(r"-?(?:0|[1-9][0-9]*)")
+_SEAL_KEY = secrets.token_bytes(32)
 
 
 class MaterialRefusal(NamedTuple):
@@ -66,6 +70,51 @@ class LocaleMaterial:
     rules: str
     rulesets: tuple[str, ...]
     provenance: Mapping[str, str] = field(hash=False)
+    _seal: str | None = field(default=None, init=False, repr=False, compare=False, hash=False)
+
+    def __deepcopy__(self, memo: dict[int, object]) -> LocaleMaterial:
+        """Copy immutable material while preserving its loader seal."""
+        copied = type(self)(
+            self.kind,
+            self.locale,
+            self.digest,
+            self.rules,
+            self.rulesets,
+            MappingProxyType(deepcopy(dict(self.provenance), memo)),
+        )
+        object.__setattr__(copied, "_seal", self._seal)
+        memo[id(self)] = copied
+        return copied
+
+
+def _material_seal(material: LocaleMaterial) -> str:
+    encoded = json.dumps(
+        (
+            material.kind,
+            material.locale,
+            material.digest,
+            material.rules,
+            material.rulesets,
+        ),
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hmac.digest(_SEAL_KEY, encoded, "sha256").hex()
+
+
+def _require_loaded(material: object) -> LocaleMaterial:
+    if not isinstance(material, LocaleMaterial):
+        raise TypeError(f"material must be a LocaleMaterial, got {type(material).__name__}")
+    try:
+        valid = material._seal is not None and hmac.compare_digest(
+            material._seal, _material_seal(material)
+        )
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError("locale material must come from load_locale_material and remain unchanged")
+    return material
 
 
 def locale_descends_from(locale: str, ancestor: str) -> bool:
@@ -96,7 +145,12 @@ def _constant(value: str) -> object:
 
 def _plain_json(value: object) -> object:
     if isinstance(value, Mapping):
-        return {key: _plain_json(item) for key, item in value.items()}
+        result = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise _InvalidJSON(f"object key must be a string, got {key!r}")
+            result[key] = _plain_json(item)
+        return result
     if isinstance(value, (list, tuple)):
         return [_plain_json(item) for item in value]
     if isinstance(value, float) and not math.isfinite(value):
@@ -204,8 +258,8 @@ def _validate_witness_shape(
     ):
         reasons.append(f"{name}: locale {locale!r} does not descend from {material_locale!r}")
 
-    text_hash = raw.get("text_sha256")
-    if text_hash is not None:
+    if "text_sha256" in raw:
+        text_hash = raw["text_sha256"]
         if not isinstance(text_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", text_hash):
             reasons.append(f"{name}: text_sha256 must be 64 lowercase hexadecimal digits")
         elif isinstance(text, str) and text_hash != sha256(text.encode("utf-8")).hexdigest():
@@ -329,11 +383,12 @@ def _envelope(data: Mapping[str, object]) -> list[MaterialRefusal]:
                 f"top-level field 'schema_version' must be integer 1, got {version!r}",
             )
         )
-    if data.get("kind") not in _KIND_LOADERS:
+    kind = data.get("kind")
+    if not isinstance(kind, str) or kind not in _KIND_LOADERS:
         errors.append(
             _refuse(
                 "INVALID_KIND",
-                f"top-level field 'kind' names unregistered kind {data.get('kind')!r}",
+                f"top-level field 'kind' names unregistered kind {kind!r}",
             )
         )
     locale = data.get("locale")
@@ -468,7 +523,6 @@ def _rbnf_spellout(
         for name in names
         if any(kind in name.casefold() for kind in ("cardinal", "ordinal", "year"))
     )
-    types = {_type_for_ruleset(name, cardinal): name for name in admitted}
     witnesses = cast(list[Mapping[str, object]], data["witnesses"])
     near_misses = cast(list[Mapping[str, object]], data.get("near_misses", []))
     referenced_types = {
@@ -488,6 +542,21 @@ def _rbnf_spellout(
         for name in admitted
         if name != cardinal and _type_for_ruleset(name, cardinal) in referenced_types
     )
+    selected_by_type: dict[str, list[str]] = {}
+    for name in selected:
+        selected_by_type.setdefault(_type_for_ruleset(name, cardinal), []).append(name)
+    for reader_type, rule_sets in selected_by_type.items():
+        if len(rule_sets) > 1:
+            errors.append(
+                _refuse(
+                    "AMBIGUOUS_RULESET",
+                    f"reader type {reader_type!r} is produced by public rule sets "
+                    + ", ".join(repr(name) for name in rule_sets),
+                )
+            )
+    if any(error.code == "AMBIGUOUS_RULESET" for error in errors):
+        return None, errors
+    types = {_type_for_ruleset(name, cardinal): name for name in selected}
     provisional = LocaleMaterial(
         "rbnf-spellout",
         locale,
@@ -496,25 +565,65 @@ def _rbnf_spellout(
         selected,
         MappingProxyType(dict(cast(Mapping[str, str], data["provenance"]))),
     )
-    readers = {}
-    for name in selected:
+    object.__setattr__(provisional, "_seal", _material_seal(provisional))
+
+    formatters: dict[str, icu.RuleBasedNumberFormat] = {locale: formatter}
+    readers_by_locale: dict[str, dict[str, MaterialSpelloutDetector]] = {}
+    failed_locales: set[str] = set()
+
+    def tools_for(
+        witness_locale: str,
+    ) -> tuple[icu.RuleBasedNumberFormat, dict[str, MaterialSpelloutDetector]] | None:
+        if witness_locale in failed_locales:
+            return None
+        if witness_locale in readers_by_locale:
+            return formatters[witness_locale], readers_by_locale[witness_locale]
         try:
-            readers[_type_for_ruleset(name, cardinal)] = MaterialSpelloutDetector(
-                locale, provisional, ruleset=None if name == cardinal else name
-            )
-        except (icu.ICUError, ValueError) as error:
+            locale_formatter = formatters.get(witness_locale)
+            if locale_formatter is None:
+                locale_formatter = icu.RuleBasedNumberFormat(rules, icu.Locale(witness_locale))
+                formatters[witness_locale] = locale_formatter
+        except icu.ICUError as error:
             errors.append(
                 _refuse(
                     "RBNF_SYNTAX",
-                    f"rule set {name!r}: material reader construction failed: {error}",
+                    f"locale {witness_locale!r}: ICU refused the rule text: {error}",
                 )
             )
-    if len(readers) != len(selected):
+            failed_locales.add(witness_locale)
+            return None
+        locale_readers = {}
+        for name in selected:
+            try:
+                locale_readers[_type_for_ruleset(name, cardinal)] = MaterialSpelloutDetector(
+                    witness_locale, provisional, ruleset=None if name == cardinal else name
+                )
+            except (icu.ICUError, ValueError) as error:
+                errors.append(
+                    _refuse(
+                        "RBNF_SYNTAX",
+                        f"rule set {name!r}"
+                        + (f" for locale {witness_locale!r}" if witness_locale != locale else "")
+                        + f": material reader construction failed: {error}",
+                    )
+                )
+        if len(locale_readers) != len(selected):
+            failed_locales.add(witness_locale)
+            return None
+        readers_by_locale[witness_locale] = locale_readers
+        return locale_formatter, locale_readers
+
+    if tools_for(locale) is None:
         return None, errors
     cardinal_has_value = False
     for witness_index, witness in enumerate(witnesses):
         witness_name = _record_name("witness", witness, witness_index)
         text = cast(str, witness["text"])
+        witness_locale = cast(str, witness["locale"])
+        witness_tools = tools_for(witness_locale)
+        if witness_tools is None:
+            continue
+        witness_formatter, readers = witness_tools
         labels = cast(list[Mapping[str, object]], witness.get("labels", []))
         values = cast(
             list[Mapping[str, object]],
@@ -566,7 +675,9 @@ def _rbnf_spellout(
                 continue
             expected = text[cast(int, item["start"]) : cast(int, item["end"])]
             try:
-                rendered = formatter.format(int(cast(str, value["decimal"])), types[item_type])
+                rendered = witness_formatter.format(
+                    int(cast(str, value["decimal"])), types[item_type]
+                )
             except (icu.ICUError, ValueError) as error:
                 errors.append(
                     _refuse(
@@ -640,6 +751,11 @@ def _rbnf_spellout(
     for index, near_miss in enumerate(near_misses):
         near_miss_name = _record_name("near miss", near_miss, index)
         item_type = cast(str, near_miss["type"])
+        near_miss_locale = cast(str, near_miss["locale"])
+        near_miss_tools = tools_for(near_miss_locale)
+        if near_miss_tools is None:
+            continue
+        _, readers = near_miss_tools
         if item_type not in readers:
             errors.append(
                 _refuse(
@@ -713,5 +829,8 @@ def load_locale_material(
     loaded, errors = _KIND_LOADERS[cast(str, data["kind"])](data, digest)
     if errors:
         raise MaterialLoadError(errors)
-    assert loaded is not None
+    if loaded is None:
+        raise MaterialLoadError(
+            [_refuse("RBNF_SYNTAX", "rule material produced no validated reader")]
+        )
     return loaded
