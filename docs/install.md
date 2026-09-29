@@ -38,19 +38,20 @@ ik --version
 ik locale info en_US
 ```
 
-## Optional cartlet sentence model
+## Experimental cartlet sentence model
 
-The provisional, experimental `en-tn-cart@1` sentence-break base requires the
-optional cartlet extra:
+Cartlet 0.7.0 or later is an icukit dependency and is installed by the normal
+icukit installation above once the owner's cartlet 0.7.0 release is available
+from PyPI. The `en-tn-cart@1` sentence-break base remains experimental and
+opt-in:
 
 ```bash
-pip install "icukit[cartlet]"
+python -c 'from icukit import SentenceOverride; SentenceOverride(base="en-tn-cart@1")'
 ```
 
-Cartlet is imported only when a cartlet model is selected. The default
-`SentenceOverride(base="none")` and flat-rule bases work without it. Selecting
-`base="en-tn-cart@1"` without the extra raises an `ImportError` explaining how
-to install it.
+Cartlet is imported lazily, only when a cartlet model is selected, so the
+default `SentenceOverride(base="none")` does not pay its import cost. The
+default remains unchanged; selecting the model is explicit.
 
 ## Advanced: using a system PyICU
 

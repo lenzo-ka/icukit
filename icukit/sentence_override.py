@@ -14,7 +14,6 @@ Example:
 from __future__ import annotations
 
 import hashlib
-import importlib.metadata
 import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
@@ -71,7 +70,7 @@ _NAMED_RULE_BASES = {
 _EN_TN_CART_PATH = (
     Path(__file__).with_name("data") / "break_rules" / "en" / "sentence-tn-cart.json.gz"
 )
-_EN_TN_CART_DIGEST = "sha256:662a0def1a7fa8e6cba3da98ea9b1df54d812eb86c3b882e62d248961a4c8f3e"
+_EN_TN_CART_DIGEST = "sha256:a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d"
 _CARTLET_IDENTITY = {
     "icu": "78.3",
     "unicode": "17.0",
@@ -173,7 +172,11 @@ class BreakRule(TypedDict):
 
 
 class BreakDecision(TypedDict):
-    """The attributed decision for one ICU sentence candidate."""
+    """The attributed decision for one ICU sentence candidate.
+
+    A cartlet model decision appends its model-global leaf id to ``id`` as
+    ``"<model>#leaf:<id>"``.
+    """
 
     offset: int
     end: int
@@ -271,8 +274,9 @@ class BreakRuleSet:
 class CartletModelRef:
     """A digest- and runtime-bound reference to an experimental cartlet model.
 
-    Constructing a reference does not import cartlet. The optional dependency
-    is imported only when a :class:`SentenceOverride` uses this reference.
+    Constructing a reference does not import cartlet. The dependency is
+    imported only when a :class:`SentenceOverride` uses this reference. Model
+    evaluation requires cartlet 0.7 or later.
     Models use ``icukit.features@1`` and are tied to the ICU, Unicode, and
     tokenizer identity under which those features were measured.
     """
@@ -460,23 +464,10 @@ def _load_cartlet_model(
                 )
             ]
         )
-    try:
-        from cartlet import DecisionTree
-    except ImportError as error:
-        raise ImportError(
-            "cartlet sentence-break models require the optional dependency; "
-            "install with `pip install 'icukit[cartlet]'`"
-        ) from error
-    try:
-        version = importlib.metadata.version("cartlet")
-    except importlib.metadata.PackageNotFoundError as error:
-        raise ImportError(
-            "cartlet sentence-break models require cartlet>=0.6; "
-            "install with `pip install 'icukit[cartlet]'`"
-        ) from error
-    numeric_version = tuple(int(part) if part.isdigit() else 0 for part in version.split(".")[:2])
-    if numeric_version < (0, 6):
-        raise ImportError(f"cartlet>=0.6 is required for sentence-break models; found {version}")
+    # Keep this import lazy so the unchanged base="none" path does not pay the
+    # cartlet import cost. Packaging enforces the hard cartlet>=0.7 dependency.
+    from cartlet import DecisionTree
+
     model = DecisionTree()
     document = model.load_model(str(ref.path), format="json")
     metadata = document.get("metadata", {})
@@ -1249,15 +1240,23 @@ def _observed_model_decision(
         cache,
     )
     try:
-        prediction = loaded.model._eval_normalized(vector, return_dist=True)
+        path = loaded.model.predict_path(vector)
     except _FeatureNotYet:
         return _ObservedResult(None, "model", vector.tokens_read, vector.horizon)
-    label = _cartlet_label(prediction)
+    label = _cartlet_label(path["prediction"])
     if label not in {"0", "1"}:
         raise ValueError(f"cartlet sentence-break model returned unknown label {label!r}")
+    leaf = path["trees"][0]["leaf"]
     effect: Effect = "break" if label == "1" else "no-break"
     return _ObservedResult(
-        _decision(offset, end, effect, "model", loaded.ref.name, vector.tokens_read),
+        _decision(
+            offset,
+            end,
+            effect,
+            "model",
+            f"{loaded.ref.name}#leaf:{leaf}",
+            vector.tokens_read,
+        ),
         None,
         vector.tokens_read,
         vector.horizon,
@@ -1997,13 +1996,14 @@ class SentenceOverride:
     not accuracy on naturally occurring running text. The unchanged default is
     always ``base="none"``.
 
-    ``en-tn-cart@1`` is the provisional, experimental cartlet counterpart. It
-    is also opt-in and requires the separately installed ``cartlet`` extra.
+    ``en-tn-cart@1`` is the experimental cartlet counterpart. It is also
+    opt-in. Cartlet is an icukit dependency, imported lazily when this path is
+    selected.
 
     Args:
         locale: ICU locale used for both sentence and word boundaries.
         base: ``"none"`` (the unchanged ICU default), the opt-in learned base
-            ``"en-tn@1"``, the optional ``"en-tn-cart@1"`` model, a loaded
+            ``"en-tn@1"``, the opt-in ``"en-tn-cart@1"`` model, a loaded
             rule set, a :class:`CartletModelRef`, or a path to a
             ``break-rules`` JSON file. Unknown names are refused.
         before: Ordered caller rules that force a decision before inventories

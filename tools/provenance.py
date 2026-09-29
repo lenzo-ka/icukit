@@ -27,7 +27,7 @@ MANIFEST_NAME = "PROVENANCE.json"
 SCHEMA_VERSION = 1
 ALLOWED_CLASSES = frozenset({"shippable", "shippable-share-alike", "derived-shippable"})
 REQUIRED_ENTRY_KEYS = frozenset({"path", "sha256", "source", "spdx", "class", "notice"})
-OPTIONAL_ENTRY_KEYS = frozenset({"term", "note"})
+OPTIONAL_ENTRY_KEYS = frozenset({"term", "note", "corpus_reference", "encoding"})
 PROVENANCE_KEYS = frozenset(
     {
         "source",

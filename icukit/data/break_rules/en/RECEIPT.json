@@ -5,10 +5,10 @@
     "sha256": "f79659de9fcdd1cc384502c5a6b53d1f99484f588d30ea6a8fd17d34135ab7e7"
   },
   "cartlet_model": {
-    "basename": "c-glue2-k1-d10-l20.json.gz",
+    "basename": "c-glue2-k1-d10-l20-format3.json.gz",
     "shipped_as": "sentence-tn-cart.json.gz",
-    "sha256": "662a0def1a7fa8e6cba3da98ea9b1df54d812eb86c3b882e62d248961a4c8f3e",
-    "format": 2,
+    "sha256": "a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d",
+    "format": 3,
     "features": "icukit.features@1",
     "identity": {
       "icu": "78.3",
@@ -21,6 +21,19 @@
       "depth": 10,
       "minimum_leaf": 20,
       "seed": 8675309
+    },
+    "retraining": {
+      "recipe": "frozen M3 c-glue2-k1-d10-l20 recipe",
+      "cartlet_commit": "7c8f20bf0e111a77824b5480dd108d183e06cfeb",
+      "reason": "retrained for the cartlet format-3 model contract"
+    },
+    "development_selection_equivalence": {
+      "pool": "M3 development/select",
+      "reference": "frozen format-2 model used for the M2 test measurements",
+      "format_3_fp_plus_fn": 99901,
+      "reference_fp_plus_fn": 99902,
+      "per_candidate_agreement_percent": 99.99989,
+      "test_pool_reopened": false
     }
   },
   "derivation": {

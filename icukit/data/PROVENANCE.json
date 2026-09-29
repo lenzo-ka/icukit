@@ -65,19 +65,26 @@
     },
     {
       "path": "break_rules/en/RECEIPT.json",
-      "sha256": "3ac77d4385184dc6ce560e025b7352d5edc88af7518d6f216f16868b3eeb6a9d",
+      "sha256": "5ecfd108646e56d154e9d0489a1854ee9b509c33f5e6425069dce71425433bc4",
       "source": "measurement receipt for google/tn-en_with_types rule and model derivation",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived"
+      }
     },
     {
       "path": "break_rules/en/sentence-tn-cart.json.gz",
-      "sha256": "662a0def1a7fa8e6cba3da98ea9b1df54d812eb86c3b882e62d248961a4c8f3e",
+      "sha256": "a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d",
       "source": "google/tn-en_with_types sentence-boundary labels",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "encoding": "gzip",
+      "corpus_reference": {
+        "kind": "derived"
+      }
     },
     {
       "path": "break_rules/en/sentence-tn.json",

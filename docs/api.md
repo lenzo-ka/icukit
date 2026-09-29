@@ -6877,6 +6877,9 @@ An open sentence boundary carrying both readings.
 
 The attributed decision for one ICU sentence candidate.
 
+A cartlet model decision appends its model-global leaf id to ``id`` as
+``"<model>#leaf:<id>"``.
+
 ### class `BreakPredicate`
 
 dict() -> new empty dictionary
@@ -6933,8 +6936,9 @@ Primary sentence spans plus every boundary left open by a rule.
 
 A digest- and runtime-bound reference to an experimental cartlet model.
 
-Constructing a reference does not import cartlet. The optional dependency
-is imported only when a :class:`SentenceOverride` uses this reference.
+Constructing a reference does not import cartlet. The dependency is
+imported only when a :class:`SentenceOverride` uses this reference. Model
+evaluation requires cartlet 0.7 or later.
 Models use ``icukit.features@1`` and are tied to the ICU, Unicode, and
 tokenizer identity under which those features were measured.
 
@@ -6996,13 +7000,14 @@ with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
 not accuracy on naturally occurring running text. The unchanged default is
 always ``base="none"``.
 
-``en-tn-cart@1`` is the provisional, experimental cartlet counterpart. It
-is also opt-in and requires the separately installed ``cartlet`` extra.
+``en-tn-cart@1`` is the experimental cartlet counterpart. It is also
+opt-in. Cartlet is an icukit dependency, imported lazily when this path is
+selected.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.
     base: ``"none"`` (the unchanged ICU default), the opt-in learned base
-        ``"en-tn@1"``, the optional ``"en-tn-cart@1"`` model, a loaded
+        ``"en-tn@1"``, the opt-in ``"en-tn-cart@1"`` model, a loaded
         rule set, a :class:`CartletModelRef`, or a path to a
         ``break-rules`` JSON file. Unknown names are refused.
     before: Ordered caller rules that force a decision before inventories

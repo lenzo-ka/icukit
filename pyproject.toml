@@ -51,6 +51,7 @@ classifiers = [
 # running ICU. A newer ICU reaching CI is meant to turn CI red, and that red is the
 # notice to regenerate the golden.
 dependencies = [
+    "cartlet>=0.7",
     "icukit-pyicu>=78.3.0",
 ]
 
@@ -60,7 +61,6 @@ Repository = "https://github.com/lenzo-ka/icukit"
 Issues = "https://github.com/lenzo-ka/icukit/issues"
 
 [project.optional-dependencies]
-cartlet = ["cartlet>=0.6"]
 dev = [
     "pytest>=9.0",
     "ruff>=0.6",
