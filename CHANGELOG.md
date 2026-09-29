@@ -51,7 +51,8 @@
   – $5.00"). The value is a `NumberRangeValue` of two whole amounts (`NumberValue` or
   `MeasureValue`), captured as "start", "separator", and "end", with a
   `NumberRangeSpec`. Each endpoint's own captures immediately follow it with
-  `start.*` or `end.*` names; approximately readings likewise carry `value.*` captures.
+  `start.*` or `end.*` names, and a minus sign the range reads before its start is
+  captured as `start.sign`; approximately readings likewise carry `value.*` captures.
   A range's endpoints follow the reader set: `DEFAULT_FAMILIES`
   gains `NUMBER_RANGE_FAMILY`, the ranges of numbers and percents (`number:range`), so
   plain `ik detect` reads them; `range_detectors(locale, detectors)` gives the range

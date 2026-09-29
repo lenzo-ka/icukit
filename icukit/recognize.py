@@ -7163,8 +7163,10 @@ class FlexibleNumberRangeDetector:
     a :class:`~icukit.detectors.NumberRangeValue` of two whole amounts. The captures are
     the "start" and "end" amounts, each with its value, and the "separator"; immediately
     after each endpoint capture are that endpoint reader's own captures, prefixed with
-    ``"start."`` or ``"end."`` (for example ``"start.integer"``). Approximately
-    readings likewise put ``"value.*"`` captures immediately after ``"value"``.
+    ``"start."`` or ``"end."`` (for example ``"start.integer"``). Where the range reads
+    a minus sign before a start its reader read without one, that sign is captured as
+    ``"start.sign"``. Approximately readings likewise put ``"value.*"`` captures
+    immediately after ``"value"``.
 
     ``form`` chooses what the reader reads, under its own type ``<group>:<form>``:
 
