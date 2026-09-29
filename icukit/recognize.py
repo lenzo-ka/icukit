@@ -233,6 +233,11 @@ class LetterNameDetector:
         self._names = _LETTER_NAMES.get(icu_locale.getLanguage())
         self._z_name = "zed" if icu_locale.getCountry() not in {"", "US"} else "zee"
 
+    @property
+    def has_names(self) -> bool:
+        """Whether the locale's language has a curated letter-name table."""
+        return self._names is not None
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Return isolated letter-name candidates in source order."""
         if self._names is None:
@@ -381,6 +386,11 @@ class PluralNumeralDetector:
         self.locale = locale
         self._suffixes = _PLURAL_NUMERAL_SUFFIXES.get(icu.Locale(locale).getLanguage(), ())
 
+    @property
+    def has_suffixes(self) -> bool:
+        """Whether the locale's language has a curated plural-suffix table."""
+        return bool(self._suffixes)
+
     def detect(self, text: str) -> list[ValueDetection]:
         """Return plural-numeral readings in source order."""
         if not self._suffixes:
@@ -446,6 +456,11 @@ class SingleLetterWordDetector:
     def __init__(self, locale: str) -> None:
         self.locale = locale
         self._words = _SINGLE_LETTER_WORDS.get(icu.Locale(locale).getLanguage(), frozenset())
+
+    @property
+    def has_words(self) -> bool:
+        """Whether the locale's language has a curated single-letter-word table."""
+        return bool(self._words)
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return isolated one-letter word candidates in source order."""

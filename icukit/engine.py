@@ -698,6 +698,23 @@ def generated_detectors_report(
     materials = tuple(_require_loaded(item) for item in material)
     detectors = DetectorSet(())
     skipped: list[SkippedSpec] = []
+    for family, spec, detector, reason in _family_specs(locale, families):
+        if detector is not None:
+            detectors = detectors.with_(detector)
+        else:
+            skipped.append(SkippedSpec(family.name, spec, reason))
+    material_readers, material_skipped = _material_readers(locale, families, materials)
+    return GenerationReport(detectors.with_(*material_readers), (*skipped, *material_skipped))
+
+
+def _family_specs(
+    locale: str, families: Iterable[Family]
+) -> Iterable[tuple[Family, Spec, Detector | None, str]]:
+    """Yield each enumerated family spec with its detector or reported skip reason.
+
+    Generation and availability share enumeration, probes, exception handling, and skip
+    reasons. Availability additionally reports readers that are built but have no data.
+    """
     for family in families:
         for spec in family.enumerate(locale):
             probe_function = next(
@@ -705,19 +722,14 @@ def generated_detectors_report(
             )
             probe = probe_function(spec, locale) if probe_function is not None else None
             detector = probe.detector if probe is not None else family.invert(spec, locale)
-            if detector is not None:
-                detectors = detectors.with_(detector)
-                continue
             reason = probe.reason if probe is not None else ""
-            if not reason:
+            if detector is None and not reason:
                 reason = (
                     family.skip_reason(spec, locale)
                     if family.skip_reason is not None
                     else "family returned no inverter"
                 )
-            skipped.append(SkippedSpec(family.name, spec, reason))
-    material_readers, material_skipped = _material_readers(locale, families, materials)
-    return GenerationReport(detectors.with_(*material_readers), (*skipped, *material_skipped))
+            yield family, spec, detector, reason
 
 
 def generated_detectors(

@@ -468,6 +468,32 @@ def generate_cli_markdown(cli_docs: dict[str, Any], level: int = 1, parent_cmd: 
     return "\n".join(lines)
 
 
+def generate_languages_markdown() -> str:
+    """Generate the deterministic, inexpensive language availability summary."""
+    import icu
+
+    from icukit.availability import _language_summary, available_languages
+
+    lines = [
+        "# Language availability",
+        "",
+        f"Generated with ICU {icu.ICU_VERSION}.",
+        "",
+        "This page reports reader availability and source for each ICU language. To keep",
+        "generation fast, it covers the generated default families and shipped curated",
+        "tables. `ik languages LANG` reports every generated and flexible specification,",
+        "including skips and optional guarded or user-material rows.",
+        "",
+    ]
+    for language in available_languages():
+        entries = []
+        for family, label in _language_summary(language):
+            entries.append(f"`{family}`: {label}")
+        lines.append(f"- **{language}** — {'; '.join(entries)}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def write_docs(output_dir: Path) -> list[Path]:
     """Generate and write all documentation files."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -490,6 +516,11 @@ def write_docs(output_dir: Path) -> list[Path]:
     written_files.append(cli_file)
     print(f"Generated {cli_file}")
 
+    languages_file = output_dir / "languages.md"
+    languages_file.write_text(generate_languages_markdown())
+    written_files.append(languages_file)
+    print(f"Generated {languages_file}")
+
     return written_files
 
 
@@ -504,10 +535,12 @@ def check_docs(output_dir: Path) -> bool:
 
         cli_docs = extract_cli_docs()
         cli_md = generate_cli_markdown(cli_docs)
+        languages_md = generate_languages_markdown()
 
         # Compare with existing
         api_file = output_dir / "api.md"
         cli_file = output_dir / "cli.md"
+        languages_file = output_dir / "languages.md"
 
         all_match = True
 
@@ -523,6 +556,13 @@ def check_docs(output_dir: Path) -> bool:
             all_match = False
         elif cli_file.read_text() != cli_md:
             print(f"Out of date: {cli_file}")
+            all_match = False
+
+        if not languages_file.exists():
+            print(f"Missing: {languages_file}")
+            all_match = False
+        elif languages_file.read_text() != languages_md:
+            print(f"Out of date: {languages_file}")
             all_match = False
 
         if all_match:

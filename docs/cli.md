@@ -1017,6 +1017,24 @@ Examples:
 
 - `help_command`: Subcommand to show help for
 
+## `icukit languages` (aliases: langs)
+
+With LANG, report the default selection of generated and flexible reader families:
+default locales, currencies, and units, plus guarded families with --guarded. Rows with
+no source have no usable reader: they were not built or were built with nothing to read.
+For a user row, provenance is the material's own provenance.source, verbatim user text
+that icukit does not interpret. icukit computes and reports no measured shares.
+
+Without LANG, quickly summarize generated default families and shipped curated tables
+for each ICU language. Use a LANG for the specification-level report.
+
+**Options:**
+
+- `lang`: ICU locale or language
+- `--material`: Add validated locale material from PATH (repeatable; requires LANG) (default: `[]`)
+- `--guarded`: Include readers of deliberately guarded readings (requires LANG) (default: `False`)
+- `-j, --json`: Output JSON lines (default: `False`)
+
 ## `icukit listfmt` (aliases: lf, listformat)
 
 Format lists of items with locale-appropriate conjunctions and separators.

@@ -1,0 +1,254 @@
+# Language availability
+
+Generated with ICU 78.3.
+
+This page reports reader availability and source for each ICU language. To keep
+generation fast, it covers the generated default families and shipped curated
+tables. `ik languages LANG` reports every generated and flexible specification,
+including skips and optional guarded or user-material rows.
+
+- **af** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **agq** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ak** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **am** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ar** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **as** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **asa** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ast** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **az** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ba** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bas** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **be** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **bem** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bez** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **bgc** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bho** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **blo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bm** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **br** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **brx** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **bs** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **bua** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ca** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ccp** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ce** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ceb** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **cgg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **chr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ckb** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **cs** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **csw** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **cv** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **cy** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **da** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **dav** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **de** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **dje** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **doi** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **dsb** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **dua** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **dyo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **dz** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ebu** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ee** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **el** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **en** — `abbreviation`: curated (icukit/data/abbreviations/en.xml); `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU; `measure`: curated surfaces beside ICU's units (icukit/data/unit_surfaces/en.tsv)
+- **eo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **es** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **et** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **eu** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ewo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **fa** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ff** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **fi** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **fil** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **fo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **fr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **fur** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **fy** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ga** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **gaa** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **gd** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **gl** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **gsw** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **gu** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **guz** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **gv** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ha** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **haw** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **he** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **hi** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **hr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **hsb** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **hu** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **hy** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ia** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **id** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ie** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ig** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ii** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **is** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **it** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ja** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **jgo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **jmc** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **jv** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ka** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **kab** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kam** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kde** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kea** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kgp** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **khq** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ki** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kk** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **kkj** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kl** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **kln** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **km** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **kn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ko** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **kok** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ks** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ksb** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ksf** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ksh** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ku** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kw** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **kxv** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ky** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **lag** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **lb** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **lg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **lij** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **lkt** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **lmo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ln** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **lo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **lrc** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **lt** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **lu** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **luo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **luy** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **lv** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **mai** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mas** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mer** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mfe** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mgh** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mgo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mi** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mk** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ml** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mni** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **mr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ms** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **mt** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **mua** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **my** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **mzn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **naq** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **nb** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **nd** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **nds** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ne** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **nl** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **nmg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **nn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **nnh** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **no** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **nqo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **nso** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **nus** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **nyn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **oc** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **om** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **or** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **os** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **pa** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **pcm** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **pl** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **pms** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **prg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ps** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **pt** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **qu** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **raj** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **rm** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **rn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ro** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **rof** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ru** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **rw** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **rwk** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sa** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sah** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **saq** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sat** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sbp** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sc** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **scn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sd** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **se** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **seh** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ses** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **shi** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **shn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **si** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sk** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **sl** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **smn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **so** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **sq** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **sr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **st** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **su** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **sv** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **sw** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **syr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **szl** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ta** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **te** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **teo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **tg** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **th** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ti** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **tk** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **tn** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **to** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **tok** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **tr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **tt** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **twq** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **tyv** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **tzm** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **ug** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **uk** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **ur** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **uz** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **vai** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **vec** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **vi** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **vmw** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **vun** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **wae** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **wo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **xh** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **xnr** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **xog** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **yav** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **yi** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **yo** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **yrl** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **yue** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **za** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **zgh** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
+- **zh** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU; `number-range`: ICU
+- **zu** — `date-time-skeleton`: ICU; `date-interval`: ICU; `compact-number`: ICU; `relative-date`: ICU; `scientific-number`: ICU; `spellout-number`: ICU (served by en); `number-range`: ICU
