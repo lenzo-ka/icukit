@@ -4822,8 +4822,9 @@ class MaterialSpelloutDetector(FlexibleSpelloutDetector):
     """Recognize spell-out rules supplied by a validated locale material file."""
 
     def __init__(self, locale: str, material, *, ruleset: str | None = None) -> None:
-        from .material import locale_descends_from
+        from .material import _require_loaded, locale_descends_from
 
+        material = _require_loaded(material)
         base_locale = icu.Locale(locale).getBaseName()
         if not locale_descends_from(base_locale, material.locale):
             raise ValueError(
