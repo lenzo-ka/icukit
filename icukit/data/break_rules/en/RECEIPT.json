@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "source_model": {
+    "basename": "b-glue2-k1-r200.json",
+    "sha256": "f79659de9fcdd1cc384502c5a6b53d1f99484f588d30ea6a8fd17d34135ab7e7"
+  },
+  "derivation": {
+    "name": "sb-decision-list",
+    "source": "compact_miner.py",
+    "sha256": "ab44dc37951ebbbad6f38798af3a677081ec439e46d4246573f3f3829ecbc24c",
+    "parameters": {
+      "detokenizer": "glue2",
+      "lookahead": 1,
+      "maximum_conditions": 3,
+      "minimum_weighted_support": 20,
+      "ordering": "one-sided-wilson-lower-95",
+      "rules": 200
+    }
+  },
+  "sampling": {
+    "all_negatives_retained": true,
+    "positive_rate": 0.08,
+    "positive_weight": 12.5,
+    "seed": 27182818
+  },
+  "feature_digest": "sha256:91a57e4336909a623a7c4cc8fb6990dc1378ef74262299d0eb908f38ad2bf597",
+  "witnesses": {
+    "method": "Mechanically synthesized from each rule's predicates using the authored vocabulary in tools/break_rule_witnesses.py; the complete ordered rule list and public loader verified every pinned match and no-match witness.",
+    "corpus_text_included": false
+  },
+  "measurements": {
+    "meaning": "Agreement with the corpus splitter on synthetic glue2 concatenations; these are not measurements of running-text accuracy.",
+    "development": {
+      "pool": "shard 90",
+      "selection": "fallback-best-dev-f1-among-p95-le-1",
+      "f1": 0.9793842703422532,
+      "tokens_read_p95": 1
+    },
+    "test": {
+      "pool": "shards 95-99, exact training duplicates removed",
+      "retained_sentences": 2968115,
+      "chunks": 148406,
+      "tp": 2754822,
+      "fp": 58906,
+      "fn": 64887,
+      "precision": 0.9790647852244424,
+      "recall": 0.9769880508946136,
+      "f1": 0.9780253156288071,
+      "fp_plus_fn": 123793
+    }
+  },
+  "license": {
+    "spdx": "CC-BY-SA-4.0",
+    "class": "shippable-share-alike",
+    "notice": "NOTICE",
+    "legal_code": "LICENSE"
+  }
+}

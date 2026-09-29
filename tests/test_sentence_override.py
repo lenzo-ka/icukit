@@ -781,3 +781,45 @@ def test_path_base_and_stream_factory(tmp_path: Path):
     assert override.decide("Mr. Smith arrived.")[0]["layer"] == "rules"
     assert SentenceOverride(base=str(path)).decide("Mr. Smith arrived.")[0]["layer"] == "rules"
     assert override.stream().lookahead == override.lookahead
+
+
+def test_named_en_tn_base_is_opt_in_and_attributes_rules():
+    text = "alpha a a a\n(1111). continues"
+    plain = SentenceOverride().decide(text)[0]
+    learned = SentenceOverride(base="en-tn@1").decide(text)[0]
+    assert (plain["layer"], plain["id"], plain["decision"]) == ("icu", None, "break")
+    assert (learned["layer"], learned["id"], learned["decision"]) == (
+        "rules",
+        "en.sb.0001",
+        "no-break",
+    )
+
+
+def test_unknown_named_base_is_refused():
+    with pytest.raises(ValueError, match="unknown sentence-override base"):
+        SentenceOverride(base="en-tn@unknown")
+
+
+def test_shipped_en_tn_identity_mismatch_is_refused(tmp_path: Path):
+    source = Path(__file__).parents[1] / "icukit/data/break_rules/en/sentence-tn.json"
+    document = __import__("json").loads(source.read_text(encoding="utf-8"))
+    document["identity"]["unicode"] = "0.0"
+    path = tmp_path / "mismatch.json"
+    path.write_text(__import__("json").dumps(document), encoding="utf-8")
+    with pytest.raises(BreakRuleLoadError) as caught:
+        SentenceOverride(base=path)
+    assert "IDENTITY_MISMATCH" in caught.value.reason_codes
+
+
+def test_shipped_en_tn_authored_harness_cases():
+    """Row 25: fixed authored cases agree with the harness's first-match semantics."""
+    override = SentenceOverride(base="en-tn@1")
+    cases = [
+        ("alpha a a a\n(1111). continues", "en.sb.0001", "no-break"),
+        ("alpha a a 2014.\na continues", "en.sb.0004", "break"),
+        ("alpha beta,x ed. Author", "en.sb.0029", "break"),
+        ("alpha beta word. ). A1234567890", "en.sb.0179", "no-break"),
+    ]
+    for text, rule_id, decision in cases:
+        item = next(found for found in override.decide(text) if found["id"] == rule_id)
+        assert (item["layer"], item["decision"]) == ("rules", decision)

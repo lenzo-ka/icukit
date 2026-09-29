@@ -23,6 +23,7 @@ from tools.provenance import refresh_hashes, validate_repository
 ROOT = Path(__file__).parents[1]
 DATA_REL = Path("icukit/data")
 MANIFEST_REL = DATA_REL / "PROVENANCE.json"
+LICENSE_EXPRESSION = "BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0"
 
 
 def _read_manifest(root: Path) -> dict:
@@ -74,11 +75,6 @@ def _plant_share_alike_file(root: Path, artifact_class: str) -> None:
             "class": artifact_class,
             "notice": notice,
         }
-    )
-    _replace_pyproject(
-        root,
-        'license = "BSD-2-Clause AND Unicode-3.0"',
-        'license = "BSD-2-Clause AND Unicode-3.0 AND cc-by-sa-4.0"',
     )
     _replace_pyproject(root, '    "LICENSE",\n', f'    "LICENSE",\n    "{notice}",\n')
     _write_manifest(root, manifest)
@@ -162,11 +158,6 @@ def test_share_alike_class_requires_notice(tmp_path: Path) -> None:
     manifest, entry = _entry(root, "abbreviations/abbreviations.rng")
     entry.update({"class": "shippable-share-alike", "spdx": "CC-BY-SA-4.0"})
     manifest["notices"]["LICENSE"]["spdx"] = "CC-BY-SA-4.0"
-    _replace_pyproject(
-        root,
-        'license = "BSD-2-Clause AND Unicode-3.0"',
-        'license = "BSD-2-Clause AND Unicode-3.0 AND CC-BY-SA-4.0"',
-    )
     _write_manifest(root, manifest)
     assert any("shippable-share-alike requires a notice" in error for error in _errors(root))
 
@@ -176,11 +167,6 @@ def test_shippable_class_rejects_share_alike_spdx(tmp_path: Path) -> None:
     manifest, entry = _entry(root, "abbreviations/abbreviations.rng")
     entry.update({"spdx": "CC-BY-SA-4.0", "notice": "LICENSE"})
     manifest["notices"]["LICENSE"]["spdx"] = "CC-BY-SA-4.0"
-    _replace_pyproject(
-        root,
-        'license = "BSD-2-Clause AND Unicode-3.0"',
-        'license = "BSD-2-Clause AND Unicode-3.0 AND CC-BY-SA-4.0"',
-    )
     _write_manifest(root, manifest)
     assert any("shippable must not use a share-alike SPDX id" in error for error in _errors(root))
 
@@ -312,13 +298,13 @@ def test_bsd_entry_may_use_its_own_bsd_notice(tmp_path: Path) -> None:
 
 def test_missing_bsd_expression_term_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", "Unicode-3.0")
+    _replace_pyproject(root, LICENSE_EXPRESSION, "CC-BY-SA-4.0 AND Unicode-3.0")
     assert "SPDX id is absent from project license expression: BSD-2-Clause" in _errors(root)
 
 
 def test_unused_expression_term_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", "BSD-2-Clause AND Unicode-3.0 AND MIT")
+    _replace_pyproject(root, LICENSE_EXPRESSION, f"{LICENSE_EXPRESSION} AND MIT")
     assert "project license term has no provenance use: MIT" in _errors(root)
 
 
@@ -347,25 +333,25 @@ def test_notice_spdx_must_occur_in_expression(tmp_path: Path) -> None:
 )
 def test_non_conjunction_license_expression_is_rejected(tmp_path: Path, expression: str) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", expression)
+    _replace_pyproject(root, LICENSE_EXPRESSION, expression)
     assert "project license expression must be an AND-only conjunction" in _errors(root)
 
 
 @pytest.mark.parametrize(
     "expression",
     [
-        "(BSD-2-Clause AND Unicode-3.0)",
-        "BSD-2-Clause AND (Unicode-3.0)",
-        "((BSD-2-Clause) AND (Unicode-3.0))",
-        "bsd-2-clause AND unicode-3.0",
-        "BSD-2-Clause AND LicenseRef-OR-internal AND Unicode-3.0",
+        "(BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0)",
+        "BSD-2-Clause AND (CC-BY-SA-4.0) AND (Unicode-3.0)",
+        "((BSD-2-Clause) AND (CC-BY-SA-4.0) AND (Unicode-3.0))",
+        "bsd-2-clause AND cc-by-sa-4.0 AND unicode-3.0",
+        "BSD-2-Clause AND CC-BY-SA-4.0 AND LicenseRef-OR-internal AND Unicode-3.0",
     ],
 )
 def test_supported_license_expression_spellings_are_accepted(
     tmp_path: Path, expression: str
 ) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, "BSD-2-Clause AND Unicode-3.0", expression)
+    _replace_pyproject(root, LICENSE_EXPRESSION, expression)
     if "LicenseRef" in expression:
         manifest = _read_manifest(root)
         notice = "LICENSE-OR-internal"
@@ -383,8 +369,8 @@ def test_duplicate_expression_term_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     _replace_pyproject(
         root,
-        "BSD-2-Clause AND Unicode-3.0",
-        "BSD-2-Clause AND Unicode-3.0 AND BSD-2-Clause",
+        LICENSE_EXPRESSION,
+        f"{LICENSE_EXPRESSION} AND BSD-2-Clause",
     )
     assert "project license expression contains duplicate terms" in _errors(root)
 
@@ -545,6 +531,8 @@ def test_license_files_must_be_an_array_of_strings(tmp_path: Path) -> None:
         root,
         "license-files = [\n"
         '    "LICENSE",\n'
+        '    "icukit/data/break_rules/en/LICENSE",\n'
+        '    "icukit/data/break_rules/en/NOTICE",\n'
         '    "icukit/data/cldr_symbols/LICENSE",\n'
         '    "icukit/data/ucd_name_aliases/LICENSE",\n'
         "]",
@@ -567,7 +555,7 @@ def test_license_files_glob_is_rejected_clearly(tmp_path: Path) -> None:
 
 def test_empty_license_expression_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    _replace_pyproject(root, 'license = "BSD-2-Clause AND Unicode-3.0"', 'license = ""')
+    _replace_pyproject(root, f'license = "{LICENSE_EXPRESSION}"', 'license = ""')
     assert "project license expression must be a nonempty string" in _errors(root)
 
 
@@ -690,8 +678,9 @@ def test_only_top_level_provenance_manifest_is_excluded(tmp_path: Path) -> None:
         ("DATA_SOURCE", "Kaggle"),
     ],
 )
+@pytest.mark.parametrize("artifact_class", ["shippable", "derived-shippable"])
 def test_declared_internal_corpus_in_shipped_json_is_rejected(
-    tmp_path: Path, key: str, value: object
+    tmp_path: Path, key: str, value: object, artifact_class: str
 ) -> None:
     root = _planted_tree(tmp_path)
     path = root / DATA_REL / "exceptions/examples-en.json"
@@ -702,11 +691,29 @@ def test_declared_internal_corpus_in_shipped_json_is_rejected(
     entry = next(
         item for item in manifest["files"] if item["path"] == "exceptions/examples-en.json"
     )
+    entry["class"] = artifact_class
     entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     _write_manifest(root, manifest)
     assert any(
         "declared provenance names known internal corpus" in error for error in _errors(root)
     )
+
+
+def test_share_alike_artifact_with_matching_notice_may_name_source_corpus(
+    tmp_path: Path,
+) -> None:
+    root = _planted_tree(tmp_path)
+    _plant_share_alike_file(root, "shippable-share-alike")
+    path = root / DATA_REL / "exceptions/planted.json"
+    path.write_text(
+        json.dumps({"provenance": {"source": "google/tn-en_with_types"}}) + "\n",
+        encoding="utf-8",
+    )
+    manifest, entry = _entry(root, "exceptions/planted.json")
+    entry["source"] = "google/tn-en_with_types sentence labels"
+    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert _errors(root) == []
 
 
 def test_declared_internal_corpus_in_nested_json_mapping_key_is_rejected(

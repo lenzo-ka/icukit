@@ -202,7 +202,7 @@ def _archive_files(path):
 def _material_like_objects(value):
     if isinstance(value, dict):
         keys = set(value)
-        if (
+        if value.get("kind") != "break-rules" and (
             value.get("kind") == "rbnf-spellout"
             or {"rules", "witnesses"} <= keys
             or {"schema_version", "kind"} <= keys
@@ -244,6 +244,12 @@ def _material_like_text(text, *, check_signature=True):
 )
 def test_b16_material_shape_probe_catches_valid_or_malformed_material(value):
     assert list(_material_like_objects(value))
+
+
+def test_b16_break_rules_are_not_rbnf_locale_material():
+    assert not list(
+        _material_like_objects({"schema_version": 1, "kind": "break-rules", "rules": []})
+    )
 
 
 def test_b16_distributions_and_package_data_ship_no_locale_material(tmp_path):

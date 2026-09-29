@@ -1,0 +1,24 @@
+English TN sentence-break rules
+
+This artifact is derived from the English portion of the Google Text
+Normalization dataset (tn-en_with_types), created for:
+
+Richard Sproat and Navdeep Jaitly. 2016. "RNN Approaches to Text
+Normalization: A Challenge."
+
+Corpus source:
+https://github.com/rwsproat/text-normalization-data/tree/master/en_with_types
+
+The corpus is based on English Wikipedia. Attribution is also given to the
+Wikipedia contributors whose work supplied the underlying text:
+https://www.wikipedia.org/
+
+Modifications: icukit's ordered rules were mined from the corpus's
+sentence-boundary labels, converted to the icukit break-rules format, and
+supplemented with independently authored validation witnesses. No corpus text
+is included in this distribution.
+
+The rule artifact, this notice, and the accompanying receipt are distributed
+under the Creative Commons Attribution-ShareAlike 4.0 International license.
+The full license text is in LICENSE beside this file, and the canonical license
+URL is https://creativecommons.org/licenses/by-sa/4.0/.

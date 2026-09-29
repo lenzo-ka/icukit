@@ -4,6 +4,14 @@
 
 ### Added
 
+- Provisionally, under owner choices D2 and D3, the learned English sentence
+  rule base `en-tn@1` ships as an experimental, opt-in CC BY-SA 4.0 artifact;
+  `base="none"` remains the default. The ordered 200-rule artifact is derived
+  from the Google TN English corpus, carries full license, attribution, and
+  measurement receipts, and loads only when its ICU, Unicode, and empty-
+  inventory token-profile identity matches. Its frozen test-pool F1 of
+  0.978025 measures agreement with the corpus splitter on synthetic `glue2`
+  concatenations, not running-text accuracy.
 - Experimental whole-text and incremental sentence-break overrides can retain,
   suppress, or leave open ICU sentence candidates with caller-authored flat
   rules, protected spans, exception inventories, per-candidate attribution, and
@@ -30,7 +38,8 @@
   class, notice, and byte hash of every data file under `icukit/data`. A license guard
   rejects missing entries and entries changed since last recorded, rejects unknown
   class labels, rejects data under `icukit/data` whose declared provenance names a
-  known internal corpus, and checks that required notices ship. Each notice file is
+  known internal corpus except a hash-pinned `shippable-share-alike` artifact with
+  its matching CC BY-SA notice, and checks that required notices ship. Each notice file is
   hash-pinned and labeled with the license it carries. Archive members under
   `icukit/data` are hash-verified against the manifest and compared between wheel and
   sdist. The package license expression

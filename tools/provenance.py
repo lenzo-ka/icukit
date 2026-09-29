@@ -251,6 +251,23 @@ def _corpus_error(source: str) -> bool:
     return any(corpus_id in lowered for corpus_id in CORPUS_IDS)
 
 
+def _share_alike_corpus_allowed(
+    entry: dict[str, Any] | None, notices: dict[str, dict[str, str]]
+) -> bool:
+    """Whether a hash-pinned CC BY-SA artifact may name its source corpus."""
+    if entry is None or entry.get("class") != "shippable-share-alike":
+        return False
+    spdx = entry.get("spdx")
+    notice = entry.get("notice")
+    return (
+        isinstance(spdx, str)
+        and SHARE_ALIKE.fullmatch(spdx) is not None
+        and isinstance(notice, str)
+        and notice in notices
+        and notices[notice]["spdx"].casefold() == spdx.casefold()
+    )
+
+
 def validate_repository(root: Path) -> list[str]:
     """Return every provenance or licensing error below a repository root."""
     root = root.resolve()
@@ -348,7 +365,7 @@ def validate_repository(root: Path) -> list[str]:
             used_spdx.add(spdx)
         for field in ("source", "note", "term"):
             for declaration in _strings_below(entry.get(field)):
-                if _corpus_error(declaration):
+                if _corpus_error(declaration) and not _share_alike_corpus_allowed(entry, notices):
                     errors.append(
                         f"{relative}:{field}: declared provenance names known internal corpus "
                         f"{declaration!r}"
@@ -428,7 +445,9 @@ def validate_repository(root: Path) -> list[str]:
             errors.append(f"{json_path.relative_to(root)}: invalid JSON: {error}")
             continue
         for key, source in _declared_provenance_strings(value):
-            if _corpus_error(source):
+            if _corpus_error(source) and not _share_alike_corpus_allowed(
+                entries.get(relative), notices
+            ):
                 errors.append(
                     f"{json_path.relative_to(root)}:{key}: declared provenance names known "
                     f"internal corpus {source!r}"
