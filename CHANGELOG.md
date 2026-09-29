@@ -4,6 +4,13 @@
 
 ### Added
 
+- Experimental whole-text sentence-break overrides can retain, suppress, or
+  leave open ICU sentence candidates with caller-authored flat rules, protected
+  spans, exception inventories, per-candidate attribution, and lattice output.
+  Rule artifacts declare and verify their ICU, Unicode, and explicitly
+  versioned tokenizer-profile identity and run candidate- and decision-aware
+  authored witnesses when loaded. The default remains `base="none"`, so
+  existing ICU sentence output is unchanged.
 - Experimental `char-classes` and `shape-refinement` locale-material kinds add
   namespaced character classes and extended shape symbols at runtime. They are
   witness-checked, canonically digested, explicitly passed with `material=`, and

@@ -23,7 +23,13 @@ from .errors import OverlappingProtectedSpans
 from .exceptions import LoadedExceptionInventory
 from .shape import shape
 
-__all__ = ["ProtectedSpan", "Token", "tokens", "token_features"]
+__all__ = ["TOKEN_PROFILE", "ProtectedSpan", "Token", "tokens", "token_features"]
+
+
+# Bump this whenever the observable ``tokens()`` policy changes.  The sentence
+# override includes it in authored-rule identities, and a golden test below the
+# API pins representative punctuation, astral, protection, and inventory cases.
+TOKEN_PROFILE = "icukit.tokens@1"
 
 
 class ProtectedSpan(TypedDict):
