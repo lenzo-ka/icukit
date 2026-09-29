@@ -196,12 +196,32 @@ def test_user_provenance_is_verbatim_and_not_an_icukit_computed_share(tmp_path):
     ] == [(records.index(user), "provenance")]
 
 
+# The row's fields, fixed here rather than read from AvailabilityRow, so a field that
+# carries a measured figure cannot be added without this test changing. None is numeric.
+ROW_FIELDS = {
+    "locale",
+    "family",
+    "spec",
+    "type",
+    "source",
+    "served_by",
+    "material",
+    "provenance",
+    "reason",
+}
+
+
 def test_rows_have_no_measured_share_fields():
     records = [asdict(row) for row in availability("en")]
-    expected_keys = set(availability_module.AvailabilityRow.__dataclass_fields__)
+    expected_keys = ROW_FIELDS
     assert records
     assert all(set(record) == expected_keys for record in records)
     assert all("share" not in key for record in records for key in record)
+    assert not any(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for record in records
+        for value in record.values()
+    )
     assert all(
         "measured share" not in value.lower()
         for record in records
@@ -253,11 +273,16 @@ def test_cli_reports_every_material_refusal_and_all_languages(tmp_path):
 def test_cli_json_has_no_measured_share_keys():
     result = _run("yo", "--json")
     assert result.returncode == 0
-    expected_keys = set(availability_module.AvailabilityRow.__dataclass_fields__)
+    expected_keys = ROW_FIELDS
     records = [json.loads(line) for line in result.stdout.splitlines()]
     assert records
     assert all(set(record) == expected_keys for record in records)
     assert all("share" not in key for record in records for key in record)
+    assert not any(
+        isinstance(value, (int, float)) and not isinstance(value, bool)
+        for record in records
+        for value in record.values()
+    )
     assert all(
         "measured share" not in value.lower()
         for record in records
