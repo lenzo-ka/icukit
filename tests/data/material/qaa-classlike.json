@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "kind": "classlike",
+  "id": "qaa/tengwar",
+  "status": "experimental",
+  "locale": "qaa",
+  "classes": [
+    {
+      "name": "qaa:tengwar-letter",
+      "unicode_set": "[\\uE000-\\uE07F]"
+    }
+  ],
+  "shape_refinements": [
+    {
+      "name": "qaa:tengwar-run",
+      "class": "qaa:tengwar-letter",
+      "symbol": "<qaa:L>"
+    }
+  ],
+  "provenance": {
+    "source": "icukit documentation example",
+    "license": "CC0-1.0"
+  },
+  "witnesses": [
+    {
+      "id": "qaa-w1",
+      "text": "",
+      "expect": {
+        "codepoint_classes": [
+          ["qaa:tengwar-letter"],
+          ["qaa:tengwar-letter"]
+        ],
+        "shapes": {
+          "qaa:tengwar-run": "<qaa:L>"
+        }
+      }
+    }
+  ]
+}

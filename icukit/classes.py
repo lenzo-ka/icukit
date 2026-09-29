@@ -1,8 +1,8 @@
 """ICU character classes and fixed-width context windows.
 
 The four base class alphabets are discovered from the linked ICU at import
-time.  Class and shape extensions are intentionally deferred to the later
-locale-material integration; this module has no material parameter yet.
+time. Runtime material can add namespaced extension classes, but it cannot
+replace any ICU value.
 
 Example:
     >>> char_classes("Mr. 5", "sentence_break")
@@ -15,11 +15,20 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from functools import cache
 from typing import Literal
 
 import icu
+
+from .material import (
+    LocaleMaterial,
+    MaterialLoadError,
+    MaterialRefusal,
+    _ambiguous_refinements,
+    _require_loaded,
+)
 
 __all__ = ["Prop", "ClassPoint", "ClassWindow", "char_classes", "class_window"]
 
@@ -133,7 +142,84 @@ class ClassWindow:
     identity: str
 
 
-def char_classes(text: str, prop: Prop = "general_category", /) -> list[str]:
+def _class_materials(material: Iterable[LocaleMaterial]) -> tuple[LocaleMaterial, ...]:
+    """Validate and canonically order class-like material for composition."""
+    loaded = tuple(
+        item
+        for raw in material
+        if (item := _require_loaded(raw)).kind in {"char-classes", "shape-refinement", "classlike"}
+    )
+    seen_ids: set[str] = set()
+    seen_names: set[str] = set()
+    refusals = []
+    for item in loaded:
+        if item.id in seen_ids:
+            refusals.append(MaterialRefusal("DUPLICATE_ID", f"duplicate material id {item.id!r}"))
+        elif item.id is not None:
+            seen_ids.add(item.id)
+        for extension in (*item.classes, *item.shape_refinements):
+            if extension.name in seen_names:
+                refusals.append(
+                    MaterialRefusal("DUPLICATE_ID", f"duplicate extension id {extension.name!r}")
+                )
+            else:
+                seen_names.add(extension.name)
+    if not refusals:
+        refusals.extend(
+            _ambiguous_refinements(
+                tuple(extension for item in loaded for extension in item.classes),
+                tuple(refinement for item in loaded for refinement in item.shape_refinements),
+            )
+        )
+    if refusals:
+        raise MaterialLoadError(refusals)
+    return tuple(sorted(loaded, key=lambda item: (item.digest, item.id or "")))
+
+
+@cache
+def _unicode_set(pattern: str) -> icu.UnicodeSet:
+    result = icu.UnicodeSet(pattern)
+    result.freeze()
+    return result
+
+
+def _extension_classes(char: str, material: Iterable[LocaleMaterial]) -> tuple[str, ...]:
+    """Return the additive classes matching one code point."""
+    matches = []
+    for item in _class_materials(material):
+        for extension in item.classes:
+            if (
+                extension.unicode_set is not None
+                and _unicode_set(extension.unicode_set).contains(char)
+            ) or char in extension.members:
+                matches.append(extension.name)
+    return tuple(sorted(matches))
+
+
+def _identity(materials: tuple[LocaleMaterial, ...]) -> str:
+    if not materials:
+        return _CLASS_IDENTITY
+    definition = {
+        "base": _IDENTITY_DEFINITION,
+        "material": [item.digest for item in materials],
+    }
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(
+                definition, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()
+        ).hexdigest()
+    )
+
+
+def char_classes(
+    text: str,
+    prop: Prop = "general_category",
+    /,
+    *,
+    material: Iterable[LocaleMaterial] = (),
+) -> list[str]:
     """Return one canonical long ICU property value name per code point.
 
     ICU aliases for the property name are accepted and resolved within the
@@ -145,11 +231,12 @@ def char_classes(text: str, prop: Prop = "general_category", /) -> list[str]:
         >>> char_classes("A", "gc")
         ['Uppercase_Letter']
     """
+    _class_materials(material)
     canonical = _canonical_property(prop)
     return [_value_name(char, canonical) for char in text]
 
 
-def _point(text: str, index: int, choice: int) -> ClassPoint:
+def _point(text: str, index: int, choice: int, materials: tuple[LocaleMaterial, ...]) -> ClassPoint:
     char = text[index]
     return ClassPoint(
         char,
@@ -159,7 +246,7 @@ def _point(text: str, index: int, choice: int) -> ClassPoint:
         _value_name(char, "sentence_break", choice),
         _value_name(char, "general_category", choice),
         _value_name(char, "script", choice),
-        (),
+        _extension_classes(char, materials),
     )
 
 
@@ -174,6 +261,7 @@ def class_window(
     *,
     before: int = 3,
     after: int = 3,
+    material: Iterable[LocaleMaterial] = (),
     text_starts: bool = True,
     text_ends: bool = True,
     names: Literal["long", "short"] = "long",
@@ -185,6 +273,7 @@ def class_window(
         offset: Code-point boundary in ``text``.
         before: Number of entries before the boundary.
         after: Number of entries after the boundary.
+        material: Validated additive character-class material.
         text_starts: Whether index zero is the start of the complete text.
         text_ends: Whether ``len(text)`` is the end of the complete text.
         names: Return ICU long or short value names.
@@ -204,20 +293,22 @@ def class_window(
     if names not in {"long", "short"}:
         raise ValueError("names must be 'long' or 'short'")
     choice = _LONG if names == "long" else _SHORT
+    materials = _class_materials(material)
 
     before_points = [
-        _point(text, index, choice) for index in range(max(0, offset - before), offset)
+        _point(text, index, choice, materials) for index in range(max(0, offset - before), offset)
     ]
     before_padding = before - len(before_points)
     if before_padding:
         before_points[:0] = [_padding(0, "<BOS>" if text_starts else "<PAD>")] * before_padding
 
     after_points = [
-        _point(text, index, choice) for index in range(offset, min(len(text), offset + after))
+        _point(text, index, choice, materials)
+        for index in range(offset, min(len(text), offset + after))
     ]
     after_padding = after - len(after_points)
     if after_padding:
         after_points.extend(
             [_padding(len(text), "<EOS>" if text_ends else "<PAD>")] * after_padding
         )
-    return ClassWindow(offset, tuple(before_points), tuple(after_points), _CLASS_IDENTITY)
+    return ClassWindow(offset, tuple(before_points), tuple(after_points), _identity(materials))

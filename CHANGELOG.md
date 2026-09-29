@@ -11,6 +11,14 @@
   versioned tokenizer-profile identity and run candidate- and decision-aware
   authored witnesses when loaded. The default remains `base="none"`, so
   existing ICU sentence output is unchanged.
+- Experimental `char-classes` and `shape-refinement` locale-material kinds add
+  namespaced character classes and extended shape symbols at runtime. They are
+  witness-checked, canonically digested, explicitly passed with `material=`, and
+  strictly additive: ICU's Word_Break, Sentence_Break, General_Category, Script,
+  and the unextended `coarse@1` and `cased@1` behavior remain unchanged. Every
+  declaration needs a nonempty exercising witness, overlapping refinements are
+  refused, and an extended scheme name can be reused only with its matching
+  material composition.
 - ICU-backed character-class features: `char_classes` and fixed-width
   `class_window` contexts expose reflective Word_Break, Sentence_Break,
   General_Category, and Script values with stable identities and explicit edge

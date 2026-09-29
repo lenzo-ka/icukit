@@ -303,7 +303,14 @@ from .locale import (
     minimize_subtags,
     parse_locale,
 )
-from .material import LocaleMaterial, MaterialLoadError, MaterialRefusal, load_locale_material
+from .material import (
+    ClassExtension,
+    LocaleMaterial,
+    MaterialLoadError,
+    MaterialRefusal,
+    ShapeRefinement,
+    load_locale_material,
+)
 from .measure import (
     WIDTH_NARROW,
     WIDTH_SHORT,
@@ -804,8 +811,10 @@ __all__ = [
     "RuleRefusal",
     "RuleLoadError",
     "LocaleMaterial",
+    "ClassExtension",
     "MaterialLoadError",
     "MaterialRefusal",
+    "ShapeRefinement",
     "load_locale_material",
     # Spoof/Confusables
     "are_confusable",
