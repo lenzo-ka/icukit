@@ -359,6 +359,18 @@ def test_every_malformed_input_in_the_refusal_sweep_raises_material_load_error(t
         with pytest.raises(MaterialLoadError):
             load_locale_material(material)
 
+    # A mapping that contains itself, or nests past any real material's depth, is
+    # refused by the walk itself, not by exhausting the caller's stack.
+    deep = _fixture()
+    node = deep["provenance"]
+    for _ in range(100):
+        node["note"] = {}
+        node = node["note"]
+    for material in (cyclic, deep):
+        with pytest.raises(MaterialLoadError) as caught:
+            load_locale_material(material)
+        assert [refusal.code for refusal in caught.value.refusals] == ["INVALID_JSON"]
+
     non_utf8 = tmp_path / "non-utf8.json"
     non_utf8.write_bytes(b"\xff")
     for path in (non_utf8, tmp_path):
@@ -499,6 +511,28 @@ def test_material_detector_spec_serializes_with_digest_and_material_is_hashable(
     assert MaterialSpelloutDetector("qaa", copy.deepcopy(material))
     with pytest.raises(TypeError):
         material.provenance["source"] = "changed"
+
+
+def test_a_subclass_of_loaded_material_is_refused():
+    loaded = load_locale_material(FIXTURE)
+
+    class Proxy(LocaleMaterial):
+        # Answers every read from the loaded material, so a seal check alone would pass.
+        def __getattribute__(self, name):
+            if name == "__class__":
+                return object.__getattribute__(self, name)
+            return getattr(loaded, name)
+
+    proxy = Proxy(
+        loaded.kind,
+        loaded.locale,
+        loaded.digest,
+        loaded.rules,
+        loaded.rulesets,
+        loaded.provenance,
+    )
+    with pytest.raises(TypeError, match="material must be a LocaleMaterial"):
+        MaterialSpelloutDetector("qaa", proxy)
 
 
 def test_only_loaded_unchanged_material_is_accepted_by_the_reader():

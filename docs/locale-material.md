@@ -2,7 +2,7 @@
 
 Locale material is data you supply at runtime for a locale where ICU lacks a capability. This page is its specification: format `icukit-locale-material` version 1, versioned with icukit. icukit loads material only when you pass it, refuses it unless every witness it carries passes, adds its readers beside ICU's without replacing them, ships none, and labels it `user` in every availability report. Version 1 has one kind, `rbnf-spellout`: ICU rule-based number format rule text, exactly as ICU reads it. This format is a draft and not yet stable.
 
-This page specifies the whole contract. On this branch, icukit provides the loader and the material reader; the parts of the contract about reader sets and availability reports are implemented by the changes that add `material=` to the reader-set builders and add `icukit.availability`.
+This page specifies the whole contract. The loader and the material reader described here are provided now; adding material readers to reader sets and labeling them in availability reports are not yet provided.
 
 ## Version 1 envelope
 
@@ -41,8 +41,9 @@ semantics do not change.
 
 A label-only witness certifies that its reader finds a reading at the declared extent
 and type; it does not certify a particular value. The cardinal rule set must have at
-least one value witness, which certifies both a case-insensitive (`casefold`) formatting
-match at its extent and recovered value.
+least one value witness, which certifies that ICU's formatting matches the text at its
+extent under Unicode full case folding (`str.casefold`, the folding the reader matches
+with, so `ß` and `ss` also compare equal) and that the reader recovers the value.
 
 `near_misses` is an array of objects having exactly `id`, `text`, `locale`, and
 `type`. Its ID and locale follow the witness rules. The type must name one of this
@@ -185,7 +186,7 @@ Loading is transactional. Duplicate JSON keys and non-finite numbers are refused
 The complete envelope is checked before semantic checks begin. ICU then compiles the
 rules; a public cardinal spell-out rule set must exist and must format 0 through 1000
 to 1001 distinct case-folded strings. Every declared value must format to its witness
-extent with a case-insensitive (`casefold`) comparison, and the material reader must find
+extent under Unicode full case folding (`str.casefold`), and the material reader must find
 every label and value in the whole witness text at that exact extent and type (and recover
 the declared value). Formatting and reading use each witness's declared locale, including
 descendant locales. Every near miss is read in its declared locale as well. Any failure
@@ -223,7 +224,9 @@ application material as `user`; neither integration is part of this release. No
 material is bundled in the wheel or source distribution. Version 1 accepts no
 pronunciation material.
 
-The reader accepts only material loaded and unchanged through the public API. Material
-constructed directly or altered through the public API, including with
-`dataclasses.replace`, is refused. icukit does not defend against callers that invoke
-private functions or bypass the frozen dataclass.
+The reader accepts only a `LocaleMaterial` that `load_locale_material` returned, or a
+copy of one (`copy.copy`, `copy.deepcopy`), unchanged. Material constructed directly,
+altered with `dataclasses.replace`, or of a subclass of `LocaleMaterial` is refused, and
+so is material whose fields were overwritten. A loaded material is valid only in the
+process that loaded it: pickling it is not supported, so load the file again in another
+process. icukit does not defend against callers that call its private functions.

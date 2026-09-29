@@ -112,13 +112,14 @@ def _material_seal(material: LocaleMaterial) -> str:
 
 
 def _require_loaded(material: object) -> LocaleMaterial:
-    """Require material loaded and unchanged through the public API.
+    """Require a LocaleMaterial the loader returned (or a copy of one), unchanged.
 
-    Material constructed directly or altered through the public API, including
-    with ``dataclasses.replace``, is refused. icukit does not defend against
-    callers that invoke private functions or bypass the frozen dataclass.
+    Material constructed directly, altered with ``dataclasses.replace``, of a subclass
+    (which could answer the seal check with one value and later reads with another), or
+    with fields overwritten is refused. icukit does not defend against callers that
+    call its private functions.
     """
-    if not isinstance(material, LocaleMaterial):
+    if type(material) is not LocaleMaterial:
         raise TypeError(f"material must be a LocaleMaterial, got {type(material).__name__}")
     try:
         valid = material._seal is not None and hmac.compare_digest(
@@ -157,16 +158,25 @@ def _constant(value: str) -> object:
     raise _InvalidJSON(f"non-finite number {value}")
 
 
-def _plain_json(value: object) -> object:
+_MAX_DEPTH = 64
+
+
+def _plain_json(value: object, _open: tuple[int, ...] = ()) -> object:
+    if isinstance(value, (Mapping, list, tuple)):
+        if id(value) in _open:
+            raise _InvalidJSON("the mapping contains itself")
+        if len(_open) >= _MAX_DEPTH:
+            raise _InvalidJSON(f"nesting deeper than {_MAX_DEPTH} levels")
+        _open = (*_open, id(value))
     if isinstance(value, Mapping):
         result = {}
         for key, item in value.items():
             if not isinstance(key, str):
                 raise _InvalidJSON(f"object key must be a string, got {key!r}")
-            result[key] = _plain_json(item)
+            result[key] = _plain_json(item, _open)
         return result
     if isinstance(value, (list, tuple)):
-        return [_plain_json(item) for item in value]
+        return [_plain_json(item, _open) for item in value]
     if isinstance(value, float) and not math.isfinite(value):
         raise _InvalidJSON("non-finite number")
     return value
