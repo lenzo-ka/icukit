@@ -4,6 +4,13 @@
 
 ### Added
 
+- Experimental whole-text sentence-break overrides can retain, suppress, or
+  leave open ICU sentence candidates with caller-authored flat rules, protected
+  spans, exception inventories, per-candidate attribution, and lattice output.
+  Rule artifacts declare and verify their ICU, Unicode, and explicitly
+  versioned tokenizer-profile identity and run candidate- and decision-aware
+  authored witnesses when loaded. The default remains `base="none"`, so
+  existing ICU sentence output is unchanged.
 - ICU-backed character-class features: `char_classes` and fixed-width
   `class_window` contexts expose reflective Word_Break, Sentence_Break,
   General_Category, and Script values with stable identities and explicit edge
