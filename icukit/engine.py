@@ -29,7 +29,7 @@ from functools import cache
 import icu
 
 from .detectors import DateDetector, Detector, DetectorSet, NumberDetector
-from .material import LocaleMaterial, locale_descends_from
+from .material import LocaleMaterial, _require_loaded, locale_descends_from
 from .recognize import (
     AlphanumericRunsDetector,
     FlexibleBareHourDetector,
@@ -695,10 +695,7 @@ def generated_detectors_report(
 ) -> GenerationReport:
     """Derive detectors for ``locale`` and report specs that could not be inverted."""
     families = tuple(families)
-    materials = tuple(material)
-    for item in materials:
-        if not isinstance(item, LocaleMaterial):
-            raise TypeError(f"material must contain LocaleMaterial, got {type(item).__name__}")
+    materials = tuple(_require_loaded(item) for item in material)
     detectors = DetectorSet(())
     skipped: list[SkippedSpec] = []
     for family in families:

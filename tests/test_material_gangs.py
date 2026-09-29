@@ -5,14 +5,15 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
-from icukit.detectors import DetectorSet, detector_key
+from icukit.detectors import detector_key
 from icukit.engine import flexible_detectors, generated_detectors, generated_detectors_report
-from icukit.material import LocaleMaterial, load_locale_material
+from icukit.material import LocaleMaterial, _material_seal, load_locale_material
 from icukit.recognize import MaterialLoneSpelloutDetector, MaterialSpelloutDetector
 from icukit.serialize import detections_to_json
 
@@ -46,6 +47,64 @@ def _material_for(locale: str, *, note: str | None = None):
     return load_locale_material(raw)
 
 
+def _distinct_yo_material():
+    raw = json.loads(FIXTURE.read_text())
+    raw["locale"] = "yo"
+    raw["rules"] = [line.replace("1: one;", "1: uno;") for line in raw["rules"]]
+    for witness in raw["witnesses"]:
+        witness["locale"] = "yo"
+    witness = raw["witnesses"][0]
+    witness["text"] = "uno hundred forty-five goats"
+    witness["text_sha256"] = sha256(witness["text"].encode()).hexdigest()
+    witness["labels"][0]["text"] = "uno hundred forty-five"
+    for near_miss in raw["near_misses"]:
+        near_miss["locale"] = "yo"
+    return load_locale_material(raw)
+
+
+def _multiple_ruleset_material():
+    raw = json.loads(FIXTURE.read_text())
+    raw["rules"].extend(
+        [
+            "%spellout-ordinal:",
+            "0: =%spellout-cardinal= ordinal;",
+            "%spellout-year:",
+            "0: =%spellout-cardinal= year;",
+        ]
+    )
+    for suffix, reader_type in (
+        (" ordinal", "number:spellout:ordinal"),
+        (" year", "number:spellout:year"),
+    ):
+        text = "twenty-three" + suffix
+        raw["witnesses"].append(
+            {
+                "id": "qaa-" + reader_type.rsplit(":", 1)[-1],
+                "text": text,
+                "locale": "qaa",
+                "labels": [
+                    {
+                        "start": 0,
+                        "end": len(text),
+                        "class": reader_type,
+                        "scheme": "icukit-type",
+                    }
+                ],
+                "x-icukit": {
+                    "values": [
+                        {
+                            "start": 0,
+                            "end": len(text),
+                            "type": reader_type,
+                            "value": {"kind": "number", "decimal": "23", "currency": None},
+                        }
+                    ]
+                },
+            }
+        )
+    return load_locale_material(raw)
+
+
 def _legacy_keys(locale: str, *, material=()):
     detectors = generated_detectors(locale, material=material).detectors
     keys = [
@@ -72,37 +131,74 @@ def test_b9_default_detection_serialization_is_unchanged():
         assert sha256(encoded.encode()).hexdigest() == expected
 
 
-def test_b10_material_is_added_after_all_existing_yo_readers():
-    material = _material_for("yo")
-    baseline = generated_detectors("yo")
-    extended = generated_detectors("yo", material=[material])
-    baseline_keys = tuple(map(detector_key, baseline.detectors))
-    extended_keys = tuple(map(detector_key, extended.detectors))
-    assert extended_keys[: len(baseline_keys)] == baseline_keys
-    assert sum(detector.type.startswith("number:spellout") for detector in baseline.detectors) == 5
-    material_reader = next(
-        detector
-        for detector in extended.detectors
-        if isinstance(detector, MaterialSpelloutDetector)
-    )
-    assert material_reader.material_digest == material.digest
-    assert material_reader.detect("twenty-one people")
+@pytest.mark.parametrize("flexible", [False, True], ids=["generated", "flexible"])
+def test_b10_material_adds_results_without_changing_icu_results(flexible):
+    material = _distinct_yo_material()
+    text = "twenty-one people and twenty-uno goats"
+    if flexible:
+        baseline = flexible_detectors("yo", locales=())
+        extended = flexible_detectors("yo", locales=(), material=[material])
+    else:
+        baseline = generated_detectors("yo")
+        extended = generated_detectors("yo", material=[material])
+
+    baseline_readings = detections_to_json(baseline.detect(text))
+    extended_readings = detections_to_json(extended.detect(text))
+    material_readings = [
+        item
+        for item in extended_readings
+        if item["spec"]["kind"] == "material_spellout_format_spec"
+    ]
+    assert [
+        item
+        for item in extended_readings
+        if item["spec"]["kind"] != "material_spellout_format_spec"
+    ] == baseline_readings
+    assert any(item["text"] == "twenty-one" for item in baseline_readings)
     assert any(
-        detector.detect("twenty-one people")
-        for detector in baseline.detectors
-        if detector.type.startswith("number:spellout")
+        item["text"] == "twenty-uno"
+        and item["value"]["decimal"] == "21"
+        and item["spec"]["material_digest"] == material.digest
+        for item in material_readings
     )
 
 
 def test_b11_distinct_material_digests_coexist_and_keys_are_hashable():
     first = _material_for("yo", note="first")
     second = _material_for("yo", note="second")
-    gang = DetectorSet(()).with_(
-        MaterialSpelloutDetector("yo", first, ruleset="%spellout-cardinal"),
-        MaterialSpelloutDetector("yo", second, ruleset="%spellout-cardinal"),
-    )
-    keys = {detector_key(detector) for detector in gang.detectors}
-    assert len(gang.detectors) == len(keys) == 2
+    gang = generated_detectors("yo", material=[first, second])
+    material_readers = [
+        detector for detector in gang.detectors if isinstance(detector, MaterialSpelloutDetector)
+    ]
+    keys = {detector_key(detector) for detector in material_readers}
+    assert first.rules == second.rules
+    assert first.provenance != second.provenance
+    assert len(material_readers) == len(keys) == 2
+
+
+def test_same_file_cardinal_ordinal_and_year_readers_survive_one_gang():
+    material = _multiple_ruleset_material()
+    gang = generated_detectors("qaa", material=[material])
+    readers = [
+        detector
+        for detector in gang.detectors
+        if isinstance(detector, MaterialSpelloutDetector)
+        and detector.material_digest == material.digest
+    ]
+    assert {reader.type for reader in readers} == {
+        "number:spellout",
+        "number:spellout:ordinal",
+        "number:spellout:year",
+    }
+    assert len(readers) == len({detector_key(reader) for reader in readers}) == 3
+    assert {
+        (item["text"], item["type"], item["value"].decimal)
+        for item in gang.detect("twenty-three ordinal and twenty-three year")
+        if getattr(item["spec"], "material_digest", None) == material.digest
+    } >= {
+        ("twenty-three ordinal", "number:spellout:ordinal", "23"),
+        ("twenty-three year", "number:spellout:year", "23"),
+    }
 
 
 def test_b12_material_application_follows_locale_descent():
@@ -161,12 +257,41 @@ def test_flexible_default_material_argument_is_unchanged():
 
 
 def test_non_material_element_is_a_type_error():
-    with pytest.raises(TypeError, match="LocaleMaterial"):
+    with pytest.raises(TypeError, match="material must be a LocaleMaterial"):
         generated_detectors("en", material=[object()])  # type: ignore[list-item]
+
+
+@pytest.mark.parametrize("flexible", [False, True], ids=["generated", "flexible"])
+def test_gangs_refuse_forged_material(flexible):
+    loaded = load_locale_material(FIXTURE)
+    forged = (
+        replace(loaded, rules=loaded.rules.replace("1: one;", "1: uno;")),
+        LocaleMaterial(
+            loaded.kind,
+            loaded.locale,
+            loaded.digest,
+            loaded.rules,
+            loaded.rulesets,
+            loaded.provenance,
+        ),
+    )
+    for material in forged:
+        with pytest.raises(ValueError, match="locale material must come from load_locale_material"):
+            if flexible:
+                flexible_detectors("qaa", locales=(), material=[material])
+            else:
+                generated_detectors("qaa", material=[material])
+        # The gang boundary refuses it even where no reader would be built from it (a
+        # locale it does not apply to), so a forged object is never reported as skipped.
+        with pytest.raises(ValueError, match="locale material must come from load_locale_material"):
+            generated_detectors_report("fr", material=[material])
 
 
 def test_unknown_material_kind_is_reported_as_skipped():
     material = LocaleMaterial("future-kind", "qaa", "sha256:future", "", (), {})
+    # Unknown kinds cannot come from today's loader; seal this synthetic future loader
+    # result so the test reaches the forward-compatible skip path honestly.
+    object.__setattr__(material, "_seal", _material_seal(material))
     report = generated_detectors_report("qaa", material=[material])
     skipped = next(item for item in report.skipped if item.spec == material.digest)
     assert skipped.family == "spellout-number"
@@ -223,3 +348,16 @@ def test_cli_bad_material_prints_every_refusal(tmp_path):
     assert "INVALID_KEY:" in result.stderr
     assert "INVALID_SCHEMA_VERSION:" in result.stderr
     assert "INVALID_KIND:" in result.stderr
+
+
+def test_cli_partly_valid_witness_list_is_refused_without_output(tmp_path):
+    raw = json.loads(FIXTURE.read_text())
+    raw["witnesses"][1]["x-icukit"]["values"][0]["value"]["decimal"] = "24"
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = _run_cli("detect", "--material", str(path), "-t", "twenty-three")
+
+    assert result.returncode == 2
+    assert "WITNESS_FORMAT_FAILED" in result.stderr
+    assert result.stdout == ""
