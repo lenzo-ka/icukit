@@ -702,6 +702,16 @@ def test_internal_corpus_in_json_key_is_rejected(tmp_path: Path) -> None:
     _assert_unclassified_corpus_is_rejected(root, "exceptions/examples-en.json")
 
 
+def test_internal_corpus_in_decoded_json_key_is_rejected(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_text('{"\\u0065n_with_types": 1}\n', encoding="utf-8")
+    manifest, _ = _record_changed_bytes(root, relative)
+    _write_manifest(root, manifest)
+    _assert_unclassified_corpus_is_rejected(root, relative)
+
+
 def test_internal_corpus_in_nested_json_value_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     path = root / DATA_REL / "exceptions/examples-en.json"
@@ -746,6 +756,18 @@ def test_duplicate_source_in_manifest_entry_is_rejected(tmp_path: Path) -> None:
     assert "icukit/data/PROVENANCE.json: duplicate JSON key 'source'" in _errors(root)
 
 
+def test_internal_corpus_in_manifest_entry_source_is_rejected(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    manifest, entry = _entry(root, "abbreviations/en.xml")
+    entry["source"] = "en_with_types"
+    _write_manifest(root, manifest)
+    assert any(
+        "abbreviations/en.xml: manifest entry names known internal corpus en_with_types" in error
+        and "without a valid corpus_reference" in error
+        for error in _errors(root)
+    )
+
+
 def test_duplicate_source_in_shipped_json_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     path = root / DATA_REL / "exceptions/examples-en.json"
@@ -772,6 +794,20 @@ def test_internal_corpus_in_source_url_attribute_is_rejected(tmp_path: Path) -> 
     manifest, _ = _record_changed_bytes(root, "abbreviations/en.xml")
     _write_manifest(root, manifest)
     _assert_unclassified_corpus_is_rejected(root, "abbreviations/en.xml")
+
+
+def test_internal_corpus_in_decoded_xml_attribute_is_rejected(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "abbreviations/en.xml"
+    path = root / DATA_REL / relative
+    text = path.read_text(encoding="utf-8")
+    original = '<abbreviations xml:lang="en" status="draft">'
+    replacement = '<abbreviations xml:lang="en" status="draft" source="&#101;n_with_types">'
+    assert original in text
+    path.write_text(text.replace(original, replacement, 1), encoding="utf-8")
+    manifest, _ = _record_changed_bytes(root, relative)
+    _write_manifest(root, manifest)
+    _assert_unclassified_corpus_is_rejected(root, relative)
 
 
 def test_internal_corpus_in_tsv_comment_is_rejected(tmp_path: Path) -> None:

@@ -18,6 +18,7 @@ import json
 import re
 import sys
 import tomllib
+import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -205,15 +206,47 @@ def _license_terms(expression: Any) -> tuple[dict[str, str], str | None]:
     return folded, None
 
 
+def _corpus_ids_in_value(value: Any) -> set[str]:
+    """Return corpus identifiers in decoded mapping keys and string values."""
+    found: set[str] = set()
+    pending = [value]
+    while pending:
+        child = pending.pop()
+        if isinstance(child, str):
+            lowered = child.casefold()
+            found.update(corpus_id for corpus_id in CORPUS_IDS if corpus_id in lowered)
+        elif isinstance(child, dict):
+            pending.extend(child.keys())
+            pending.extend(child.values())
+        elif isinstance(child, (list, tuple)):
+            pending.extend(child)
+    return found
+
+
 def _corpus_ids_in_file(path: Path) -> list[str]:
-    """Return known corpus identifiers found anywhere in a packaged file."""
+    """Return corpus identifiers in raw and consumer-decoded packaged content."""
     content = path.read_bytes()
+    found: set[str] = set()
     try:
-        lowered_text = content.decode("utf-8").casefold()
+        text = content.decode("utf-8")
     except UnicodeDecodeError:
         lowered_bytes = content.lower()
-        return [corpus_id for corpus_id in CORPUS_IDS if corpus_id.encode() in lowered_bytes]
-    return [corpus_id for corpus_id in CORPUS_IDS if corpus_id in lowered_text]
+        found.update(corpus_id for corpus_id in CORPUS_IDS if corpus_id.encode() in lowered_bytes)
+    else:
+        found.update(_corpus_ids_in_value(text))
+        try:
+            found.update(_corpus_ids_in_value(json.loads(text)))
+        except json.JSONDecodeError:
+            pass
+        try:
+            xml_root = ET.fromstring(text)
+        except ET.ParseError:
+            pass
+        else:
+            for element in xml_root.iter():
+                found.update(_corpus_ids_in_value(element.attrib))
+                found.update(_corpus_ids_in_value((element.text, element.tail)))
+    return [corpus_id for corpus_id in CORPUS_IDS if corpus_id in found]
 
 
 def _share_alike_corpus_allowed(entry: dict[str, Any], notices: dict[str, dict[str, str]]) -> bool:
@@ -369,6 +402,16 @@ def validate_repository(root: Path) -> list[str]:
         errors.extend(corpus_reference_errors)
         if entry.get("corpus_reference") is not None and not corpus_reference_errors:
             valid_corpus_references.add(relative)
+        manifest_corpus_ids = _corpus_ids_in_value(entry)
+        if manifest_corpus_ids and relative not in valid_corpus_references:
+            ordered_corpus_ids = (
+                corpus_id for corpus_id in CORPUS_IDS if corpus_id in manifest_corpus_ids
+            )
+            errors.append(
+                f"{relative}: manifest entry names known internal corpus "
+                f"{', '.join(ordered_corpus_ids)} "
+                "without a valid corpus_reference"
+            )
         if "notice" not in entry or (notice is not None and not isinstance(notice, str)):
             errors.append(f"{relative}: notice must be a repository-relative path or null")
         else:
