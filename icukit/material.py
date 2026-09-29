@@ -88,6 +88,13 @@ class LocaleMaterial:
 
 
 def _material_seal(material: LocaleMaterial) -> str:
+    provenance = json.dumps(
+        dict(material.provenance),
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     encoded = json.dumps(
         (
             material.kind,
@@ -95,6 +102,7 @@ def _material_seal(material: LocaleMaterial) -> str:
             material.digest,
             material.rules,
             material.rulesets,
+            provenance,
         ),
         ensure_ascii=False,
         allow_nan=False,
@@ -104,6 +112,12 @@ def _material_seal(material: LocaleMaterial) -> str:
 
 
 def _require_loaded(material: object) -> LocaleMaterial:
+    """Require material loaded and unchanged through the public API.
+
+    Material constructed directly or altered through the public API, including
+    with ``dataclasses.replace``, is refused. icukit does not defend against
+    callers that invoke private functions or bypass the frozen dataclass.
+    """
     if not isinstance(material, LocaleMaterial):
         raise TypeError(f"material must be a LocaleMaterial, got {type(material).__name__}")
     try:
@@ -819,6 +833,7 @@ def load_locale_material(
         _InvalidJSON,
         TypeError,
         ValueError,
+        RecursionError,
     ) as error:
         raise MaterialLoadError([_refuse("INVALID_JSON", str(error))]) from error
     data = cast(Mapping[str, object], parsed)

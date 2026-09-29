@@ -244,6 +244,7 @@ def test_b16_material_shape_probe_catches_valid_or_malformed_material(value):
 
 
 def test_b16_distributions_and_package_data_ship_no_locale_material(tmp_path):
+    """Scan data files and JSON-shaped text; Python source is code, reviewed as code."""
     root = Path(__file__).parent.parent
     # uv builds in a development checkout; CI installs the dev extra's ``build``.
     if shutil.which("uv"):
@@ -345,11 +346,14 @@ def test_every_malformed_input_in_the_refusal_sweep_raises_material_load_error(t
                 with pytest.raises(MaterialLoadError):
                     load_locale_material(material)
 
+    cyclic = {}
+    cyclic["self"] = cyclic
     malformed_mappings = (
         {**_fixture(), 1: "non-string top-level key"},
         {**_fixture(), "provenance": {1: "non-string nested key"}},
         {**_fixture(), "provenance": {"source": object()}},
         {**_fixture(), "witnesses": [{"nested": object()}]},
+        cyclic,
     )
     for material in malformed_mappings:
         with pytest.raises(MaterialLoadError):
@@ -517,6 +521,9 @@ def test_only_loaded_unchanged_material_is_accepted_by_the_reader():
     for item in forged:
         with pytest.raises(ValueError, match="locale material must come from load_locale_material"):
             MaterialSpelloutDetector("qaa", item)
+    object.__setattr__(material, "provenance", MappingProxyType({"source": "changed"}))
+    with pytest.raises(ValueError, match="locale material must come from load_locale_material"):
+        MaterialSpelloutDetector("qaa", material)
     with pytest.raises(TypeError, match="material must be a LocaleMaterial"):
         MaterialSpelloutDetector("qaa", object())
 
