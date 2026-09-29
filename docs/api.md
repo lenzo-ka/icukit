@@ -325,8 +325,10 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`RuleRefusal`](#icukiterrors) — class, `icukit.errors`
 - [`RuleLoadError`](#icukiterrors) — class, `icukit.errors`
 - [`LocaleMaterial`](#icukitmaterial) — class, `icukit.material`
+- [`ClassExtension`](#icukitmaterial) — class, `icukit.material`
 - [`MaterialLoadError`](#icukitmaterial) — class, `icukit.material`
 - [`MaterialRefusal`](#icukitmaterial) — class, `icukit.material`
+- [`ShapeRefinement`](#icukitmaterial) — class, `icukit.material`
 - [`load_locale_material`](#icukitmaterial) — function, `icukit.material`
 - [`are_confusable`](#icukitspoof) — function, `icukit.spoof`
 - [`get_confusable_type`](#icukitspoof) — function, `icukit.spoof`
@@ -1484,8 +1486,8 @@ Example:
 ICU character classes and fixed-width context windows.
 
 The four base class alphabets are discovered from the linked ICU at import
-time.  Class and shape extensions are intentionally deferred to the later
-locale-material integration; this module has no material parameter yet.
+time. Runtime material can add namespaced extension classes, but it cannot
+replace any ICU value.
 
 Example:
     >>> char_classes("Mr. 5", "sentence_break")
@@ -1523,7 +1525,7 @@ the long-name feature definition and therefore does not change with
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-### `char_classes(text: 'str', prop: 'Prop' = 'general_category', /) -> 'list[str]'`
+### `char_classes(text: 'str', prop: 'Prop' = 'general_category', /, *, material: 'Iterable[LocaleMaterial]' = ()) -> 'list[str]'`
 
 Return one canonical long ICU property value name per code point.
 
@@ -1536,7 +1538,7 @@ Example:
     >>> char_classes("A", "gc")
     ['Uppercase_Letter']
 
-### `class_window(text: 'str', offset: 'int', /, *, before: 'int' = 3, after: 'int' = 3, text_starts: 'bool' = True, text_ends: 'bool' = True, names: "Literal['long', 'short']" = 'long') -> 'ClassWindow'`
+### `class_window(text: 'str', offset: 'int', /, *, before: 'int' = 3, after: 'int' = 3, material: 'Iterable[LocaleMaterial]' = (), text_starts: 'bool' = True, text_ends: 'bool' = True, names: "Literal['long', 'short']" = 'long') -> 'ClassWindow'`
 
 Return ICU classes immediately before and after ``offset``.
 
@@ -1545,6 +1547,7 @@ Args:
     offset: Code-point boundary in ``text``.
     before: Number of entries before the boundary.
     after: Number of entries after the boundary.
+    material: Validated additive character-class material.
     text_starts: Whether index zero is the start of the complete text.
     text_ends: Whether ``len(text)`` is the end of the complete text.
     names: Return ICU long or short value names.
@@ -4582,11 +4585,23 @@ Load witness-checked locale material supplied by an application at runtime.
 
 `frozenset({'id', 'labels', 'locale', 'text', 'text_sha256', 'x-icukit'})`
 
+### class `ClassExtension`
+
+One namespaced, additive character class.
+
+#### `ClassExtension(name: 'str', unicode_set: 'str | None' = None, members: 'tuple[str, ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `LocaleMaterial`
 
 Immutable, validated locale material identified by its content digest.
 
-#### `LocaleMaterial(kind: 'str', locale: 'str', digest: 'str', rules: 'str', rulesets: 'tuple[str, ...]', provenance: 'Mapping[str, str]') -> None`
+Reader material uses ``rules`` and ``rulesets``. Character material uses
+``id``, ``status``, ``classes``, and ``shape_refinements``. The unused
+fields are empty so all kinds pass through one sealed loader type.
+
+#### `LocaleMaterial(kind: 'str', locale: 'str', digest: 'str', rules: 'str', rulesets: 'tuple[str, ...]', provenance: 'Mapping[str, str]', id: 'str | None' = None, status: 'str | None' = None, classes: 'tuple[ClassExtension, ...]' = (), shape_refinements: 'tuple[ShapeRefinement, ...]' = ()) -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -4601,6 +4616,14 @@ Initialize self.  See help(type(self)) for accurate signature.
 ### class `MaterialRefusal`
 
 One reason a locale material file was refused.
+
+### class `ShapeRefinement`
+
+A new shape symbol selected by a base or extension class.
+
+#### `ShapeRefinement(name: 'str', class_name: 'str', symbol: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
 
 ### `load_locale_material(material: 'Mapping[str, object] | str | os.PathLike[str]', /) -> 'LocaleMaterial'`
 
@@ -7075,8 +7098,8 @@ Convert typed detections to a list containing only JSON-native values.
 Versioned ICU word-shape schemes.
 
 The built-in schemes are deliberately fixed and identified by a digest of
-their canonical definition and the linked ICU/Unicode versions. Shape
-extensions arrive later with locale-material support.
+their canonical definition and the linked ICU/Unicode versions. Experimental
+runtime material can add namespaced symbols without redefining them.
 
 Example:
     >>> shape("U.S.")
@@ -7088,13 +7111,18 @@ Example:
 
 Stable metadata identifying a shape scheme and its Unicode runtime.
 
-### `shape(text: 'str', scheme: 'str' = 'coarse@1', /) -> 'str'`
+### `shape(text: 'str', scheme: 'str' = 'coarse@1', /, *, material: 'Iterable[LocaleMaterial]' = ()) -> 'str'`
 
 Return the versioned ICU shape of ``text``.
 
 ``coarse@1`` collapses letter and digit runs; ``cased@1`` distinguishes
 letter case and caps each same-symbol run at four. Combining marks directly
-following a letter or digit run are absorbed.
+following a letter or digit run are absorbed. Validated shape-refinement
+material selects a namespaced symbol before absorption or the base scheme
+and collapses adjacent uses of that symbol as one run. A refined
+punctuation symbol does not make punctuation absorb following marks. An
+extended scheme name checks the supplied material's ids and digest prefixes.
+The name is a label and is not proof of material identity.
 
 Example:
     >>> shape("Mr. Smith")
@@ -7102,12 +7130,17 @@ Example:
     >>> shape("Mr. Smith", "cased@1")
     'Xx. Xxxxx'
 
-### `shape_scheme(scheme: 'str' = 'coarse@1', /) -> 'ShapeSchemeInfo'`
+### `shape_scheme(scheme: 'str' = 'coarse@1', /, *, material: 'Iterable[LocaleMaterial]' = ()) -> 'ShapeSchemeInfo'`
 
-Describe a built-in shape scheme and return its stable identity digest.
+Describe a shape scheme and return its stable identity digest.
 
 The digest covers canonical JSON containing the scheme definition plus the
-linked ICU and Unicode versions.
+linked ICU and Unicode versions. With material, it also covers every
+material digest and reports each extension's id and digest. Its extended
+name is a label containing each material id and 12-hex digest prefix. Passing
+that label back checks those prefixes against the supplied material as a guard
+against an obvious mismatch; the full extension digests and this record's
+digest, rather than the label, are identities.
 
 ## icukit.spoof
 
