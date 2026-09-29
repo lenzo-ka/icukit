@@ -5,14 +5,16 @@ The ``project.license-files`` entries are deliberately restricted to literal,
 repository-relative paths. Although packaging metadata permits globs, this guard
 refuses them so every shipped notice has one unambiguous manifest record. Refreshing
 hashes acknowledges only that bytes changed: provenance must be re-reviewed first.
-The guard rejects any data file under ``icukit/data`` whose content names a known
-internal corpus unless its manifest entry records and classifies that reference.
+The guard accepts only UTF-8 text data or a manifest-declared, inspectable gzip whose
+payload is UTF-8 text. It rejects a known internal corpus name in the raw text or its
+decoded JSON/XML unless the manifest entry records and classifies that reference.
 """
 
 from __future__ import annotations
 
 import argparse
 import fnmatch
+import gzip
 import hashlib
 import json
 import re
@@ -27,7 +29,8 @@ MANIFEST_NAME = "PROVENANCE.json"
 SCHEMA_VERSION = 1
 ALLOWED_CLASSES = frozenset({"shippable", "shippable-share-alike", "derived-shippable"})
 REQUIRED_ENTRY_KEYS = frozenset({"path", "sha256", "source", "spdx", "class", "notice"})
-OPTIONAL_ENTRY_KEYS = frozenset({"term", "note", "corpus_reference"})
+OPTIONAL_ENTRY_KEYS = frozenset({"term", "note", "corpus_reference", "encoding"})
+INSPECTABLE_ENCODINGS = frozenset({"gzip"})
 CORPUS_IDS = (
     "google/tn-",
     "en_with_types",
@@ -49,7 +52,7 @@ class _DuplicateJSONKeyError(ValueError):
     pass
 
 
-def _read_json(path: Path, display_path: Path) -> Any:
+def _read_json_text(text: str, display_path: Path) -> Any:
     def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
         value: dict[str, Any] = {}
         for key, child in pairs:
@@ -58,7 +61,11 @@ def _read_json(path: Path, display_path: Path) -> Any:
             value[key] = child
         return value
 
-    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicate_keys)
+    return json.loads(text, object_pairs_hook=reject_duplicate_keys)
+
+
+def _read_json(path: Path, display_path: Path) -> Any:
+    return _read_json_text(path.read_text(encoding="utf-8"), display_path)
 
 
 def _safe_relative_path(value: str) -> bool:
@@ -223,29 +230,40 @@ def _corpus_ids_in_value(value: Any) -> set[str]:
     return found
 
 
-def _corpus_ids_in_file(path: Path) -> list[str]:
-    """Return corpus identifiers in raw and consumer-decoded packaged content."""
+def _inspectable_text(
+    path: Path, encoding: Any, *, declared: bool
+) -> tuple[str | None, str | None]:
+    """Decode a UTF-8 data file or its one supported declared container."""
     content = path.read_bytes()
-    found: set[str] = set()
+    if declared:
+        if not isinstance(encoding, str) or encoding not in INSPECTABLE_ENCODINGS:
+            return None, "data files must be UTF-8 text or a declared, inspectable encoding"
+        try:
+            content = gzip.decompress(content)
+        except (OSError, EOFError):
+            return None, "data files must be UTF-8 text or a declared, inspectable encoding"
     try:
-        text = content.decode("utf-8")
+        return content.decode("utf-8"), None
     except UnicodeDecodeError:
-        lowered_bytes = content.lower()
-        found.update(corpus_id for corpus_id in CORPUS_IDS if corpus_id.encode() in lowered_bytes)
+        return None, "data files must be UTF-8 text or a declared, inspectable encoding"
+
+
+def _corpus_ids_in_text(text: str) -> list[str]:
+    """Return corpus identifiers in raw and structured decoded text."""
+    found: set[str] = set()
+    found.update(_corpus_ids_in_value(text))
+    try:
+        found.update(_corpus_ids_in_value(json.loads(text)))
+    except json.JSONDecodeError:
+        pass
+    try:
+        xml_root = ET.fromstring(text)
+    except ET.ParseError:
+        pass
     else:
-        found.update(_corpus_ids_in_value(text))
-        try:
-            found.update(_corpus_ids_in_value(json.loads(text)))
-        except json.JSONDecodeError:
-            pass
-        try:
-            xml_root = ET.fromstring(text)
-        except ET.ParseError:
-            pass
-        else:
-            for element in xml_root.iter():
-                found.update(_corpus_ids_in_value(element.attrib))
-                found.update(_corpus_ids_in_value((element.text, element.tail)))
+        for element in xml_root.iter():
+            found.update(_corpus_ids_in_value(element.attrib))
+            found.update(_corpus_ids_in_value((element.text, element.tail)))
     return [corpus_id for corpus_id in CORPUS_IDS if corpus_id in found]
 
 
@@ -476,7 +494,15 @@ def validate_repository(root: Path) -> list[str]:
 
     for relative in sorted(actual):
         data_path = root / DATA_REL / relative
-        corpus_ids = _corpus_ids_in_file(data_path)
+        entry = entries.get(relative, {})
+        text, format_error = _inspectable_text(
+            data_path, entry.get("encoding"), declared="encoding" in entry
+        )
+        if format_error:
+            errors.append(f"{data_path.relative_to(root)}: {format_error}")
+            continue
+        assert text is not None
+        corpus_ids = _corpus_ids_in_text(text)
         if corpus_ids and relative not in valid_corpus_references:
             errors.append(
                 f"{data_path.relative_to(root)}: content names known internal corpus "
@@ -486,11 +512,11 @@ def validate_repository(root: Path) -> list[str]:
         if PurePosixPath(relative).suffix.casefold() != ".json":
             continue
         try:
-            _read_json(data_path, data_path.relative_to(root))
+            _read_json_text(text, data_path.relative_to(root))
         except _DuplicateJSONKeyError as error:
             errors.append(str(error))
             continue
-        except (OSError, json.JSONDecodeError) as error:
+        except json.JSONDecodeError as error:
             errors.append(f"{data_path.relative_to(root)}: invalid JSON: {error}")
     return errors
 

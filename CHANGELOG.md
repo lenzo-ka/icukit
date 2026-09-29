@@ -7,9 +7,10 @@
 - A generated provenance manifest now records the declared source, license, shipping
   class, notice, and byte hash of every data file under `icukit/data`. A license guard
   rejects missing entries and entries changed since last recorded, rejects unknown
-  class labels, rejects any data file under `icukit/data` whose content names a known
-  internal corpus unless its manifest entry records and classifies that reference,
-  and checks that required notices ship. Each notice file is
+  class labels, and accepts only UTF-8 text or manifest-declared gzip whose payload is
+  UTF-8 text. It scans that text and decoded JSON/XML for known internal corpus names,
+  rejecting a match unless the manifest records and classifies the reference, and
+  checks that required notices ship. Each notice file is
   hash-pinned and labeled with the license it carries. Archive members under
   `icukit/data` are hash-verified against the manifest and compared between wheel and
   sdist. The package license expression

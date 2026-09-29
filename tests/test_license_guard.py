@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -820,14 +821,116 @@ def test_internal_corpus_in_tsv_comment_is_rejected(tmp_path: Path) -> None:
     _assert_unclassified_corpus_is_rejected(root, relative)
 
 
-def test_internal_corpus_in_non_utf8_file_is_rejected(tmp_path: Path) -> None:
+def test_valid_utf16_xml_is_refused_even_when_elementtree_can_read_it(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    relative = "cldr_symbols/af.tsv"
+    relative = "abbreviations/en.xml"
     path = root / DATA_REL / relative
-    path.write_bytes(path.read_bytes() + b"\xff EN_WITH_TYPES\n")
+    xml_root = ET.Element("abbreviations", source="en_with_types")
+    ET.ElementTree(xml_root).write(path, encoding="utf-16", xml_declaration=True)
+    assert ET.parse(path).getroot().attrib["source"] == "en_with_types"
     manifest, _ = _record_changed_bytes(root, relative)
     _write_manifest(root, manifest)
+    assert any(
+        error == "icukit/data/abbreviations/en.xml: data files must be UTF-8 text or a "
+        "declared, inspectable encoding"
+        for error in _errors(root)
+    )
+
+
+def test_zip_data_file_is_refused_even_when_its_member_is_readable(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "abbreviations/en.xml"
+    path = root / DATA_REL / relative
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("hidden.xml", '<data source="en_with_types"/>')
+    with zipfile.ZipFile(path) as archive:
+        assert b"en_with_types" in archive.read("hidden.xml")
+    manifest, _ = _record_changed_bytes(root, relative)
+    _write_manifest(root, manifest)
+    assert any(
+        "data files must be UTF-8 text or a declared, inspectable encoding" in error
+        for error in _errors(root)
+    )
+
+
+def test_declared_gzip_json_with_unreviewed_corpus_is_rejected(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_bytes(gzip.compress(b'{"source": "en_with_types"}\n', mtime=0))
+    manifest, entry = _record_changed_bytes(root, relative)
+    entry["encoding"] = "gzip"
+    _write_manifest(root, manifest)
     _assert_unclassified_corpus_is_rejected(root, relative)
+
+
+def test_declared_gzip_json_with_reviewed_share_alike_derivation_passes(
+    tmp_path: Path,
+) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_bytes(gzip.compress(b'{"source": "en_with_types"}\n', mtime=0))
+
+    notice_dir = root / "PLANTED"
+    notice_dir.mkdir()
+    notice_path = notice_dir / "NOTICE"
+    license_path = notice_dir / "LICENSE"
+    notice_path.write_text("Planted attribution.\n", encoding="utf-8")
+    license_path.write_text("Planted legal code.\n", encoding="utf-8")
+    _replace_pyproject(
+        root,
+        'license = "BSD-2-Clause AND Unicode-3.0"',
+        'license = "BSD-2-Clause AND Unicode-3.0 AND CC-BY-SA-4.0"',
+    )
+    _replace_pyproject(
+        root,
+        '    "LICENSE",\n',
+        '    "LICENSE",\n    "PLANTED/NOTICE",\n    "PLANTED/LICENSE",\n',
+    )
+    manifest, entry = _record_changed_bytes(root, relative)
+    for notice in (notice_path, license_path):
+        manifest["notices"][notice.relative_to(root).as_posix()] = {
+            "spdx": "CC-BY-SA-4.0",
+            "sha256": hashlib.sha256(notice.read_bytes()).hexdigest(),
+        }
+    entry.update(
+        {
+            "encoding": "gzip",
+            "source": "planted derived fixture",
+            "spdx": "CC-BY-SA-4.0",
+            "class": "shippable-share-alike",
+            "notice": "PLANTED/NOTICE",
+            "corpus_reference": {"kind": "derived"},
+        }
+    )
+    _write_manifest(root, manifest)
+    assert _errors(root) == []
+
+
+def test_undeclared_gzip_is_refused(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_bytes(gzip.compress(b'{"source": "authored"}\n', mtime=0))
+    manifest, _ = _record_changed_bytes(root, relative)
+    _write_manifest(root, manifest)
+    assert any(
+        "data files must be UTF-8 text or a declared, inspectable encoding" in error
+        for error in _errors(root)
+    )
+
+
+@pytest.mark.parametrize("encoding", ["zip", "utf-16", None])
+def test_unsupported_declared_encoding_is_refused(tmp_path: Path, encoding: str | None) -> None:
+    root = _planted_tree(tmp_path)
+    manifest, entry = _entry(root, "abbreviations/en.xml")
+    entry["encoding"] = encoding
+    _write_manifest(root, manifest)
+    assert any(
+        "data files must be UTF-8 text or a declared, inspectable encoding" in error
+        for error in _errors(root)
+    )
 
 
 def test_reviewed_corpus_mention_is_accepted(tmp_path: Path) -> None:
