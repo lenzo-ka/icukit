@@ -66,6 +66,15 @@ def test_a_short_year_beside_an_era_is_the_guarded_readers():
     assert guarded.detect(long) == []
 
 
+def test_an_adlam_year_field_after_astral_text_keeps_the_four_digit_floor():
+    locale = "ff_Adlm_GN"
+    detector = DateDetector(locale, "yMMMd")
+    surface, _ = _surface(detector, year=344, month=2, day=15)
+
+    assert detector._year_floor
+    assert detector.detect(surface) == []
+
+
 @pytest.mark.parametrize(
     ("locale", "skeleton"),
     [

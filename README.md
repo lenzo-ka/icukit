@@ -190,6 +190,8 @@ Run `ik help` or `ik <command> --help` for detailed usage information.
 
 - [API Reference](https://github.com/lenzo-ka/icukit/blob/main/docs/api.md)
 - [CLI Reference](https://github.com/lenzo-ka/icukit/blob/main/docs/cli.md)
+- [Language Availability](https://github.com/lenzo-ka/icukit/blob/main/docs/languages.md)
+- [Locale Material](https://github.com/lenzo-ka/icukit/blob/main/docs/locale-material.md)
 
 ## License
 
