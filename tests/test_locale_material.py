@@ -1,6 +1,9 @@
 import copy
+import importlib.util
 import json
+import shutil
 import subprocess
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -256,9 +259,14 @@ def test_b16_material_shape_probe_catches_valid_or_malformed_material(value):
 
 def test_b16_distributions_and_package_data_ship_no_locale_material(tmp_path):
     root = Path(__file__).parent.parent
-    subprocess.run(
-        ["uv", "build", "--out-dir", str(tmp_path)], cwd=root, check=True, capture_output=True
-    )
+    # uv builds in a development checkout; CI installs the dev extra's ``build``.
+    if shutil.which("uv"):
+        command = ["uv", "build", "--out-dir", str(tmp_path)]
+    elif importlib.util.find_spec("build") is not None:
+        command = [sys.executable, "-m", "build", "--outdir", str(tmp_path)]
+    else:
+        pytest.fail("neither uv nor build is available to build the distributions")
+    subprocess.run(command, cwd=root, check=True, capture_output=True)
     archives = sorted(path for path in tmp_path.iterdir() if path.suffix in {".whl", ".gz"})
     assert {path.suffix for path in archives} >= {".whl", ".gz"}
     for archive in archives:
