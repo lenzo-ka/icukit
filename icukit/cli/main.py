@@ -23,6 +23,7 @@ from .command import (
     DisplayNameCommand,
     DurationCommand,
     IDNACommand,
+    LanguagesCommand,
     ListFmtCommand,
     LocaleCommand,
     MeasureCommand,
@@ -197,6 +198,9 @@ def create_parser():
 
     register_command("idna", ["punycode", "idn"])
     IDNACommand.add_subparser(subparsers)
+
+    register_command("languages", ["langs"])
+    LanguagesCommand.add_subparser(subparsers)
 
     register_command("listfmt", ["lf", "listformat"])
     ListFmtCommand.add_subparser(subparsers)

@@ -15,6 +15,7 @@ from .displayname import DisplayNameCommand
 from .duration import DurationCommand
 from .help_cmd import add_subparser as add_help_subparser
 from .idna import IDNACommand
+from .languages import LanguagesCommand
 from .listfmt import ListFmtCommand
 from .locale import LocaleCommand
 from .measure import MeasureCommand
@@ -45,6 +46,7 @@ __all__ = [
     "DurationCommand",
     "IDNACommand",
     "ListFmtCommand",
+    "LanguagesCommand",
     "LocaleCommand",
     "MeasureCommand",
     "MessageCommand",
