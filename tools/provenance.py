@@ -51,6 +51,11 @@ CORPUS_IDS = (
 )
 SPDX_TERM = re.compile(r"[A-Za-z0-9][A-Za-z0-9.-]*")
 SHARE_ALIKE = re.compile(r"CC-BY-SA-.+", re.IGNORECASE)
+LICENSE_TITLES = {
+    "bsd-2-clause": "BSD 2-Clause License",
+    "cc-by-sa-4.0": "Attribution-ShareAlike 4.0 International",
+    "unicode-3.0": "UNICODE LICENSE V3",
+}
 
 
 def _sha256(path: Path) -> str:
@@ -254,17 +259,25 @@ def _corpus_error(source: str) -> bool:
 def _share_alike_corpus_allowed(
     entry: dict[str, Any] | None, notices: dict[str, dict[str, str]]
 ) -> bool:
-    """Whether a hash-pinned CC BY-SA artifact may name its source corpus."""
+    """Whether a hash-pinned CC BY-SA artifact has attribution and legal code."""
     if entry is None or entry.get("class") != "shippable-share-alike":
         return False
     spdx = entry.get("spdx")
-    notice = entry.get("notice")
+    attribution = entry.get("notice")
+    legal_code = (
+        str(PurePosixPath(attribution).with_name("LICENSE"))
+        if isinstance(attribution, str)
+        else None
+    )
     return (
         isinstance(spdx, str)
         and SHARE_ALIKE.fullmatch(spdx) is not None
-        and isinstance(notice, str)
-        and notice in notices
-        and notices[notice]["spdx"].casefold() == spdx.casefold()
+        and isinstance(attribution, str)
+        and PurePosixPath(attribution).name == "NOTICE"
+        and attribution in notices
+        and legal_code in notices
+        and notices[attribution]["spdx"].casefold() == spdx.casefold()
+        and notices[legal_code]["spdx"].casefold() == spdx.casefold()
     )
 
 
@@ -356,6 +369,11 @@ def validate_repository(root: Path) -> list[str]:
                 errors.append(f"{relative}: shippable-share-alike requires a CC-BY-SA-* SPDX id")
             if not isinstance(notice, str) or not notice:
                 errors.append(f"{relative}: shippable-share-alike requires a notice")
+            elif not _share_alike_corpus_allowed(entry, notices):
+                errors.append(
+                    f"{relative}: shippable-share-alike requires a hashed attribution NOTICE "
+                    "and sibling LICENSE with matching SPDX ids"
+                )
         if artifact_class == "shippable" and isinstance(spdx, str) and SHARE_ALIKE.fullmatch(spdx):
             errors.append(f"{relative}: shippable must not use a share-alike SPDX id")
         for field in ("source", "spdx"):
@@ -415,8 +433,21 @@ def validate_repository(root: Path) -> list[str]:
         notice_path = root / notice
         if not notice_path.is_file():
             errors.append(f"manifest notice does not exist: {notice}")
-        elif notices[notice]["sha256"] != _sha256(notice_path):
-            errors.append(f"{notice}: notice sha256 mismatch")
+        else:
+            try:
+                notice_text = notice_path.read_text(encoding="utf-8-sig")
+            except (OSError, UnicodeDecodeError) as error:
+                errors.append(f"{notice}: notice must be UTF-8 text: {error}")
+            else:
+                lines = notice_text.splitlines()
+                if len(lines) < 2 or not any(line.strip() for line in lines):
+                    errors.append(f"{notice}: notice must be nonempty multi-line text")
+                if PurePosixPath(notice).name == "LICENSE" and lines:
+                    expected_title = LICENSE_TITLES.get(notices[notice]["spdx"].casefold())
+                    if expected_title is None or lines[0].strip() != expected_title:
+                        errors.append(f"{notice}: legal-code first line must be its license title")
+            if notices[notice]["sha256"] != _sha256(notice_path):
+                errors.append(f"{notice}: notice sha256 mismatch")
     for notice in sorted(license_files - set(notices)):
         errors.append(f"license-files item is absent from manifest notices: {notice}")
 
@@ -445,9 +476,10 @@ def validate_repository(root: Path) -> list[str]:
             errors.append(f"{json_path.relative_to(root)}: invalid JSON: {error}")
             continue
         for key, source in _declared_provenance_strings(value):
-            if _corpus_error(source) and not _share_alike_corpus_allowed(
+            corpus_exception = key == "provenance" and _share_alike_corpus_allowed(
                 entries.get(relative), notices
-            ):
+            )
+            if _corpus_error(source) and not corpus_exception:
                 errors.append(
                     f"{json_path.relative_to(root)}:{key}: declared provenance names known "
                     f"internal corpus {source!r}"

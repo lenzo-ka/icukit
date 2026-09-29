@@ -15,8 +15,9 @@ https://www.wikipedia.org/
 
 Modifications: icukit's ordered rules were mined from the corpus's
 sentence-boundary labels, converted to the icukit break-rules format, and
-supplemented with independently authored validation witnesses. No corpus text
-is included in this distribution.
+supplemented with validation witnesses synthesized from each rule's predicates,
+which include lexical values mined from the corpus (e.g. `lower` token values);
+no corpus sentence or row was read or copied.
 
 The rule artifact, this notice, and the accompanying receipt are distributed
 under the Creative Commons Attribution-ShareAlike 4.0 International license.

@@ -19,7 +19,7 @@
     },
     "icukit/data/break_rules/en/NOTICE": {
       "spdx": "CC-BY-SA-4.0",
-      "sha256": "ce42aa051daf58bd17c20dcf8fe932c85c86f27c1f130b8218276b9eb4689de4"
+      "sha256": "3c4dbb0de6e4bacca32caaecd2225135e9e9c14dd168554869250a5c7cdc53d1"
     }
   },
   "files": [
@@ -53,31 +53,31 @@
       "source": "Creative Commons Attribution-ShareAlike 4.0 legal code",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE"
     },
     {
       "path": "break_rules/en/NOTICE",
-      "sha256": "ce42aa051daf58bd17c20dcf8fe932c85c86f27c1f130b8218276b9eb4689de4",
+      "sha256": "3c4dbb0de6e4bacca32caaecd2225135e9e9c14dd168554869250a5c7cdc53d1",
       "source": "attribution for google/tn-en_with_types and Wikipedia contributors",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE"
     },
     {
       "path": "break_rules/en/RECEIPT.json",
-      "sha256": "0ec6971fb89d765d52dabd677179d1a16b4b0500970bb4498d0eb8e31062139f",
+      "sha256": "a2b1222d6f8b5d29d9ea370bb4675f8ae86f7d51a65854fd27a2cab5eb4c5e14",
       "source": "measurement receipt for google/tn-en_with_types rule derivation",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE"
     },
     {
       "path": "break_rules/en/sentence-tn.json",
-      "sha256": "c46ea4839965ab8844e272d72b7840e9574e59cd9c801eecc8d70ff8aa186874",
+      "sha256": "77f7eb05f0feeac2471c4ea8fd7c91d0b285ad90ec0114fef82f7c9311115de6",
       "source": "google/tn-en_with_types sentence-boundary labels",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE"
     },
     {
       "path": "cldr_symbols/LICENSE",

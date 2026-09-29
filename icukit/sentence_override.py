@@ -1735,7 +1735,9 @@ class SentenceOverride:
     CC BY-SA 4.0. Its reported development and test figures measure agreement
     with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
     not accuracy on naturally occurring running text. The unchanged default is
-    always ``base="none"``.
+    always ``base="none"``. Its witnesses are synthesized from each rule's
+    predicates, which include lexical values mined from the corpus (e.g.
+    ``lower`` token values); no corpus sentence or row was read or copied.
 
     Args:
         locale: ICU locale used for both sentence and word boundaries.

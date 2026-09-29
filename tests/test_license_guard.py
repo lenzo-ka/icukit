@@ -58,13 +58,24 @@ def _entry(root: Path, path: str) -> tuple[dict, dict]:
 def _plant_share_alike_file(root: Path, artifact_class: str) -> None:
     data_path = root / DATA_REL / "exceptions/planted.json"
     data_path.write_text("{}\n", encoding="utf-8")
-    notice = "PLANTED-CC-BY-SA-LICENSE"
+    notice = "planted/NOTICE"
+    license_code = "planted/LICENSE"
     notice_path = root / notice
-    notice_path.write_text("Planted CC BY-SA 4.0 test notice.\n", encoding="utf-8")
+    notice_path.parent.mkdir()
+    notice_path.write_text("Planted attribution notice\n\nTest attribution.\n", encoding="utf-8")
+    license_path = root / license_code
+    license_path.write_text(
+        "Attribution-ShareAlike 4.0 International\n\nPlanted legal code.\n",
+        encoding="utf-8",
+    )
     manifest = _read_manifest(root)
     manifest["notices"][notice] = {
         "spdx": "cc-by-sa-4.0",
         "sha256": hashlib.sha256(notice_path.read_bytes()).hexdigest(),
+    }
+    manifest["notices"][license_code] = {
+        "spdx": "cc-by-sa-4.0",
+        "sha256": hashlib.sha256(license_path.read_bytes()).hexdigest(),
     }
     manifest["files"].append(
         {
@@ -76,7 +87,11 @@ def _plant_share_alike_file(root: Path, artifact_class: str) -> None:
             "notice": notice,
         }
     )
-    _replace_pyproject(root, '    "LICENSE",\n', f'    "LICENSE",\n    "{notice}",\n')
+    _replace_pyproject(
+        root,
+        '    "LICENSE",\n',
+        f'    "LICENSE",\n    "{license_code}",\n    "{notice}",\n',
+    )
     _write_manifest(root, manifest)
 
 
@@ -188,6 +203,28 @@ def test_removing_only_notice_file_is_rejected(tmp_path: Path) -> None:
     notice = "icukit/data/ucd_name_aliases/LICENSE"
     (root / notice).unlink()
     assert f"manifest notice does not exist: {notice}" in _errors(root)
+
+
+def test_notice_must_be_nonempty_multiline_text(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    notice = "icukit/data/break_rules/en/NOTICE"
+    path = root / notice
+    path.write_text("literal \\n+ diff fragment", encoding="utf-8")
+    manifest = _read_manifest(root)
+    manifest["notices"][notice]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert f"{notice}: notice must be nonempty multi-line text" in _errors(root)
+
+
+def test_legal_code_first_line_must_be_license_title(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    notice = "icukit/data/break_rules/en/LICENSE"
+    path = root / notice
+    path.write_text("diff fragment\n\nnot legal code\n", encoding="utf-8")
+    manifest = _read_manifest(root)
+    manifest["notices"][notice]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert f"{notice}: legal-code first line must be its license title" in _errors(root)
 
 
 def test_removing_only_license_files_item_is_rejected(tmp_path: Path) -> None:
@@ -714,6 +751,43 @@ def test_share_alike_artifact_with_matching_notice_may_name_source_corpus(
     entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
     _write_manifest(root, manifest)
     assert _errors(root) == []
+
+
+def test_share_alike_corpus_exception_does_not_cover_witness_sources(
+    tmp_path: Path,
+) -> None:
+    root = _planted_tree(tmp_path)
+    _plant_share_alike_file(root, "shippable-share-alike")
+    path = root / DATA_REL / "exceptions/planted.json"
+    path.write_text(
+        json.dumps(
+            {
+                "provenance": {"source": "google/tn-en_with_types"},
+                "witnesses": {"match": [{"text": "Authored.", "source": "en_with_types"}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    manifest, entry = _entry(root, "exceptions/planted.json")
+    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert any(
+        "witnesses.match.0.source" in error
+        and "declared provenance names known internal corpus" in error
+        for error in _errors(root)
+    )
+
+
+@pytest.mark.parametrize("name", ["NOTICE", "LICENSE"])
+def test_share_alike_corpus_exception_requires_attribution_and_legal_code(
+    tmp_path: Path, name: str
+) -> None:
+    root = _planted_tree(tmp_path)
+    _plant_share_alike_file(root, "shippable-share-alike")
+    (root / "planted" / name).unlink()
+    errors = _errors(root)
+    assert f"manifest notice does not exist: planted/{name}" in errors
 
 
 def test_declared_internal_corpus_in_nested_json_mapping_key_is_rejected(
