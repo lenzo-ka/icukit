@@ -4,6 +4,25 @@
     "basename": "b-glue2-k1-r200.json",
     "sha256": "f79659de9fcdd1cc384502c5a6b53d1f99484f588d30ea6a8fd17d34135ab7e7"
   },
+  "cartlet_model": {
+    "basename": "c-glue2-k1-d10-l20.json.gz",
+    "shipped_as": "sentence-tn-cart.json.gz",
+    "sha256": "662a0def1a7fa8e6cba3da98ea9b1df54d812eb86c3b882e62d248961a4c8f3e",
+    "format": 2,
+    "features": "icukit.features@1",
+    "identity": {
+      "icu": "78.3",
+      "unicode": "17.0",
+      "token_profile": "sha256:14989ce05e894b86c0502fb563c1d0e89399c2bd39dd835bba7cfa2422e7c451"
+    },
+    "parameters": {
+      "detokenizer": "glue2",
+      "lookahead": 1,
+      "depth": 10,
+      "minimum_leaf": 20,
+      "seed": 8675309
+    }
+  },
   "derivation": {
     "name": "sb-decision-list",
     "source": "compact_miner.py",
@@ -47,6 +66,33 @@
       "recall": 0.9769880508946136,
       "f1": 0.9780253156288071,
       "fp_plus_fn": 123793
+    },
+    "cartlet_test": {
+      "pool": "shards 95-99, exact training duplicates removed",
+      "chunks": 148406,
+      "glue2": {
+        "tp": 2753504,
+        "fp": 5390,
+        "fn": 66205,
+        "precision": 0.9980463185609886,
+        "recall": 0.9765206267738976,
+        "f1": 0.987166141774204,
+        "fp_plus_fn": 71595,
+        "relative_error_reduction_vs_decision_list": 0.42165550556170384,
+        "one_sided_95_lower_bound": 0.4188577342259306
+      },
+      "space": {
+        "tp": 2717562,
+        "fp": 38869,
+        "fn": 102147,
+        "precision": 0.9858987944918628,
+        "recall": 0.9637739213514586,
+        "f1": 0.9747108214643104,
+        "fp_plus_fn": 141016,
+        "relative_error_reduction_vs_decision_list": 0.14870599882884894,
+        "one_sided_95_lower_bound": 0.14704271796754181
+      },
+      "criterion": "D1 passed on both detokenizers; dependency recommendation only, owner ruling pending"
     }
   },
   "license": {

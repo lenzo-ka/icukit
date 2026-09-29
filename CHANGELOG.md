@@ -4,6 +4,12 @@
 
 ### Added
 
+- Provisionally, `CartletModelRef` and the named `en-tn-cart@1` sentence-break
+  base add an experimental, opt-in cartlet model path. The shipped CC BY-SA
+  4.0 model is digest- and runtime-identity-bound, uses path-aware lazy feature
+  reads for incremental decisions, and is available only through the optional
+  `icukit[cartlet]` extra; cartlet is not a required dependency and
+  `base="none"` remains unchanged.
 - Provisionally, under owner choices D2 and D3, the learned English sentence
   rule base `en-tn@1` ships as an experimental, opt-in CC BY-SA 4.0 artifact;
   `base="none"` remains the default. The ordered 200-rule artifact is derived

@@ -220,6 +220,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`BreakDecision`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`BreakBoundary`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`BreakSegmentation`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`CartletModelRef`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`PendingCandidate`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`IncrementalSentenceBreaker`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`SentenceOverride`](#icukitsentence-override) — class, `icukit.sentence_override`
@@ -6928,6 +6929,19 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Primary sentence spans plus every boundary left open by a rule.
 
+### class `CartletModelRef`
+
+A digest- and runtime-bound reference to an experimental cartlet model.
+
+Constructing a reference does not import cartlet. The optional dependency
+is imported only when a :class:`SentenceOverride` uses this reference.
+Models use ``icukit.features@1`` and are tied to the ICU, Unicode, and
+tokenizer identity under which those features were measured.
+
+#### `CartletModelRef(path: 'str | Path', digest: 'str', identity: 'Mapping[str, str]' = <factory>, features: 'str' = 'icukit.features@1', name: 'str' = 'cartlet') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `IncrementalSentenceBreaker`
 
 Incrementally decide ICU sentence candidates with immutable output.
@@ -6974,7 +6988,7 @@ An ICU candidate awaiting stable context, a rule feature, or protection.
 
 ### class `SentenceOverride`
 
-Apply opt-in flat rules to ICU sentence candidates.
+Apply opt-in rules or a cartlet model to ICU sentence candidates.
 
 ``en-tn@1`` is a learned, experimental, opt-in English rule base under
 CC BY-SA 4.0. Its reported development and test figures measure agreement
@@ -6982,11 +6996,15 @@ with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
 not accuracy on naturally occurring running text. The unchanged default is
 always ``base="none"``.
 
+``en-tn-cart@1`` is the provisional, experimental cartlet counterpart. It
+is also opt-in and requires the separately installed ``cartlet`` extra.
+
 Args:
     locale: ICU locale used for both sentence and word boundaries.
     base: ``"none"`` (the unchanged ICU default), the opt-in learned base
-        ``"en-tn@1"``, a loaded rule set, or a path to a ``break-rules``
-        JSON file. Unknown names are refused.
+        ``"en-tn@1"``, the optional ``"en-tn-cart@1"`` model, a loaded
+        rule set, a :class:`CartletModelRef`, or a path to a
+        ``break-rules`` JSON file. Unknown names are refused.
     before: Ordered caller rules that force a decision before inventories
         and the base.
     after: Ordered caller rules that may override the base decision.
@@ -7000,7 +7018,7 @@ Example:
     ... )
     True
 
-#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet" = 'none', before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
+#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef" = 'none', before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 

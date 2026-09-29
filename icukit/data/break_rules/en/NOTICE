@@ -1,4 +1,4 @@
-English TN sentence-break rules
+English TN sentence-break rules and cartlet model
 
 This artifact is derived from the English portion of the Google Text
 Normalization dataset (tn-en_with_types), created for:
@@ -13,12 +13,13 @@ The corpus is based on English Wikipedia. Attribution is also given to the
 Wikipedia contributors whose work supplied the underlying text:
 https://www.wikipedia.org/
 
-Modifications: icukit's ordered rules were mined from the corpus's
-sentence-boundary labels, converted to the icukit break-rules format, and
-supplemented with independently authored validation witnesses. No corpus text
-is included in this distribution.
+Modifications: icukit's ordered rules and cartlet decision tree were learned
+from the corpus's sentence-boundary labels and class-like features. The rules
+were converted to the icukit break-rules format and supplemented with
+independently authored validation witnesses. No corpus text is included in
+this distribution.
 
-The rule artifact, this notice, and the accompanying receipt are distributed
-under the Creative Commons Attribution-ShareAlike 4.0 International license.
+The rule and model artifacts, this notice, and the accompanying receipt are
+distributed under the Creative Commons Attribution-ShareAlike 4.0 International license.
 The full license text is in LICENSE beside this file, and the canonical license
 URL is https://creativecommons.org/licenses/by-sa/4.0/.

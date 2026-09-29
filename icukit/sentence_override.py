@@ -14,11 +14,12 @@ Example:
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, NotRequired, TypedDict, cast
@@ -52,6 +53,7 @@ __all__ = [
     "BreakRuleIdentity",
     "BreakRuleSet",
     "BreakSegmentation",
+    "CartletModelRef",
     "IncrementalSentenceBreaker",
     "PendingCandidate",
     "SentenceOverride",
@@ -60,12 +62,36 @@ __all__ = [
 ]
 
 Effect = Literal["break", "no-break", "ambiguous"]
-Layer = Literal["icu", "token", "before", "exceptions", "rules", "after"]
+Layer = Literal["icu", "token", "before", "exceptions", "rules", "model", "after"]
 _OPS = {"in", "not_in", "prefix", "le", "ge"}
 _FEATURES = "icukit.features@1"
-_NAMED_BASES = {
+_NAMED_RULE_BASES = {
     "en-tn@1": Path(__file__).with_name("data") / "break_rules" / "en" / "sentence-tn.json"
 }
+_EN_TN_CART_PATH = (
+    Path(__file__).with_name("data") / "break_rules" / "en" / "sentence-tn-cart.json.gz"
+)
+_EN_TN_CART_DIGEST = "sha256:662a0def1a7fa8e6cba3da98ea9b1df54d812eb86c3b882e62d248961a4c8f3e"
+_CARTLET_IDENTITY = {
+    "icu": "78.3",
+    "unicode": "17.0",
+    "token_profile": "sha256:14989ce05e894b86c0502fb563c1d0e89399c2bd39dd835bba7cfa2422e7c451",
+}
+_TOKEN_FEATURE_ORDER = (
+    "lower",
+    "len",
+    "shape.coarse",
+    "shape.cased",
+    "general_category.first",
+    "general_category.last",
+    "sentence_break.first",
+    "word_break.first",
+    "script.first",
+    "ws.before",
+    "run.shape.cased",
+    "lex",
+)
+_CHAR_FEATURE_ORDER = ("word_break", "sentence_break", "general_category", "script")
 _TOKEN_FEATURES = {
     "text",
     "lower",
@@ -241,6 +267,42 @@ class BreakRuleSet:
         return max((rule.lookahead for rule in self._rules), default=0)
 
 
+@dataclass(frozen=True)
+class CartletModelRef:
+    """A digest- and runtime-bound reference to an experimental cartlet model.
+
+    Constructing a reference does not import cartlet. The optional dependency
+    is imported only when a :class:`SentenceOverride` uses this reference.
+    Models use ``icukit.features@1`` and are tied to the ICU, Unicode, and
+    tokenizer identity under which those features were measured.
+    """
+
+    path: str | Path
+    digest: str
+    identity: Mapping[str, str] = field(default_factory=lambda: dict(_CARTLET_IDENTITY))
+    features: str = _FEATURES
+    name: str = "cartlet"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "path", Path(self.path))
+        digest = self.digest if self.digest.startswith("sha256:") else f"sha256:{self.digest}"
+        if len(digest) != 71:
+            raise ValueError("cartlet model digest must be a SHA-256 digest")
+        object.__setattr__(self, "digest", digest)
+        object.__setattr__(self, "identity", MappingProxyType(dict(self.identity)))
+        if not self.name:
+            raise ValueError("cartlet model name must be nonempty")
+
+
+@dataclass(frozen=True)
+class _LoadedCartletModel:
+    ref: CartletModelRef
+    model: object
+    feature_names: tuple[str, ...]
+    predicates: tuple[_CompiledPredicate, ...]
+    lookahead: int
+
+
 def _freeze(value: object) -> object:
     if isinstance(value, Mapping):
         return MappingProxyType({key: _freeze(item) for key, item in value.items()})
@@ -362,6 +424,77 @@ def break_rule_identity(
         "unicode": icu.UNICODE_VERSION,
         "token_profile": "sha256:" + hashlib.sha256(_canonical(profile)).hexdigest(),
     }
+
+
+def _cartlet_feature_names(lookahead: int) -> tuple[str, ...]:
+    names: list[str] = []
+    for at in ("-3", "-2", "-1"):
+        features = _TOKEN_FEATURE_ORDER if at == "-1" else _TOKEN_FEATURE_ORDER[1:]
+        names.extend(f"{feature}@{at}" for feature in features)
+    names.extend(("text@run-1", "shape.cased@run-1"))
+    for position in range(1, lookahead + 1):
+        names.extend(f"{feature}@{position}" for feature in _TOKEN_FEATURE_ORDER)
+    for position in (*range(-8, 0), *range(1, 9)):
+        names.extend(f"{feature}@c{position:+d}" for feature in _CHAR_FEATURE_ORDER)
+    return tuple(names)
+
+
+def _load_cartlet_model(
+    ref: CartletModelRef,
+    locale: str,
+    inventories: Sequence[LoadedExceptionInventory],
+) -> _LoadedCartletModel:
+    actual_digest = "sha256:" + hashlib.sha256(ref.path.read_bytes()).hexdigest()
+    if actual_digest != ref.digest:
+        raise BreakRuleLoadError(
+            [_refuse(ref.name, "DIGEST_MISMATCH", "cartlet model bytes differ from digest")]
+        )
+    expected_identity = break_rule_identity(locale, inventories=inventories)
+    if dict(ref.identity) != expected_identity or ref.features != _FEATURES:
+        raise BreakRuleLoadError(
+            [
+                _refuse(
+                    ref.name,
+                    "IDENTITY_MISMATCH",
+                    "cartlet model ICU, Unicode, token profile, or features differ",
+                )
+            ]
+        )
+    try:
+        from cartlet import DecisionTree
+    except ImportError as error:
+        raise ImportError(
+            "cartlet sentence-break models require the optional dependency; "
+            "install with `pip install 'icukit[cartlet]'`"
+        ) from error
+    try:
+        version = importlib.metadata.version("cartlet")
+    except importlib.metadata.PackageNotFoundError as error:
+        raise ImportError(
+            "cartlet sentence-break models require cartlet>=0.6; "
+            "install with `pip install 'icukit[cartlet]'`"
+        ) from error
+    numeric_version = tuple(int(part) if part.isdigit() else 0 for part in version.split(".")[:2])
+    if numeric_version < (0, 6):
+        raise ImportError(f"cartlet>=0.6 is required for sentence-break models; found {version}")
+    model = DecisionTree()
+    document = model.load_model(str(ref.path), format="json")
+    metadata = document.get("metadata", {})
+    raw_lookahead = metadata.get("k")
+    if isinstance(raw_lookahead, bool) or not isinstance(raw_lookahead, int):
+        raise ValueError("cartlet sentence-break model metadata must declare integer k")
+    if not 0 <= raw_lookahead <= 8:
+        raise ValueError("cartlet sentence-break model k must be between 0 and 8")
+    feature_names = tuple(model.feature_names)
+    expected_names = _cartlet_feature_names(raw_lookahead)
+    if feature_names != expected_names:
+        raise ValueError("cartlet sentence-break model feature schema is not icukit.features@1")
+    predicates: list[_CompiledPredicate] = []
+    for name in feature_names:
+        feature, raw_at = name.rsplit("@", 1)
+        at: int | str = int(raw_at) if raw_at.lstrip("-").isdigit() else raw_at
+        predicates.append(_CompiledPredicate(at, feature, "in", ()))
+    return _LoadedCartletModel(ref, model, feature_names, tuple(predicates), raw_lookahead)
 
 
 def _refuse(rule_id: str, reason: str, detail: str) -> RuleRefusal:
@@ -1030,6 +1163,107 @@ def _match_observed_rule(
     return True, read, horizon
 
 
+class _CartletFeatureVector(Sequence[object]):
+    """A model-width vector that computes only the path cartlet requests."""
+
+    def __init__(
+        self,
+        loaded: _LoadedCartletModel,
+        text: str,
+        offset: int,
+        toks: Sequence[Token],
+        protected_types: tuple[str, ...],
+        locale: str,
+        inventories: Sequence[LoadedExceptionInventory],
+        closed: bool,
+        cache: _TokenFeatureCache,
+    ) -> None:
+        self.loaded = loaded
+        self.text = text
+        self.offset = offset
+        self.toks = toks
+        self.protected_types = protected_types
+        self.locale = locale
+        self.inventories = inventories
+        self.closed = closed
+        self.cache = cache
+        self.tokens_read = 0
+        self.horizon = offset
+        self.indices_read: list[int] = []
+        self._rule = _CompiledBreakRule(loaded.ref.name, "break", loaded.lookahead, ())
+
+    def __len__(self) -> int:
+        return len(self.loaded.feature_names)
+
+    def __getitem__(self, index: int | slice) -> object:
+        if isinstance(index, slice):
+            return [self[item] for item in range(*index.indices(len(self)))]
+        normalized = index + len(self) if index < 0 else index
+        if not 0 <= normalized < len(self):
+            raise IndexError(index)
+        value, reached, horizon = _observed_feature_value(
+            self.loaded.predicates[normalized],
+            self._rule,
+            self.text,
+            self.offset,
+            self.toks,
+            self.protected_types,
+            self.locale,
+            self.inventories,
+            self.closed,
+            self.cache,
+        )
+        self.tokens_read = max(self.tokens_read, reached)
+        self.horizon = max(self.horizon, horizon)
+        self.indices_read.append(normalized)
+        return value
+
+
+def _cartlet_label(prediction: object) -> str:
+    if isinstance(prediction, dict):
+        prediction = max(prediction, key=prediction.__getitem__)
+    return str(prediction)
+
+
+def _observed_model_decision(
+    loaded: _LoadedCartletModel,
+    text: str,
+    offset: int,
+    end: int,
+    toks: Sequence[Token],
+    protected_types: tuple[str, ...],
+    locale: str,
+    inventories: Sequence[LoadedExceptionInventory],
+    closed: bool,
+    cache: _TokenFeatureCache,
+) -> _ObservedResult:
+    vector = _CartletFeatureVector(
+        loaded,
+        text,
+        offset,
+        toks,
+        protected_types,
+        locale,
+        inventories,
+        closed,
+        cache,
+    )
+    try:
+        prediction = loaded.model._eval_normalized(vector, return_dist=True)
+    except _FeatureNotYet:
+        return _ObservedResult(None, "model", vector.tokens_read, vector.horizon)
+    label = _cartlet_label(prediction)
+    if label not in {"0", "1"}:
+        raise ValueError(f"cartlet sentence-break model returned unknown label {label!r}")
+    effect: Effect = "break" if label == "1" else "no-break"
+    return _ObservedResult(
+        _decision(offset, end, effect, "model", loaded.ref.name, vector.tokens_read),
+        None,
+        vector.tokens_read,
+        vector.horizon,
+    )
+
+
 def _decision(
     offset: int,
     end: int,
@@ -1427,7 +1661,7 @@ def _candidate_observed(
 
     if owner.base is None:
         current = _decision(offset, end, "break", "icu", None, read)
-    else:
+    elif isinstance(owner.base, BreakRuleSet):
         base = _observed_rules_decision(
             (owner.base,),
             "rules",
@@ -1446,6 +1680,26 @@ def _candidate_observed(
         if base.waiting_on is not None:
             return _ObservedResult(None, base.waiting_on, read, horizon)
         current = base.decision or _decision(offset, end, "break", "icu", None, read)
+    else:
+        base = _observed_model_decision(
+            owner.base,
+            text,
+            offset,
+            end,
+            toks,
+            covering,
+            owner.locale,
+            owner.inventories,
+            closed,
+            cache,
+        )
+        read = max(read, base.tokens_read)
+        horizon = max(horizon, base.horizon)
+        if base.waiting_on is not None:
+            return _ObservedResult(None, "model", read, horizon)
+        if base.decision is None:
+            raise AssertionError("cartlet model returned neither a decision nor a wait")
+        current = base.decision
 
     after = _observed_rules_decision(
         owner.after,
@@ -1476,7 +1730,7 @@ def _decide_core(
     locale: str,
     inventories: Sequence[LoadedExceptionInventory],
     before: Sequence[BreakRuleSet],
-    base: BreakRuleSet | None,
+    base: BreakRuleSet | _LoadedCartletModel | None,
     after: Sequence[BreakRuleSet],
     protected: Iterable[ProtectedSpan],
 ) -> list[BreakDecision]:
@@ -1487,8 +1741,14 @@ def _decide_core(
     owner.before = tuple(before)
     owner.base = base
     owner.after = tuple(after)
-    layers = (*owner.before, *((base,) if base is not None else ()), *owner.after)
-    owner.lookahead = max((item.lookahead for item in layers), default=0)
+    rule_layers = (
+        *owner.before,
+        *((base,) if isinstance(base, BreakRuleSet) else ()),
+        *owner.after,
+    )
+    owner.lookahead = max(
+        (*(item.lookahead for item in rule_layers), base.lookahead if base is not None else 0)
+    )
     cache = _TokenFeatureCache(True)
     result: list[BreakDecision] = []
     for span in break_sentence_spans(text, locale):
@@ -1729,7 +1989,7 @@ class IncrementalSentenceBreaker:
 
 
 class SentenceOverride:
-    """Apply opt-in flat rules to ICU sentence candidates.
+    """Apply opt-in rules or a cartlet model to ICU sentence candidates.
 
     ``en-tn@1`` is a learned, experimental, opt-in English rule base under
     CC BY-SA 4.0. Its reported development and test figures measure agreement
@@ -1737,11 +1997,15 @@ class SentenceOverride:
     not accuracy on naturally occurring running text. The unchanged default is
     always ``base="none"``.
 
+    ``en-tn-cart@1`` is the provisional, experimental cartlet counterpart. It
+    is also opt-in and requires the separately installed ``cartlet`` extra.
+
     Args:
         locale: ICU locale used for both sentence and word boundaries.
         base: ``"none"`` (the unchanged ICU default), the opt-in learned base
-            ``"en-tn@1"``, a loaded rule set, or a path to a ``break-rules``
-            JSON file. Unknown names are refused.
+            ``"en-tn@1"``, the optional ``"en-tn-cart@1"`` model, a loaded
+            rule set, a :class:`CartletModelRef`, or a path to a
+            ``break-rules`` JSON file. Unknown names are refused.
         before: Ordered caller rules that force a decision before inventories
             and the base.
         after: Ordered caller rules that may override the base decision.
@@ -1761,7 +2025,7 @@ class SentenceOverride:
         locale: str = "en_US",
         /,
         *,
-        base: Literal["none"] | str | Path | BreakRuleSet = "none",
+        base: Literal["none"] | str | Path | BreakRuleSet | CartletModelRef = "none",
         before: Sequence[BreakRuleSet] = (),
         after: Sequence[BreakRuleSet] = (),
         inventories: Sequence[LoadedExceptionInventory] = (),
@@ -1780,9 +2044,21 @@ class SentenceOverride:
             loaded_base = None
         elif isinstance(base, BreakRuleSet):
             loaded_base = base
-        elif isinstance(base, str) and base in _NAMED_BASES:
+        elif isinstance(base, CartletModelRef):
+            loaded_base = _load_cartlet_model(base, locale, self.inventories)
+        elif base == "en-tn-cart@1":
+            loaded_base = _load_cartlet_model(
+                CartletModelRef(
+                    _EN_TN_CART_PATH,
+                    _EN_TN_CART_DIGEST,
+                    name="en-tn-cart@1",
+                ),
+                locale,
+                self.inventories,
+            )
+        elif isinstance(base, str) and base in _NAMED_RULE_BASES:
             loaded_base = load_break_rules(
-                _NAMED_BASES[base], locale=locale, inventories=self.inventories
+                _NAMED_RULE_BASES[base], locale=locale, inventories=self.inventories
             )
         elif isinstance(base, Path) or (isinstance(base, str) and Path(base).is_file()):
             loaded_base = load_break_rules(base, locale=locale, inventories=self.inventories)
@@ -1790,12 +2066,17 @@ class SentenceOverride:
             raise ValueError(f"unknown sentence-override base {base!r}")
         else:
             raise TypeError(
-                "base must be 'none', a named base, a BreakRuleSet, or a break-rules JSON path"
+                "base must be 'none', a named base, a BreakRuleSet, a CartletModelRef, "
+                "or a break-rules JSON path"
             )
         self.base = loaded_base
         self.before = tuple(before)
         self.after = tuple(after)
-        layers = (*self.before, *((loaded_base,) if loaded_base is not None else ()), *self.after)
+        layers = (
+            *self.before,
+            *((loaded_base,) if isinstance(loaded_base, BreakRuleSet) else ()),
+            *self.after,
+        )
         invalid_digests = [item.id for item in layers if _rule_set_digest(item) != item.digest]
         if invalid_digests:
             raise BreakRuleLoadError(
@@ -1842,12 +2123,20 @@ class SentenceOverride:
             "locale": locale,
             "inventories": [_inventory_definition(item) for item in self.inventories],
             "before": [item.digest for item in self.before],
-            "base": loaded_base.digest if loaded_base is not None else "none",
+            "base": (
+                loaded_base.digest
+                if isinstance(loaded_base, BreakRuleSet)
+                else loaded_base.ref.digest
+                if isinstance(loaded_base, _LoadedCartletModel)
+                else "none"
+            ),
             "after": [item.digest for item in self.after],
             "features": _FEATURES,
         }
         self.identity = "sha256:" + hashlib.sha256(_canonical(definition)).hexdigest()
-        self.lookahead = max((item.lookahead for item in layers), default=0)
+        self.lookahead = max(
+            (*(item.lookahead for item in layers), loaded_base.lookahead if loaded_base else 0)
+        )
 
     def decide(
         self, text: str, /, *, protected: Iterable[ProtectedSpan] = ()

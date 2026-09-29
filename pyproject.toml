@@ -60,6 +60,7 @@ Repository = "https://github.com/lenzo-ka/icukit"
 Issues = "https://github.com/lenzo-ka/icukit/issues"
 
 [project.optional-dependencies]
+cartlet = ["cartlet>=0.6"]
 dev = [
     "pytest>=9.0",
     "ruff>=0.6",
@@ -92,6 +93,7 @@ icukit = [
     "data/abbreviations/*.rng",
     "data/exceptions/*.json",
     "data/break_rules/en/*.json",
+    "data/break_rules/en/*.json.gz",
     "data/break_rules/en/LICENSE",
     "data/break_rules/en/NOTICE",
     "data/unit_surfaces/*.tsv",
