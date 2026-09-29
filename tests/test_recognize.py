@@ -215,6 +215,34 @@ def test_flexible_date_interval_reflects_non_english_locale():
     )
 
 
+def test_adlam_date_and_interval_captures_use_code_point_offsets():
+    locale = "ff_Adlm_GN"
+    icu_locale = icu.Locale(locale)
+    date = DateDetector(locale, "yMd")
+    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu_locale)
+    calendar.clear()
+    calendar.set(2024, 2, 5)
+    date_surface = str(date._df.format(calendar.getTime()))
+    date_text = "𞤀 " + date_surface
+    (date_found,) = date.detect(date_text)
+
+    interval_surface = _interval_surface(
+        locale,
+        "yMd",
+        {"YEAR": 2024, "MONTH": 2, "DATE": 5},
+        {"YEAR": 2025, "MONTH": 3, "DATE": 7},
+    )
+    interval_text = "𞤀 " + interval_surface
+    (interval_found,) = FlexibleDateIntervalDetector(locale, "yMd").detect(interval_text)
+
+    for text, detection in ((date_text, date_found), (interval_text, interval_found)):
+        assert detection["start"] == 2
+        assert detection["end"] == len(text)
+        assert all(
+            text[capture.start : capture.end] == capture.text for capture in detection["captures"]
+        )
+
+
 def test_flexible_date_interval_gracefully_excludes_unmodeled_day_periods():
     # Flexible day periods ("in the afternoon"), era, quarter, and week fields are not
     # invertible by the field model used by this recognizer (AM/PM and zones are).
@@ -651,6 +679,23 @@ def test_flexible_currency_accepts_narrow_no_break_space():
     assert detection["value"] == NumberValue("5.00", "EUR")
 
 
+def test_adlam_currency_plural_field_is_sliced_in_code_points():
+    locale = "ff_Adlm_GN"
+    currency = "GNF"
+    surface = str(
+        icu.NumberFormatter.withLocale(icu.Locale(locale))
+        .unit(icu.CurrencyUnit(currency))
+        .unitWidth(icu.UNumberUnitWidth.FULL_NAME)
+        .formatInt(42)
+    )
+    (found,) = FlexibleCurrencyNameDetector(locale, currency).detect(surface)
+
+    assert found["value"] == NumberValue("42", currency)
+    assert all(
+        surface[capture.start : capture.end] == capture.text for capture in found["captures"]
+    )
+
+
 @pytest.mark.parametrize(
     "detector, surface",
     [
@@ -1016,6 +1061,32 @@ def test_flexible_date_captures_use_code_point_offsets_and_stop_greedily():
     assert captures["y"].value == 2026
     for capture in captures.values():
         assert text[capture.start : capture.end] == capture.text
+
+
+def test_adlam_decimal_and_percent_captures_use_code_point_offsets():
+    locale = "ff_Adlm_GN"
+    icu_locale = icu.Locale(locale)
+    cases = (
+        (
+            FlexibleNumberDetector(locale),
+            str(icu.NumberFormatter.withLocale(icu_locale).formatDouble(12.5)),
+        ),
+        (
+            FlexiblePercentDetector(locale),
+            str(
+                icu.NumberFormatter.withLocale(icu_locale)
+                .unit(icu.MeasureUnit.forIdentifier("percent"))
+                .formatDouble(12.5)
+            ),
+        ),
+    )
+    for detector, surface in cases:
+        text = "𞤀 " + surface
+        (found,) = detector.detect(text)
+        assert (found["start"], found["end"]) == (2, len(text))
+        assert all(
+            text[capture.start : capture.end] == capture.text for capture in found["captures"]
+        )
 
 
 def test_flexible_dates_compose_with_detect_and_resolve():
@@ -1579,6 +1650,19 @@ def test_flexible_spellout_is_reflective_in_a_non_english_locale():
 
     assert surface != english.format(23)
     assert detector.detect(surface)[0]["value"] == NumberValue("23", None)
+
+
+def test_chakma_spellout_parse_endpoint_is_converted_to_code_points():
+    locale = "ccp"
+    formatter = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.SPELLOUT, icu.Locale(locale))
+    detector = FlexibleSpelloutDetector(locale)
+    surface = str(formatter.format(42, detector._ruleset))
+    text = "𑄃 " + surface
+    (found,) = detector.detect(text)
+
+    assert found["value"] == NumberValue("42", None)
+    assert (found["start"], found["end"], found["text"]) == (2, len(text), surface)
+    assert all(text[capture.start : capture.end] == capture.text for capture in found["captures"])
 
 
 @pytest.mark.parametrize("locale", ["en_US", "es_ES", "fr_FR", "de_DE"])

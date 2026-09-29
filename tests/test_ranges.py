@@ -64,6 +64,24 @@ def _whole(detector, text: str):
     ]
 
 
+def _fixed_range(locale: str, low: float, high: float, unit=None, collapse: str = "AUTO") -> str:
+    number = icu.NumberFormatter.with_().precision(icu.Precision.fixedFraction(2))
+    if unit is not None:
+        number = number.unit(unit)
+    formatter = (
+        icu.NumberRangeFormatter.withLocale(icu.Locale(locale))
+        .numberFormatterBoth(number)
+        .collapse(getattr(icu.UNumberRangeCollapse, collapse))
+    )
+    return str(formatter.formatDoubleRange(low, high))
+
+
+def _assert_capture_offsets(text, detection):
+    assert all(
+        text[capture.start : capture.end] == capture.text for capture in detection["captures"]
+    )
+
+
 def _amounts(value) -> tuple[Decimal, Decimal]:
     return Decimal(value.start.decimal), Decimal(value.end.decimal)
 
@@ -87,7 +105,164 @@ def test_a_plain_range_reads_as_icu_writes_it(locale, low, high):
 
     assert found["type"] == "number:range"
     assert found["value"] == NumberRangeValue(NumberValue(str(low)), NumberValue(str(high)))
-    assert [capture.name for capture in found["captures"]] == ["start", "separator", "end"]
+    names = [capture.name for capture in found["captures"]]
+    assert names[0] == "start"
+    assert names.index("separator") > 0
+    assert names[names.index("separator") + 1] == "end"
+    assert all(
+        name == "start" or name.startswith("start.") for name in names[: names.index("separator")]
+    )
+    assert all(
+        name == "end" or name.startswith("end.") for name in names[names.index("separator") + 1 :]
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "reader", "names"),
+    [
+        (
+            "79.20%–80.00%",
+            FlexibleNumberRangeDetector("en_US"),
+            [
+                "start",
+                "start.integer",
+                "start.decimal-separator",
+                "start.fraction",
+                "start.percent",
+                "separator",
+                "end",
+                "end.integer",
+                "end.decimal-separator",
+                "end.fraction",
+                "end.percent",
+            ],
+        ),
+        (
+            _fixed_range("en_US", 1, 2),
+            FlexibleNumberRangeDetector("en_US"),
+            [
+                "start",
+                "start.integer",
+                "start.decimal-separator",
+                "start.fraction",
+                "separator",
+                "end",
+                "end.integer",
+                "end.decimal-separator",
+                "end.fraction",
+            ],
+        ),
+    ],
+)
+def test_a_range_carries_each_endpoints_own_captures(text, reader, names):
+    # The no-space, repeated-percent spelling is accepted by the flexible reader; this
+    # ICU writes its equivalent with spaces, so that named regression surface is the one
+    # unavoidable hand-written range here. The decimal case is ICU-formatted.
+    (found,) = _whole(reader, text)
+
+    assert [capture.name for capture in found["captures"]] == names
+    _assert_capture_offsets(text, found)
+
+
+def test_an_approximately_reading_carries_its_values_own_captures():
+    formatter = (
+        icu.NumberRangeFormatter.withLocale(icu.Locale("en_US"))
+        .numberFormatterBoth(icu.NumberFormatter.with_().precision(icu.Precision.fixedFraction(2)))
+        .identityFallback(icu.UNumberRangeIdentityFallback.APPROXIMATELY)
+    )
+    text = str(formatter.formatDoubleRange(3.5, 3.5))
+    (found,) = _whole(FlexibleNumberRangeDetector("en_US", form="approximately"), text)
+
+    assert [capture.name for capture in found["captures"]] == [
+        "approximately",
+        "value",
+        "value.integer",
+        "value.decimal-separator",
+        "value.fraction",
+    ]
+    _assert_capture_offsets(text, found)
+
+
+def test_currency_and_measure_ranges_keep_only_each_written_sides_captures():
+    currency_text = _fixed_range("en_US", 3, 5, icu.CurrencyUnit("USD"), "NONE")
+    currency_reader = FlexibleNumberRangeDetector(
+        "en_US", [*_numbers("en_US"), FlexibleCurrencyDetector("en_US", "USD")]
+    )
+    measure_text = _fixed_range("en_US", 10, 15, icu.MeasureUnit.forIdentifier("kilogram"), "UNIT")
+    measure_reader = FlexibleNumberRangeDetector(
+        "en_US", [FlexibleMeasureDetector("en_US", "kilogram")]
+    )
+
+    (currency,) = _whole(currency_reader, currency_text)
+    (measure,) = _whole(measure_reader, measure_text)
+    assert [capture.name for capture in currency["captures"]] == [
+        "start",
+        "start.currency",
+        "start.integer",
+        "start.decimal-separator",
+        "start.fraction",
+        "separator",
+        "end",
+        "end.currency",
+        "end.integer",
+        "end.decimal-separator",
+        "end.fraction",
+    ]
+    measure_names = [capture.name for capture in measure["captures"]]
+    assert measure_names == [
+        "start",
+        "start.integer",
+        "start.decimal-separator",
+        "start.fraction",
+        "separator",
+        "end",
+        "end.integer",
+        "end.decimal-separator",
+        "end.fraction",
+        "end.unit",
+    ]
+    assert "start.unit" not in measure_names
+    _assert_capture_offsets(currency_text, currency)
+    _assert_capture_offsets(measure_text, measure)
+
+
+def test_an_extended_unicode_minus_is_a_start_sign_capture():
+    # ICU en_US writes a hyphen-minus for negatives, while this existing flexible path
+    # specifically accepts U+2212 before a range, so its regression spelling is manual.
+    text = "\N{MINUS SIGN}3–5"
+    (found,) = _whole(FlexibleNumberRangeDetector("en_US"), text)
+
+    assert [capture.name for capture in found["captures"]] == [
+        "start",
+        "start.sign",
+        "start.integer",
+        "separator",
+        "end",
+        "end.integer",
+    ]
+    assert found["captures"][1].form == "symbol"
+    _assert_capture_offsets(text, found)
+
+
+def test_an_adlam_range_after_an_astral_prefix_has_code_point_capture_offsets():
+    locale = "ff_Adlm_GN"
+    surface = _fixed_range(locale, 1, 2)
+    text = "𞤀 " + surface
+    (found,) = FlexibleNumberRangeDetector(locale).detect(text)
+
+    assert (found["start"], found["end"]) == (2, len(text))
+    assert [capture.name for capture in found["captures"]] == [
+        "start",
+        "start.integer",
+        "start.decimal-separator",
+        "start.fraction",
+        "separator",
+        "end",
+        "end.integer",
+        "end.decimal-separator",
+        "end.fraction",
+    ]
+    _assert_capture_offsets(text, found)
 
 
 def test_icus_shared_and_independent_negative_sign_shapes_keep_their_values():
