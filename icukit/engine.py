@@ -65,6 +65,7 @@ from .recognize import (
     _iso_currency_codes,
     _language_locales,
     _locale_selection,
+    _shared_number_reader,
     _spellout_formatter_and_ruleset,
 )
 from .recognize import (
@@ -966,7 +967,10 @@ def _flexible_families(
         return _mixed_units(locale, locales)
 
     families = [
-        one("number", FlexibleNumberDetector),
+        one(
+            "number",
+            lambda locale, *, locales=None: _shared_number_reader(locale, locales, True, False),
+        ),
         one("percent", FlexiblePercentDetector),
         one("fraction", FlexibleFractionDetector, widened=False),
         one("ordinal", FlexibleOrdinalDetector, widened=False),
