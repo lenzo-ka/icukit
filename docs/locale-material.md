@@ -226,9 +226,9 @@ pronunciation material.
 
 The reader accepts only a `LocaleMaterial` that `load_locale_material` returned, or a
 copy of one (`copy.copy`, `copy.deepcopy`), unchanged. Material constructed directly,
-altered with `dataclasses.replace`, or of a subclass of `LocaleMaterial` is refused. A
-loaded material is valid only in the process that loaded it: pickling it is not
-supported, so load the file again in another process. A mapping passed to the loader is
+altered with `dataclasses.replace`, or of a subclass of `LocaleMaterial` is refused.
+Pickling a loaded material is not supported; to use material in another process, load
+the file again there (a process forked after loading keeps it). A mapping passed to the loader is
 read as JSON (every value the loader keeps is a plain JSON type), within limits of 64
 levels of nesting and a million values. icukit does not defend against callers that
 call its private functions or overwrite a field of the frozen dataclass.
