@@ -120,6 +120,17 @@ class BreakRule(TypedDict):
     Its text, lower-case text, length, shapes, first/last character classes,
     leading-whitespace flag, and run shape are all derived from that same
     truncated run, never from only its final token.
+
+    A forward character position ``c+n`` has horizon equal to the number of
+    right tokens ending at or before that code point, plus one when the code
+    point is inside a right token, with a minimum of one. It is readable when
+    that horizon is at most ``lookahead``. Thus the gap after token ``+k`` is
+    readable at lookahead ``k``, while the first code point of token ``+(k+1)``
+    is ``<BEYOND>``. At or past the end of the text, its horizon is the lesser
+    of eight and one more than the number of right tokens; a readable position
+    returns ``<EOS>``. ``tokens_read`` records this horizon, including ``k``
+    rather than ``k+1`` for a gap after token ``+k``. Every ``c+n`` predicate
+    therefore requires a declared lookahead of at least one.
     """
 
     id: str
@@ -747,19 +758,21 @@ def _feature_value(
     distance = int(cast(str, at)[1:])
     index = offset + distance - 1 if distance > 0 else offset + distance
     if distance > 0:
-        horizon_index = pivot + rule.lookahead - 1
-        if horizon_index < len(toks) and index >= toks[horizon_index]["end"]:
+        right = toks[pivot:]
+        if index >= len(text):
+            horizon = min(8, len(right) + 1)
+        else:
+            completed = sum(token["end"] <= index for token in right)
+            containing = any(token["start"] <= index < token["end"] for token in right)
+            horizon = max(1, completed + int(containing))
+        if horizon > rule.lookahead:
             return "<BEYOND>", rule.lookahead
     if index < 0:
         return "<BOS>", 0
     if index >= len(text):
-        return "<EOS>", rule.lookahead if distance > 0 else 0
+        return "<EOS>", horizon
     window = class_window(text, index, before=0, after=1)
-    tokens_read = 0
-    if distance > 0:
-        tokens_read = sum(1 for token in toks[pivot:] if token["start"] <= index)
-        tokens_read = min(tokens_read, rule.lookahead)
-    return _point_feature(window.after[0], predicate.feature), tokens_read
+    return _point_feature(window.after[0], predicate.feature), horizon if distance > 0 else 0
 
 
 def _predicate_matches(value: object, predicate: _CompiledPredicate) -> bool:

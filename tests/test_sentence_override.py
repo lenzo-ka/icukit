@@ -252,6 +252,18 @@ def test_loader_bounds_beyond_and_real_code_point():
     assert SentenceOverride(before=[loaded]).decide("Mr. A B C D E")[0]["id"] == "test.beyond"
     assert SentenceOverride(before=[loaded]).decide("Mr. Alexander")[0]["layer"] == "icu"
 
+    gap = _rule(
+        "test.gap",
+        when=[
+            {"at": "run-1", "f": "shape.cased", "in": ["Xx."]},
+            {"at": "c+2", "f": "text", "in": [" "]},
+        ],
+        match=["Mr. A B"],
+        no_match=["Mr. AB B"],
+    )
+    in_gap = SentenceOverride(before=[_loaded(gap)]).decide("Mr. A B")[0]
+    assert (in_gap["id"], in_gap["tokens_read"]) == ("test.gap", 1)
+
     end_rule = _rule(
         "test.end",
         when=[

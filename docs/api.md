@@ -6898,6 +6898,17 @@ Its text, lower-case text, length, shapes, first/last character classes,
 leading-whitespace flag, and run shape are all derived from that same
 truncated run, never from only its final token.
 
+A forward character position ``c+n`` has horizon equal to the number of
+right tokens ending at or before that code point, plus one when the code
+point is inside a right token, with a minimum of one. It is readable when
+that horizon is at most ``lookahead``. Thus the gap after token ``+k`` is
+readable at lookahead ``k``, while the first code point of token ``+(k+1)``
+is ``<BEYOND>``. At or past the end of the text, its horizon is the lesser
+of eight and one more than the number of right tokens; a readable position
+returns ``<EOS>``. ``tokens_read`` records this horizon, including ``k``
+rather than ``k+1`` for a gap after token ``+k``. Every ``c+n`` predicate
+therefore requires a declared lookahead of at least one.
+
 ### class `BreakRuleIdentity`
 
 Runtime identity against which a break-rule artifact was authored.
