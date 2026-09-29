@@ -691,6 +691,10 @@ def test_adlam_currency_plural_field_is_sliced_in_code_points():
     (found,) = FlexibleCurrencyNameDetector(locale, currency).detect(surface)
 
     assert found["value"] == NumberValue("42", currency)
+    assert (found["start"], found["end"]) == (0, len(surface))
+    (name,) = [capture for capture in found["captures"] if capture.name == "currency"]
+    # The name follows astral digits, so its UTF-16 and code-point offsets differ.
+    assert len(surface[: name.start].encode("utf-16-le")) // 2 != name.start
     assert all(
         surface[capture.start : capture.end] == capture.text for capture in found["captures"]
     )

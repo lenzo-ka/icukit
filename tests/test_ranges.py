@@ -115,6 +115,8 @@ def test_a_plain_range_reads_as_icu_writes_it(locale, low, high):
     assert all(
         name == "end" or name.startswith("end.") for name in names[names.index("separator") + 1 :]
     )
+    assert "start.integer" in names and "end.integer" in names
+    _assert_capture_offsets(text, found)
 
 
 @pytest.mark.parametrize(
@@ -241,6 +243,22 @@ def test_an_extended_unicode_minus_is_a_start_sign_capture():
         "end.integer",
     ]
     assert found["captures"][1].form == "symbol"
+    _assert_capture_offsets(text, found)
+
+
+def test_a_unit_written_first_once_is_captured_only_on_the_start():
+    text = _fixed_range("en_US", 3, 5, icu.CurrencyUnit("USD"), "UNIT")
+    reader = FlexibleNumberRangeDetector(
+        "en_US", [*_numbers("en_US"), FlexibleCurrencyDetector("en_US", "USD")]
+    )
+    (found,) = _whole(reader, text)
+
+    captures = {capture.name: capture for capture in found["captures"]}
+    assert found["spec"].collapse == "unit"
+    assert "end.currency" not in captures
+    assert captures["start.currency"].start == 0
+    assert captures["start.integer"].start == captures["start.currency"].end
+    assert captures["end.integer"].start == captures["end"].start
     _assert_capture_offsets(text, found)
 
 
