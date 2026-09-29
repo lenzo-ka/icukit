@@ -1414,7 +1414,11 @@
       "spdx": "BSD-2-Clause",
       "class": "shippable",
       "notice": null,
-      "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question"
+      "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question",
+      "corpus_reference": {
+        "kind": "mention",
+        "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question"
+      }
     }
   ]
 }

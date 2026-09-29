@@ -5,7 +5,8 @@ The ``project.license-files`` entries are deliberately restricted to literal,
 repository-relative paths. Although packaging metadata permits globs, this guard
 refuses them so every shipped notice has one unambiguous manifest record. Refreshing
 hashes acknowledges only that bytes changed: provenance must be re-reviewed first.
-TSV and XML comments are content rather than declarations and are not scanned.
+The guard rejects any data file under ``icukit/data`` whose content names a known
+internal corpus unless its manifest entry records and classifies that reference.
 """
 
 from __future__ import annotations
@@ -17,8 +18,6 @@ import json
 import re
 import sys
 import tomllib
-import xml.etree.ElementTree as ET
-from collections.abc import Iterator
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -27,19 +26,7 @@ MANIFEST_NAME = "PROVENANCE.json"
 SCHEMA_VERSION = 1
 ALLOWED_CLASSES = frozenset({"shippable", "shippable-share-alike", "derived-shippable"})
 REQUIRED_ENTRY_KEYS = frozenset({"path", "sha256", "source", "spdx", "class", "notice"})
-OPTIONAL_ENTRY_KEYS = frozenset({"term", "note"})
-PROVENANCE_KEYS = frozenset(
-    {
-        "source",
-        "sources",
-        "corpus",
-        "origin",
-        "dataset",
-        "provenance",
-        "derived_from",
-        "data_source",
-    }
-)
+OPTIONAL_ENTRY_KEYS = frozenset({"term", "note", "corpus_reference"})
 CORPUS_IDS = (
     "google/tn-",
     "en_with_types",
@@ -172,34 +159,6 @@ def _load_manifest(root: Path) -> tuple[dict[str, Any] | None, list[str]]:
     return manifest, []
 
 
-def _strings_below(value: Any) -> Iterator[str]:
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, dict):
-        for key, child in value.items():
-            yield str(key)
-            yield from _strings_below(child)
-    elif isinstance(value, list):
-        for child in value:
-            yield from _strings_below(child)
-
-
-def _declared_provenance_strings(
-    value: Any, keys: tuple[str, ...] = ()
-) -> Iterator[tuple[str, str]]:
-    if isinstance(value, dict):
-        for key, child in value.items():
-            child_keys = (*keys, str(key))
-            if str(key).casefold() in PROVENANCE_KEYS:
-                for string in _strings_below(child):
-                    yield ".".join(child_keys), string
-            else:
-                yield from _declared_provenance_strings(child, child_keys)
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            yield from _declared_provenance_strings(child, (*keys, str(index)))
-
-
 def _license_terms(expression: Any) -> tuple[dict[str, str], str | None]:
     if not isinstance(expression, str) or not expression.strip():
         return {}, "project license expression must be a nonempty string"
@@ -246,9 +205,69 @@ def _license_terms(expression: Any) -> tuple[dict[str, str], str | None]:
     return folded, None
 
 
-def _corpus_error(source: str) -> bool:
-    lowered = source.casefold()
-    return any(corpus_id in lowered for corpus_id in CORPUS_IDS)
+def _corpus_ids_in_file(path: Path) -> list[str]:
+    """Return known corpus identifiers found anywhere in a packaged file."""
+    content = path.read_bytes()
+    try:
+        lowered_text = content.decode("utf-8").casefold()
+    except UnicodeDecodeError:
+        lowered_bytes = content.lower()
+        return [corpus_id for corpus_id in CORPUS_IDS if corpus_id.encode() in lowered_bytes]
+    return [corpus_id for corpus_id in CORPUS_IDS if corpus_id in lowered_text]
+
+
+def _share_alike_corpus_allowed(entry: dict[str, Any], notices: dict[str, dict[str, str]]) -> bool:
+    """Whether a derived reference has matching attribution and legal-code records."""
+    if entry.get("class") != "shippable-share-alike":
+        return False
+    spdx = entry.get("spdx")
+    attribution = entry.get("notice")
+    legal_code = (
+        str(PurePosixPath(attribution).with_name("LICENSE"))
+        if isinstance(attribution, str)
+        else None
+    )
+    return (
+        isinstance(spdx, str)
+        and SHARE_ALIKE.fullmatch(spdx) is not None
+        and isinstance(attribution, str)
+        and PurePosixPath(attribution).name == "NOTICE"
+        and attribution in notices
+        and legal_code in notices
+        and notices[attribution]["spdx"].casefold() == spdx.casefold()
+        and notices[legal_code]["spdx"].casefold() == spdx.casefold()
+    )
+
+
+def _corpus_reference_errors(
+    relative: str, entry: dict[str, Any], notices: dict[str, dict[str, str]]
+) -> list[str]:
+    reference = entry.get("corpus_reference")
+    if reference is None:
+        return []
+    if not isinstance(reference, dict):
+        return [f"{relative}: corpus_reference must be an object"]
+    kind = reference.get("kind")
+    if kind == "mention":
+        if set(reference) != {"kind", "note"}:
+            return [f"{relative}: mention corpus_reference must contain exactly kind and note"]
+        if not isinstance(reference.get("note"), str) or not reference["note"].strip():
+            return [f"{relative}: mention corpus_reference requires a nonempty note"]
+        return []
+    if kind == "derived":
+        if set(reference) - {"kind", "note"}:
+            return [f"{relative}: derived corpus_reference has unknown keys"]
+        if "note" in reference and (
+            not isinstance(reference["note"], str) or not reference["note"].strip()
+        ):
+            return [f"{relative}: derived corpus_reference note must be nonempty"]
+        if not _share_alike_corpus_allowed(entry, notices):
+            return [
+                f"{relative}: derived corpus_reference requires class shippable-share-alike "
+                "with a listed attribution NOTICE and sibling legal-code LICENSE"
+            ]
+        return []
+    return [f"{relative}: corpus_reference kind must be 'mention' or 'derived'"]
 
 
 def validate_repository(root: Path) -> list[str]:
@@ -322,12 +341,12 @@ def validate_repository(root: Path) -> list[str]:
         errors.append("manifest notices must include LICENSE as BSD-2-Clause")
 
     used_spdx: set[str] = {"BSD-2-Clause"}
+    valid_corpus_references: set[str] = set()
     for relative, entry in sorted(entries.items()):
         data_path = root / DATA_REL / relative
         artifact_class = entry.get("class")
         spdx = entry.get("spdx")
         notice = entry.get("notice")
-        source = entry.get("source")
         if artifact_class not in ALLOWED_CLASSES:
             errors.append(f"{relative}: invalid class {artifact_class!r}")
         if artifact_class == "derived-shippable" and (
@@ -346,13 +365,10 @@ def validate_repository(root: Path) -> list[str]:
                 errors.append(f"{relative}: {field} must be a nonempty string")
         if isinstance(spdx, str) and spdx.strip():
             used_spdx.add(spdx)
-        for field in ("source", "note", "term"):
-            for declaration in _strings_below(entry.get(field)):
-                if _corpus_error(declaration):
-                    errors.append(
-                        f"{relative}:{field}: declared provenance names known internal corpus "
-                        f"{declaration!r}"
-                    )
+        corpus_reference_errors = _corpus_reference_errors(relative, entry, notices)
+        errors.extend(corpus_reference_errors)
+        if entry.get("corpus_reference") is not None and not corpus_reference_errors:
+            valid_corpus_references.add(relative)
         if "notice" not in entry or (notice is not None and not isinstance(notice, str)):
             errors.append(f"{relative}: notice must be a repository-relative path or null")
         else:
@@ -416,60 +432,23 @@ def validate_repository(root: Path) -> list[str]:
             errors.append(f"project license term has no provenance use: {expression_terms[folded]}")
 
     for relative in sorted(actual):
-        if not relative.endswith(".json"):
+        data_path = root / DATA_REL / relative
+        corpus_ids = _corpus_ids_in_file(data_path)
+        if corpus_ids and relative not in valid_corpus_references:
+            errors.append(
+                f"{data_path.relative_to(root)}: content names known internal corpus "
+                f"{', '.join(corpus_ids)} without a valid corpus_reference"
+            )
+
+        if PurePosixPath(relative).suffix.casefold() != ".json":
             continue
-        json_path = root / DATA_REL / relative
         try:
-            value = _read_json(json_path, json_path.relative_to(root))
+            _read_json(data_path, data_path.relative_to(root))
         except _DuplicateJSONKeyError as error:
             errors.append(str(error))
             continue
         except (OSError, json.JSONDecodeError) as error:
-            errors.append(f"{json_path.relative_to(root)}: invalid JSON: {error}")
-            continue
-        for key, source in _declared_provenance_strings(value):
-            if _corpus_error(source):
-                errors.append(
-                    f"{json_path.relative_to(root)}:{key}: declared provenance names known "
-                    f"internal corpus {source!r}"
-                )
-    for relative in sorted(actual):
-        suffix = PurePosixPath(relative).suffix.casefold()
-        if suffix in {".json", ".tsv"}:
-            continue
-        xml_path = root / DATA_REL / relative
-        try:
-            tree = ET.parse(xml_path)
-        except (OSError, ET.ParseError) as error:
-            if suffix in {".xml", ".rng"}:
-                errors.append(f"{xml_path.relative_to(root)}: invalid XML: {error}")
-            continue
-        for element in tree.iter():
-            element_name = element.tag.rsplit("}", 1)[-1]
-            provenance_element = element_name.casefold() in PROVENANCE_KEYS
-            if provenance_element:
-                declarations = [(element_name, "".join(element.itertext()))]
-                declarations.extend(
-                    (f"{element_name}:@{attribute.rsplit('}', 1)[-1]}", source)
-                    for attribute, source in element.attrib.items()
-                )
-                for declaration, source in declarations:
-                    if _corpus_error(source):
-                        errors.append(
-                            f"{xml_path.relative_to(root)}:{declaration}: declared provenance "
-                            f"names known internal corpus {source!r}"
-                        )
-            for attribute, source in element.attrib.items():
-                local_name = attribute.rsplit("}", 1)[-1]
-                if (
-                    not provenance_element
-                    and local_name.casefold() in PROVENANCE_KEYS
-                    and _corpus_error(source)
-                ):
-                    errors.append(
-                        f"{xml_path.relative_to(root)}:@{local_name}: declared provenance names "
-                        f"known internal corpus {source!r}"
-                    )
+            errors.append(f"{data_path.relative_to(root)}: invalid JSON: {error}")
     return errors
 
 
