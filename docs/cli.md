@@ -663,6 +663,8 @@ Dates with an era are read in ICU's own forms, with four-digit years ("Mar 5, 20
 BC"). Ranges are read as ICU writes them: of numbers and percents ("3–5", "10–15%",
 "~3") and of years ("1914–1918"). Currencies and measures require explicit --currency
 and --measure options, and with them their ranges are read too ("$3–5", "10–15 kg").
+Amount ranges keep "start", "separator", and "end" captures and add each endpoint's
+own captures as "start.*" and "end.*"; approximate amounts similarly add "value.*".
 
 --flexible adds the flexible readers, which read the forms text writes beyond ICU's
 own: negative and accounting currency, mixed measures, other decimal styles, dates
@@ -706,6 +708,7 @@ Examples:
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
+- `--material`: Add validated locale material from PATH (repeatable) (default: `[]`)
 - `--currency`: Add an ISO 4217 currency, in either case (with --flexible, the flexible currency readers read only the currencies given) (default: `[]`)
 - `--measure`: Add an ICU measure unit, single or mixed (with --flexible, the measure readers read only the units given) (default: `[]`)
 - `--flexible`: Add the flexible readers (seconds to build) (default: `False`)
@@ -1013,6 +1016,24 @@ Examples:
 **Options:**
 
 - `help_command`: Subcommand to show help for
+
+## `icukit languages` (aliases: langs)
+
+With LANG, report the default selection of generated and flexible reader families:
+default locales, currencies, and units, plus guarded families with --guarded. Rows with
+no source have no usable reader: they were not built or were built with nothing to read.
+For a user row, provenance is the material's own provenance.source, verbatim user text
+that icukit does not interpret. icukit computes and reports no measured shares.
+
+Without LANG, quickly summarize generated default families and shipped curated tables
+for each ICU language. Use a LANG for the specification-level report.
+
+**Options:**
+
+- `lang`: ICU locale or language
+- `--material`: Add validated locale material from PATH (repeatable; requires LANG) (default: `[]`)
+- `--guarded`: Include readers of deliberately guarded readings (requires LANG) (default: `False`)
+- `-j, --json`: Output JSON lines (default: `False`)
 
 ## `icukit listfmt` (aliases: lf, listformat)
 
