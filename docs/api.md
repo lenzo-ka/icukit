@@ -830,11 +830,15 @@ Example:
 
 ## icukit.availability
 
-Report which reader specifications a locale can build and from which source.
+Report reader availability for a locale and identify each usable source.
 
 ### class `AvailabilityRow`
 
 One enumerated reader specification and the source that contributes to it.
+
+For a ``user`` row, ``provenance`` is the material's own
+``provenance.source``: verbatim user text that icukit does not interpret. icukit
+computes and reports no measured shares.
 
 #### `AvailabilityRow(locale: 'str', family: 'str', spec: 'str', type: 'str | None', source: 'str | None', served_by: 'str | None', material: 'str | None', provenance: 'str | None', reason: 'str | None') -> None`
 
@@ -842,10 +846,12 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### `availability(locale: 'str', *, material: 'Iterable[LocaleMaterial]' = (), guarded: 'bool' = False) -> 'tuple[AvailabilityRow, ...]'`
 
-Report every generated and flexible reader spec available for ``locale``.
+Report the default generated and flexible selections for ``locale``.
 
-ICU/CLDR, shipped curated tables, and explicitly supplied user material are
-separate rows. An enumerated spec that cannot be built is retained with its reason.
+Flexible rows use the default locales, currencies, and units; ``guarded=True``
+includes the guarded families. ICU/CLDR, shipped curated tables, and explicitly
+supplied user material are separate rows. A row with no source means there is no
+usable reader: it was not built, or it was built with nothing to read.
 
 ### `available_languages() -> 'tuple[str, ...]'`
 

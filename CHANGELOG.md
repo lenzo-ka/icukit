@@ -4,9 +4,11 @@
 
 ### Added
 
-- `icukit.availability` adds `availability` and `AvailabilityRow` for reporting each
-  generated and flexible reader specification with its ICU, curated-table, or user
-  material source, including ICU spell-out fallback and reported skip reasons.
+- `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
+  default selection of generated and flexible reader specifications (default locales,
+  currencies, and units, plus guarded families when requested) with its ICU,
+  curated-table, or user material source, including ICU spell-out fallback and
+  reported skip reasons.
   `available_languages` lists the ICU languages covered. `ik languages` exposes full
   locale rows or a fast all-language summary, and the generated `docs/languages.md`
   records the default-family summary for the build's ICU version.

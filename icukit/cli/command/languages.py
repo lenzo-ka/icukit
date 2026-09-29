@@ -22,9 +22,14 @@ class LanguagesCommand(SubcommandBase):
             "languages",
             help="Report reader availability by language",
             description="""
-With LANG, report every generated and flexible reader specification, including skips.
+With LANG, report the default selection of generated and flexible reader families:
+default locales, currencies, and units, plus guarded families with --guarded. Rows with
+no source have no usable reader: they were not built or were built with nothing to read.
+For a user row, provenance is the material's own provenance.source, verbatim user text
+that icukit does not interpret. icukit computes and reports no measured shares.
+
 Without LANG, quickly summarize generated default families and shipped curated tables
-for each ICU language. Use a LANG for the full specification-level report.
+for each ICU language. Use a LANG for the specification-level report.
 """,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )

@@ -11,8 +11,14 @@ from pathlib import Path
 
 import pytest
 
+from icukit.availability import availability
 from icukit.detectors import detector_key
-from icukit.engine import flexible_detectors, generated_detectors, generated_detectors_report
+from icukit.engine import (
+    SPELLOUT_NUMBER_FAMILY,
+    flexible_detectors,
+    generated_detectors,
+    generated_detectors_report,
+)
 from icukit.material import LocaleMaterial, _material_seal, load_locale_material
 from icukit.recognize import MaterialLoneSpelloutDetector, MaterialSpelloutDetector
 from icukit.serialize import detections_to_json
@@ -160,6 +166,46 @@ def test_b10_material_adds_results_without_changing_icu_results(flexible):
         and item["value"]["decimal"] == "21"
         and item["spec"]["material_digest"] == material.digest
         for item in material_readings
+    )
+
+
+def test_availability_and_detection_add_the_same_distinct_user_material():
+    material = _distinct_yo_material()
+    baseline_rows = availability("yo")
+    extended_rows = availability("yo", material=[material])
+    user = next(row for row in extended_rows if row.source == "user")
+
+    assert user.material == material.digest
+    assert [row for row in extended_rows if row.source == "icu"] == [
+        row for row in baseline_rows if row.source == "icu"
+    ]
+
+    text = "twenty-one people and twenty-uno goats"
+    baseline = detections_to_json(generated_detectors("yo").detect(text))
+    extended = detections_to_json(generated_detectors("yo", material=[material]).detect(text))
+    assert [
+        item for item in extended if item["spec"]["kind"] != "material_spellout_format_spec"
+    ] == baseline
+    assert any(
+        item["text"] == "twenty-uno"
+        and item["value"]["decimal"] == "21"
+        and item["spec"]["material_digest"] == material.digest
+        for item in extended
+        if item["spec"]["kind"] == "material_spellout_format_spec"
+    )
+
+
+def test_one_shot_family_iterable_reaches_material_readers():
+    material = _distinct_yo_material()
+    families = (SPELLOUT_NUMBER_FAMILY,)
+    expected = generated_detectors_report("yo", families, material=[material])
+    actual = generated_detectors_report("yo", (family for family in families), material=[material])
+
+    assert tuple(map(detector_key, actual.detectors.detectors)) == tuple(
+        map(detector_key, expected.detectors.detectors)
+    )
+    assert any(
+        detector_key(detector)[4] == material.digest for detector in actual.detectors.detectors
     )
 
 

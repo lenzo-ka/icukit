@@ -2,7 +2,8 @@
 
 Locale material is data you supply at runtime for a locale where ICU lacks a capability. This page is its specification: format `icukit-locale-material` version 1, versioned with icukit. icukit loads material only when you pass it, refuses it unless every witness it carries passes, adds its readers beside ICU's without replacing them, ships none, and labels it `user` in every availability report. Version 1 has one kind, `rbnf-spellout`: ICU rule-based number format rule text, exactly as ICU reads it. This format is a draft and not yet stable.
 
-This page specifies the whole contract. The loader, the material reader, and `material=` on the reader-set builders are provided now; labeling material in availability reports is not yet provided.
+This page specifies the whole contract. The loader, the material reader, `material=` on
+the reader-set builders, and `user` rows in availability reports are provided now.
 
 ## Version 1 envelope
 
@@ -16,7 +17,9 @@ reads it.
 `provenance` has a required non-empty string `source`, and may have string
 `license`, `retrieved`, and `note` fields. It has no other fields. Provenance is
 reported with the loaded material but is excluded from the material object's Python
-hash.
+hash. In a `user` availability row, the `provenance` field is this
+`provenance.source`, passed through as verbatim user text that icukit does not
+interpret. icukit computes and reports no measured shares.
 
 Each witness uses only `id`, `text`, `text_sha256`, `locale`, `labels`, and
 `x-icukit`; `id`, `text`, and `locale` are required. IDs match
@@ -238,9 +241,8 @@ Whitespace and JSON object-key order therefore do not affect identity; any conte
 change does. The format's locale applicability rule follows fallback downward only:
 material for `yo` applies to `yo`, `yo_NG`, and `yo_BJ`, while material for `yo_NG`
 does not apply to `yo`. The reader-set builders add material readers beside ICU's
-readers and never in their place; labeling material as `user` in availability reports
-is not yet provided. No
-material is bundled in the wheel or source distribution. Version 1 accepts no
+readers and never in their place; availability reports label material rows as `user`.
+No material is bundled in the wheel or source distribution. Version 1 accepts no
 pronunciation material.
 
 The reader accepts only a `LocaleMaterial` that `load_locale_material` returned, or a

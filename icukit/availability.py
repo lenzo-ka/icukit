@@ -1,4 +1,4 @@
-"""Report which reader specifications a locale can build and from which source."""
+"""Report reader availability for a locale and identify each usable source."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from .engine import (
     _flexible_families,
     _material_readers,
 )
-from .material import LocaleMaterial
+from .material import LocaleMaterial, _require_loaded
 from .unit_surfaces import (
     curated_composed_units,
     curated_currency_surfaces,
@@ -54,7 +54,12 @@ _AVAILABILITY_CHECKS: dict[str, tuple[Callable[[object], bool], str]] = {
 
 @dataclass(frozen=True)
 class AvailabilityRow:
-    """One enumerated reader specification and the source that contributes to it."""
+    """One enumerated reader specification and the source that contributes to it.
+
+    For a ``user`` row, ``provenance`` is the material's own
+    ``provenance.source``: verbatim user text that icukit does not interpret. icukit
+    computes and reports no measured shares.
+    """
 
     locale: str
     family: str
@@ -163,16 +168,15 @@ def _families(guarded: bool) -> tuple[Family, ...]:
 def availability(
     locale: str, *, material: Iterable[LocaleMaterial] = (), guarded: bool = False
 ) -> tuple[AvailabilityRow, ...]:
-    """Report every generated and flexible reader spec available for ``locale``.
+    """Report the default generated and flexible selections for ``locale``.
 
-    ICU/CLDR, shipped curated tables, and explicitly supplied user material are
-    separate rows. An enumerated spec that cannot be built is retained with its reason.
+    Flexible rows use the default locales, currencies, and units; ``guarded=True``
+    includes the guarded families. ICU/CLDR, shipped curated tables, and explicitly
+    supplied user material are separate rows. A row with no source means there is no
+    usable reader: it was not built, or it was built with nothing to read.
     """
     families = _families(guarded)
-    materials = tuple(material)
-    for item in materials:
-        if not isinstance(item, LocaleMaterial):
-            raise TypeError(f"material must contain LocaleMaterial, got {type(item).__name__}")
+    materials = tuple(_require_loaded(item) for item in material)
 
     rows: list[AvailabilityRow] = []
     for family, raw_spec, detector, reason in _family_specs(locale, families):
@@ -194,7 +198,7 @@ def availability(
                     None,
                     None,
                     None,
-                    check[1].format(language=language),
+                    f"built, but {check[1].format(language=language)}, so it reads nothing",
                 )
             )
             continue

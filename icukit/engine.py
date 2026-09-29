@@ -712,8 +712,8 @@ def _family_specs(
 ) -> Iterable[tuple[Family, Spec, Detector | None, str]]:
     """Yield each enumerated family spec with its detector or reported skip reason.
 
-    Availability reporting uses this seam so it cannot drift from generation's probes,
-    exception handling, or skip reasons.
+    Generation and availability share enumeration, probes, exception handling, and skip
+    reasons. Availability additionally reports readers that are built but have no data.
     """
     for family in families:
         for spec in family.enumerate(locale):
