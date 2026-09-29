@@ -6884,10 +6884,10 @@ Whole-text and incremental sentence-break overrides.
 
 ICU always supplies the candidate boundaries: this module can retain or
 suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
-English (language ``en``, with any region or script) and ``"none"`` for every
-other language. Explicit ``base="none"`` is exactly ICU's current sentence
-output. Whole-text and incremental operation share the same prefix-aware
-candidate evaluator.
+English (language ``en``, with any region or script, except the ``POSIX``
+variant) and ``"none"`` otherwise. Explicit ``base="none"`` is exactly ICU's
+current sentence output. Whole-text and incremental operation share the same
+prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -7032,13 +7032,15 @@ The locale-default base is:
 ================ =================
 Locale language  Default base
 ================ =================
-``en``           ``en-tn-cart@1``
+``en``           ``en-tn-cart@1`` (except ``POSIX``)
 every other      ``none``
 ================ =================
 
-Region and script do not change the English default. Pass ``base="none"``
-explicitly for plain ICU sentence boundaries. Cartlet is an icukit
-dependency and is imported lazily only when a cartlet model is selected.
+Region and script do not change the English default. The ``POSIX`` variant
+uses ``"none"`` because its ICU word tokens differ from the model profile.
+Pass ``base="none"`` explicitly for plain ICU sentence boundaries. Cartlet
+is an icukit dependency and is imported lazily only when a cartlet model is
+selected.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.

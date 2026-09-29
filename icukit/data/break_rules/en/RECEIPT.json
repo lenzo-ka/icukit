@@ -13,7 +13,7 @@
     "identity": {
       "icu": "78.3",
       "unicode": "17.0",
-      "token_profile": "sha256:14989ce05e894b86c0502fb563c1d0e89399c2bd39dd835bba7cfa2422e7c451"
+      "token_profile": "sha256:d181cf8c122b6fe98ef6ccdaa5139b35d3a1b24185a023845898a4941fd9e2d5"
     },
     "parameters": {
       "detokenizer": "glue2",

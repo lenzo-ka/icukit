@@ -30,8 +30,9 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 
 ### Sentence breaking
 
-`SentenceOverride` uses the learned `en-tn-cart@1` model by default for every
-English locale, including English locales with a region or script. Pass
+`SentenceOverride` uses the learned `en-tn-cart@1` model by default for English
+locales, including locales with a region or script. The `POSIX` variant is
+excluded because its ICU word tokens differ from the model profile. Pass
 `base="none"` for plain ICU sentence boundaries. Other locale languages keep
 plain ICU as their default. The model is derived from CC BY-SA 4.0 data; its
 measured results are agreement with the corpus splitter on synthetic text, not

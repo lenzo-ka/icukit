@@ -2,10 +2,10 @@
 
 ICU always supplies the candidate boundaries: this module can retain or
 suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
-English (language ``en``, with any region or script) and ``"none"`` for every
-other language. Explicit ``base="none"`` is exactly ICU's current sentence
-output. Whole-text and incremental operation share the same prefix-aware
-candidate evaluator.
+English (language ``en``, with any region or script, except the ``POSIX``
+variant) and ``"none"`` otherwise. Explicit ``base="none"`` is exactly ICU's
+current sentence output. Whole-text and incremental operation share the same
+prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -76,7 +76,7 @@ _EN_TN_CART_DIGEST = "sha256:a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851
 _CARTLET_IDENTITY = {
     "icu": "78.3",
     "unicode": "17.0",
-    "token_profile": "sha256:14989ce05e894b86c0502fb563c1d0e89399c2bd39dd835bba7cfa2422e7c451",
+    "token_profile": "sha256:d181cf8c122b6fe98ef6ccdaa5139b35d3a1b24185a023845898a4941fd9e2d5",
 }
 _TOKEN_FEATURE_ORDER = (
     "lower",
@@ -432,6 +432,21 @@ def break_rule_identity(
     }
 
 
+def _cartlet_runtime_identity(
+    locale: str, inventories: Sequence[LoadedExceptionInventory]
+) -> BreakRuleIdentity:
+    parsed = icu.Locale(locale)
+    identity_locale = (
+        "en" if parsed.getLanguage() == "en" and parsed.getVariant().upper() != "POSIX" else locale
+    )
+    return break_rule_identity(identity_locale, inventories=inventories)
+
+
+def _uses_english_cartlet_default(locale: str) -> bool:
+    parsed = icu.Locale(locale)
+    return parsed.getLanguage() == "en" and parsed.getVariant().upper() != "POSIX"
+
+
 def _cartlet_feature_names(lookahead: int) -> tuple[str, ...]:
     names: list[str] = []
     for at in ("-3", "-2", "-1"):
@@ -455,7 +470,7 @@ def _load_cartlet_model(
         raise BreakRuleLoadError(
             [_refuse(ref.name, "DIGEST_MISMATCH", "cartlet model bytes differ from digest")]
         )
-    expected_identity = break_rule_identity(locale, inventories=inventories)
+    expected_identity = _cartlet_runtime_identity(locale, inventories)
     if dict(ref.identity) != expected_identity or ref.features != _FEATURES:
         raise BreakRuleLoadError(
             [
@@ -2005,13 +2020,15 @@ class SentenceOverride:
     ================ =================
     Locale language  Default base
     ================ =================
-    ``en``           ``en-tn-cart@1``
+    ``en``           ``en-tn-cart@1`` (except ``POSIX``)
     every other      ``none``
     ================ =================
 
-    Region and script do not change the English default. Pass ``base="none"``
-    explicitly for plain ICU sentence boundaries. Cartlet is an icukit
-    dependency and is imported lazily only when a cartlet model is selected.
+    Region and script do not change the English default. The ``POSIX`` variant
+    uses ``"none"`` because its ICU word tokens differ from the model profile.
+    Pass ``base="none"`` explicitly for plain ICU sentence boundaries. Cartlet
+    is an icukit dependency and is imported lazily only when a cartlet model is
+    selected.
 
     Args:
         locale: ICU locale used for both sentence and word boundaries.
@@ -2054,9 +2071,8 @@ class SentenceOverride:
         self.cache = cache
         self.inventories = tuple(inventories)
         expected = break_rule_identity(locale, inventories=self.inventories)
-        locale_default = base is None
-        if locale_default:
-            base = "en-tn-cart@1" if icu.Locale(locale).getLanguage() == "en" else "none"
+        if base is None:
+            base = "en-tn-cart@1" if _uses_english_cartlet_default(locale) else "none"
         if base == "none":
             loaded_base = None
         elif isinstance(base, BreakRuleSet):
@@ -2068,7 +2084,7 @@ class SentenceOverride:
                 CartletModelRef(
                     _EN_TN_CART_PATH,
                     _EN_TN_CART_DIGEST,
-                    identity=expected if locale_default else _CARTLET_IDENTITY,
+                    identity=_CARTLET_IDENTITY,
                     name="en-tn-cart@1",
                 ),
                 locale,

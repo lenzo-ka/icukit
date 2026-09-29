@@ -49,9 +49,10 @@ sentence-break base by default:
 python -c 'from icukit import SentenceOverride; SentenceOverride()'
 ```
 
-Cartlet is imported lazily, only when a cartlet model is selected. Explicit
-`SentenceOverride(base="none")` and non-English locale defaults therefore do
-not pay its import cost.
+Cartlet is imported lazily, only when a cartlet model is selected. The English
+`POSIX` locale variant defaults to `base="none"` because its ICU word tokens
+differ from the model profile. Explicit `SentenceOverride(base="none")` and
+non-English locale defaults therefore do not pay its import cost.
 
 ## Advanced: using a system PyICU
 

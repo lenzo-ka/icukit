@@ -29,8 +29,30 @@ def test_english_locale_default_is_named_cartlet_model(locale: str) -> None:
     assert all(str(item["id"]).startswith("en-tn-cart@1#leaf:") for item in decisions)
 
 
-def test_default_identity_matches_explicit_named_model_for_canonical_locale() -> None:
-    assert SentenceOverride().identity == SentenceOverride(base="en-tn-cart@1").identity
+@pytest.mark.parametrize("locale", ["en_US", "en_GB", "en_Latn_US"])
+def test_default_identity_matches_explicit_named_model(locale: str) -> None:
+    default = SentenceOverride(locale)
+    named = SentenceOverride(locale, base="en-tn-cart@1")
+
+    assert default.identity == named.identity
+    assert default.decide("Mr. Smith arrived. Next.") == named.decide("Mr. Smith arrived. Next.")
+
+
+def test_english_posix_default_is_plain_icu_and_named_model_refuses() -> None:
+    default = SentenceOverride("en_US_POSIX")
+    plain = SentenceOverride("en_US_POSIX", base="none")
+
+    assert default.identity == plain.identity
+    with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
+        SentenceOverride("en_US_POSIX", base="en-tn-cart@1")
+
+
+@pytest.mark.parametrize("base", [None, "en-tn-cart@1"])
+def test_default_and_named_model_refuse_runtime_icu_mismatch(monkeypatch, base) -> None:
+    monkeypatch.setattr(sentence_override_module.icu, "ICU_VERSION", "0.0")
+
+    with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
+        SentenceOverride("en_GB", base=base)
 
 
 def test_non_english_locale_default_is_plain_icu() -> None:
