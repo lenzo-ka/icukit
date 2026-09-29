@@ -4,9 +4,16 @@
 
 ### Added
 
-- Experimental whole-text sentence-break overrides can retain, suppress, or
-  leave open ICU sentence candidates with caller-authored flat rules, protected
-  spans, exception inventories, per-candidate attribution, and lattice output.
+- Experimental whole-text and incremental sentence-break overrides can retain,
+  suppress, or leave open ICU sentence candidates with caller-authored flat
+  rules, protected spans, exception inventories, per-candidate attribution, and
+  lattice output. Incremental breakers expose prefix-stable `feed`, `pending`,
+  `flush`, and `close` operations, bounded token lookahead, feature caching, and
+  optional protected-span watermarks while sharing the whole-text decision core.
+  Streaming refuses exception inventories with collation-variant word- or
+  sentence-level rules because primary-ignorable code points make the surface
+  extent unbounded; those inventories remain supported by the whole-text API,
+  and exact variants remain supported incrementally.
   Rule artifacts declare and verify their ICU, Unicode, and explicitly
   versioned tokenizer-profile identity and run candidate- and decision-aware
   authored witnesses when loaded. The default remains `base="none"`, so
