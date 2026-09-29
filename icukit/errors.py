@@ -89,6 +89,12 @@ class BreakerError(ICUKitError):
     pass
 
 
+class OverlappingProtectedSpans(ICUKitError):
+    """Token-scoped protected spans overlap without one containing the other."""
+
+    pass
+
+
 class MessageError(ICUKitError):
     """Error related to message formatting operations."""
 

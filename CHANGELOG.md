@@ -14,6 +14,14 @@
   sdist. The package license expression
   now includes the Unicode License v3 term that covers its bundled CLDR and UCD
   snapshots.
+- ICU-backed character-class features: `char_classes` and fixed-width
+  `class_window` contexts expose reflective Word_Break, Sentence_Break,
+  General_Category, and Script values with stable identities and explicit edge
+  padding; `shape` adds the versioned `coarse@1` and `cased@1` schemes; and
+  `tokens` plus `token_features` provide word units, protected-span merges,
+  whitespace runs, exception-inventory merges, and the feature set used by the
+  forthcoming sentence-break override. These are additive APIs; no existing
+  segmentation or default behavior changes.
 - `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
   default selection of generated and flexible reader specifications (default locales,
   currencies, and units, plus guarded families when requested) with its ICU,
