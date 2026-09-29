@@ -1,9 +1,9 @@
-"""Experimental whole-text sentence-break overrides.
+"""Experimental whole-text and incremental sentence-break overrides.
 
 ICU always supplies the candidate boundaries: this module can retain or
 suppress them, but never add one. ``base="none"`` is the default and is exactly
-ICU's current sentence output. Incremental operation belongs to the later B2
-API and is deliberately unavailable here.
+ICU's current sentence output. Whole-text and incremental operation share the
+same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -25,9 +25,9 @@ from typing import Literal, NotRequired, TypedDict, cast
 
 import icu
 
-from .breaker import BreakSpan, break_sentence_spans
+from .breaker import BreakSpan, break_sentence_spans, break_word_spans
 from .classes import ClassPoint, char_classes, class_window
-from .errors import BreakRuleLoadError, OverlappingProtectedSpans, RuleRefusal
+from .errors import BreakRuleLoadError, LateProtectedSpan, OverlappingProtectedSpans, RuleRefusal
 from .exceptions import (
     ExceptionPolicy,
     LoadedExceptionInventory,
@@ -52,6 +52,8 @@ __all__ = [
     "BreakRuleIdentity",
     "BreakRuleSet",
     "BreakSegmentation",
+    "IncrementalSentenceBreaker",
+    "PendingCandidate",
     "SentenceOverride",
     "break_rule_identity",
     "load_break_rules",
@@ -151,6 +153,14 @@ class BreakDecision(TypedDict):
     layer: Layer
     id: str | None
     tokens_read: int
+
+
+class PendingCandidate(TypedDict):
+    """An ICU candidate awaiting stable context, a rule feature, or protection."""
+
+    offset: int
+    tokens_after: int
+    waiting_on: str
 
 
 class BreakBoundary(TypedDict):
@@ -706,26 +716,166 @@ def _point_feature(point: ClassPoint, feature: str) -> object:
     return values.get(feature, "<UNKNOWN>")
 
 
-def _feature_value(
+class _FeatureNotYet(Exception):
+    """A prefix does not yet make a requested feature immutable."""
+
+
+class _TokenFeatureCache:
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+        self.values: dict[tuple[object, ...], dict[str, str | int | bool]] = {}
+
+    @staticmethod
+    def _key(toks: Sequence[Token], index: int, text: str) -> tuple[object, ...]:
+        token = toks[index]
+        run = token["run"]
+        run_tokens = [item for item in toks if item["run"] == run]
+        run_start = min(item["start"] for item in run_tokens)
+        run_end = max(item["end"] for item in run_tokens)
+        return (
+            token["start"],
+            token["end"],
+            token["text"],
+            run,
+            text[run_start:run_end],
+            token.get("protected_types", ()),
+        )
+
+    def get(self, toks: Sequence[Token], index: int, text: str) -> dict[str, str | int | bool]:
+        if not self.enabled:
+            return token_features(toks, index, text)
+        key = self._key(toks, index, text)
+        if key not in self.values:
+            self.values[key] = token_features(toks, index, text)
+        return self.values[key]
+
+    def evict_before(self, offset: int) -> None:
+        self.values = {
+            key: value for key, value in self.values.items() if cast(int, key[1]) >= offset
+        }
+
+    def clear(self) -> None:
+        self.values.clear()
+
+
+def _is_white_space(char: str) -> bool:
+    return icu.Char.hasBinaryProperty(ord(char), icu.UProperty.WHITE_SPACE)
+
+
+def _read_edge_stable(end: int, text: str, closed: bool) -> bool:
+    """Whether ICU's boundary at ``end`` is immutable under extension."""
+    # ICU's WB4-transparent Extend, Format and ZWJ runs make code-point
+    # lookahead unbounded. White_Space is not transparent and cannot be joined
+    # across by the ICU word rules, so an unabsorbed whitespace code point is
+    # the first general extension-proof terminator. ICU's word rules have no
+    # joining rule for a P* or S* code point with Word_Break=Other; after WB4
+    # ignores its following Extend/Format/ZWJ run, WB999 therefore fixes the
+    # edge as soon as the next non-ignored code point is present.
+    if closed or any(_is_white_space(char) for char in text[end:]):
+        return True
+    if not 0 < end <= len(text):
+        return False
+    edge_index = end - 1
+    while edge_index >= 0 and char_classes(text[edge_index], "word_break")[0] in {
+        "Extend",
+        "Format",
+        "ZWJ",
+    }:
+        edge_index -= 1
+    if edge_index < 0:
+        return False
+    category = char_classes(text[edge_index], "general_category")[0]
+    word_break = char_classes(text[edge_index], "word_break")[0]
+    if not (
+        word_break == "Other"
+        and (category.endswith("_Punctuation") or category.endswith("_Symbol"))
+    ):
+        return False
+    return any(
+        char_classes(char, "word_break")[0] not in {"Extend", "Format", "ZWJ"}
+        for char in text[end:]
+    )
+
+
+def _extent_complete(
+    start: int,
+    end: int,
+    text: str,
+    closed: bool,
+) -> bool:
+    """Whether an observed extent is immutable under stream extension."""
+    del start
+    return _read_edge_stable(end, text, closed)
+
+
+def _token_completion_horizon(
+    token: Token,
+    text: str,
+    locale: str,
+    inventories: Sequence[LoadedExceptionInventory],
+    closed: bool,
+) -> int | None:
+    if not _extent_complete(
+        token["start"],
+        token["end"],
+        text,
+        closed,
+    ):
+        return None
+    horizons = tuple(
+        _inventory_locality_horizon(
+            inventory,
+            text,
+            token["start"],
+            locale,
+            closed,
+            levels=frozenset({"word"}),
+        )
+        for inventory in inventories
+    )
+    if any(item is None for item in horizons):
+        return None
+    return max((token["end"], *(cast(int, item) for item in horizons)))
+
+
+def _forward_character_horizon(index: int, text: str, right: Sequence[Token]) -> int:
+    """Return the token horizon of an absolute forward character position."""
+    if index >= len(text):
+        return min(8, len(right) + 1)
+    completed = sum(token["end"] <= index for token in right)
+    containing = any(token["start"] <= index < token["end"] for token in right)
+    return max(1, completed + int(containing))
+
+
+def _observed_feature_value(
     predicate: _CompiledPredicate,
     rule: _CompiledBreakRule,
     text: str,
     offset: int,
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
-) -> tuple[object, int]:
+    locale: str,
+    inventories: Sequence[LoadedExceptionInventory],
+    closed: bool,
+    cache: _TokenFeatureCache,
+) -> tuple[object, int, int]:
+    """Return value, tokens read, and exclusive code-point read horizon."""
     at = predicate.at
     if at == "protected":
-        value: object = protected_types
-        return value, 0
+        return protected_types, 0, offset
     pivot = _token_index_after(toks, offset)
     if at == "run-1":
         if pivot == 0:
-            return _sentinel_features("<BOS>").get(predicate.feature, "<BOS>"), 0
+            return _sentinel_features("<BOS>").get(predicate.feature, "<BOS>"), 0, offset
         previous = toks[pivot - 1]
         same_run = [
             item for item in toks if item["run"] == previous["run"] and item["end"] <= offset
         ]
+        completion_horizons = tuple(
+            _token_completion_horizon(item, text, locale, inventories, closed) for item in same_run
+        )
+        if any(item is None for item in completion_horizons):
+            raise _FeatureNotYet
         start = min(item["start"] for item in same_run)
         run_text = text[start:offset].rstrip()
         first = run_text[0]
@@ -746,33 +896,77 @@ def _feature_value(
             "run.shape.cased": cased_shape,
             "lex": "none",
         }
-        return features.get(predicate.feature, "<UNKNOWN>"), 0
+        return (
+            features.get(predicate.feature, "<UNKNOWN>"),
+            0,
+            max((offset, *(cast(int, item) for item in completion_horizons))),
+        )
     if isinstance(at, int):
         index = pivot + at - 1 if at > 0 else pivot + at
         if index < 0:
-            return _sentinel_features("<BOS>").get(predicate.feature, "<BOS>"), 0
+            return _sentinel_features("<BOS>").get(predicate.feature, "<BOS>"), 0, offset
         if index >= len(toks):
+            if not closed:
+                raise _FeatureNotYet
             reached = min(max(at, 0), max(len(toks) - pivot, 0))
-            return _sentinel_features("<EOS>").get(predicate.feature, "<EOS>"), reached
-        return token_features(toks, index, text).get(predicate.feature, "<UNKNOWN>"), max(at, 0)
+            return (
+                _sentinel_features("<EOS>").get(predicate.feature, "<EOS>"),
+                reached,
+                len(text),
+            )
+        token = toks[index]
+        completion_horizon = _token_completion_horizon(token, text, locale, inventories, closed)
+        if completion_horizon is None:
+            raise _FeatureNotYet
+        return (
+            cache.get(toks, index, text).get(predicate.feature, "<UNKNOWN>"),
+            max(at, 0),
+            max(offset, completion_horizon),
+        )
     distance = int(cast(str, at)[1:])
     index = offset + distance - 1 if distance > 0 else offset + distance
     if distance > 0:
         right = toks[pivot:]
-        if index >= len(text):
-            horizon = min(8, len(right) + 1)
-        else:
-            completed = sum(token["end"] <= index for token in right)
-            containing = any(token["start"] <= index < token["end"] for token in right)
-            horizon = max(1, completed + int(containing))
+        horizon = _forward_character_horizon(index, text, right)
+        if index >= len(text) and not closed:
+            raise _FeatureNotYet
+        completed_tokens = tuple(token for token in right if token["end"] <= index)
+        completion_horizons = tuple(
+            _token_completion_horizon(item, text, locale, inventories, closed)
+            for item in completed_tokens
+        )
+        if any(item is None for item in completion_horizons):
+            raise _FeatureNotYet
+        read_horizon = max(
+            offset,
+            min(index + 1, len(text)),
+            *(cast(int, item) for item in completion_horizons),
+        )
         if horizon > rule.lookahead:
-            return "<BEYOND>", rule.lookahead
+            return "<BEYOND>", rule.lookahead, read_horizon
     if index < 0:
-        return "<BOS>", 0
+        return "<BOS>", 0, offset
     if index >= len(text):
-        return "<EOS>", horizon
+        return "<EOS>", horizon, read_horizon
+    if distance > 0:
+        window = class_window(text, index, before=0, after=1)
+        return _point_feature(window.after[0], predicate.feature), horizon, read_horizon
+    containing = next((token for token in toks if token["start"] <= index < token["end"]), None)
+    completion_horizon = None
+    if containing is not None:
+        completion_horizon = _token_completion_horizon(
+            containing, text, locale, inventories, closed
+        )
+        if completion_horizon is None:
+            raise _FeatureNotYet
     window = class_window(text, index, before=0, after=1)
-    return _point_feature(window.after[0], predicate.feature), horizon if distance > 0 else 0
+    tokens_read = 0
+    if distance > 0:
+        tokens_read = min(
+            sum(1 for token in toks[pivot:] if token["start"] <= index), rule.lookahead
+        )
+    horizon = completion_horizon if completion_horizon is not None else index + 1
+    return _point_feature(window.after[0], predicate.feature), tokens_read, max(offset, horizon)
 
 
 def _predicate_matches(value: object, predicate: _CompiledPredicate) -> bool:
@@ -793,20 +987,44 @@ def _predicate_matches(value: object, predicate: _CompiledPredicate) -> bool:
     return isinstance(value, (int, float)) and value >= cast(int | float, operand)
 
 
-def _match_rule(
+def _match_observed_rule(
     rule: _CompiledBreakRule,
     text: str,
     offset: int,
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
-) -> tuple[bool, int]:
+    locale: str,
+    inventories: Sequence[LoadedExceptionInventory],
+    closed: bool,
+    cache: _TokenFeatureCache,
+) -> tuple[bool | None, int, int]:
+    """Return match, token reach, and read horizon; None means not yet decidable."""
     read = 0
+    horizon = offset
     for predicate in rule.when:
-        value, reached = _feature_value(predicate, rule, text, offset, toks, protected_types)
+        try:
+            value, reached, predicate_horizon = _observed_feature_value(
+                predicate,
+                rule,
+                text,
+                offset,
+                toks,
+                protected_types,
+                locale,
+                inventories,
+                closed,
+                cache,
+            )
+        except _FeatureNotYet:
+            # Predicate order is semantic.  An unavailable earlier feature
+            # holds this rule; later predicates cannot exclude it early or
+            # make the attributed read depend on chunk boundaries.
+            return None, read, horizon
         read = max(read, reached)
+        horizon = max(horizon, predicate_horizon)
         if not _predicate_matches(value, predicate):
-            return False, read
-    return True, read
+            return False, read, horizon
+    return True, read, horizon
 
 
 def _decision(
@@ -831,22 +1049,50 @@ def _decision(
     }
 
 
-def _rules_decision(
-    rule_set: BreakRuleSet,
+@dataclass(frozen=True)
+class _ObservedResult:
+    decision: BreakDecision | None
+    waiting_on: str | None
+    tokens_read: int
+    horizon: int
+
+
+def _observed_rules_decision(
+    rule_sets: Sequence[BreakRuleSet],
     layer: Layer,
     text: str,
     offset: int,
     end: int,
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
-) -> tuple[BreakDecision | None, int]:
-    furthest = 0
-    for rule in rule_set._rules:
-        matched, read = _match_rule(rule, text, offset, toks, protected_types)
-        furthest = max(furthest, read)
-        if matched:
-            return _decision(offset, end, rule.effect, layer, rule.id, furthest), furthest
-    return None, furthest
+    locale: str,
+    inventories: Sequence[LoadedExceptionInventory],
+    closed: bool,
+    cache: _TokenFeatureCache,
+) -> _ObservedResult:
+    read = 0
+    horizon = offset
+    for rule_set in rule_sets:
+        for rule in rule_set._rules:
+            matched, reached, rule_horizon = _match_observed_rule(
+                rule,
+                text,
+                offset,
+                toks,
+                protected_types,
+                locale,
+                inventories,
+                closed,
+                cache,
+            )
+            read = max(read, reached)
+            horizon = max(horizon, rule_horizon)
+            if matched is None:
+                return _ObservedResult(None, rule.id, read, horizon)
+            if matched:
+                decision = _decision(offset, end, rule.effect, layer, rule.id, read)
+                return _ObservedResult(decision, None, read, horizon)
+    return _ObservedResult(None, None, read, horizon)
 
 
 def _run_witnesses(
@@ -902,17 +1148,21 @@ def _run_witnesses(
                             }
                         )
                     )
-                    decision, _read = _rules_decision(
-                        rule_set,
+                    observed = _observed_rules_decision(
+                        (rule_set,),
                         "rules",
                         text,
                         offset,
                         _logical_end(toks, offset),
                         toks,
                         covering,
+                        locale,
+                        inventories,
+                        True,
+                        _TokenFeatureCache(True),
                     )
-                    if decision is not None:
-                        decisions.append(decision)
+                    if observed.decision is not None:
+                        decisions.append(observed.decision)
                 found = any(
                     item["id"] == rule.id
                     and (
@@ -960,6 +1210,264 @@ def _inventory_claims(
     )
 
 
+def _combined_inventory(
+    inventories: Sequence[LoadedExceptionInventory],
+) -> LoadedExceptionInventory | None:
+    if not inventories:
+        return None
+    return LoadedExceptionInventory(
+        " + ".join(item.corpus for item in inventories),
+        {key: value for item in inventories for key, value in item.named_lists.items()},
+        tuple(rule for item in inventories for rule in item._rules),
+    )
+
+
+def _inventory_rules(
+    inventory: LoadedExceptionInventory,
+    locale: str,
+    levels: frozenset[str] = frozenset({"word", "sentence"}),
+) -> tuple[object, ...]:
+    """Rules whose matcher results can affect a streamed sentence decision."""
+    return tuple(
+        rule
+        for rule in inventory._rules
+        if (levels & set(rule.levels))
+        and rule.effect == "suppress"
+        and _locale_applies(rule.locale, locale)
+    )
+
+
+def _whitespace_terminated_horizon(text: str, end: int) -> int | None:
+    """Return the exclusive end of the first whitespace terminator after ``end``."""
+    if end > len(text):
+        return None
+    terminator = next(
+        (index for index in range(end, len(text)) if _is_white_space(text[index])),
+        None,
+    )
+    return None if terminator is None else terminator + 1
+
+
+def _inventory_locality_horizon(
+    inventory: LoadedExceptionInventory,
+    text: str,
+    anchor: int,
+    locale: str,
+    closed: bool,
+    *,
+    levels: frozenset[str] = frozenset({"word", "sentence"}),
+) -> int | None:
+    """Return the real inventory matcher's exclusive right read horizon.
+
+    Static reach is derived by ``exceptions._context_bounds`` through the
+    public ``context_bounds`` property. Every possible exact surface is first
+    completed from the candidate-side anchor through the inventory's maximum
+    surface length and a whitespace terminator. An unbounded whitespace skip
+    is then made finite for the current buffer by observing its complete next
+    whitespace run, the following ICU word span, and whitespace terminating
+    that span.
+    """
+    if closed:
+        return len(text)
+    rules = _inventory_rules(inventory, locale, levels)
+    if not rules:
+        return anchor
+    local = LoadedExceptionInventory(inventory.corpus, inventory.named_lists, rules)
+    bounds = local.context_bounds
+    surface_end = anchor + bounds.max_surface_length
+    surface_horizon = _whitespace_terminated_horizon(text, surface_end)
+    if surface_horizon is None:
+        return None
+
+    reach = bounds.right_from_match_start
+    if reach is not None:
+        target = anchor + reach
+        horizon = _whitespace_terminated_horizon(text, target)
+        return None if horizon is None else max(surface_horizon, horizon)
+
+    whitespace = next(
+        (index for index in range(surface_end, len(text)) if _is_white_space(text[index])),
+        None,
+    )
+    if whitespace is None:
+        return None
+    following = whitespace
+    while following < len(text) and _is_white_space(text[following]):
+        following += 1
+    if following == len(text):
+        return None
+    word = next(
+        (
+            span
+            for span in break_word_spans(text, locale)
+            if span["start"] <= following < span["end"]
+        ),
+        None,
+    )
+    end = following + 1 if word is None else word["end"]
+    condition_horizon = _whitespace_terminated_horizon(text, end)
+    return None if condition_horizon is None else max(surface_horizon, condition_horizon)
+
+
+def _inventory_anchor(toks: Sequence[Token], offset: int, lookahead: int) -> int:
+    """End of the furthest word a candidate's flat rules may inspect."""
+    if lookahead <= 0:
+        return offset
+    pivot = _token_index_after(toks, offset)
+    read = toks[pivot : pivot + lookahead]
+    return read[-1]["end"] if read else offset
+
+
+def _candidate_observed(
+    owner: SentenceOverride,
+    text: str,
+    offset: int,
+    protected: Sequence[ProtectedSpan],
+    closed: bool,
+    cache: _TokenFeatureCache,
+) -> _ObservedResult:
+    combined = _combined_inventory(owner.inventories)
+    toks = tokens(text, owner.locale, inventory=combined, protected=protected)
+    covering = tuple(
+        sorted({item["type"] for item in protected if item["start"] < offset < item["end"]})
+    )
+    containing = next((token for token in toks if token["start"] < offset < token["end"]), None)
+    end = containing["end"] if containing is not None else _logical_end(toks, offset)
+    word_inventories = tuple(
+        inventory
+        for inventory in owner.inventories
+        if _inventory_rules(inventory, owner.locale, frozenset({"word"}))
+    )
+    if containing is not None:
+        completion_horizon = containing["end"]
+        if word_inventories and "protected" not in containing:
+            observed_horizon = _token_completion_horizon(
+                containing,
+                text,
+                owner.locale,
+                word_inventories,
+                closed,
+            )
+            if observed_horizon is None:
+                return _ObservedResult(None, "exceptions", 0, offset)
+            completion_horizon = observed_horizon
+        return _ObservedResult(
+            _decision(offset, end, "no-break", "token", None, 0),
+            None,
+            0,
+            completion_horizon,
+        )
+
+    read = 0
+    word_locality_horizons = tuple(
+        _inventory_locality_horizon(
+            inventory,
+            text,
+            offset,
+            owner.locale,
+            closed,
+            levels=frozenset({"word"}),
+        )
+        for inventory in word_inventories
+    )
+    if any(item is None for item in word_locality_horizons):
+        return _ObservedResult(None, "exceptions", read, offset)
+    horizon = max((offset, *(cast(int, item) for item in word_locality_horizons)))
+
+    before = _observed_rules_decision(
+        owner.before,
+        "before",
+        text,
+        offset,
+        end,
+        toks,
+        covering,
+        owner.locale,
+        owner.inventories,
+        closed,
+        cache,
+    )
+    read = max(read, before.tokens_read)
+    horizon = max(horizon, before.horizon)
+    if before.waiting_on is not None:
+        return _ObservedResult(None, before.waiting_on, read, horizon)
+    if before.decision is not None:
+        decision = dict(before.decision)
+        decision["tokens_read"] = read
+        return _ObservedResult(cast(BreakDecision, decision), None, read, horizon)
+
+    anchor = _inventory_anchor(toks, offset, owner.lookahead)
+    locality_horizons = tuple(
+        _inventory_locality_horizon(
+            inventory,
+            text,
+            anchor,
+            owner.locale,
+            closed,
+            levels=frozenset({"sentence"}),
+        )
+        for inventory in owner.inventories
+    )
+    if any(item is None for item in locality_horizons):
+        return _ObservedResult(None, "exceptions", read, horizon)
+    horizon = max((horizon, *(cast(int, item) for item in locality_horizons)))
+
+    for inventory in owner.inventories:
+        rule_ids = _inventory_claims(inventory, text, owner.locale).get(offset)
+        if rule_ids:
+            return _ObservedResult(
+                _decision(offset, end, "no-break", "exceptions", rule_ids[0], read),
+                None,
+                read,
+                horizon,
+            )
+
+    if owner.base is None:
+        current = _decision(offset, end, "break", "icu", None, read)
+    else:
+        base = _observed_rules_decision(
+            (owner.base,),
+            "rules",
+            text,
+            offset,
+            end,
+            toks,
+            covering,
+            owner.locale,
+            owner.inventories,
+            closed,
+            cache,
+        )
+        read = max(read, base.tokens_read)
+        horizon = max(horizon, base.horizon)
+        if base.waiting_on is not None:
+            return _ObservedResult(None, base.waiting_on, read, horizon)
+        current = base.decision or _decision(offset, end, "break", "icu", None, read)
+
+    after = _observed_rules_decision(
+        owner.after,
+        "after",
+        text,
+        offset,
+        end,
+        toks,
+        covering,
+        owner.locale,
+        owner.inventories,
+        closed,
+        cache,
+    )
+    read = max(read, after.tokens_read)
+    horizon = max(horizon, after.horizon)
+    if after.waiting_on is not None:
+        return _ObservedResult(None, after.waiting_on, read, horizon)
+    if after.decision is not None:
+        current = after.decision
+    copied = dict(current)
+    copied["tokens_read"] = read
+    return _ObservedResult(cast(BreakDecision, copied), None, read, horizon)
+
+
 def _decide_core(
     text: str,
     locale: str,
@@ -970,76 +1478,255 @@ def _decide_core(
     protected: Iterable[ProtectedSpan],
 ) -> list[BreakDecision]:
     protected_items = tuple(protected)
-    combined_inventory = (
-        LoadedExceptionInventory(
-            " + ".join(item.corpus for item in inventories),
-            {key: value for item in inventories for key, value in item.named_lists.items()},
-            tuple(rule for item in inventories for rule in item._rules),
-        )
-        if inventories
-        else None
-    )
-    toks = tokens(text, locale, inventory=combined_inventory, protected=protected_items)
-    _token_spans, _hints = _validated_protected(protected_items, len(text))
-    claims = [_inventory_claims(item, text, locale) for item in inventories]
+    owner = SentenceOverride.__new__(SentenceOverride)
+    owner.locale = locale
+    owner.inventories = tuple(inventories)
+    owner.before = tuple(before)
+    owner.base = base
+    owner.after = tuple(after)
+    layers = (*owner.before, *((base,) if base is not None else ()), *owner.after)
+    owner.lookahead = max((item.lookahead for item in layers), default=0)
+    cache = _TokenFeatureCache(True)
     result: list[BreakDecision] = []
     for span in break_sentence_spans(text, locale):
-        offset = span["end"]
-        covering = tuple(
-            sorted(
-                {item["type"] for item in protected_items if item["start"] < offset < item["end"]}
-            )
-        )
-        containing = next((token for token in toks if token["start"] < offset < token["end"]), None)
-        end = containing["end"] if containing is not None else _logical_end(toks, offset)
-        if containing is not None:
-            result.append(_decision(offset, end, "no-break", "token", None, 0))
-            continue
-        tokens_read = 0
-        forced = None
-        for rule_set in before:
-            forced, read = _rules_decision(rule_set, "before", text, offset, end, toks, covering)
-            tokens_read = max(tokens_read, read)
-            if forced is not None:
-                forced["tokens_read"] = tokens_read
-                break
-        if forced is not None:
-            result.append(forced)
-            continue
-        exception = next(
-            (
-                (rule_ids[0], inventory_index)
-                for inventory_index, inventory_claims in enumerate(claims)
-                if (rule_ids := inventory_claims.get(offset))
-            ),
-            None,
-        )
-        if exception is not None:
-            result.append(
-                _decision(offset, end, "no-break", "exceptions", exception[0], tokens_read)
-            )
-            continue
-        current = None
-        if base is not None:
-            current, read = _rules_decision(base, "rules", text, offset, end, toks, covering)
-            tokens_read = max(tokens_read, read)
-        if current is None:
-            current = _decision(offset, end, "break", "icu", None, tokens_read)
-        else:
-            current["tokens_read"] = tokens_read
-        for rule_set in after:
-            changed, read = _rules_decision(rule_set, "after", text, offset, end, toks, covering)
-            tokens_read = max(tokens_read, read)
-            if changed is not None:
-                current = changed
-                break
-        current["tokens_read"] = tokens_read
-        result.append(current)
+        observed = _candidate_observed(owner, text, span["end"], protected_items, True, cache)
+        if observed.decision is None:
+            raise AssertionError("closed candidate remained pending")
+        result.append(observed.decision)
     return result
 
 
+def _icu_stable(text: str, offset: int) -> bool:
+    # A buffer-end candidate, including one followed only by Close/Sp or any
+    # other whitespace, is provisional until a non-whitespace code point or
+    # END has arrived.
+    if not any(not _is_white_space(char) for char in text[offset:]):
+        return False
+    if offset < len(text):
+        suffix = text[offset:]
+        if any(
+            value in {"Upper", "Lower", "OLetter"}
+            for value in (char_classes(char, "sentence_break")[0] for char in suffix)
+        ):
+            return True
+    prefix = text[:offset].rstrip(" \t")
+    if not prefix:
+        return False
+    hard = char_classes(prefix[-1], "sentence_break")[0]
+    if hard in {"LF", "Sep"}:
+        return True
+    return hard == "CR" and offset < len(text) and text[offset] != "\n"
+
+
+class IncrementalSentenceBreaker:
+    """Incrementally decide ICU sentence candidates with immutable output.
+
+    Instances are created by :meth:`SentenceOverride.stream`. Offsets are code
+    points in all text supplied so far. ``flush()`` treats the current end as
+    END but permits later input; ``close()`` also prevents further input.
+
+    Example:
+        >>> stream = SentenceOverride().stream()
+        >>> stream.feed("Hello. N") + stream.feed("ext.") + stream.close()
+        [{'offset': 7, 'end': 6, 'decision': 'break', 'alternatives': ('break',),
+          'layer': 'icu', 'id': None, 'tokens_read': 0},
+         {'offset': 11, 'end': 11, 'decision': 'break', 'alternatives': ('break',),
+          'layer': 'icu', 'id': None, 'tokens_read': 0}]
+    """
+
+    def __init__(self, owner: SentenceOverride, protection: Literal["none", "watermark"]) -> None:
+        self._owner = owner
+        self._protection = protection
+        self._text = ""
+        self._segment_start = 0
+        self._protected: list[ProtectedSpan] = []
+        self._emitted: set[int] = set()
+        self._emitted_candidates: list[int] = []
+        self._read_horizon = 0
+        self._watermark = 0
+        self._pending: list[PendingCandidate] = []
+        self._closed = False
+        self._cache = _TokenFeatureCache(owner.cache)
+        self.lookahead = owner.lookahead
+
+    def _prospective_protected(
+        self, additions: Iterable[ProtectedSpan], text_length: int
+    ) -> list[ProtectedSpan]:
+        items = [*self._protected, *(cast(ProtectedSpan, dict(item)) for item in additions)]
+        _validated_protected(items, text_length)
+        new_items = items[len(self._protected) :]
+        for span in new_items:
+            if self._protection == "watermark":
+                if span["start"] < self._watermark:
+                    raise LateProtectedSpan(
+                        f"protected span starts at {span['start']} below "
+                        f"watermark {self._watermark}"
+                    )
+            elif span["start"] < self._read_horizon or any(
+                span["start"] < offset < span["end"] for offset in self._emitted_candidates
+            ):
+                raise LateProtectedSpan(
+                    f"protected span [{span['start']}, {span['end']}) arrived after emitted context"
+                )
+        return items
+
+    def _evaluate(self, *, closed: bool) -> list[BreakDecision]:
+        emitted: list[BreakDecision] = []
+        pending: list[PendingCandidate] = []
+        earlier_pending = False
+        segment_start = self._segment_start
+        text = self._text[segment_start:]
+        protected = [
+            cast(
+                ProtectedSpan,
+                {
+                    **item,
+                    "start": item["start"] - segment_start,
+                    "end": item["end"] - segment_start,
+                },
+            )
+            for item in self._protected
+            if item["start"] >= segment_start
+        ]
+        combined = _combined_inventory(self._owner.inventories)
+        toks = tokens(
+            text,
+            self._owner.locale,
+            inventory=combined,
+            protected=protected,
+        )
+        for span in break_sentence_spans(text, self._owner.locale):
+            local_offset = span["end"]
+            offset = segment_start + local_offset
+            if offset in self._emitted:
+                continue
+            tokens_after = sum(1 for token in toks if token["start"] >= local_offset)
+            if earlier_pending:
+                pending.append(
+                    {"offset": offset, "tokens_after": tokens_after, "waiting_on": "order"}
+                )
+                continue
+            if not closed and not _icu_stable(text, local_offset):
+                pending.append(
+                    {"offset": offset, "tokens_after": tokens_after, "waiting_on": "icu"}
+                )
+                earlier_pending = True
+                continue
+            observed = _candidate_observed(
+                self._owner,
+                text,
+                local_offset,
+                protected,
+                closed,
+                self._cache,
+            )
+            if observed.decision is None:
+                pending.append(
+                    {
+                        "offset": offset,
+                        "tokens_after": tokens_after,
+                        "waiting_on": observed.waiting_on or "model",
+                    }
+                )
+                earlier_pending = True
+                continue
+            horizon = segment_start + observed.horizon
+            if self._protection == "watermark" and horizon > self._watermark and not closed:
+                pending.append(
+                    {"offset": offset, "tokens_after": tokens_after, "waiting_on": "protection"}
+                )
+                earlier_pending = True
+                continue
+            self._emitted.add(offset)
+            self._emitted_candidates.append(offset)
+            self._read_horizon = max(self._read_horizon, horizon)
+            decision = dict(observed.decision)
+            decision["offset"] += segment_start
+            decision["end"] += segment_start
+            emitted.append(cast(BreakDecision, decision))
+        self._pending = pending
+        reachable_starts: list[int] = []
+        if toks:
+            reachable_starts.append(toks[max(0, len(toks) - 3)]["start"])
+            current_run = toks[-1]["run"]
+            reachable_starts.extend(token["start"] for token in toks if token["run"] == current_run)
+        if pending:
+            for item in pending:
+                pivot = _token_index_after(toks, item["offset"] - segment_start)
+                if toks:
+                    reachable_starts.append(toks[max(0, pivot - 3)]["start"])
+                if pivot:
+                    previous_run = toks[pivot - 1]["run"]
+                    reachable_starts.extend(
+                        token["start"] for token in toks if token["run"] == previous_run
+                    )
+        self._cache.evict_before(min(reachable_starts, default=len(text)))
+        return emitted
+
+    def feed(
+        self,
+        chunk: str,
+        /,
+        *,
+        protected: Iterable[ProtectedSpan] = (),
+        protected_through: int | None = None,
+    ) -> list[BreakDecision]:
+        """Append a chunk and return decisions made immutable by this prefix."""
+        if self._closed:
+            raise RuntimeError("incremental sentence breaker is closed")
+        if not isinstance(chunk, str):
+            raise TypeError("chunk must be str")
+        prospective_text = self._text + chunk
+        prospective_protected = self._prospective_protected(protected, len(prospective_text))
+        if protected_through is not None:
+            if self._protection != "watermark":
+                raise ValueError("protected_through requires protection='watermark'")
+            if (
+                not isinstance(protected_through, int)
+                or isinstance(protected_through, bool)
+                or not self._watermark <= protected_through <= len(prospective_text)
+            ):
+                raise ValueError("protected_through must advance within buffered text")
+        self._text = prospective_text
+        self._protected = prospective_protected
+        if protected_through is not None:
+            self._watermark = protected_through
+        return self._evaluate(closed=False)
+
+    def pending(self) -> list[PendingCandidate]:
+        """Return snapshots of candidates that still need context or protection."""
+        return [dict(item) for item in self._pending]  # type: ignore[misc]
+
+    def flush(self) -> list[BreakDecision]:
+        """End the current logical segment without closing the stream.
+
+        Current candidates are decided with END as context. Later input starts
+        a new ICU segment, so its decisions equal whole-text decisions for the
+        post-flush text alone, shifted by the flushed stream length.
+        """
+        if self._closed:
+            return []
+        if self._protection == "watermark":
+            self._watermark = len(self._text)
+        result = self._evaluate(closed=True)
+        self._pending = []
+        self._segment_start = len(self._text)
+        # Cache keys and every eviction threshold are segment-local. A flush
+        # starts a new coordinate space, so no prior key can be retained.
+        self._cache.clear()
+        return result
+
+    def close(self) -> list[BreakDecision]:
+        """Flush once and reject later input; repeated calls return an empty list."""
+        if self._closed:
+            return []
+        result = self.flush()
+        self._closed = True
+        return result
+
+
 class SentenceOverride:
-    """Apply opt-in flat rules to ICU sentence candidates over complete text.
+    """Apply opt-in flat rules to ICU sentence candidates.
 
     Args:
         locale: ICU locale used for both sentence and word boundaries.
@@ -1050,7 +1737,7 @@ class SentenceOverride:
         after: Ordered caller rules that may override the base decision.
         inventories: Exception inventories; word rules merge tokens and
             sentence rules suppress candidates.
-        cache: Reserved for API parity with the incremental implementation.
+        cache: Reuse immutable per-token features in incremental evaluation.
 
     Example:
         >>> SentenceOverride().spans("Hello. Next.") == break_sentence_spans(
@@ -1212,6 +1899,31 @@ class SentenceOverride:
         ]
         return {"spans": self.spans(text, protected=protected_items), "boundaries": boundaries}
 
-    def stream(self, *args: object, **kwargs: object) -> None:
-        """Refuse incremental operation, which is reserved for lane B2."""
-        raise NotImplementedError("incremental sentence breaking is implemented by lane B2")
+    def stream(
+        self, *, protection: Literal["none", "watermark"] = "none"
+    ) -> IncrementalSentenceBreaker:
+        """Return an incremental breaker sharing this override's decision core.
+
+        Collation-variant word- and sentence-level exception rules are refused:
+        primary-ignorable code points make their surface-match extent unbounded,
+        so no bounded incremental hold can decide them safely. Use those rules
+        with whole-text methods such as :meth:`decide`, or use exact variants.
+
+        In text without whitespace or punctuation/symbol edges whose
+        ``Word_Break`` value is ``Other``, a decision may wait for whitespace,
+        :meth:`IncrementalSentenceBreaker.flush`, or
+        :meth:`IncrementalSentenceBreaker.close`.
+        """
+        if protection not in {"none", "watermark"}:
+            raise ValueError("protection must be 'none' or 'watermark'")
+        if any(
+            rule.variant == "collation" and ({"word", "sentence"} & set(rule.levels))
+            for inventory in self.inventories
+            for rule in inventory._rules
+        ):
+            raise ValueError(
+                "stream() cannot decide collation-variant word- or sentence-level "
+                "exception rules incrementally with a bounded hold; use them with "
+                "the whole-text API, or use exact variants"
+            )
+        return IncrementalSentenceBreaker(self, protection)

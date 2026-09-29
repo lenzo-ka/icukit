@@ -95,6 +95,12 @@ class OverlappingProtectedSpans(ICUKitError):
     pass
 
 
+class LateProtectedSpan(ICUKitError):
+    """A protected span arrived after streaming output made it unsafe."""
+
+    pass
+
+
 class MessageError(ICUKitError):
     """Error related to message formatting operations."""
 

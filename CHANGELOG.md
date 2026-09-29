@@ -4,6 +4,14 @@
 
 ### Added
 
+- `SentenceOverride.stream()` returns an experimental `IncrementalSentenceBreaker`
+  with prefix-stable `feed`, `pending`, `flush`, and `close`: for any chunking,
+  the returned decisions equal the whole-text `decide()`, and a returned decision
+  never changes. It shares the whole-text decision core, decides a candidate as
+  soon as everything its deciding rule reads is final, computes each token's
+  features once, and supports protected-span watermarks. Streaming refuses
+  exception inventories with collation-variant rules, because primary-ignorable
+  code points make their extent unbounded; `decide()` still accepts them.
 - A generated provenance manifest now records the declared source, license, shipping
   class, notice, and byte hash of every data file under `icukit/data`. A license guard
   rejects missing entries and entries changed since last recorded, rejects unknown

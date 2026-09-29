@@ -774,11 +774,10 @@ def test_token_profile_golden_covers_authored_tokenization_policy():
     ]
 
 
-def test_path_base_and_stream_refusal(tmp_path: Path):
+def test_path_base_and_stream_factory(tmp_path: Path):
     path = tmp_path / "rules.json"
     path.write_text(__import__("json").dumps(_rules(_rule())), encoding="utf-8")
     override = SentenceOverride(base=path)
     assert override.decide("Mr. Smith arrived.")[0]["layer"] == "rules"
     assert SentenceOverride(base=str(path)).decide("Mr. Smith arrived.")[0]["layer"] == "rules"
-    with pytest.raises(NotImplementedError, match="lane B2"):
-        override.stream()
+    assert override.stream().lookahead == override.lookahead

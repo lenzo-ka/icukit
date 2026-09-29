@@ -220,10 +220,13 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`BreakDecision`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`BreakBoundary`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`BreakSegmentation`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`PendingCandidate`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`IncrementalSentenceBreaker`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`SentenceOverride`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`break_rule_identity`](#icukitsentence-override) — function, `icukit.sentence_override`
 - [`load_break_rules`](#icukitsentence-override) — function, `icukit.sentence_override`
 - [`BreakRuleLoadError`](#icukiterrors) — class, `icukit.errors`
+- [`LateProtectedSpan`](#icukiterrors) — class, `icukit.errors`
 - [`get_base_direction`](#icukitbidi) — function, `icukit.bidi`
 - [`get_bidi_info`](#icukitbidi) — function, `icukit.bidi`
 - [`strip_bidi_controls`](#icukitbidi) — function, `icukit.bidi`
@@ -6876,12 +6879,12 @@ Example:
 
 ## icukit.sentence_override
 
-Experimental whole-text sentence-break overrides.
+Experimental whole-text and incremental sentence-break overrides.
 
 ICU always supplies the candidate boundaries: this module can retain or
 suppress them, but never add one. ``base="none"`` is the default and is exactly
-ICU's current sentence output. Incremental operation belongs to the later B2
-API and is deliberately unavailable here.
+ICU's current sentence output. Whole-text and incremental operation share the
+same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -6948,9 +6951,53 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Primary sentence spans plus every boundary left open by a rule.
 
+### class `IncrementalSentenceBreaker`
+
+Incrementally decide ICU sentence candidates with immutable output.
+
+Instances are created by :meth:`SentenceOverride.stream`. Offsets are code
+points in all text supplied so far. ``flush()`` treats the current end as
+END but permits later input; ``close()`` also prevents further input.
+
+Example:
+    >>> stream = SentenceOverride().stream()
+    >>> stream.feed("Hello. N") + stream.feed("ext.") + stream.close()
+    [{'offset': 7, 'end': 6, 'decision': 'break', 'alternatives': ('break',),
+      'layer': 'icu', 'id': None, 'tokens_read': 0},
+     {'offset': 11, 'end': 11, 'decision': 'break', 'alternatives': ('break',),
+      'layer': 'icu', 'id': None, 'tokens_read': 0}]
+
+#### `IncrementalSentenceBreaker(owner: 'SentenceOverride', protection: "Literal['none', 'watermark']") -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `close() -> 'list[BreakDecision]'`
+
+Flush once and reject later input; repeated calls return an empty list.
+
+#### `feed(chunk: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = (), protected_through: 'int | None' = None) -> 'list[BreakDecision]'`
+
+Append a chunk and return decisions made immutable by this prefix.
+
+#### `flush() -> 'list[BreakDecision]'`
+
+End the current logical segment without closing the stream.
+
+Current candidates are decided with END as context. Later input starts
+a new ICU segment, so its decisions equal whole-text decisions for the
+post-flush text alone, shifted by the flushed stream length.
+
+#### `pending() -> 'list[PendingCandidate]'`
+
+Return snapshots of candidates that still need context or protection.
+
+### class `PendingCandidate`
+
+An ICU candidate awaiting stable context, a rule feature, or protection.
+
 ### class `SentenceOverride`
 
-Apply opt-in flat rules to ICU sentence candidates over complete text.
+Apply opt-in flat rules to ICU sentence candidates.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.
@@ -6961,7 +7008,7 @@ Args:
     after: Ordered caller rules that may override the base decision.
     inventories: Exception inventories; word rules merge tokens and
         sentence rules suppress candidates.
-    cache: Reserved for API parity with the incremental implementation.
+    cache: Reuse immutable per-token features in incremental evaluation.
 
 Example:
     >>> SentenceOverride().spans("Hello. Next.") == break_sentence_spans(
@@ -6985,9 +7032,19 @@ Return one-best spans and each candidate retaining two alternatives.
 
 Return the one-best sentence spans; trailing whitespace stays left.
 
-#### `stream(*args: 'object', **kwargs: 'object') -> 'None'`
+#### `stream(*, protection: "Literal['none', 'watermark']" = 'none') -> 'IncrementalSentenceBreaker'`
 
-Refuse incremental operation, which is reserved for lane B2.
+Return an incremental breaker sharing this override's decision core.
+
+Collation-variant word- and sentence-level exception rules are refused:
+primary-ignorable code points make their surface-match extent unbounded,
+so no bounded incremental hold can decide them safely. Use those rules
+with whole-text methods such as :meth:`decide`, or use exact variants.
+
+In text without whitespace or punctuation/symbol edges whose
+``Word_Break`` value is ``Other``, a decision may wait for whitespace,
+:meth:`IncrementalSentenceBreaker.flush`, or
+:meth:`IncrementalSentenceBreaker.close`.
 
 ### `break_rule_identity(locale: 'str' = 'en_US', /, *, inventories: 'Sequence[LoadedExceptionInventory]' = ()) -> 'BreakRuleIdentity'`
 
@@ -8133,6 +8190,10 @@ Base exception for all icukit errors.
 ### class `IDNAError`
 
 Error related to IDNA encoding/decoding.
+
+### class `LateProtectedSpan`
+
+A protected span arrived after streaming output made it unsafe.
 
 ### class `ListFormatError`
 
