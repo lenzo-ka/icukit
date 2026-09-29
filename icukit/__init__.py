@@ -67,6 +67,7 @@ from .alpha_index import (
     get_bucket_for_name,
     get_bucket_labels,
 )
+from .availability import AvailabilityRow, availability, available_languages
 from .bidi import (
     DIRECTION_LTR,
     DIRECTION_MIXED,
@@ -450,6 +451,9 @@ from .unicode import (
 
 __all__ = [
     "__version__",
+    "AvailabilityRow",
+    "availability",
+    "available_languages",
     "FlexibleCompactDetector",
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",

@@ -7,6 +7,9 @@ Version: 0.8.0
 Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 
 - [`__version__`](#root-api-index) — constant, `icukit`
+- [`AvailabilityRow`](#icukitavailability) — class, `icukit.availability`
+- [`availability`](#icukitavailability) — function, `icukit.availability`
+- [`available_languages`](#icukitavailability) — function, `icukit.availability`
 - [`FlexibleCompactDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleCurrencyDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleCurrencyNameDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -824,6 +827,29 @@ Example:
     ['A', 'B', 'C', 'D', 'E']
     >>> get_bucket_labels("ja_JP")[:5]
     ['あ', 'か', 'さ', 'た', 'な']
+
+## icukit.availability
+
+Report which reader specifications a locale can build and from which source.
+
+### class `AvailabilityRow`
+
+One enumerated reader specification and the source that contributes to it.
+
+#### `AvailabilityRow(locale: 'str', family: 'str', spec: 'str', type: 'str | None', source: 'str | None', served_by: 'str | None', material: 'str | None', provenance: 'str | None', reason: 'str | None') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `availability(locale: 'str', *, material: 'Iterable[LocaleMaterial]' = (), guarded: 'bool' = False) -> 'tuple[AvailabilityRow, ...]'`
+
+Report every generated and flexible reader spec available for ``locale``.
+
+ICU/CLDR, shipped curated tables, and explicitly supplied user material are
+separate rows. An enumerated spec that cannot be built is retained with its reason.
+
+### `available_languages() -> 'tuple[str, ...]'`
+
+Return the distinct ICU language identifiers covered by availability reports.
 
 ## icukit.bidi
 

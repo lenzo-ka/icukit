@@ -4,6 +4,12 @@
 
 ### Added
 
+- `icukit.availability` adds `availability` and `AvailabilityRow` for reporting each
+  generated and flexible reader specification with its ICU, curated-table, or user
+  material source, including ICU spell-out fallback and reported skip reasons.
+  `available_languages` lists the ICU languages covered. `ik languages` exposes full
+  locale rows or a fast all-language summary, and the generated `docs/languages.md`
+  records the default-family summary for the build's ICU version.
 - `generated_detectors`, `generated_detectors_report`, `flexible_detectors`, and
   `flexible_detectors_report` accept `material=` and add applicable validated locale
   material readers beside ICU's readers. `ik detect --material PATH` loads the same

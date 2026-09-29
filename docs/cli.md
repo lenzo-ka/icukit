@@ -1015,6 +1015,19 @@ Examples:
 
 - `help_command`: Subcommand to show help for
 
+## `icukit languages` (aliases: langs)
+
+With LANG, report every generated and flexible reader specification, including skips.
+Without LANG, quickly summarize generated default families and shipped curated tables
+for each ICU language. Use a LANG for the full specification-level report.
+
+**Options:**
+
+- `lang`: ICU locale or language
+- `--material`: Add validated locale material from PATH (repeatable; requires LANG) (default: `[]`)
+- `--guarded`: Include readers of deliberately guarded readings (requires LANG) (default: `False`)
+- `-j, --json`: Output JSON lines (default: `False`)
+
 ## `icukit listfmt` (aliases: lf, listformat)
 
 Format lists of items with locale-appropriate conjunctions and separators.
