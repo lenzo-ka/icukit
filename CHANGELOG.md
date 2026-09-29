@@ -26,6 +26,16 @@
   whitespace runs, exception-inventory merges, and the feature set used by the
   forthcoming sentence-break override. These are additive APIs; no existing
   segmentation or default behavior changes.
+- A generated provenance manifest now records the declared source, license, shipping
+  class, notice, and byte hash of every data file under `icukit/data`. A license guard
+  rejects missing entries and entries changed since last recorded, rejects unknown
+  class labels, rejects data under `icukit/data` whose declared provenance names a
+  known internal corpus, and checks that required notices ship. Each notice file is
+  hash-pinned and labeled with the license it carries. Archive members under
+  `icukit/data` are hash-verified against the manifest and compared between wheel and
+  sdist. The package license expression
+  now includes the Unicode License v3 term that covers its bundled CLDR and UCD
+  snapshots.
 - `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
   default selection of generated and flexible reader specifications (default locales,
   currencies, and units, plus guarded families when requested) with its ICU,
