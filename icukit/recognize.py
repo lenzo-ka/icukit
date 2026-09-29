@@ -3061,7 +3061,7 @@ class FlexibleNumberDetector:
             # _plural_suffix); a language without an entry reads no suffix.
             position = icu.ParsePosition(0)
             parsed = self._roman.parse(surface, position)
-            if parsed is None or position.getIndex() != len(surface):
+            if parsed is None or position.getIndex() != len(icu.UnicodeString(surface)):
                 continue
             value = parsed.getInt64()
             if self._roman.format(value, rule_set) != surface:
@@ -4731,11 +4731,15 @@ class FlexibleSpelloutDetector:
             parsed = self._rbnf.parse(candidate, position)
             if parsed is None or position.getIndex() <= 0:
                 continue
+            _, u16_to_cp = boundary_maps(candidate)
+            consumed = u16_to_cp.get(position.getIndex())
+            if consumed is None:
+                continue
             parsed_type = parsed.getType()
             if parsed_type in (icu.Formattable.kLong, icu.Formattable.kInt64):
-                return position.getIndex(), parsed.getInt64()
+                return consumed, parsed.getInt64()
             if parsed_type == icu.Formattable.kDouble and float(parsed.getDouble()).is_integer():
-                return position.getIndex(), parsed.getInt64()
+                return consumed, parsed.getInt64()
         return None
 
     def _integer_value(self, surface: str) -> int | None:
@@ -4951,7 +4955,10 @@ class FlexibleCurrencyNameDetector:
             formatter.setCurrency(canonical)
             position = icu.FieldPosition(icu.UNumberFormatFields.CURRENCY_FIELD)
             rendered = formatter.format(representative, position)
-            surface = rendered[position.getBeginIndex() : position.getEndIndex()]
+            _, u16_to_cp = boundary_maps(rendered)
+            surface = rendered[
+                u16_to_cp[position.getBeginIndex()] : u16_to_cp[position.getEndIndex()]
+            ]
             if surface:
                 number_index = min(
                     (pattern.index(character) for character in "#0@" if character in pattern),
@@ -6677,7 +6684,7 @@ class FlexibleOrdinalDetector:
         surface = text[start:cursor]
         position = icu.ParsePosition(0)
         parsed = self._roman.parse(surface, position)
-        if parsed is None or position.getIndex() != len(surface):
+        if parsed is None or position.getIndex() != len(icu.UnicodeString(surface)):
             return None
         value = parsed.getInt64()
         if value < 1 or self._roman.format(value, self._roman_rule_set) != surface:
@@ -7193,7 +7200,13 @@ class _RangeSide:
     end: int
     key: tuple[str, str]
     value: NumberValue | MeasureValue
+    captures: tuple[Capture, ...]
     unit_first: bool | None = None
+
+
+def _range_side_captures(side: _RangeSide, name: str) -> tuple[Capture, ...]:
+    """An endpoint's captures named for its role in a range detection."""
+    return tuple(replace(capture, name=f"{name}.{capture.name}") for capture in side.captures)
 
 
 class FlexibleNumberRangeDetector:
@@ -7208,8 +7221,13 @@ class FlexibleNumberRangeDetector:
     spaces around it. A side may leave its unit to the other where ICU writes a range
     of that unit once ("$3–5", "10–15 kg", "10–15%"; see
     :func:`_range_collapse_sides`), or both may write it ("$3.00 – $5.00"). The value is
-    a :class:`~icukit.detectors.NumberRangeValue` of two whole amounts, and the captures
-    are the "start" and "end" amounts, each with its value, and the "separator".
+    a :class:`~icukit.detectors.NumberRangeValue` of two whole amounts. The captures are
+    the "start" and "end" amounts, each with its value, and the "separator"; immediately
+    after each endpoint capture are that endpoint reader's own captures, prefixed with
+    ``"start."`` or ``"end."`` (for example ``"start.integer"``). Where the range reads
+    a minus sign before a start its reader read without one, that sign is captured as
+    ``"start.sign"``. Approximately readings likewise put ``"value.*"`` captures
+    immediately after ``"value"``.
 
     ``form`` chooses what the reader reads, under its own type ``<group>:<form>``:
 
@@ -7335,6 +7353,14 @@ class FlexibleNumberRangeDetector:
                     start + detection["end"],
                     key,
                     detection["value"],
+                    tuple(
+                        replace(
+                            capture,
+                            start=start + capture.start,
+                            end=start + capture.end,
+                        )
+                        for capture in detection["captures"]
+                    ),
                     _unit_first(detection["captures"]),
                 )
                 found.setdefault((side.start, side.end, side.value), side)
@@ -7389,7 +7415,22 @@ class FlexibleNumberRangeDetector:
                 continue
             start_value, end_value, collapse = pair
             if _minus_before(text, left.start):
-                left = replace(left, start=left.start - 1)
+                sign_start = left.start - 1
+                left = replace(
+                    left,
+                    start=sign_start,
+                    captures=(
+                        Capture(
+                            "sign",
+                            sign_start,
+                            sign_start + 1,
+                            text[sign_start],
+                            None,
+                            "symbol",
+                        ),
+                        *left.captures,
+                    ),
+                )
                 start_value = _negated(start_value)
             separator = text[left.end : right.start]
             if (
@@ -7408,6 +7449,7 @@ class FlexibleNumberRangeDetector:
                     Capture(
                         "start", left.start, left.end, text[left.start : left.end], start_value
                     ),
+                    *_range_side_captures(left, "start"),
                     Capture(
                         "separator",
                         left.end,
@@ -7418,6 +7460,7 @@ class FlexibleNumberRangeDetector:
                     Capture(
                         "end", right.start, right.end, text[right.start : right.end], end_value
                     ),
+                    *_range_side_captures(right, "end"),
                 ),
                 spec=NumberRangeSpec(self.locale, self.form, collapse, mark),
             )
@@ -7441,6 +7484,7 @@ class FlexibleNumberRangeDetector:
                 captures=(
                     Capture("approximately", mark_start, mark_end, mark, form="symbol"),
                     Capture("value", side.start, side.end, text[side.start : side.end], side.value),
+                    *_range_side_captures(side, "value"),
                 ),
                 spec=NumberRangeSpec(self.locale, self.form, "none", mark),
             )
