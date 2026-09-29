@@ -4,8 +4,11 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from icukit import (
     Breaker,
+    BreakRuleLoadError,
     SentenceOverride,
     break_graphemes,
     break_lines,
@@ -156,6 +159,23 @@ class TestBreakerClass:
         text = "The U.S. Supreme Court ruled. Markets moved."
         assert Breaker("en_US").break_sentence_spans(text) == SentenceOverride("en_US").spans(text)
         assert break_sentence_spans(text, "en_US") == SentenceOverride("en_US").spans(text)
+
+    def test_posix_variant_defaults_and_explicit_learned_bases(self):
+        text = "The U.S. Supreme Court ruled. Markets moved."
+        for locale in ("en_US_POSIX", "en_US_POSIX_FOO", "en_POSIX"):
+            assert Breaker(locale).break_sentence_spans(text) == Breaker(
+                locale, base="none"
+            ).break_sentence_spans(text)
+            for base in ("en-tn-cart@1", "en-tn@1"):
+                with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
+                    Breaker(locale, base=base).break_sentence_spans(text)
+
+        assert Breaker("en_US").break_sentence_spans(text) == Breaker(
+            "en_US", base="en-tn-cart@1"
+        ).break_sentence_spans(text)
+        assert Breaker("en_US").break_sentence_spans(text) != Breaker(
+            "en_US", base="none"
+        ).break_sentence_spans(text)
 
     def test_base_none_preserves_parent_raw_icu_span_golden(self):
         text = "The U.S. Supreme Court ruled. Markets moved."

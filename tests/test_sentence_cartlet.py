@@ -38,13 +38,19 @@ def test_default_identity_matches_explicit_named_model(locale: str) -> None:
     assert default.decide("Mr. Smith arrived. Next.") == named.decide("Mr. Smith arrived. Next.")
 
 
-def test_english_posix_default_is_plain_icu_and_named_model_refuses() -> None:
-    default = SentenceOverride("en_US_POSIX")
-    plain = SentenceOverride("en_US_POSIX", base="none")
+@pytest.mark.parametrize("locale", ["en_US_POSIX", "en_US_POSIX_FOO", "en_POSIX"])
+def test_english_posix_variant_default_is_plain_icu_and_learned_bases_refuse(
+    locale: str,
+) -> None:
+    default = SentenceOverride(locale)
+    plain = SentenceOverride(locale, base="none")
 
+    assert default.base is None
     assert default.identity == plain.identity
-    with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
-        SentenceOverride("en_US_POSIX", base="en-tn-cart@1")
+    assert default.decide("Mr. Smith arrived. Next.") == plain.decide("Mr. Smith arrived. Next.")
+    for base in ("en-tn-cart@1", "en-tn@1"):
+        with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
+            SentenceOverride(locale, base=base)
 
 
 @pytest.mark.parametrize("base", [None, "en-tn-cart@1"])

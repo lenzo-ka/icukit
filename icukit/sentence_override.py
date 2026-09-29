@@ -435,16 +435,16 @@ def break_rule_identity(
 def _cartlet_runtime_identity(
     locale: str, inventories: Sequence[LoadedExceptionInventory]
 ) -> BreakRuleIdentity:
-    parsed = icu.Locale(locale)
-    identity_locale = (
-        "en" if parsed.getLanguage() == "en" and parsed.getVariant().upper() != "POSIX" else locale
-    )
+    identity_locale = "en" if _uses_english_cartlet_default(locale) else locale
     return break_rule_identity(identity_locale, inventories=inventories)
 
 
 def _uses_english_cartlet_default(locale: str) -> bool:
     parsed = icu.Locale(locale)
-    return parsed.getLanguage() == "en" and parsed.getVariant().upper() != "POSIX"
+    variant_subtags = {
+        subtag.upper() for subtag in parsed.getVariant().replace("-", "_").split("_") if subtag
+    }
+    return parsed.getLanguage() == "en" and "POSIX" not in variant_subtags
 
 
 def _cartlet_feature_names(lookahead: int) -> tuple[str, ...]:
