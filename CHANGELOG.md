@@ -24,6 +24,10 @@
   whitespace runs, exception-inventory merges, and the feature set used by the
   forthcoming sentence-break override. These are additive APIs; no existing
   segmentation or default behavior changes.
+- `StartGate`, the runtime-checkable `GatedDetector` protocol, and
+  `candidate_starts(text, locale, gate)` let built-in and third-party detectors declare
+  sound per-lane opening sets and skip impossible grapheme starts. `ICUKIT_GATES=0`
+  disables the optimization at import for byte-identical comparison runs.
 - `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
   default selection of generated and flexible reader specifications (default locales,
   currencies, and units, plus guarded families when requested) with its ICU,

@@ -358,10 +358,33 @@ def generate_api_markdown(lib_docs: dict[str, Any]) -> str:
 
     for entry in lib_docs["root_exports"]:
         origin = entry["origin"]
-        module_name = f"icukit.{origin}" if origin else "icukit"
-        anchor = f"icukit{origin.replace('_', '-')}" if origin else "root-api-index"
+        module_name = "icukit" if origin == "_gate" else f"icukit.{origin}" if origin else "icukit"
+        anchor = (
+            "start-gates"
+            if origin == "_gate"
+            else f"icukit{origin.replace('_', '-')}"
+            if origin
+            else "root-api-index"
+        )
         lines.append(f"- [`{entry['name']}`](#{anchor}) — {entry['kind']}, `{module_name}`")
-    lines.append("")
+    lines.extend(
+        [
+            "",
+            "## Start gates",
+            "",
+            "Start gates skip grapheme starts at which a detector lane cannot read or raise. "
+            "They are sound over-approximations: admitting an extra start only costs time, "
+            "while rejecting a non-miss start is a bug. `StartGate` admits literal `chars`, "
+            "case-folded first characters in `folded`, and named ICU property `tests`. "
+            "A lane whose safe opening set is not known declares `None` and remains ungated.",
+            "",
+            "`GatedDetector.start_gates()` maps stable lane names to their gates. Third-party "
+            "detectors can use `candidate_starts(text, locale, gate)` in their own scans. "
+            "Set `ICUKIT_GATES=0` before importing icukit to disable gates for the process, "
+            "or use `ungated()` for a context-local comparison.",
+            "",
+        ]
+    )
 
     for mod_name, mod_info in lib_docs["modules"].items():
         lines.extend(

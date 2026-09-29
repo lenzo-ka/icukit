@@ -41,6 +41,10 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`PluralNumeralDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
+- [`GatedDetector`](#icukitdetectors) — class, `icukit.detectors`
+- [`StartGate`](#start-gates) — class, `icukit`
+- [`candidate_starts`](#start-gates) — function, `icukit`
+- [`ungated`](#start-gates) — function, `icukit`
 - [`ABBREVIATION_KINDS`](#icukiticu-abbreviations) — constant, `icukit.icu_abbreviations`
 - [`IcuAbbreviation`](#icukiticu-abbreviations) — class, `icukit.icu_abbreviations`
 - [`icu_abbreviations`](#icukiticu-abbreviations) — function, `icukit.icu_abbreviations`
@@ -409,6 +413,12 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`format_compact`](#icukitlocale) — function, `icukit.locale`
 - [`COMPACT_STYLE_SHORT`](#icukitcompact) — constant, `icukit.compact`
 - [`COMPACT_STYLE_LONG`](#icukitcompact) — constant, `icukit.compact`
+
+## Start gates
+
+Start gates skip grapheme starts at which a detector lane cannot read or raise. They are sound over-approximations: admitting an extra start only costs time, while rejecting a non-miss start is a bug. `StartGate` admits literal `chars`, case-folded first characters in `folded`, and named ICU property `tests`. A lane whose safe opening set is not known declares `None` and remains ungated.
+
+`GatedDetector.start_gates()` maps stable lane names to their gates. Third-party detectors can use `candidate_starts(text, locale, gate)` in their own scans. Set `ICUKIT_GATES=0` before importing icukit to disable gates for the process, or use `ungated()` for a context-local comparison.
 
 ## icukit.abbreviation_breaker
 
@@ -2435,6 +2445,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `DateFormatSpec`
 
 The generative recipe for a temporal detection.
@@ -2555,6 +2569,22 @@ Return a new gang with the named detector types removed.
 
 Every locale's member of a type is removed, or only ``locale``'s when given.
 
+### class `GatedDetector`
+
+A detector which declares a sound gate for each start-scanning lane.
+
+#### `GatedDetector(*args, **kwargs)`
+
+
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+
+
 ### class `MeasureFormatSpec`
 
 The locale, canonical ICU unit, and width used for a measure candidate.
@@ -2582,6 +2612,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `NumberFormatSpec`
 
@@ -5432,6 +5466,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible compact numbers in source order.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleCurrencyDetector`
 
 Recognize a reflective currency symbol or name around a scaled flexible number.
@@ -5444,6 +5482,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible currency candidates in source order.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleCurrencyNameDetector`
 
 Recognize flexible numbers adjacent to reflective spelled currency names.
@@ -5455,6 +5497,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping spelled-currency candidates in source order.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleDateDetector`
 
@@ -5484,6 +5530,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 Return every structure's flexible numeric dates, distinct, in source order.
 
 A date with its era is its own reading, beside the date without it.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleDateIntervalDetector`
 
@@ -5519,6 +5569,10 @@ Return greedy, non-overlapping date-interval candidates in source order.
 A span whose zone text names several zones is read once per zone, the reader's
 own locale's zone first.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleFractionDetector`
 
 Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
@@ -5539,6 +5593,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible fractions in source order.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleMeasureDetector`
 
@@ -5563,6 +5621,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return flexible measure candidates in source order, a bare per form beside them.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleMixedMeasureDetector`
 
 Recognize a mixed-unit measure, such as feet and inches: "5'10"", "5 ft, 10 in".
@@ -5583,6 +5645,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping mixed-unit measures in source order.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleNumberDetector`
 
@@ -5609,6 +5675,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible decimal candidates in source order.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleNumberRangeDetector`
 
@@ -5692,6 +5762,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return flexible ordinals in source order: digit ordinals, then Roman ones.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexiblePercentDetector`
 
 Recognize flexible numbers adjacent to the locale's percent symbol.
@@ -5707,6 +5781,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible percent candidates in source order.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleRelativeDateDetector`
 
 Recognize relative dates by inverting locale-relative ICU formatting.
@@ -5719,6 +5797,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping relative-date candidates in source order.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleScientificDetector`
 
 Recognize scientific notation using locale symbols reflected from ICU.
@@ -5730,6 +5812,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping scientific numbers in source order.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleSpelloutDetector`
 
@@ -5753,6 +5839,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping spelled-out cardinals in source order.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleTextDateDetector`
 
@@ -5786,6 +5876,10 @@ Return textual-date, day-month, and era-year candidates in source order.
 
 Each kind is its own pass, so their readings may overlap ("5 May 2000 AD" gives
 the date and "2000 AD"); none takes a start from another.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `FlexibleTimeDetector`
 
@@ -5848,6 +5942,10 @@ replaces the other. A zone name that names several zones is read once per zone
 A zone is read as ICU writes it that day: "10:00 PM IST" is Irish summer time on
 July 5 but not on January 5. ``fields`` are a date's ``(letter, value)`` pairs.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `LetterNameDetector`
 
 Recognize an isolated ASCII Latin letter as its locale's letter name.
@@ -5880,6 +5978,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return the lone unit words the default material reader refuses.
 
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `MaterialSpelloutDetector`
 
 Recognize spell-out rules supplied by a validated locale material file.
@@ -5891,6 +5993,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping spelled-out cardinals in source order.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
 
 ### class `PluralNumeralDetector`
 

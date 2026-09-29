@@ -37,15 +37,28 @@ Everything here is pure icukit over code-point offsets -- no tiergraph.
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, fields, is_dataclass
 from decimal import Decimal
 from typing import Literal, Protocol, runtime_checkable
 
 import icu
 
+from ._gate import (
+    GATE_AUDIT,
+    GATE_STATS,
+    StartGate,
+    _audit_probe,
+    _candidate_starts,
+    _GatedReader,
+    _grapheme_starts,
+    _install_gates,
+    _record,
+    _strict_gate,
+    gates_enabled,
+)
 from ._offsets import boundary_maps, u16_boundary_to_codepoint
-from .breaker import break_grapheme_spans, break_word_spans
+from .breaker import break_word_spans
 from .detect import Detection
 
 __all__ = [
@@ -58,6 +71,7 @@ __all__ = [
     "DateDetector",
     "DateTimeValue",
     "Detector",
+    "GatedDetector",
     "DetectorRefusal",
     "DetectorSet",
     "MeasureFormatSpec",
@@ -379,6 +393,13 @@ class Detector(Protocol):
     def detect(self, text: str) -> list[ValueDetection]: ...
 
 
+@runtime_checkable
+class GatedDetector(Detector, Protocol):
+    """A detector which declares a sound gate for each start-scanning lane."""
+
+    def start_gates(self) -> Mapping[str, StartGate | None]: ...
+
+
 # --------------------------------------------------------------------------- dates
 
 
@@ -529,7 +550,7 @@ def _date_fields(pattern: str) -> tuple[_DateField, ...]:
     return tuple(sorted(found, key=lambda field: order[field.name]))
 
 
-class DateDetector:
+class DateDetector(_GatedReader):
     """Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
 
     The public ``tz`` parameter is deliberately restricted to ``"GMT"``: the current
@@ -640,6 +661,7 @@ class DateDetector:
         # give; ICU resolves a year-less parse in 1970, where 5 March is a Thursday.
         self._yearless_weekday = bool(_letters & {"E", "e", "c"}) and "y" not in _letters
         self._inv = _Inverter(self._parse, self._reformat, self._build)
+        _install_gates(self, {"scan": _strict_gate(self)})
 
     def _parse(self, text: icu.UnicodeString, start_u16: int) -> tuple[int, object] | None:
         calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(self.locale))
@@ -772,13 +794,20 @@ class DateDetector:
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:
-        return _scan(text, self.locale, self.type, self._inv)
+        return _scan(
+            text,
+            self.locale,
+            self.type,
+            self._inv,
+            gate=self._start_gates["scan"],
+            stats_key=self._lane_key("scan"),
+        )
 
 
 # --------------------------------------------------------------------------- numbers
 
 
-class NumberDetector:
+class NumberDetector(_GatedReader):
     """Detect canonical ICU decimal, currency, or percent surfaces."""
 
     group = "number"
@@ -822,6 +851,7 @@ class NumberDetector:
         self._currency_symbol = symbols.getSymbol(symbol.kCurrencySymbol)
         self._percent = symbols.getSymbol(symbol.kPercentSymbol)
         self._inv = _Inverter(self._parse, self._reformat, self._build)
+        _install_gates(self, {"scan": _strict_gate(self)})
 
     def _parse(self, text: icu.UnicodeString, start_u16: int) -> tuple[int, object] | None:
         position = icu.ParsePosition(start_u16)
@@ -1006,7 +1036,14 @@ class NumberDetector:
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:
-        return _scan(text, self.locale, self.type, self._inv)
+        return _scan(
+            text,
+            self.locale,
+            self.type,
+            self._inv,
+            gate=self._start_gates["scan"],
+            stats_key=self._lane_key("scan"),
+        )
 
 
 # --------------------------------------------------------------------------- scanner
@@ -1146,7 +1183,128 @@ def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
     return frozenset(interior)
 
 
-def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[ValueDetection]:
+@dataclass(frozen=True)
+class _ScanContext:
+    ustr: object
+    cp_to_u16: list[int]
+    u16_to_cp: dict[int, int]
+    boundaries: frozenset[int]
+    interior: frozenset[int]
+
+
+def _scan_context(text: str, locale: str) -> _ScanContext:
+    ustr = icu.UnicodeString(text)
+    cp_to_u16, u16_to_cp = boundary_maps(text)
+    boundaries = frozenset((*_grapheme_starts(text, locale), len(text)))
+    return _ScanContext(
+        ustr,
+        cp_to_u16,
+        u16_to_cp,
+        boundaries,
+        _word_interior_offsets(text, locale),
+    )
+
+
+def _scan_step(
+    text: str,
+    start_cp: int,
+    locale: str,
+    type_label: str,
+    inv: _Inverter,
+    ctx: _ScanContext,
+) -> ValueDetection | None:
+    """Run the strict matcher at one start, preserving every existing refusal."""
+    del locale  # the context already embodies the locale's grapheme and word rules
+    if start_cp in ctx.interior:
+        return None
+    result = inv.parse(ctx.ustr, ctx.cp_to_u16[start_cp])
+    if result is None:
+        return None
+    end_u16, parsed = result
+    if end_u16 < ctx.cp_to_u16[start_cp]:
+        raise DetectorRefusal(
+            type_label, start_cp, end_u16, "reversed-endpoint", "parse ended before its start"
+        )
+    if end_u16 == ctx.cp_to_u16[start_cp]:
+        return None
+    if end_u16 > ctx.cp_to_u16[-1]:
+        raise DetectorRefusal(
+            type_label,
+            start_cp,
+            end_u16,
+            "out-of-range-endpoint",
+            "parse ended beyond the end of the text",
+        )
+    end_cp = u16_boundary_to_codepoint(ctx.u16_to_cp, end_u16)
+    if end_cp is None:
+        raise DetectorRefusal(
+            type_label,
+            start_cp,
+            end_u16,
+            "surrogate-interior-endpoint",
+            "parse ended inside a surrogate pair",
+        )
+    if end_cp not in ctx.boundaries:
+        raise DetectorRefusal(
+            type_label,
+            start_cp,
+            end_cp,
+            "mid-grapheme-endpoint",
+            "parse ended inside a grapheme cluster",
+        )
+    if end_cp in ctx.interior:
+        return None
+    surface = text[start_cp:end_cp]
+    try:
+        reformatted = inv.reformat(parsed)
+    except icu.ICUError:
+        return None
+    if reformatted != surface:
+        return None
+    built = inv.build(parsed, surface, start_cp, ctx.cp_to_u16, ctx.u16_to_cp)
+    if built is None:
+        return None
+    value, captures, spec = built
+    if _contains_float(value) or _contains_float(spec) or _contains_float(captures):
+        raise ValueError(
+            f"{type_label}: build() produced a float in a record (values are "
+            f"surface-derived, never a float) at [{start_cp}, {end_cp})"
+        )
+    return ValueDetection(
+        text=surface,
+        start=start_cp,
+        end=end_cp,
+        type=type_label,
+        value=value,
+        captures=captures,
+        spec=spec,
+    )
+
+
+def _scan_outcome(
+    text: str,
+    start_cp: int,
+    locale: str,
+    type_label: str,
+    inv: _Inverter,
+) -> Literal["miss", "reading", "raise"]:
+    """Classify the strict matcher outcome at one start for gate falsifiers."""
+    try:
+        result = _scan_step(text, start_cp, locale, type_label, inv, _scan_context(text, locale))
+    except Exception:
+        return "raise"
+    return "reading" if result is not None else "miss"
+
+
+def _scan(
+    text: str,
+    locale: str,
+    type_label: str,
+    inv: _Inverter,
+    *,
+    gate: StartGate | None = None,
+    stats_key: str | None = None,
+) -> list[ValueDetection]:
     """Windowed detection with reformat-equality acceptance and greedy longest-match.
 
     Scans grapheme-cluster starts left to right. A miss or no forward progress simply
@@ -1157,87 +1315,40 @@ def _scan(text: str, locale: str, type_label: str, inv: _Inverter) -> list[Value
     (see :func:`_word_interior_offsets`). After a match ``[s, e)`` the scan resumes at
     ``e`` so one detector never self-overlaps.
     """
-    us = icu.UnicodeString(text)
-    cp_to_u16, u16_to_cp = boundary_maps(text)
-    gspans = break_grapheme_spans(text, locale)
-    starts = sorted({g["start"] for g in gspans})
-    boundaries = {g["start"] for g in gspans} | {g["end"] for g in gspans} | {0, len(text)}
-    interior = _word_interior_offsets(text, locale)
-
+    ctx = _scan_context(text, locale)
+    inspect_gate = GATE_STATS and gates_enabled() and gate is not None
+    starts = (
+        _grapheme_starts(text, locale) if inspect_gate else _candidate_starts(text, locale, gate)
+    )
     out: list[ValueDetection] = []
     cursor = 0
     for start_cp in starts:
         if start_cp < cursor:
             continue  # greedy: inside a prior match
-        if start_cp in interior:
+        if start_cp in ctx.interior:
             continue  # a fragment of a longer token
-        result = inv.parse(us, cp_to_u16[start_cp])
-        if result is None:
-            continue  # ordinary miss
-        end_u16, parsed = result
-        if end_u16 < cp_to_u16[start_cp]:
-            raise DetectorRefusal(
-                type_label, start_cp, end_u16, "reversed-endpoint", "parse ended before its start"
-            )
-        if end_u16 == cp_to_u16[start_cp]:
-            continue  # no forward progress -> miss
-        if end_u16 > cp_to_u16[-1]:
-            raise DetectorRefusal(
-                type_label,
-                start_cp,
-                end_u16,
-                "out-of-range-endpoint",
-                "parse ended beyond the end of the text",
-            )
-        end_cp = u16_boundary_to_codepoint(u16_to_cp, end_u16)
-        if end_cp is None:
-            raise DetectorRefusal(
-                type_label,
-                start_cp,
-                end_u16,
-                "surrogate-interior-endpoint",
-                "parse ended inside a surrogate pair",
-            )
-        if end_cp not in boundaries:
-            raise DetectorRefusal(
-                type_label,
-                start_cp,
-                end_cp,
-                "mid-grapheme-endpoint",
-                "parse ended inside a grapheme cluster",
-            )
-        if end_cp in interior:
-            continue  # a fragment of a longer token
-        surface = text[start_cp:end_cp]
+        if inspect_gate and not gate.admits(text[start_cp]):
+            _record(stats_key, "gated_out")
+            if GATE_AUDIT:
+                _audit_probe(
+                    stats_key,
+                    lambda start=start_cp: _scan_step(text, start, locale, type_label, inv, ctx),
+                )
+            continue
+        if GATE_STATS:
+            _record(stats_key, "tried")
         try:
-            reformatted = inv.reformat(parsed)
-        except icu.ICUError:
-            # ICU accepted a parse it cannot reformat (an out-of-range field
-            # combination whose getTime() is illegal). Not a match, not fatal.
+            detection = _scan_step(text, start_cp, locale, type_label, inv, ctx)
+        except Exception:
+            if GATE_STATS:
+                _record(stats_key, "non_miss")
+            raise
+        if detection is None:
             continue
-        if reformatted != surface:
-            continue  # permissive coercion -> not accepted (not fatal)
-        built = inv.build(parsed, surface, start_cp, cp_to_u16, u16_to_cp)
-        if built is None:
-            continue
-        value, captures, spec = built
-        if _contains_float(value) or _contains_float(spec) or _contains_float(captures):
-            raise ValueError(
-                f"{type_label}: build() produced a float in a record (values are "
-                f"surface-derived, never a float) at [{start_cp}, {end_cp})"
-            )
-        out.append(
-            ValueDetection(
-                text=surface,
-                start=start_cp,
-                end=end_cp,
-                type=type_label,
-                value=value,
-                captures=captures,
-                spec=spec,
-            )
-        )
-        cursor = end_cp
+        if GATE_STATS:
+            _record(stats_key, "non_miss")
+        out.append(detection)
+        cursor = detection["end"]
     return out
 
 
