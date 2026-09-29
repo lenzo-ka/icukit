@@ -269,9 +269,21 @@ class LaneGate:
 
 def gate_report(detectors: Iterable[object] | object) -> tuple[LaneGate, ...]:
     """Describe every declared start-scanning lane in ``detectors``."""
-    from .detectors import detector_key
+    from .detectors import DetectorSet, detector_key
 
-    members = getattr(detectors, "detectors", detectors)
+    if isinstance(detectors, DetectorSet):
+        members = detectors.detectors
+    elif callable(getattr(detectors, "start_gates", None)) or callable(
+        getattr(detectors, "detect", None)
+    ):
+        try:
+            iter(detectors)
+        except TypeError:
+            members = (detectors,)
+        else:
+            members = detectors
+    else:
+        members = detectors
     report = []
     for detector in members:
         method = getattr(detector, "start_gates", None)

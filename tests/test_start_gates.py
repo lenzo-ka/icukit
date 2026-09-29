@@ -15,7 +15,7 @@ import pytest
 
 import icukit.recognize as recognize
 from icukit import StartGate, candidate_starts, ungated
-from icukit._gate import _SCAN_PLAN, _ScanPlan
+from icukit._gate import _SCAN_PLAN, _ScanPlan, gate_report
 from icukit.detectors import (
     DateDetector,
     DetectorRefusal,
@@ -84,6 +84,13 @@ def test_en_US_gate_literals():
     )
     assert DateDetector("en_US", "yMd").start_gates()["scan"] == strict
     assert DateDetector("en_US", "MMMd").start_gates()["scan"] == strict
+
+
+def test_gate_report_accepts_single_detector():
+    reader = NumberDetector("en_US", "decimal")
+    report = gate_report(reader)
+    assert report == gate_report([reader])
+    assert len(report) == 1
 
 
 _PINNED = {
