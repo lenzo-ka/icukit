@@ -26,6 +26,18 @@
   versioned tokenizer-profile identity and run candidate- and decision-aware
   authored witnesses when loaded. The default remains `base="none"`, so
   existing ICU sentence output is unchanged.
+- A generated provenance manifest now records the declared source, license, shipping
+  class, notice, and byte hash of every data file under `icukit/data`. A license guard
+  rejects missing entries and entries changed since last recorded, rejects unknown
+  class labels, and accepts only UTF-8 text or manifest-declared gzip whose payload is
+  UTF-8 text. It scans that text and decoded JSON/XML for known internal corpus names,
+  rejecting a match unless the manifest records and classifies the reference, and
+  checks that required notices ship. Each notice file is
+  hash-pinned and labeled with the license it carries. Archive members under
+  `icukit/data` are hash-verified against the manifest and compared between wheel and
+  sdist. The package license expression
+  now includes the Unicode License v3 term that covers its bundled CLDR and UCD
+  snapshots.
 - Experimental `char-classes` and `shape-refinement` locale-material kinds add
   namespaced character classes and extended shape symbols at runtime. They are
   witness-checked, canonically digested, explicitly passed with `material=`, and
@@ -42,17 +54,6 @@
   whitespace runs, exception-inventory merges, and the feature set used by the
   forthcoming sentence-break override. These are additive APIs; no existing
   segmentation or default behavior changes.
-- A generated provenance manifest now records the declared source, license, shipping
-  class, notice, and byte hash of every data file under `icukit/data`. A license guard
-  rejects missing entries and entries changed since last recorded, rejects unknown
-  class labels, rejects data under `icukit/data` whose declared provenance names a
-  known internal corpus except a hash-pinned `shippable-share-alike` artifact with
-  its matching CC BY-SA notice, and checks that required notices ship. Each notice file is
-  hash-pinned and labeled with the license it carries. Archive members under
-  `icukit/data` are hash-verified against the manifest and compared between wheel and
-  sdist. The package license expression
-  now includes the Unicode License v3 term that covers its bundled CLDR and UCD
-  snapshots.
 - `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
   default selection of generated and flexible reader specifications (default locales,
   currencies, and units, plus guarded families when requested) with its ICU,

@@ -61,7 +61,11 @@
       "source": "attribution for google/tn-en_with_types and Wikipedia contributors",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/NOTICE"
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "mention",
+        "note": "the notice names the source corpus to provide attribution"
+      }
     },
     {
       "path": "break_rules/en/RECEIPT.json",
@@ -69,7 +73,11 @@
       "source": "measurement receipt for google/tn-en_with_types rule derivation",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/NOTICE"
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the receipt records measurements for the derived rule artifact"
+      }
     },
     {
       "path": "break_rules/en/sentence-tn.json",
@@ -77,7 +85,11 @@
       "source": "google/tn-en_with_types sentence-boundary labels",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/NOTICE"
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the learned en-tn@1 rule artifact is derived from corpus sentence-boundary labels"
+      }
     },
     {
       "path": "cldr_symbols/LICENSE",
@@ -1454,7 +1466,11 @@
       "spdx": "BSD-2-Clause",
       "class": "shippable",
       "notice": null,
-      "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question"
+      "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question",
+      "corpus_reference": {
+        "kind": "mention",
+        "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question"
+      }
     }
   ]
 }
