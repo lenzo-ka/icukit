@@ -114,10 +114,10 @@ def _material_seal(material: LocaleMaterial) -> str:
 def _require_loaded(material: object) -> LocaleMaterial:
     """Require a LocaleMaterial the loader returned (or a copy of one), unchanged.
 
-    Material constructed directly, altered with ``dataclasses.replace``, of a subclass
-    (which could answer the seal check with one value and later reads with another), or
-    with fields overwritten is refused. icukit does not defend against callers that
-    call its private functions.
+    Material constructed directly, altered with ``dataclasses.replace``, or of a subclass
+    (which could answer the seal check with one value and later reads with another) is
+    refused. icukit does not defend against callers that call its private functions or
+    overwrite a field of the frozen dataclass (``object.__setattr__``).
     """
     if type(material) is not LocaleMaterial:
         raise TypeError(f"material must be a LocaleMaterial, got {type(material).__name__}")
@@ -159,9 +159,16 @@ def _constant(value: str) -> object:
 
 
 _MAX_DEPTH = 64
+_MAX_NODES = 1_000_000
 
 
-def _plain_json(value: object, _open: tuple[int, ...] = ()) -> object:
+def _plain_json(
+    value: object, _open: tuple[int, ...] = (), *, _budget: list[int] | None = None
+) -> object:
+    if _budget is not None:
+        _budget[0] -= 1
+        if _budget[0] < 0:
+            raise _InvalidJSON(f"more than {_MAX_NODES} values")
     if isinstance(value, (Mapping, list, tuple)):
         if id(value) in _open:
             raise _InvalidJSON("the mapping contains itself")
@@ -173,10 +180,10 @@ def _plain_json(value: object, _open: tuple[int, ...] = ()) -> object:
         for key, item in value.items():
             if not isinstance(key, str):
                 raise _InvalidJSON(f"object key must be a string, got {key!r}")
-            result[key] = _plain_json(item, _open)
+            result[key] = _plain_json(item, _open, _budget=_budget)
         return result
     if isinstance(value, (list, tuple)):
-        return [_plain_json(item, _open) for item in value]
+        return [_plain_json(item, _open, _budget=_budget) for item in value]
     if isinstance(value, float) and not math.isfinite(value):
         raise _InvalidJSON("non-finite number")
     return value
@@ -819,12 +826,20 @@ def load_locale_material(
     material: Mapping[str, object] | str | os.PathLike[str], /
 ) -> LocaleMaterial:
     """Parse, validate, witness-check, and atomically return locale material."""
+    invalid = (OSError, UnicodeError, json.JSONDecodeError, _InvalidJSON, TypeError, ValueError)
     try:
         if isinstance(material, (str, os.PathLike)):
-            with open(material, encoding="utf-8") as stream:
-                parsed = json.load(stream, object_pairs_hook=_object, parse_constant=_constant)
+            try:
+                with open(material, encoding="utf-8") as stream:
+                    parsed = json.load(stream, object_pairs_hook=_object, parse_constant=_constant)
+            except RecursionError as error:
+                # The decoder recurses once per nesting level of the file's JSON.
+                raise _InvalidJSON("JSON nested too deeply") from error
         elif isinstance(material, Mapping):
-            parsed = _plain_json(material)
+            # Bounded walk (depth, size, cycles), then a round trip through JSON text,
+            # so every value the loader keeps is a plain JSON type, never a subclass.
+            text = json.dumps(_plain_json(material, _budget=[_MAX_NODES]), allow_nan=False)
+            parsed = json.loads(text, object_pairs_hook=_object, parse_constant=_constant)
         else:
             parsed = material
         if not isinstance(parsed, Mapping):
@@ -836,15 +851,7 @@ def load_locale_material(
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-    except (
-        OSError,
-        UnicodeError,
-        json.JSONDecodeError,
-        _InvalidJSON,
-        TypeError,
-        ValueError,
-        RecursionError,
-    ) as error:
+    except invalid as error:
         raise MaterialLoadError([_refuse("INVALID_JSON", str(error))]) from error
     data = cast(Mapping[str, object], parsed)
     errors = _envelope(data)

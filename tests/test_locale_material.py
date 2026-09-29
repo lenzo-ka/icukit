@@ -366,16 +366,41 @@ def test_every_malformed_input_in_the_refusal_sweep_raises_material_load_error(t
     for _ in range(100):
         node["note"] = {}
         node = node["note"]
-    for material in (cyclic, deep):
+    shared: list = []
+    for _ in range(60):
+        shared = [shared, shared]  # no cycle and 61 deep, but 2**60 values to walk
+    wide = _fixture()
+    wide["provenance"]["note"] = shared
+    for material in (cyclic, deep, wide):
         with pytest.raises(MaterialLoadError) as caught:
             load_locale_material(material)
         assert [refusal.code for refusal in caught.value.refusals] == ["INVALID_JSON"]
+        assert not isinstance(caught.value.__cause__, RecursionError)
 
     non_utf8 = tmp_path / "non-utf8.json"
     non_utf8.write_bytes(b"\xff")
     for path in (non_utf8, tmp_path):
         with pytest.raises(MaterialLoadError):
             load_locale_material(path)
+
+
+def test_a_mapping_is_read_as_plain_json():
+    class Lying(str):
+        def __eq__(self, other):
+            return True
+
+        __hash__ = str.__hash__
+
+        def startswith(self, *args):
+            return True
+
+    material = _fixture()
+    material["locale"] = Lying("qaa")
+    material["provenance"]["source"] = Lying("icukit test fixture")
+    loaded = load_locale_material(material)
+    assert type(loaded.locale) is str
+    assert type(loaded.provenance["source"]) is str
+    assert loaded.digest == DIGEST
 
 
 @pytest.mark.parametrize("text_hash", [None, 0, True, [], {}, "A" * 64, "0" * 63])
