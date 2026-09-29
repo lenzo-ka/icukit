@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -55,16 +56,41 @@ def _entry(root: Path, path: str) -> tuple[dict, dict]:
     return manifest, next(item for item in manifest["files"] if item["path"] == path)
 
 
+def _record_changed_bytes(root: Path, relative: str) -> tuple[dict, dict]:
+    manifest, entry = _entry(root, relative)
+    entry["sha256"] = hashlib.sha256((root / DATA_REL / relative).read_bytes()).hexdigest()
+    return manifest, entry
+
+
+def _assert_unclassified_corpus_is_rejected(root: Path, relative: str) -> None:
+    assert any(
+        f"icukit/data/{relative}: content names known internal corpus" in error
+        and "without a valid corpus_reference" in error
+        for error in _errors(root)
+    )
+
+
 def _plant_share_alike_file(root: Path, artifact_class: str) -> None:
     data_path = root / DATA_REL / "exceptions/planted.json"
     data_path.write_text("{}\n", encoding="utf-8")
-    notice = "PLANTED-CC-BY-SA-LICENSE"
+    notice = "planted/NOTICE"
+    license_code = "planted/LICENSE"
     notice_path = root / notice
-    notice_path.write_text("Planted CC BY-SA 4.0 test notice.\n", encoding="utf-8")
+    notice_path.parent.mkdir()
+    notice_path.write_text("Planted attribution notice\n\nTest attribution.\n", encoding="utf-8")
+    license_path = root / license_code
+    license_path.write_text(
+        "Attribution-ShareAlike 4.0 International\n\nPlanted legal code.\n",
+        encoding="utf-8",
+    )
     manifest = _read_manifest(root)
     manifest["notices"][notice] = {
         "spdx": "cc-by-sa-4.0",
         "sha256": hashlib.sha256(notice_path.read_bytes()).hexdigest(),
+    }
+    manifest["notices"][license_code] = {
+        "spdx": "cc-by-sa-4.0",
+        "sha256": hashlib.sha256(license_path.read_bytes()).hexdigest(),
     }
     manifest["files"].append(
         {
@@ -76,7 +102,11 @@ def _plant_share_alike_file(root: Path, artifact_class: str) -> None:
             "notice": notice,
         }
     )
-    _replace_pyproject(root, '    "LICENSE",\n', f'    "LICENSE",\n    "{notice}",\n')
+    _replace_pyproject(
+        root,
+        '    "LICENSE",\n',
+        f'    "LICENSE",\n    "{license_code}",\n    "{notice}",\n',
+    )
     _write_manifest(root, manifest)
 
 
@@ -183,11 +213,47 @@ def test_share_alike_class_accepts_lowercase_share_alike_spdx(tmp_path: Path) ->
     assert _errors(root) == []
 
 
+@pytest.mark.parametrize("name", ["NOTICE", "LICENSE"])
+def test_derived_corpus_reference_requires_attribution_and_legal_code(
+    tmp_path: Path, name: str
+) -> None:
+    root = _planted_tree(tmp_path)
+    _plant_share_alike_file(root, "shippable-share-alike")
+    manifest, entry = _entry(root, "exceptions/planted.json")
+    entry["source"] = "derived from en_with_types"
+    entry["corpus_reference"] = {"kind": "derived"}
+    _write_manifest(root, manifest)
+    (root / "planted" / name).unlink()
+    assert f"manifest notice does not exist: planted/{name}" in _errors(root)
+
+
 def test_removing_only_notice_file_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     notice = "icukit/data/ucd_name_aliases/LICENSE"
     (root / notice).unlink()
     assert f"manifest notice does not exist: {notice}" in _errors(root)
+
+
+def test_notice_must_be_nonempty_multiline_text(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    notice = "icukit/data/break_rules/en/NOTICE"
+    path = root / notice
+    path.write_text("literal \\n+ diff fragment", encoding="utf-8")
+    manifest = _read_manifest(root)
+    manifest["notices"][notice]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert f"{notice}: notice must be nonempty multi-line text" in _errors(root)
+
+
+def test_legal_code_first_line_must_be_license_title(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    notice = "icukit/data/break_rules/en/LICENSE"
+    path = root / notice
+    path.write_text("diff fragment\n\nnot legal code\n", encoding="utf-8")
+    manifest = _read_manifest(root)
+    manifest["notices"][notice]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    _write_manifest(root, manifest)
+    assert f"{notice}: legal-code first line must be its license title" in _errors(root)
 
 
 def test_removing_only_license_files_item_is_rejected(tmp_path: Path) -> None:
@@ -665,85 +731,58 @@ def test_only_top_level_provenance_manifest_is_excluded(tmp_path: Path) -> None:
     assert _errors(root) == []
 
 
-@pytest.mark.parametrize(
-    ("key", "value"),
-    [
-        ("Source", ["Sproat & Jaitly"]),
-        ("sources", {"nested": ["en_with_types"]}),
-        ("origin", "Kaggle text normalization"),
-        ("dataset", "en_train.csv"),
-        ("corpus", "google/tn-sample"),
-        ("provenance", {"nested": ["tn-corpus"]}),
-        ("derived_from", ["Sproat"]),
-        ("DATA_SOURCE", "Kaggle"),
-    ],
-)
-@pytest.mark.parametrize("artifact_class", ["shippable", "derived-shippable"])
-def test_declared_internal_corpus_in_shipped_json_is_rejected(
-    tmp_path: Path, key: str, value: object, artifact_class: str
-) -> None:
+def test_internal_corpus_in_json_key_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     path = root / DATA_REL / "exceptions/examples-en.json"
     document = json.loads(path.read_text(encoding="utf-8"))
-    document["planted"] = {key: value}
+    document["EN_WITH_TYPES"] = "planted key"
     path.write_text(json.dumps(document), encoding="utf-8")
-    manifest = _read_manifest(root)
-    entry = next(
-        item for item in manifest["files"] if item["path"] == "exceptions/examples-en.json"
-    )
-    entry["class"] = artifact_class
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest, _ = _record_changed_bytes(root, "exceptions/examples-en.json")
     _write_manifest(root, manifest)
-    assert any(
-        "declared provenance names known internal corpus" in error for error in _errors(root)
-    )
+    _assert_unclassified_corpus_is_rejected(root, "exceptions/examples-en.json")
 
 
-def test_share_alike_artifact_with_matching_notice_may_name_source_corpus(
-    tmp_path: Path,
-) -> None:
+def test_internal_corpus_in_decoded_json_key_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    _plant_share_alike_file(root, "shippable-share-alike")
-    path = root / DATA_REL / "exceptions/planted.json"
-    path.write_text(
-        json.dumps({"provenance": {"source": "google/tn-en_with_types"}}) + "\n",
-        encoding="utf-8",
-    )
-    manifest, entry = _entry(root, "exceptions/planted.json")
-    entry["source"] = "google/tn-en_with_types sentence labels"
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_text('{"\\u0065n_with_types": 1}\n', encoding="utf-8")
+    manifest, _ = _record_changed_bytes(root, relative)
     _write_manifest(root, manifest)
-    assert _errors(root) == []
+    _assert_unclassified_corpus_is_rejected(root, relative)
 
 
-def test_declared_internal_corpus_in_nested_json_mapping_key_is_rejected(
-    tmp_path: Path,
-) -> None:
+def test_internal_corpus_in_nested_json_value_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     path = root / DATA_REL / "exceptions/examples-en.json"
     document = json.loads(path.read_text(encoding="utf-8"))
-    document["planted"] = {"sources": {"outer": {"en_with_types": {"kind": "census"}}}}
+    document["planted"] = {"anything": [{"nested": "Sproat corpus"}]}
     path.write_text(json.dumps(document), encoding="utf-8")
-    manifest, entry = _entry(root, "exceptions/examples-en.json")
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest, _ = _record_changed_bytes(root, "exceptions/examples-en.json")
     _write_manifest(root, manifest)
-    assert any(
-        "declared provenance names known internal corpus 'en_with_types'" in error
-        for error in _errors(root)
-    )
+    _assert_unclassified_corpus_is_rejected(root, "exceptions/examples-en.json")
 
 
-@pytest.mark.parametrize("field", ["source", "note", "term"])
-def test_manifest_declaration_naming_internal_corpus_is_rejected(
-    tmp_path: Path, field: str
-) -> None:
+def test_internal_corpus_in_uppercase_json_suffix_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    manifest, entry = _entry(root, "abbreviations/abbreviations.rng")
-    entry[field] = "en_with_types census"
-    _write_manifest(root, manifest)
-    assert any(
-        "declared provenance names known internal corpus" in error for error in _errors(root)
+    _replace_pyproject(
+        root,
+        '    "data/exceptions/*.json",\n',
+        '    "data/exceptions/*.json",\n    "data/exceptions/*.JSON",\n',
     )
+    path = root / DATA_REL / "exceptions/planted.JSON"
+    path.write_text('{"anything": "en_with_types"}\n', encoding="utf-8")
+    manifest, template = _entry(root, "exceptions/examples-en.json")
+    planted = template.copy()
+    planted.update(
+        {
+            "path": "exceptions/planted.JSON",
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+    )
+    manifest["files"].append(planted)
+    _write_manifest(root, manifest)
+    _assert_unclassified_corpus_is_rejected(root, "exceptions/planted.JSON")
 
 
 def test_duplicate_source_in_manifest_entry_is_rejected(tmp_path: Path) -> None:
@@ -755,6 +794,18 @@ def test_duplicate_source_in_manifest_entry_is_rejected(tmp_path: Path) -> None:
     assert original in text
     path.write_text(text.replace(original, duplicate, 1), encoding="utf-8")
     assert "icukit/data/PROVENANCE.json: duplicate JSON key 'source'" in _errors(root)
+
+
+def test_internal_corpus_in_manifest_entry_source_is_rejected(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    manifest, entry = _entry(root, "abbreviations/en.xml")
+    entry["source"] = "en_with_types"
+    _write_manifest(root, manifest)
+    assert any(
+        "abbreviations/en.xml: manifest entry names known internal corpus en_with_types" in error
+        and "without a valid corpus_reference" in error
+        for error in _errors(root)
+    )
 
 
 def test_duplicate_source_in_shipped_json_is_rejected(tmp_path: Path) -> None:
@@ -774,94 +825,184 @@ def test_duplicate_source_in_shipped_json_is_rejected(tmp_path: Path) -> None:
     assert "icukit/data/exceptions/examples-en.json: duplicate JSON key 'source'" in _errors(root)
 
 
-@pytest.mark.parametrize(
-    "attribute",
-    [
-        "source",
-        "sources",
-        "corpus",
-        "origin",
-        "dataset",
-        "provenance",
-        "derived_from",
-        "data_source",
-    ],
-)
-def test_declared_internal_corpus_in_xml_attribute_is_rejected(
-    tmp_path: Path, attribute: str
-) -> None:
+def test_internal_corpus_in_source_url_attribute_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
     path = root / DATA_REL / "abbreviations/en.xml"
     tree = ET.parse(path)
-    tree.getroot().set(attribute, "en_with_types census")
+    tree.getroot().set("source_url", "en_with_types census")
     tree.write(path, encoding="utf-8", xml_declaration=True)
-    manifest, entry = _entry(root, "abbreviations/en.xml")
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest, _ = _record_changed_bytes(root, "abbreviations/en.xml")
     _write_manifest(root, manifest)
-    assert any(
-        "declared provenance names known internal corpus" in error for error in _errors(root)
-    )
+    _assert_unclassified_corpus_is_rejected(root, "abbreviations/en.xml")
 
 
-@pytest.mark.parametrize("tag", ["source", "Source", "{urn:planted}DATA_SOURCE"])
-def test_declared_internal_corpus_in_xml_element_text_is_rejected(tmp_path: Path, tag: str) -> None:
+def test_internal_corpus_in_decoded_xml_attribute_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    path = root / DATA_REL / "abbreviations/en.xml"
-    tree = ET.parse(path)
-    declaration = ET.SubElement(tree.getroot(), tag)
-    declaration.text = "en_with_types census"
-    tree.write(path, encoding="utf-8", xml_declaration=True)
-    manifest, entry = _entry(root, "abbreviations/en.xml")
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    relative = "abbreviations/en.xml"
+    path = root / DATA_REL / relative
+    text = path.read_text(encoding="utf-8")
+    original = '<abbreviations xml:lang="en" status="draft">'
+    replacement = '<abbreviations xml:lang="en" status="draft" source="&#101;n_with_types">'
+    assert original in text
+    path.write_text(text.replace(original, replacement, 1), encoding="utf-8")
+    manifest, _ = _record_changed_bytes(root, relative)
     _write_manifest(root, manifest)
-    assert any(
-        "declared provenance names known internal corpus" in error for error in _errors(root)
-    )
+    _assert_unclassified_corpus_is_rejected(root, relative)
 
 
-def test_declared_internal_corpus_in_xml_provenance_element_attribute_is_rejected(
-    tmp_path: Path,
-) -> None:
+def test_internal_corpus_in_tsv_comment_is_rejected(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    path = root / DATA_REL / "abbreviations/en.xml"
-    tree = ET.parse(path)
-    ET.SubElement(tree.getroot(), "source", {"href": "en_with_types"})
-    tree.write(path, encoding="utf-8", xml_declaration=True)
-    manifest, entry = _entry(root, "abbreviations/en.xml")
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    relative = "cldr_symbols/af.tsv"
+    path = root / DATA_REL / relative
+    path.write_text(path.read_text(encoding="utf-8") + "# en_with_types census\n", encoding="utf-8")
+    manifest, _ = _record_changed_bytes(root, relative)
     _write_manifest(root, manifest)
-    assert any(
-        "declared provenance names known internal corpus" in error for error in _errors(root)
-    )
+    _assert_unclassified_corpus_is_rejected(root, relative)
 
 
-def test_declared_internal_corpus_in_namespaced_rng_attribute_is_rejected(
-    tmp_path: Path,
-) -> None:
+def test_valid_utf16_xml_is_refused_even_when_elementtree_can_read_it(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    path = root / DATA_REL / "abbreviations/abbreviations.rng"
-    tree = ET.parse(path)
-    tree.getroot().set("{urn:planted}source", "en_with_types census")
-    tree.write(path, encoding="utf-8", xml_declaration=True)
-    manifest, entry = _entry(root, "abbreviations/abbreviations.rng")
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    relative = "abbreviations/en.xml"
+    path = root / DATA_REL / relative
+    xml_root = ET.Element("abbreviations", source="en_with_types")
+    ET.ElementTree(xml_root).write(path, encoding="utf-16", xml_declaration=True)
+    assert ET.parse(path).getroot().attrib["source"] == "en_with_types"
+    manifest, _ = _record_changed_bytes(root, relative)
     _write_manifest(root, manifest)
     assert any(
-        "icukit/data/abbreviations/abbreviations.rng:@source: declared provenance names known "
-        "internal corpus 'en_with_types census'" in error
+        error == "icukit/data/abbreviations/en.xml: data files must be UTF-8 text or a "
+        "declared, inspectable encoding"
         for error in _errors(root)
     )
 
 
-def test_xml_comments_are_not_scanned(tmp_path: Path) -> None:
+def test_zip_data_file_is_refused_even_when_its_member_is_readable(tmp_path: Path) -> None:
     root = _planted_tree(tmp_path)
-    path = root / DATA_REL / "abbreviations/en.xml"
-    text = path.read_text(encoding="utf-8")
-    path.write_text(text.replace("?>", "?>\n<!-- source: en_with_types -->", 1), encoding="utf-8")
-    manifest, entry = _entry(root, "abbreviations/en.xml")
-    entry["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    relative = "abbreviations/en.xml"
+    path = root / DATA_REL / relative
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("hidden.xml", '<data source="en_with_types"/>')
+    with zipfile.ZipFile(path) as archive:
+        assert b"en_with_types" in archive.read("hidden.xml")
+    manifest, _ = _record_changed_bytes(root, relative)
+    _write_manifest(root, manifest)
+    assert any(
+        "data files must be UTF-8 text or a declared, inspectable encoding" in error
+        for error in _errors(root)
+    )
+
+
+def test_declared_gzip_json_with_unreviewed_corpus_is_rejected(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_bytes(gzip.compress(b'{"source": "en_with_types"}\n', mtime=0))
+    manifest, entry = _record_changed_bytes(root, relative)
+    entry["encoding"] = "gzip"
+    _write_manifest(root, manifest)
+    _assert_unclassified_corpus_is_rejected(root, relative)
+
+
+def test_declared_gzip_json_with_reviewed_share_alike_derivation_passes(
+    tmp_path: Path,
+) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_bytes(gzip.compress(b'{"source": "en_with_types"}\n', mtime=0))
+
+    notice_dir = root / "PLANTED"
+    notice_dir.mkdir()
+    notice_path = notice_dir / "NOTICE"
+    license_path = notice_dir / "LICENSE"
+    notice_path.write_text("Planted attribution.\n\nTest attribution.\n", encoding="utf-8")
+    license_path.write_text(
+        "Attribution-ShareAlike 4.0 International\n\nPlanted legal code.\n",
+        encoding="utf-8",
+    )
+    _replace_pyproject(
+        root,
+        '    "LICENSE",\n',
+        '    "LICENSE",\n    "PLANTED/NOTICE",\n    "PLANTED/LICENSE",\n',
+    )
+    manifest, entry = _record_changed_bytes(root, relative)
+    for notice in (notice_path, license_path):
+        manifest["notices"][notice.relative_to(root).as_posix()] = {
+            "spdx": "CC-BY-SA-4.0",
+            "sha256": hashlib.sha256(notice.read_bytes()).hexdigest(),
+        }
+    entry.update(
+        {
+            "encoding": "gzip",
+            "source": "planted derived fixture",
+            "spdx": "CC-BY-SA-4.0",
+            "class": "shippable-share-alike",
+            "notice": "PLANTED/NOTICE",
+            "corpus_reference": {"kind": "derived"},
+        }
+    )
     _write_manifest(root, manifest)
     assert _errors(root) == []
+
+
+def test_undeclared_gzip_is_refused(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "exceptions/examples-en.json"
+    path = root / DATA_REL / relative
+    path.write_bytes(gzip.compress(b'{"source": "authored"}\n', mtime=0))
+    manifest, _ = _record_changed_bytes(root, relative)
+    _write_manifest(root, manifest)
+    assert any(
+        "data files must be UTF-8 text or a declared, inspectable encoding" in error
+        for error in _errors(root)
+    )
+
+
+@pytest.mark.parametrize("encoding", ["zip", "utf-16", None])
+def test_unsupported_declared_encoding_is_refused(tmp_path: Path, encoding: str | None) -> None:
+    root = _planted_tree(tmp_path)
+    manifest, entry = _entry(root, "abbreviations/en.xml")
+    entry["encoding"] = encoding
+    _write_manifest(root, manifest)
+    assert any(
+        "data files must be UTF-8 text or a declared, inspectable encoding" in error
+        for error in _errors(root)
+    )
+
+
+def test_reviewed_corpus_mention_is_accepted(tmp_path: Path) -> None:
+    root = _planted_tree(tmp_path)
+    relative = "abbreviations/en.xml"
+    path = root / DATA_REL / relative
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n<!-- measured against en_with_types -->\n",
+        encoding="utf-8",
+    )
+    manifest, entry = _record_changed_bytes(root, relative)
+    entry["corpus_reference"] = {
+        "kind": "mention",
+        "note": "the comment records measurement context, not the file's source",
+    }
+    _write_manifest(root, manifest)
+    assert _errors(root) == []
+
+
+def test_derived_corpus_reference_on_non_share_alike_class_is_rejected(
+    tmp_path: Path,
+) -> None:
+    root = _planted_tree(tmp_path)
+    path = root / DATA_REL / "abbreviations/en.xml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "\n<!-- derived from en_with_types -->\n",
+        encoding="utf-8",
+    )
+    manifest, entry = _record_changed_bytes(root, "abbreviations/en.xml")
+    entry["corpus_reference"] = {"kind": "derived"}
+    _write_manifest(root, manifest)
+    assert any(
+        "derived corpus_reference requires class shippable-share-alike" in error
+        for error in _errors(root)
+    )
 
 
 def test_invalid_shipped_json_is_rejected(tmp_path: Path) -> None:

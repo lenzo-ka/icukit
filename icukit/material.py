@@ -18,11 +18,13 @@ from typing import NamedTuple, cast
 import icu
 
 __all__ = [
+    "ClassExtension",
     "LABEL_KEYS",
     "LocaleMaterial",
     "MaterialLoadError",
     "MaterialRefusal",
     "REQUIRED_WITNESS_KEYS",
+    "ShapeRefinement",
     "VALUE_KEYS",
     "WITNESS_KEYS",
     "load_locale_material",
@@ -61,8 +63,31 @@ class MaterialLoadError(ValueError):
 
 
 @dataclass(frozen=True)
+class ClassExtension:
+    """One namespaced, additive character class."""
+
+    name: str
+    unicode_set: str | None = None
+    members: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ShapeRefinement:
+    """A new shape symbol selected by a base or extension class."""
+
+    name: str
+    class_name: str
+    symbol: str
+
+
+@dataclass(frozen=True)
 class LocaleMaterial:
-    """Immutable, validated locale material identified by its content digest."""
+    """Immutable, validated locale material identified by its content digest.
+
+    Reader material uses ``rules`` and ``rulesets``. Character material uses
+    ``id``, ``status``, ``classes``, and ``shape_refinements``. The unused
+    fields are empty so all kinds pass through one sealed loader type.
+    """
 
     kind: str
     locale: str
@@ -70,6 +95,10 @@ class LocaleMaterial:
     rules: str
     rulesets: tuple[str, ...]
     provenance: Mapping[str, str] = field(hash=False)
+    id: str | None = None
+    status: str | None = None
+    classes: tuple[ClassExtension, ...] = ()
+    shape_refinements: tuple[ShapeRefinement, ...] = ()
     _seal: str | None = field(default=None, init=False, repr=False, compare=False, hash=False)
 
     def __deepcopy__(self, memo: dict[int, object]) -> LocaleMaterial:
@@ -81,6 +110,10 @@ class LocaleMaterial:
             self.rules,
             self.rulesets,
             MappingProxyType(deepcopy(dict(self.provenance), memo)),
+            self.id,
+            self.status,
+            self.classes,
+            self.shape_refinements,
         )
         object.__setattr__(copied, "_seal", self._seal)
         memo[id(self)] = copied
@@ -103,6 +136,10 @@ def _material_seal(material: LocaleMaterial) -> str:
             material.rules,
             material.rulesets,
             provenance,
+            material.id,
+            material.status,
+            tuple((item.name, item.unicode_set, item.members) for item in material.classes),
+            tuple((item.name, item.class_name, item.symbol) for item in material.shape_refinements),
         ),
         ensure_ascii=False,
         allow_nan=False,
@@ -819,7 +856,484 @@ def _rbnf_spellout(
     return (None if errors else provisional), errors
 
 
-_KIND_LOADERS = {"rbnf-spellout": _rbnf_spellout}
+_CLASSLIKE_KINDS = frozenset({"char-classes", "shape-refinement", "classlike"})
+_CLASS_KEYS = frozenset({"name", "unicode_set", "members"})
+_REFINEMENT_KEYS = frozenset({"name", "class", "symbol"})
+_CLASSLIKE_PROVENANCE_KEYS = _PROVENANCE_KEYS
+_BASE_PROPERTY_KEYS = frozenset(
+    {
+        "gc",
+        "general_category",
+        "sc",
+        "script",
+        "sb",
+        "sentence_break",
+        "wb",
+        "word_break",
+    }
+)
+_BASE_SHAPE_SYMBOLS = frozenset({"A", "N", "X", "x", "a", "d", "¤", "<Lu>"})
+
+
+def _classlike_top_keys(kind: str) -> frozenset[str]:
+    common = frozenset(
+        {"schema_version", "kind", "id", "status", "locale", "provenance", "witnesses"}
+    )
+    if kind == "char-classes":
+        return common | {"classes"}
+    if kind == "shape-refinement":
+        return common | {"shape_refinements"}
+    return common | {"classes", "shape_refinements"}
+
+
+def _canonical_member(value: object) -> str | None:
+    if isinstance(value, str) and len(value) == 1:
+        return value
+    if isinstance(value, str) and re.fullmatch(r"U\+[0-9A-Fa-f]{4,6}", value):
+        codepoint = int(value[2:], 16)
+        if codepoint <= 0x10FFFF and not 0xD800 <= codepoint <= 0xDFFF:
+            return chr(codepoint)
+    return None
+
+
+def _canonical_general_category(value: str) -> str | None:
+    prop = icu.UProperty.GENERAL_CATEGORY
+    try:
+        number = icu.Char.getPropertyValueEnum(prop, value)
+        if number < icu.Char.getIntPropertyMinValue(
+            prop
+        ) or number > icu.Char.getIntPropertyMaxValue(prop):
+            return None
+        return icu.Char.getPropertyValueName(
+            prop, number, icu.UPropertyNameChoice.LONG_PROPERTY_NAME
+        )
+    except icu.ICUError:
+        return None
+
+
+def _unicode_set_ranges(unicode_set: icu.UnicodeSet) -> tuple[tuple[int, int], ...]:
+    """Return the code-point ranges of a UnicodeSet, excluding string members."""
+    return tuple(
+        (
+            ord(unicode_set.getRangeStart(index)),
+            ord(unicode_set.getRangeEnd(index)),
+        )
+        for index in range(unicode_set.getRangeCount())
+    )
+
+
+def _selector_ranges(
+    class_name: str, classes: Mapping[str, ClassExtension]
+) -> tuple[tuple[int, int], ...]:
+    extension = classes.get(class_name)
+    if extension is None:
+        unicode_set = icu.UnicodeSet(f"[:gc={class_name}:]")
+        return _unicode_set_ranges(unicode_set)
+    ranges = (
+        list(_unicode_set_ranges(icu.UnicodeSet(extension.unicode_set)))
+        if extension.unicode_set is not None
+        else []
+    )
+    ranges.extend((ord(member), ord(member)) for member in extension.members)
+    return tuple(sorted(ranges))
+
+
+def _ranges_intersect(
+    left: tuple[tuple[int, int], ...], right: tuple[tuple[int, int], ...]
+) -> bool:
+    left_index = right_index = 0
+    while left_index < len(left) and right_index < len(right):
+        left_start, left_end = left[left_index]
+        right_start, right_end = right[right_index]
+        if left_end < right_start:
+            left_index += 1
+        elif right_end < left_start:
+            right_index += 1
+        else:
+            return True
+    return False
+
+
+def _ambiguous_refinements(
+    classes: tuple[ClassExtension, ...], refinements: tuple[ShapeRefinement, ...]
+) -> list[MaterialRefusal]:
+    """Find refinement selectors that can both select at least one code point."""
+    class_by_name = {item.name: item for item in classes}
+    selectors = {
+        item.name: _selector_ranges(item.class_name, class_by_name) for item in refinements
+    }
+    errors = []
+    for index, left in enumerate(refinements):
+        for right in refinements[index + 1 :]:
+            if _ranges_intersect(selectors[left.name], selectors[right.name]):
+                errors.append(
+                    _refuse(
+                        "AMBIGUOUS_REFINEMENT",
+                        f"shape refinements {left.name!r} and {right.name!r} "
+                        "can select the same code point",
+                    )
+                )
+    return errors
+
+
+def _classlike_envelope(data: Mapping[str, object]) -> list[MaterialRefusal]:
+    errors: list[MaterialRefusal] = []
+    kind = data.get("kind")
+    if not isinstance(kind, str) or kind not in _CLASSLIKE_KINDS:
+        return [_refuse("INVALID_KIND", f"unregistered class material kind {kind!r}")]
+    allowed = _classlike_top_keys(kind)
+    for key in sorted(allowed - set(data)):
+        errors.append(_refuse("INVALID_KEY", f"missing top-level key {key!r}"))
+    for key in sorted(set(data) - allowed):
+        code = "REDEFINES_BASE_SYMBOL" if key in _BASE_PROPERTY_KEYS else "INVALID_KEY"
+        errors.append(_refuse(code, f"unknown top-level key {key!r}"))
+    version = data.get("schema_version")
+    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
+        errors.append(
+            _refuse("INVALID_SCHEMA_VERSION", f"schema_version must be integer 1, got {version!r}")
+        )
+    material_id = data.get("id")
+    if not isinstance(material_id, str) or not _ID_RE.fullmatch(material_id):
+        errors.append(
+            _refuse("INVALID_KEY", f"id {material_id!r} does not match the required pattern")
+        )
+    if data.get("status") != "experimental":
+        errors.append(
+            _refuse(
+                "CLAIMS_PROMOTED",
+                "caller material status must be exactly 'experimental'",
+            )
+        )
+    locale_reason = _locale_reason(data.get("locale"))
+    if locale_reason is not None:
+        errors.append(_refuse("INVALID_LOCALE", f"locale {locale_reason}"))
+    provenance = data.get("provenance")
+    if not isinstance(provenance, Mapping):
+        errors.append(_refuse("INVALID_PROVENANCE", "provenance must be an object"))
+    else:
+        reasons = _key_reasons(
+            provenance,
+            allowed=_CLASSLIKE_PROVENANCE_KEYS,
+            required=frozenset({"source"}),
+            prefix="provenance",
+        )
+        for reason in reasons:
+            errors.append(_refuse("INVALID_PROVENANCE", reason))
+        for key, value in provenance.items():
+            if not isinstance(value, str) or (key == "source" and not value):
+                errors.append(_refuse("INVALID_PROVENANCE", f"provenance.{key} must be a string"))
+
+    names: set[str] = set()
+    if "classes" in allowed:
+        classes = data.get("classes")
+        if not isinstance(classes, list) or not classes:
+            errors.append(_refuse("INVALID_KEY", "classes must be a non-empty list"))
+            classes = []
+        for index, raw in enumerate(classes):
+            prefix = f"class {index}"
+            if not isinstance(raw, Mapping):
+                errors.append(_refuse("INVALID_KEY", f"{prefix} must be an object"))
+                continue
+            base_keys = set(raw) & _BASE_PROPERTY_KEYS
+            for key in sorted(base_keys):
+                errors.append(
+                    _refuse(
+                        "REDEFINES_BASE_SYMBOL",
+                        f"{prefix} field {key!r} would replace an ICU base property",
+                    )
+                )
+            for key in sorted(set(raw) - _CLASS_KEYS - _BASE_PROPERTY_KEYS):
+                errors.append(_refuse("INVALID_KEY", f"{prefix}: unknown field {key!r}"))
+            name = raw.get("name")
+            if not isinstance(name, str) or ":" not in name or not _ID_RE.fullmatch(name):
+                errors.append(
+                    _refuse("REDEFINES_BASE_SYMBOL", f"{prefix}: name must be namespaced with ':'")
+                )
+            elif name in names:
+                errors.append(_refuse("DUPLICATE_ID", f"duplicate class id {name!r}"))
+            else:
+                names.add(name)
+            selectors = int("unicode_set" in raw) + int("members" in raw)
+            if selectors != 1:
+                errors.append(
+                    _refuse(
+                        "INVALID_KEY",
+                        f"{prefix}: exactly one of 'unicode_set' and 'members' is required",
+                    )
+                )
+            if "unicode_set" in raw:
+                pattern = raw["unicode_set"]
+                if not isinstance(pattern, str):
+                    errors.append(_refuse("INVALID_KEY", f"{prefix}: unicode_set must be a string"))
+                else:
+                    try:
+                        unicode_set = icu.UnicodeSet(pattern)
+                        if unicode_set.isEmpty():
+                            errors.append(
+                                _refuse("INVALID_KEY", f"{prefix}: unicode_set must not be empty")
+                            )
+                    except icu.ICUError as error:
+                        errors.append(
+                            _refuse("INVALID_KEY", f"{prefix}: invalid ICU UnicodeSet: {error}")
+                        )
+            if "members" in raw:
+                members = raw["members"]
+                if not isinstance(members, list) or not members:
+                    errors.append(
+                        _refuse("INVALID_KEY", f"{prefix}: members must be a non-empty list")
+                    )
+                else:
+                    for member in members:
+                        if _canonical_member(member) is None:
+                            errors.append(
+                                _refuse(
+                                    "INVALID_KEY",
+                                    f"{prefix}: member {member!r} is not one code point or U+XXXX",
+                                )
+                            )
+
+    if "shape_refinements" in allowed:
+        refinements = data.get("shape_refinements")
+        if not isinstance(refinements, list) or not refinements:
+            errors.append(_refuse("INVALID_KEY", "shape_refinements must be a non-empty list"))
+            refinements = []
+        for index, raw in enumerate(refinements):
+            prefix = f"shape refinement {index}"
+            if not isinstance(raw, Mapping):
+                errors.append(_refuse("INVALID_KEY", f"{prefix} must be an object"))
+                continue
+            for key in sorted(set(raw) - _REFINEMENT_KEYS):
+                code = "REDEFINES_BASE_SYMBOL" if key in _BASE_PROPERTY_KEYS else "INVALID_KEY"
+                errors.append(_refuse(code, f"{prefix}: unknown field {key!r}"))
+            name = raw.get("name")
+            if not isinstance(name, str) or ":" not in name or not _ID_RE.fullmatch(name):
+                errors.append(
+                    _refuse("REDEFINES_BASE_SYMBOL", f"{prefix}: name must be namespaced with ':'")
+                )
+            elif name in names:
+                errors.append(_refuse("DUPLICATE_ID", f"duplicate extension id {name!r}"))
+            else:
+                names.add(name)
+            class_name = raw.get("class")
+            if not isinstance(class_name, str) or not class_name:
+                errors.append(_refuse("INVALID_KEY", f"{prefix}: class must be a non-empty string"))
+            symbol = raw.get("symbol")
+            if not isinstance(symbol, str) or not symbol:
+                errors.append(
+                    _refuse("INVALID_KEY", f"{prefix}: symbol must be a non-empty string")
+                )
+            elif symbol in _BASE_SHAPE_SYMBOLS:
+                errors.append(
+                    _refuse(
+                        "REDEFINES_BASE_SYMBOL",
+                        f"{prefix}: symbol {symbol!r} is reserved by a base scheme",
+                    )
+                )
+
+    witnesses = data.get("witnesses")
+    if not isinstance(witnesses, list):
+        errors.append(_refuse("INVALID_WITNESS", "witnesses must be a non-empty list"))
+        return errors
+    if not witnesses:
+        errors.append(_refuse("WITNESS_FAILED", "witnesses must be a non-empty list"))
+        return errors
+    witness_ids: set[str] = set()
+    for index, raw in enumerate(witnesses):
+        prefix = f"witness {index}"
+        if not isinstance(raw, Mapping):
+            errors.append(_refuse("INVALID_WITNESS", f"{prefix} must be an object"))
+            continue
+        for key in sorted(set(raw) - {"id", "text", "expect"}):
+            errors.append(_refuse("INVALID_WITNESS", f"{prefix}: unknown field {key!r}"))
+        witness_id = raw.get("id")
+        if not isinstance(witness_id, str) or not _ID_RE.fullmatch(witness_id):
+            errors.append(_refuse("INVALID_WITNESS", f"{prefix}: invalid id {witness_id!r}"))
+        elif witness_id in witness_ids:
+            errors.append(_refuse("DUPLICATE_ID", f"duplicate witness id {witness_id!r}"))
+        else:
+            witness_ids.add(witness_id)
+        if not isinstance(raw.get("text"), str):
+            errors.append(_refuse("INVALID_WITNESS", f"{prefix}: text must be a string"))
+        expect = raw.get("expect")
+        if not isinstance(expect, Mapping):
+            errors.append(_refuse("INVALID_WITNESS", f"{prefix}: expect must be an object"))
+            continue
+        expected_keys = set()
+        if kind in {"char-classes", "classlike"}:
+            expected_keys.add("codepoint_classes")
+        if kind in {"shape-refinement", "classlike"}:
+            expected_keys.add("shapes")
+        if set(expect) != expected_keys:
+            errors.append(
+                _refuse(
+                    "INVALID_WITNESS",
+                    f"{prefix}: expect fields must be {sorted(expected_keys)!r}",
+                )
+            )
+    return errors
+
+
+def _class_extensions(data: Mapping[str, object]) -> tuple[ClassExtension, ...]:
+    result = []
+    for raw in cast(list[Mapping[str, object]], data.get("classes", [])):
+        members = tuple(
+            cast(str, _canonical_member(item))
+            for item in cast(list[object], raw.get("members", []))
+        )
+        result.append(
+            ClassExtension(
+                cast(str, raw["name"]),
+                cast(str | None, raw.get("unicode_set")),
+                members,
+            )
+        )
+    return tuple(result)
+
+
+def _shape_refinements(data: Mapping[str, object]) -> tuple[ShapeRefinement, ...]:
+    result = []
+    for raw in cast(list[Mapping[str, object]], data.get("shape_refinements", [])):
+        class_name = cast(str, raw["class"])
+        canonical = _canonical_general_category(class_name)
+        result.append(
+            ShapeRefinement(
+                cast(str, raw["name"]),
+                canonical if canonical is not None else class_name,
+                cast(str, raw["symbol"]),
+            )
+        )
+    return tuple(result)
+
+
+def _classlike(
+    data: Mapping[str, object], digest: str
+) -> tuple[LocaleMaterial | None, list[MaterialRefusal]]:
+    classes = _class_extensions(data)
+    refinements = _shape_refinements(data)
+    known_classes = {item.name for item in classes}
+    errors = []
+    for refinement in refinements:
+        if (
+            refinement.class_name not in known_classes
+            and _canonical_general_category(refinement.class_name) is None
+        ):
+            errors.append(
+                _refuse(
+                    "WITNESS_FAILED",
+                    f"shape refinement {refinement.name!r} names unknown class "
+                    f"{refinement.class_name!r}",
+                )
+            )
+    errors.extend(_ambiguous_refinements(classes, refinements))
+    if errors:
+        return None, errors
+    provisional = LocaleMaterial(
+        cast(str, data["kind"]),
+        cast(str, data["locale"]),
+        digest,
+        "",
+        (),
+        MappingProxyType(dict(cast(Mapping[str, str], data["provenance"]))),
+        cast(str, data["id"]),
+        cast(str, data["status"]),
+        classes,
+        refinements,
+    )
+    object.__setattr__(provisional, "_seal", _material_seal(provisional))
+    from .classes import _extension_classes
+    from .shape import _shape_with_selections
+
+    refinement_by_name = {item.name: item for item in refinements}
+    exercised_classes: set[str] = set()
+    exercised_refinements: set[str] = set()
+    for index, witness in enumerate(cast(list[Mapping[str, object]], data["witnesses"])):
+        text = cast(str, witness["text"])
+        expect = cast(Mapping[str, object], witness["expect"])
+        if not text:
+            errors.append(_refuse("WITNESS_FAILED", f"witness {index}: text must not be empty"))
+        if "codepoint_classes" in expect:
+            expected = expect["codepoint_classes"]
+            if not isinstance(expected, list) or not expected:
+                errors.append(
+                    _refuse(
+                        "WITNESS_FAILED",
+                        f"witness {index}: codepoint_classes must be a non-empty list",
+                    )
+                )
+            else:
+                actual = [list(_extension_classes(char, (provisional,))) for char in text]
+                if expected != actual:
+                    errors.append(
+                        _refuse(
+                            "WITNESS_FAILED",
+                            f"witness {index}: codepoint_classes expected {expected!r}, "
+                            f"got {actual!r}",
+                        )
+                    )
+                else:
+                    exercised_classes.update(
+                        name
+                        for names in expected
+                        if isinstance(names, list)
+                        for name in names
+                        if isinstance(name, str) and name in known_classes
+                    )
+        if "shapes" in expect:
+            expected_shapes = expect["shapes"]
+            if not isinstance(expected_shapes, Mapping):
+                errors.append(
+                    _refuse("WITNESS_FAILED", f"witness {index}: shapes must be an object")
+                )
+            elif not expected_shapes:
+                errors.append(
+                    _refuse("WITNESS_FAILED", f"witness {index}: shapes must not be empty")
+                )
+            else:
+                for name, expected in expected_shapes.items():
+                    if name not in refinement_by_name:
+                        errors.append(
+                            _refuse(
+                                "WITNESS_FAILED",
+                                f"witness {index}: unknown shape refinement {name!r}",
+                            )
+                        )
+                        continue
+                    actual, selected_refinements = _shape_with_selections(
+                        text, "coarse@1", (provisional,)
+                    )
+                    if not isinstance(expected, str) or actual != expected:
+                        errors.append(
+                            _refuse(
+                                "WITNESS_FAILED",
+                                f"witness {index}: shape {name!r} expected "
+                                f"{expected!r}, got {actual!r}",
+                            )
+                        )
+                    elif name in selected_refinements:
+                        exercised_refinements.add(name)
+    for name in sorted(known_classes - exercised_classes):
+        errors.append(
+            _refuse(
+                "WITNESS_FAILED",
+                f"extension class {name!r} is not carried by any witnessed code point",
+            )
+        )
+    for name in sorted(refinement_by_name.keys() - exercised_refinements):
+        errors.append(
+            _refuse(
+                "WITNESS_FAILED",
+                f"shape refinement {name!r} is not selected by any witnessed output",
+            )
+        )
+    return (None if errors else provisional), errors
+
+
+_KIND_LOADERS = {
+    "rbnf-spellout": _rbnf_spellout,
+    "char-classes": _classlike,
+    "shape-refinement": _classlike,
+    "classlike": _classlike,
+}
 
 
 def load_locale_material(
@@ -854,15 +1368,20 @@ def load_locale_material(
     except invalid as error:
         raise MaterialLoadError([_refuse("INVALID_JSON", str(error))]) from error
     data = cast(Mapping[str, object], parsed)
-    errors = _envelope(data)
+    kind = data.get("kind")
+    errors = (
+        _classlike_envelope(data)
+        if isinstance(kind, str) and kind in _CLASSLIKE_KINDS
+        else _envelope(data)
+    )
     if errors:
         raise MaterialLoadError(errors)
     digest = "sha256:" + sha256(canonical).hexdigest()
-    loaded, errors = _KIND_LOADERS[cast(str, data["kind"])](data, digest)
+    loaded, errors = _KIND_LOADERS[cast(str, kind)](data, digest)
     if errors:
         raise MaterialLoadError(errors)
     if loaded is None:
         raise MaterialLoadError(
-            [_refuse("RBNF_SYNTAX", "rule material produced no validated reader")]
+            [_refuse("INVALID_KIND", "material produced no validated extension")]
         )
     return loaded

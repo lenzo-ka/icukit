@@ -57,8 +57,19 @@
   },
   "feature_digest": "sha256:91a57e4336909a623a7c4cc8fb6990dc1378ef74262299d0eb908f38ad2bf597",
   "witnesses": {
-    "method": "Mechanically synthesized from each rule's predicates using the authored vocabulary in tools/break_rule_witnesses.py; the complete ordered rule list and public loader verified every pinned match and no-match witness.",
-    "corpus_text_included": false
+    "generation_policy": "Synthesized from each rule's predicates, which include lexical values mined from the corpus (e.g. `lower` token values); no corpus sentence or row was read or copied.",
+    "verification": "The complete ordered rule list and public loader verified every pinned match witness. Each no_match is the same construction with one predicate falsified and was verified to be decided by no rule of the same id.",
+    "dev_90_exact_text_check": {
+      "mode": "sweep",
+      "detokenizers": [
+        "glue2",
+        "space"
+      ],
+      "sentences_checked": 882200,
+      "witness_records_checked": 400,
+      "unique_witness_texts_checked": 307,
+      "equal_texts": 0
+    }
   },
   "measurements": {
     "meaning": "Agreement with the corpus splitter on synthetic glue2 concatenations; these are not measurements of running-text accuracy.",
@@ -113,5 +124,9 @@
     "class": "shippable-share-alike",
     "notice": "NOTICE",
     "legal_code": "LICENSE"
+  },
+  "rule_fidelity": {
+    "canonicalization": "UTF-8 compact JSON of the ordered list of (id, effect, lookahead, when, receipt)",
+    "source_model_digest": "sha256:d39c21aec7191fb4d3d5930c59c1320cd97cb698c5730230dbffdb63d4f18bf5"
   }
 }

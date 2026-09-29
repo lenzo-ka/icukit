@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Build authored witnesses for the shipped English TN decision list.
+"""Build deterministic predicate-derived witnesses for the English TN rules.
 
-The search space below is deliberately made only from short, authored lexical
-items and mechanical representatives of the predicates in the measured rules.
-It never reads corpus rows or corpus text.  A match witness is accepted only
-when ICU proposes the pinned candidate and the complete ordered rule set reaches
-that rule first.  The public loader performs the same check again on the output.
+The search never reads corpus rows or corpus text. It uses short template words
+and lexical values present in the rules. A match witness must reach its rule in
+the complete ordered list. Its near miss uses the same text construction with
+one predicate falsified, and the target rule must decide no candidate anywhere.
+The public loader performs the same checks again on the output.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 from copy import deepcopy
 from functools import cache
 from pathlib import Path
@@ -22,14 +24,19 @@ from icukit.breaker import break_sentence_spans
 from icukit.sentence_override import (
     _compile_rule,
     _CompiledBreakRule,
+    _FeatureNotYet,
     _match_observed_rule,
+    _observed_feature_value,
+    _predicate_matches,
     _TokenFeatureCache,
 )
 
 DEFAULT_MODEL = Path("/Users/lenzo/covgap-data/breaks/models/m1c/sweep/b-glue2-k1-r200.json")
 DEFAULT_OUTPUT = Path("icukit/data/break_rules/en/sentence-tn.json")
+DEFAULT_RECEIPT = Path("icukit/data/break_rules/en/RECEIPT.json")
 MINER_DIGEST = "ab44dc37951ebbbad6f38798af3a677081ec439e46d4246573f3f3829ecbc24c"
-NO_MATCH = "Calm words remain together"
+FIDELITY_FIELDS = ("id", "effect", "lookahead", "when", "receipt")
+COMPILE_NO_MATCH = "No candidate here"
 
 # A few predicates depend on ICU splitting punctuation into multiple tokens.
 # These authored templates make that token geometry explicit; they are not
@@ -266,7 +273,7 @@ def _compile(rules: list[dict[str, Any]]) -> tuple[_CompiledBreakRule, ...]:
     compiled: list[_CompiledBreakRule] = []
     for raw in rules:
         compilable = deepcopy(raw)
-        compilable["witnesses"] = {"match": ["Authored."], "no_match": [NO_MATCH]}
+        compilable["witnesses"] = {"match": ["Authored."], "no_match": [COMPILE_NO_MATCH]}
         rule, errors = _compile_rule(compilable)
         if errors or rule is None:
             raise RuntimeError(f"cannot compile {raw.get('id')}: {errors}")
@@ -277,6 +284,89 @@ def _compile(rules: list[dict[str, Any]]) -> tuple[_CompiledBreakRule, ...]:
 def _candidate_text(prefix: str, left: str, right: str, separator: str = " ") -> str:
     start = f"{prefix} " if prefix else ""
     return f"{start}{left}{separator}{right} continues"
+
+
+def canonical_rule_digest(rules: list[dict[str, Any]]) -> str:
+    """Digest the ordered semantic/count fields shared by source and artifact."""
+    fields = []
+    for rule in rules:
+        values = [rule[field] for field in FIDELITY_FIELDS[:-1]]
+        values.append({key: rule["receipt"][key] for key in ("n", "n_break")})
+        fields.append(values)
+    canonical = json.dumps(fields, ensure_ascii=False, separators=(",", ":")).encode()
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+
+def _mutation_variants(text: str, offset: int):
+    replacements = ("x", "A", "1", "word", "authors", "ZZZZZZZZZZZZ", '"', "&")
+    spans = [(match.start(), match.end()) for match in re.finditer(r"[^\s]+", text)]
+    for start, end in spans:
+        if start < offset < end:
+            continue
+        for replacement in replacements:
+            if text[start:end] == replacement:
+                continue
+            delta = len(replacement) - (end - start)
+            yield text[:start] + replacement + text[end:], offset + (delta if end <= offset else 0)
+    for index, original in enumerate(text):
+        for replacement in ("a", "A", "1", "x", " ", "\n", ".", ",", '"'):
+            if replacement == original:
+                continue
+            yield text[:index] + replacement + text[index + 1 :], offset
+    for index in range(len(text)):
+        if index == offset - 1:
+            continue
+        yield text[:index] + text[index + 1 :], offset - int(index < offset)
+
+
+def _predicate_truths(rule: _CompiledBreakRule, text: str, offset: int) -> tuple[bool, ...] | None:
+    toks = tokens(text, "en_US")
+    if offset not in {span["end"] for span in break_sentence_spans(text, "en_US")}:
+        return None
+    if any(token["start"] < offset < token["end"] for token in toks):
+        return None
+    cache = _TokenFeatureCache(True)
+    truths = []
+    for predicate in rule.when:
+        try:
+            value, _, _ = _observed_feature_value(
+                predicate, rule, text, offset, toks, (), "en_US", (), True, cache
+            )
+        except _FeatureNotYet:
+            return None
+        truths.append(_predicate_matches(value, predicate))
+    return tuple(truths)
+
+
+def _target_matches_anywhere(rule: _CompiledBreakRule, text: str) -> bool:
+    toks = tokens(text, "en_US")
+    for span in break_sentence_spans(text, "en_US"):
+        offset = span["end"]
+        if any(token["start"] < offset < token["end"] for token in toks):
+            continue
+        matched, _, _ = _match_observed_rule(
+            rule, text, offset, toks, (), "en_US", (), True, _TokenFeatureCache(True)
+        )
+        if matched:
+            return True
+    return False
+
+
+def _near_miss(rule: _CompiledBreakRule, match: dict[str, object]) -> dict[str, object] | None:
+    text = str(match["text"])
+    offset = int(match["offset"])
+    seen: set[tuple[str, int]] = set()
+    for mutated, mutated_offset in _mutation_variants(text, offset):
+        key = (mutated, mutated_offset)
+        if key in seen:
+            continue
+        seen.add(key)
+        truths = _predicate_truths(rule, mutated, mutated_offset)
+        if truths is None or truths.count(False) != 1:
+            continue
+        if not _target_matches_anywhere(rule, mutated):
+            return {"text": mutated, "offset": mutated_offset}
+    return None
 
 
 def _find_witnesses(rules: list[dict[str, Any]]) -> dict[str, dict[str, object]]:
@@ -347,13 +437,20 @@ def _find_witnesses(rules: list[dict[str, Any]]) -> dict[str, dict[str, object]]
     return found
 
 
-def build(model_path: Path, output_path: Path) -> None:
+def build(model_path: Path, output_path: Path, receipt_path: Path = DEFAULT_RECEIPT) -> None:
     measured = json.loads(model_path.read_text(encoding="utf-8"))
     rules = deepcopy(measured["rules"])
     witnesses = _find_witnesses(rules)
     missing = [str(rule["id"]) for rule in rules if rule["id"] not in witnesses]
     if missing:
         raise SystemExit("shadowed or unsynthesized rules: " + ", ".join(missing))
+    compiled = {rule.id: rule for rule in _compile(rules)}
+    near_misses = {
+        rule_id: _near_miss(compiled[rule_id], witness) for rule_id, witness in witnesses.items()
+    }
+    missing_near_misses = [rule_id for rule_id, witness in near_misses.items() if witness is None]
+    if missing_near_misses:
+        raise SystemExit("near misses not synthesized: " + ", ".join(missing_near_misses))
 
     shipped_rules = []
     for rule in rules:
@@ -369,7 +466,7 @@ def build(model_path: Path, output_path: Path) -> None:
                 },
                 "witnesses": {
                     "match": [witnesses[str(rule["id"])]],
-                    "no_match": [NO_MATCH],
+                    "no_match": [near_misses[str(rule["id"])]],
                 },
             }
         )
@@ -396,14 +493,25 @@ def build(model_path: Path, output_path: Path) -> None:
     output_path.write_text(
         json.dumps(artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["rule_fidelity"] = {
+        "canonicalization": (
+            "UTF-8 compact JSON of the ordered list of (id, effect, lookahead, when, receipt)"
+        ),
+        "source_model_digest": canonical_rule_digest(rules),
+    }
+    receipt_path.write_text(
+        json.dumps(receipt, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--receipt", type=Path, default=DEFAULT_RECEIPT)
     args = parser.parse_args()
-    build(args.model, args.output)
+    build(args.model, args.output, args.receipt)
 
 
 if __name__ == "__main__":

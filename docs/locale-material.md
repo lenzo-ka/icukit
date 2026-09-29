@@ -1,11 +1,11 @@
 # Locale material
 
-Locale material is data you supply at runtime for a locale where ICU lacks a capability. This page is its specification: format `icukit-locale-material` version 1, versioned with icukit. icukit loads material only when you pass it, refuses it unless every witness it carries passes, adds its readers beside ICU's without replacing them, ships none, and labels it `user` in every availability report. Version 1 has one kind, `rbnf-spellout`: ICU rule-based number format rule text, exactly as ICU reads it. This format is a draft and not yet stable.
+Locale material is data you supply at runtime for a locale where ICU lacks a capability. This page is its specification: format `icukit-locale-material` version 1, versioned with icukit. icukit loads material only when you pass it, refuses it unless every witness it carries passes, adds its readers and class features beside ICU's without replacing them, ships none, and labels reader material `user` in every availability report. Version 1 has `rbnf-spellout`, `char-classes`, and `shape-refinement` kinds. This format is a draft and not yet stable.
 
 This page specifies the whole contract. The loader, the material reader, `material=` on
 the reader-set builders, and `user` rows in availability reports are provided now.
 
-## Version 1 envelope
+## RBNF version 1 envelope
 
 A file is one UTF-8 JSON object. Its required keys are `schema_version`, `kind`,
 `locale`, `rules`, `provenance`, and `witnesses`; `near_misses` is optional, and no
@@ -253,3 +253,125 @@ the file again there (a process forked after loading keeps it). A mapping passed
 read as JSON (every value the loader keeps is a plain JSON type), within limits of 64
 levels of nesting and a million values. icukit does not defend against callers that
 call its private functions or overwrite a field of the frozen dataclass.
+
+## Experimental character material
+
+The `char-classes` and `shape-refinement` kinds are an add-only staging path. They
+have the common required keys `schema_version`, `kind`, `id`, `status`, `locale`,
+`provenance`, and `witnesses`. `schema_version` is `1`; `status` must be exactly
+`experimental`; `id` and every extension name are caller-owned identifiers.
+Extension names are namespaced with `:`. The identifier namespaces are precise:
+material ids are one namespace across a runtime composition; class names and
+refinement names share a second extension-name namespace across that composition;
+witness ids are a third namespace local to one material file. Thus a material id,
+class name, and witness id may have the same spelling. Duplicate material ids,
+duplicate extension names (including a class/refinement collision), and duplicate
+witness ids within one file are refused as `DUPLICATE_ID`; witness ids in different
+files are unrelated. `locale` and `provenance` follow the RBNF rules above. A caller
+cannot claim that material is promoted: promotion means a new built-in scheme
+version and checked-in tests.
+
+`char-classes` additionally has a non-empty `classes` array. Each entry is
+`{"name": "namespace:name", "unicode_set": "<ICU UnicodeSet pattern>"}` or uses
+`"members"` instead of `"unicode_set"`. A members array contains literal one-code-
+point strings or `U+XXXX` names. Exactly one selector is required. A match adds the
+name to `ClassPoint.extension_classes`; it never changes Word_Break,
+Sentence_Break, General_Category, or Script. In particular, material cannot invent
+a Script value such as `Qaaa`.
+
+`shape-refinement` additionally has a non-empty `shape_refinements` array. An entry
+is `{"name": "namespace:run", "class": "Uppercase_Letter", "symbol": "<upper>"}`.
+`class` is an ICU General_Category long name or alias. A refinement targeting an
+extension class is expressed in the compatibility composite described below. The
+new symbol takes precedence in the extended scheme, and adjacent matches collapse
+as a run. A refinement that selects a mark takes precedence over mark absorption.
+Only a letter or decimal-digit base run absorbs following unrefined marks; refining
+punctuation or another base category does not make it absorb marks. Base symbols
+(`A`, `N`, `X`, `x`, `a`, `d`, `¤`, and `<Lu>`) are reserved.
+
+Refinement selection must be unambiguous. Loading refuses
+`AMBIGUOUS_REFINEMENT` if two refinements can select the same code point: their
+selectors name the same base General_Category, an extension class intersects a base
+General_Category, or two extension classes intersect. Composition applies the same
+check across its materials, so lexical name order never silently chooses a winner.
+
+Character witnesses contain exactly `id`, `text`, and `expect`, and `text` must be
+non-empty. A `char-classes`
+witness has `expect.codepoint_classes`, one ordered list of extension names per code
+point. A `shape-refinement` witness has `expect.shapes`, mapping refinement ids to
+the expected complete `coarse@1` output. Across the witnesses, every declared class
+must appear on at least one witnessed code point and every declared refinement must
+actually select at least one witnessed code point (or collapsed run), with its symbol
+emitted there in the checked output. Coverage is attributed by the refinement selected
+at each position, never by searching for its symbol as a substring. Empty expectations,
+unexercised declarations, and output mismatches refuse the complete material as
+`WITNESS_FAILED`.
+
+Pass loaded material explicitly to `char_classes`, `class_window`, `shape`, or
+`shape_scheme`. Empty material preserves the base result exactly. A class window's
+identity and a shape scheme's digest include the sorted material digests.
+`shape_scheme` reports each extension id and full digest. The extended name is a
+human-readable label for the base scheme plus the canonically ordered material
+composition; each material contributes `+<id>@<digest12>`. A material named
+`qaa/tengwar` with digest beginning `295b930b1d8c` therefore labels the extended scheme
+`coarse@1+qaa/tengwar@295b930b1d8c` (and likewise for `cased@1`). The reported name
+may be passed back to `shape` or `shape_scheme`; its ids and 12-hex prefixes are checked
+against the supplied material only as a guard against an obvious mismatch. They are not
+proof of identity, because distinct full digests can share a prefix. The identities are
+the full digests in `extensions` and the shape scheme's own full digest. All other
+material identity comparisons, including class-window identities, material-backed
+detector keys, and provenance-bearing material records, likewise use the full material
+digest; none uses the short extended name. Absent material or a prefix mismatch raises
+`ValueError`.
+
+```json
+{
+  "schema_version": 1,
+  "kind": "char-classes",
+  "id": "example/vowels",
+  "status": "experimental",
+  "locale": "qaa",
+  "classes": [{"name": "example:vowel", "members": ["a", "U+0065"]}],
+  "provenance": {"source": "application data"},
+  "witnesses": [
+    {
+      "id": "vowels-w1",
+      "text": "axe",
+      "expect": {"codepoint_classes": [["example:vowel"], [], ["example:vowel"]]}
+    }
+  ]
+}
+```
+
+```json
+{
+  "schema_version": 1,
+  "kind": "shape-refinement",
+  "id": "example/uppercase",
+  "status": "experimental",
+  "locale": "qaa",
+  "shape_refinements": [
+    {"name": "example:uppercase-run", "class": "Lu", "symbol": "<upper>"}
+  ],
+  "provenance": {"source": "application data"},
+  "witnesses": [
+    {
+      "id": "uppercase-w1",
+      "text": "AA",
+      "expect": {"shapes": {"example:uppercase-run": "<upper>"}}
+    }
+  ]
+}
+```
+
+The adjudicated PUA example predates the split kinds and must retain its canonical
+bytes. The loader therefore also accepts `kind: "classlike"` as a compatibility
+composite containing both `classes` and `shape_refinements`. This is the only way a
+refinement can target an extension class in version 1. The complete fixture is
+`tests/data/material/qaa-classlike.json`; its canonical-JSON digest is
+`sha256:295b930b1d8c0215769f070a219065a4ce1671a2edb629fa4250cbc106dc4f18`.
+
+The character-material refusal codes added here are `REDEFINES_BASE_SYMBOL`,
+`DUPLICATE_ID`, `WITNESS_FAILED`, `CLAIMS_PROMOTED`, and
+`AMBIGUOUS_REFINEMENT`. As with RBNF material, identity is the SHA-256 digest of
+canonical JSON, not the source file bytes.

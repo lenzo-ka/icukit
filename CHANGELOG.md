@@ -17,21 +17,43 @@
   measurement receipts, and loads only when its ICU, Unicode, and empty-
   inventory token-profile identity matches. Its frozen test-pool F1 of
   0.978025 measures agreement with the corpus splitter on synthetic `glue2`
-  concatenations, not running-text accuracy.
-- Experimental whole-text and incremental sentence-break overrides can retain,
-  suppress, or leave open ICU sentence candidates with caller-authored flat
-  rules, protected spans, exception inventories, per-candidate attribution, and
-  lattice output. Incremental breakers expose prefix-stable `feed`, `pending`,
-  `flush`, and `close` operations, bounded token lookahead, feature caching, and
-  optional protected-span watermarks while sharing the whole-text decision core.
-  Streaming refuses exception inventories with collation-variant word- or
-  sentence-level rules because primary-ignorable code points make the surface
-  extent unbounded; those inventories remain supported by the whole-text API,
-  and exact variants remain supported incrementally.
+  concatenations, not running-text accuracy. The package license expression
+  becomes `BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0`.
+- `SentenceOverride.stream()` returns an experimental `IncrementalSentenceBreaker`
+  with prefix-stable `feed`, `pending`, `flush`, and `close`: for any chunking,
+  the returned decisions equal the whole-text `decide()`, and a returned decision
+  never changes. It shares the whole-text decision core, decides a candidate as
+  soon as everything its deciding rule reads is final, computes each token's
+  features once, and supports protected-span watermarks. Streaming refuses
+  exception inventories with collation-variant rules, because primary-ignorable
+  code points make their extent unbounded; `decide()` still accepts them.
+- A generated provenance manifest now records the declared source, license, shipping
+  class, notice, and byte hash of every data file under `icukit/data`. A license guard
+  rejects missing entries and entries changed since last recorded, rejects unknown
+  class labels, and accepts only UTF-8 text or manifest-declared gzip whose payload is
+  UTF-8 text. It scans that text and decoded JSON/XML for known internal corpus names,
+  rejecting a match unless the manifest records and classifies the reference, and
+  checks that required notices ship. Each notice file is
+  hash-pinned and labeled with the license it carries. Archive members under
+  `icukit/data` are hash-verified against the manifest and compared between wheel and
+  sdist. The package license expression
+  now includes the Unicode License v3 term that covers its bundled CLDR and UCD
+  snapshots.
+- Experimental whole-text sentence-break overrides can retain, suppress, or
+  leave open ICU sentence candidates with caller-authored flat rules, protected
+  spans, exception inventories, per-candidate attribution, and lattice output.
   Rule artifacts declare and verify their ICU, Unicode, and explicitly
   versioned tokenizer-profile identity and run candidate- and decision-aware
   authored witnesses when loaded. The default remains `base="none"`, so
   existing ICU sentence output is unchanged.
+- Experimental `char-classes` and `shape-refinement` locale-material kinds add
+  namespaced character classes and extended shape symbols at runtime. They are
+  witness-checked, canonically digested, explicitly passed with `material=`, and
+  strictly additive: ICU's Word_Break, Sentence_Break, General_Category, Script,
+  and the unextended `coarse@1` and `cased@1` behavior remain unchanged. Every
+  declaration needs a nonempty exercising witness, overlapping refinements are
+  refused, and an extended scheme name can be reused only with its matching
+  material composition.
 - ICU-backed character-class features: `char_classes` and fixed-width
   `class_window` contexts expose reflective Word_Break, Sentence_Break,
   General_Category, and Script values with stable identities and explicit edge
@@ -40,17 +62,6 @@
   whitespace runs, exception-inventory merges, and the feature set used by the
   forthcoming sentence-break override. These are additive APIs; no existing
   segmentation or default behavior changes.
-- A generated provenance manifest now records the declared source, license, shipping
-  class, notice, and byte hash of every data file under `icukit/data`. A license guard
-  rejects missing entries and entries changed since last recorded, rejects unknown
-  class labels, rejects data under `icukit/data` whose declared provenance names a
-  known internal corpus except a hash-pinned `shippable-share-alike` artifact with
-  its matching CC BY-SA notice, and checks that required notices ship. Each notice file is
-  hash-pinned and labeled with the license it carries. Archive members under
-  `icukit/data` are hash-verified against the manifest and compared between wheel and
-  sdist. The package license expression
-  now includes the Unicode License v3 term that covers its bundled CLDR and UCD
-  snapshots.
 - `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
   default selection of generated and flexible reader specifications (default locales,
   currencies, and units, plus guarded families when requested) with its ICU,

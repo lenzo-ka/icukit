@@ -19,7 +19,7 @@
     },
     "icukit/data/break_rules/en/NOTICE": {
       "spdx": "CC-BY-SA-4.0",
-      "sha256": "ac7c22cb92eececadd54948e635be1921ee694ff22db684a804c0aa8418fb3c9"
+      "sha256": "c0d1b835bca0dae886c2b76ce4aabae3af934902b14b6619544edb1676e8ddf6"
     }
   },
   "files": [
@@ -53,25 +53,30 @@
       "source": "Creative Commons Attribution-ShareAlike 4.0 legal code",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE"
     },
     {
       "path": "break_rules/en/NOTICE",
-      "sha256": "ac7c22cb92eececadd54948e635be1921ee694ff22db684a804c0aa8418fb3c9",
+      "sha256": "c0d1b835bca0dae886c2b76ce4aabae3af934902b14b6619544edb1676e8ddf6",
       "source": "attribution for google/tn-en_with_types and Wikipedia contributors",
-      "spdx": "CC-BY-SA-4.0",
-      "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
-    },
-    {
-      "path": "break_rules/en/RECEIPT.json",
-      "sha256": "5ecfd108646e56d154e9d0489a1854ee9b509c33f5e6425069dce71425433bc4",
-      "source": "measurement receipt for google/tn-en_with_types rule and model derivation",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
       "notice": "icukit/data/break_rules/en/NOTICE",
       "corpus_reference": {
-        "kind": "derived"
+        "kind": "mention",
+        "note": "the notice names the source corpus to provide attribution"
+      }
+    },
+    {
+      "path": "break_rules/en/RECEIPT.json",
+      "sha256": "b30e1ebb516732ae15c12008adca20d59183df20ac7762f29016061a1c3cfe7d",
+      "source": "measurement receipt for google/tn-en_with_types rule derivation",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the receipt records measurements for the derived rule artifact"
       }
     },
     {
@@ -83,16 +88,21 @@
       "notice": "icukit/data/break_rules/en/NOTICE",
       "encoding": "gzip",
       "corpus_reference": {
-        "kind": "derived"
+        "kind": "derived",
+        "note": "the learned en-tn-cart@1 model artifact is derived from corpus sentence-boundary labels"
       }
     },
     {
       "path": "break_rules/en/sentence-tn.json",
-      "sha256": "c46ea4839965ab8844e272d72b7840e9574e59cd9c801eecc8d70ff8aa186874",
+      "sha256": "77f7eb05f0feeac2471c4ea8fd7c91d0b285ad90ec0114fef82f7c9311115de6",
       "source": "google/tn-en_with_types sentence-boundary labels",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
-      "notice": "icukit/data/break_rules/en/LICENSE"
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the learned en-tn@1 rule artifact is derived from corpus sentence-boundary labels"
+      }
     },
     {
       "path": "cldr_symbols/LICENSE",
@@ -1469,7 +1479,11 @@
       "spdx": "BSD-2-Clause",
       "class": "shippable",
       "notice": null,
-      "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question"
+      "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question",
+      "corpus_reference": {
+        "kind": "mention",
+        "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question"
+      }
     }
   ]
 }

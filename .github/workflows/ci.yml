@@ -5,7 +5,13 @@ on:
     branches: [main, master]
   pull_request:
     branches: [main, master]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
+
+# A new push to a pull request cancels its older run; main is never cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
@@ -31,11 +37,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # Pull requests run a slim pair (newest Python on Linux, oldest on macOS);
+      # main, manual runs and pull requests labeled `full-ci` run the full matrix.
+      # 3.14 is intentionally omitted: PyICU segfaults there (see commit 3f5b034).
+      # Restore it here and re-add its classifier in pyproject.toml once fixed.
       matrix:
-        os: [ubuntu-24.04, macos-14]
-        # 3.14 is intentionally omitted: PyICU segfaults there (see commit 3f5b034).
-        # Restore it here and re-add its classifier in pyproject.toml once fixed.
-        python-version: ["3.11", "3.12", "3.13"]
+        include: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')) && '[{"os":"ubuntu-24.04","python-version":"3.11"},{"os":"ubuntu-24.04","python-version":"3.12"},{"os":"ubuntu-24.04","python-version":"3.13"},{"os":"macos-14","python-version":"3.11"},{"os":"macos-14","python-version":"3.12"},{"os":"macos-14","python-version":"3.13"}]' || '[{"os":"ubuntu-24.04","python-version":"3.13"},{"os":"macos-14","python-version":"3.11"}]') }}
 
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -60,6 +67,8 @@ jobs:
     # The normal `test` job covers the released tiergraph version users receive.
     # This separate integration is an upstream canary: it installs tiergraph from
     # the sibling repository's main branch to detect compatibility breaks early.
+    # It runs on main, manual runs and pull requests labeled `full-ci`.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
