@@ -97,6 +97,7 @@ from .breaker import (
     default_rules,
 )
 from .calendar import get_calendar_info, is_valid_calendar, list_calendars, list_calendars_info
+from .classes import ClassPoint, ClassWindow, Prop, char_classes, class_window
 from .collator import (
     STRENGTH_IDENTICAL,
     STRENGTH_PRIMARY,
@@ -217,6 +218,7 @@ from .errors import (
     MeasureError,
     MessageError,
     NormalizationError,
+    OverlappingProtectedSpans,
     ParseError,
     PatternError,
     PluralError,
@@ -399,6 +401,7 @@ from .script import (
 )
 from .search import StringSearcher, search_all, search_count, search_first, search_replace
 from .serialize import detection_to_dict, detections_to_json
+from .shape import ShapeSchemeInfo, shape, shape_scheme
 from .spoof import (
     CONFUSABLE_MIXED_SCRIPT,
     CONFUSABLE_NONE,
@@ -418,6 +421,7 @@ from .timezone import (
     list_timezones,
     list_timezones_info,
 )
+from .tokens import ProtectedSpan, Token, token_features, tokens
 from .transliterator import (
     CommonTransliterators,
     Transliterator,
@@ -648,6 +652,20 @@ __all__ = [
     "BREAK_WORD",
     "BREAK_LINE",
     "BREAK_CHARACTER",
+    # Character classes, shapes, and sentence-break tokens
+    "Prop",
+    "ClassPoint",
+    "ClassWindow",
+    "char_classes",
+    "class_window",
+    "ShapeSchemeInfo",
+    "shape",
+    "shape_scheme",
+    "ProtectedSpan",
+    "Token",
+    "tokens",
+    "token_features",
+    "OverlappingProtectedSpans",
     # Bidi
     "get_base_direction",
     "get_bidi_info",

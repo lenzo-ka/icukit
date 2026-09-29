@@ -4,6 +4,14 @@
 
 ### Added
 
+- ICU-backed character-class features: `char_classes` and fixed-width
+  `class_window` contexts expose reflective Word_Break, Sentence_Break,
+  General_Category, and Script values with stable identities and explicit edge
+  padding; `shape` adds the versioned `coarse@1` and `cased@1` schemes; and
+  `tokens` plus `token_features` provide word units, protected-span merges,
+  whitespace runs, exception-inventory merges, and the feature set used by the
+  forthcoming sentence-break override. These are additive APIs; no existing
+  segmentation or default behavior changes.
 - Every formal name alias Unicode defines, of all five types in `NameAliases.txt`:
   `correction`, `control`, `alternate`, `figment`, and `abbreviation`. ICU carries the
   corrections alone, so `BEL`, `ALERT`, `LINE FEED`, `NBSP`, `BYTE ORDER MARK`, and `ZWJ`
