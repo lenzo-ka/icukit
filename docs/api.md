@@ -199,6 +199,19 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`BREAK_WORD`](#icukitbreaker) — constant, `icukit.breaker`
 - [`BREAK_LINE`](#icukitbreaker) — constant, `icukit.breaker`
 - [`BREAK_CHARACTER`](#icukitbreaker) — constant, `icukit.breaker`
+- [`Prop`](#icukitclasses) — alias, `icukit.classes`
+- [`ClassPoint`](#icukitclasses) — class, `icukit.classes`
+- [`ClassWindow`](#icukitclasses) — class, `icukit.classes`
+- [`char_classes`](#icukitclasses) — function, `icukit.classes`
+- [`class_window`](#icukitclasses) — function, `icukit.classes`
+- [`ShapeSchemeInfo`](#icukitshape) — class, `icukit.shape`
+- [`shape`](#icukitshape) — function, `icukit.shape`
+- [`shape_scheme`](#icukitshape) — function, `icukit.shape`
+- [`ProtectedSpan`](#icukittokens) — class, `icukit.tokens`
+- [`Token`](#icukittokens) — class, `icukit.tokens`
+- [`tokens`](#icukittokens) — function, `icukit.tokens`
+- [`token_features`](#icukittokens) — function, `icukit.tokens`
+- [`OverlappingProtectedSpans`](#icukiterrors) — class, `icukit.errors`
 - [`get_base_direction`](#icukitbidi) — function, `icukit.bidi`
 - [`get_bidi_info`](#icukitbidi) — function, `icukit.bidi`
 - [`strip_bidi_controls`](#icukitbidi) — function, `icukit.bidi`
@@ -1450,6 +1463,81 @@ Example:
     >>> greg = next(c for c in cals if c['type'] == 'gregorian')
     >>> 'Western' in greg['description']
     True
+
+## icukit.classes
+
+ICU character classes and fixed-width context windows.
+
+The four base class alphabets are discovered from the linked ICU at import
+time.  Class and shape extensions are intentionally deferred to the later
+locale-material integration; this module has no material parameter yet.
+
+Example:
+    >>> char_classes("Mr. 5", "sentence_break")
+    ['Upper', 'Lower', 'ATerm', 'Sp', 'Numeric']
+    >>> class_window("Mr. Smith", 3, before=3, after=2).before[-1].text
+    '.'
+
+### Constants and type aliases
+
+#### `Prop` (type alias)
+
+`Literal['word_break', 'sentence_break', 'general_category', 'script']`
+
+A supported ICU character-property alphabet.
+
+### class `ClassPoint`
+
+The four ICU classes of one code point, with code-point offsets.
+
+#### `ClassPoint(text: 'str', start: 'int', end: 'int', word_break: 'str', sentence_break: 'str', general_category: 'str', script: 'str', extension_classes: 'tuple[str, ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `ClassWindow`
+
+A fixed-width character-class window around a code-point boundary.
+
+``before`` and ``after`` always contain their requested number of entries.
+Missing entries use ``<BOS>`` or ``<EOS>`` at a known text edge and
+``<PAD>`` when the supplied text is only a cutout. ``identity`` describes
+the long-name feature definition and therefore does not change with
+``names="short"``.
+
+#### `ClassWindow(offset: 'int', before: 'tuple[ClassPoint, ...]', after: 'tuple[ClassPoint, ...]', identity: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `char_classes(text: 'str', prop: 'Prop' = 'general_category', /) -> 'list[str]'`
+
+Return one canonical long ICU property value name per code point.
+
+ICU aliases for the property name are accepted and resolved within the
+property, so a short alias cannot collide with another property alphabet.
+
+Example:
+    >>> char_classes("Mr. 5", "sentence_break")
+    ['Upper', 'Lower', 'ATerm', 'Sp', 'Numeric']
+    >>> char_classes("A", "gc")
+    ['Uppercase_Letter']
+
+### `class_window(text: 'str', offset: 'int', /, *, before: 'int' = 3, after: 'int' = 3, text_starts: 'bool' = True, text_ends: 'bool' = True, names: "Literal['long', 'short']" = 'long') -> 'ClassWindow'`
+
+Return ICU classes immediately before and after ``offset``.
+
+Args:
+    text: Source text for the window.
+    offset: Code-point boundary in ``text``.
+    before: Number of entries before the boundary.
+    after: Number of entries after the boundary.
+    text_starts: Whether index zero is the start of the complete text.
+    text_ends: Whether ``len(text)`` is the end of the complete text.
+    names: Return ICU long or short value names.
+
+Example:
+    >>> point = class_window("Mr. Smith", 3, before=3, after=2).before[-1]
+    >>> (point.text, point.word_break, point.sentence_break)
+    ('.', 'MidNumLet', 'ATerm')
 
 ## icukit.cldr_symbols
 
@@ -6764,6 +6852,45 @@ Convert one typed detection to an ordered, plain JSON-native dictionary.
 
 Convert typed detections to a list containing only JSON-native values.
 
+## icukit.shape
+
+Versioned ICU word-shape schemes.
+
+The built-in schemes are deliberately fixed and identified by a digest of
+their canonical definition and the linked ICU/Unicode versions. Shape
+extensions arrive later with locale-material support.
+
+Example:
+    >>> shape("U.S.")
+    'A.A.'
+    >>> shape("U.S.", "cased@1")
+    'X.X.'
+
+### class `ShapeSchemeInfo`
+
+Stable metadata identifying a shape scheme and its Unicode runtime.
+
+### `shape(text: 'str', scheme: 'str' = 'coarse@1', /) -> 'str'`
+
+Return the versioned ICU shape of ``text``.
+
+``coarse@1`` collapses letter and digit runs; ``cased@1`` distinguishes
+letter case and caps each same-symbol run at four. Combining marks directly
+following a letter or digit run are absorbed.
+
+Example:
+    >>> shape("Mr. Smith")
+    'A. A'
+    >>> shape("Mr. Smith", "cased@1")
+    'Xx. Xxxxx'
+
+### `shape_scheme(scheme: 'str' = 'coarse@1', /) -> 'ShapeSchemeInfo'`
+
+Describe a built-in shape scheme and return its stable identity digest.
+
+The digest covers canonical JSON containing the scheme definition plus the
+linked ICU and Unicode versions.
+
 ## icukit.spoof
 
 Confusable and homoglyph detection using ICU's SpoofChecker.
@@ -7069,6 +7196,52 @@ Example:
     >>> nyc = next(t for t in tzs if t['id'] == 'America/New_York')
     >>> nyc['uses_dst']
     True
+
+## icukit.tokens
+
+ICU word tokens, caller-protected units, and token features.
+
+Token-scoped protected spans can join ICU word segments and intervening
+whitespace into one unit. Hint spans are validated but intentionally do not
+change tokenization; the sentence-break rule layer will consume them later.
+Locale-material extensions are likewise deferred to that later integration.
+
+Example:
+    >>> [(token["text"], token["run"]) for token in tokens("the U.S. Then", "en_US")]
+    [('the', 0), ('U.S', 1), ('.', 1), ('Then', 2)]
+
+### class `ProtectedSpan`
+
+A caller-owned code-point span used as a token unit or a later hint.
+
+### class `Token`
+
+A non-whitespace ICU word segment or protected token unit.
+
+``protected`` is the lexicographically first type on a protected token;
+``protected_types`` is the sorted tuple of every type on equal-extent
+protected spans.
+
+### `token_features(toks: 'Sequence[Token]', i: 'int', text: 'str', /) -> 'dict[str, str | int | bool]'`
+
+Return the feature-set-v1 values for token ``i``.
+
+``run.shape.cased`` covers the complete whitespace-delimited run containing
+the token. ``lex`` is reserved and is currently always ``"none"``.
+
+### `tokens(text: 'str', locale: 'str', /, *, inventory: 'LoadedExceptionInventory | None' = None, protected: 'Iterable[ProtectedSpan]' = ()) -> 'list[Token]'`
+
+Return ICU non-whitespace word segments with whitespace-run indexes.
+
+Token-scoped protected spans take precedence over inventory word merges and
+ICU segmentation. Nested spans use the outermost unit; partial overlaps are
+refused; equal extents produce one token carrying all sorted types.
+
+Example:
+    >>> spans = [{"start": 5, "end": 9, "type": "range"}]
+    >>> token = tokens("from 5-10 m", "en_US", protected=spans)[1]
+    >>> (token["text"], token["run"], token["protected"])
+    ('5-10', 1, 'range')
 
 ## icukit.transliterator
 
@@ -7777,6 +7950,10 @@ Error related to message formatting operations.
 ### class `NormalizationError`
 
 Error related to Unicode normalization.
+
+### class `OverlappingProtectedSpans`
+
+Token-scoped protected spans overlap without one containing the other.
 
 ### class `ParseError`
 
