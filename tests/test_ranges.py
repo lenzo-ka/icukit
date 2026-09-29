@@ -81,6 +81,12 @@ def _assert_capture_offsets(text, detection):
     assert all(
         text[capture.start : capture.end] == capture.text for capture in detection["captures"]
     )
+    # An endpoint's own capture lies within that endpoint.
+    owners = {capture.name: capture for capture in detection["captures"] if "." not in capture.name}
+    for capture in detection["captures"]:
+        if "." in capture.name:
+            owner = owners[capture.name.split(".", 1)[0]]
+            assert owner.start <= capture.start <= capture.end <= owner.end
 
 
 def _amounts(value) -> tuple[Decimal, Decimal]:
