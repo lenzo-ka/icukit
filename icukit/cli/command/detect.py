@@ -258,11 +258,19 @@ Examples:
             material=materials,
         )
         # A strict and a flexible reader can give the same reading ("$5.00" as USD 5.00);
-        # print it once. Distinct readings of one span are all kept.
+        # print it once. Distinct readings of one span are all kept, and a reading from
+        # user material stays beside ICU's same reading, so its spec (and digest) shows.
         seen = set()
         detections = []
         for item in detectors.detect(text):
-            reading = (item["start"], item["end"], item["type"], item["text"], repr(item["value"]))
+            reading = (
+                item["start"],
+                item["end"],
+                item["type"],
+                item["text"],
+                repr(item["value"]),
+                getattr(item["spec"], "material_digest", None),
+            )
             if reading not in seen:
                 seen.add(reading)
                 detections.append(item)

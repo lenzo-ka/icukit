@@ -196,6 +196,24 @@ def test_cli_material_finds_reading():
     assert result.returncode == 0, result.stderr
     assert "number:spellout\tone hundred forty-five" in result.stdout
 
+    # The material's reading is printed beside ICU's same reading, with its spec.
+    result = _run_cli(
+        "detect", "--locale", "qaa", "--material", str(FIXTURE), "--json", "-t", "twenty-three"
+    )
+    assert result.returncode == 0, result.stderr
+    specs = [item["spec"] for item in json.loads(result.stdout)]
+    assert {
+        "kind": "material_spellout_format_spec",
+        "locale": "qaa",
+        "ruleset": "%spellout-cardinal",
+        "material_digest": load_locale_material(FIXTURE).digest,
+    } in specs
+    assert {
+        "kind": "spellout_format_spec",
+        "locale": "qaa",
+        "ruleset": "%spellout-cardinal",
+    } in specs
+
 
 def test_cli_bad_material_prints_every_refusal(tmp_path):
     path = tmp_path / "bad.json"
