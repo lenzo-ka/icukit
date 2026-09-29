@@ -4,6 +4,18 @@
 
 ### Added
 
+- `icukit.material` adds the draft locale-material format for application-supplied
+  ICU rules. `load_locale_material` accepts a mapping or UTF-8 JSON path and returns
+  an immutable `LocaleMaterial`, or raises `MaterialLoadError` carrying every
+  `MaterialRefusal`. Its first kind, `rbnf-spellout`, compiles ICU RBNF spell-out
+  rules and refuses the whole file unless its witnesses read and format at their
+  declared extents and its near misses do not read whole. A canonical JSON content
+  digest identifies the material independently of JSON whitespace or key order.
+  `MaterialSpelloutDetector` reads the validated rules, and its
+  `MaterialSpelloutFormatSpec` serializes as `material_spellout_format_spec` with
+  `material_digest`. The format is a draft and not yet stable; icukit ships no locale
+  material. This entry does not join material readers to generated or flexible gangs;
+  that integration comes separately.
 - Every formal name alias Unicode defines, of all five types in `NameAliases.txt`:
   `correction`, `control`, `alternate`, `figment`, and `abbreviation`. ICU carries the
   corrections alone, so `BEL`, `ALERT`, `LINE FEED`, `NBSP`, `BYTE ORDER MARK`, and `ZWJ`
