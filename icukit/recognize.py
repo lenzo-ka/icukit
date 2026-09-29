@@ -15,6 +15,7 @@ from decimal import Decimal, localcontext
 from functools import cache, lru_cache
 from itertools import chain, product
 from math import gcd
+from threading import Lock
 
 import icu
 
@@ -3101,7 +3102,13 @@ class FlexibleNumberDetector:
         return None
 
 
-@cache
+_SHARED_NUMBER_READER_MISSING = object()
+_SHARED_NUMBER_READER_LOCK = Lock()
+_SHARED_NUMBER_READERS: dict[
+    tuple[str, tuple[str, ...] | None, bool, bool], FlexibleNumberDetector
+] = {}
+
+
 def _shared_number_reader_for_key(
     locale: str,
     locales: tuple[str, ...] | None,
@@ -3109,12 +3116,27 @@ def _shared_number_reader_for_key(
     accept_lowercase_roman: bool,
 ) -> FlexibleNumberDetector:
     """Build the one shared number reader for an already normalized key."""
-    return FlexibleNumberDetector(
-        locale,
-        locales=locales,
-        accept_single_letter_roman=accept_single_letter_roman,
-        accept_lowercase_roman=accept_lowercase_roman,
-    )
+    key = (locale, locales, accept_single_letter_roman, accept_lowercase_roman)
+    reader = _SHARED_NUMBER_READERS.get(key, _SHARED_NUMBER_READER_MISSING)
+    if reader is not _SHARED_NUMBER_READER_MISSING:
+        return reader
+    with _SHARED_NUMBER_READER_LOCK:
+        reader = _SHARED_NUMBER_READERS.get(key, _SHARED_NUMBER_READER_MISSING)
+        if reader is _SHARED_NUMBER_READER_MISSING:
+            reader = FlexibleNumberDetector(
+                locale,
+                locales=locales,
+                accept_single_letter_roman=accept_single_letter_roman,
+                accept_lowercase_roman=accept_lowercase_roman,
+            )
+            _SHARED_NUMBER_READERS[key] = reader
+        return reader
+
+
+def _clear_shared_number_reader_cache() -> None:
+    """Clear shared number readers for tests that exercise cold construction."""
+    with _SHARED_NUMBER_READER_LOCK:
+        _SHARED_NUMBER_READERS.clear()
 
 
 def _shared_number_reader(

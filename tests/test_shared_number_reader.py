@@ -3,7 +3,9 @@
 import json
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from textwrap import dedent
+from threading import Barrier, BrokenBarrierError, Lock
 
 import pytest
 
@@ -62,7 +64,7 @@ def _reader_and_main_key(composite):
 
 
 def test_number_reader_built_once_per_key(monkeypatch):
-    recognize._shared_number_reader_for_key.cache_clear()
+    recognize._clear_shared_number_reader_cache()
     original_init = FlexibleNumberDetector.__init__
     constructed = []
 
@@ -75,6 +77,36 @@ def test_number_reader_built_once_per_key(monkeypatch):
 
     keys = {recognize._number_reader_key(reader) for reader in constructed}
     assert len(constructed) == len(keys) == 1
+
+
+def test_shared_number_reader_concurrent_cold_miss_single_instance(monkeypatch):
+    recognize._clear_shared_number_reader_cache()
+    original_init = FlexibleNumberDetector.__init__
+    callers_ready = Barrier(2)
+    cold_misses = Barrier(2)
+    constructions = []
+    constructions_lock = Lock()
+
+    def blocked_init(self, *args, **kwargs):
+        with constructions_lock:
+            constructions.append(self)
+        try:
+            cold_misses.wait(timeout=0.5)
+        except BrokenBarrierError:
+            pass
+        original_init(self, *args, **kwargs)
+
+    def build():
+        callers_ready.wait()
+        return recognize._shared_number_reader("en_US", None, True, False)
+
+    monkeypatch.setattr(FlexibleNumberDetector, "__init__", blocked_init)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        readers = tuple(future.result() for future in (pool.submit(build), pool.submit(build)))
+
+    assert readers[0] is readers[1]
+    assert len(constructions) == 1
+    recognize._clear_shared_number_reader_cache()
 
 
 @pytest.mark.parametrize(
@@ -96,6 +128,21 @@ def test_shared_number_reader_key_property(locale, locales):
     for composite in composites:
         reader, expected_key = _reader_and_main_key(composite)
         assert recognize._number_reader_key(reader) == expected_key, type(composite).__name__
+
+
+@pytest.mark.parametrize("locales", [["de_DE", "de_LI"], ("de_DE", "de_LI")])
+def test_top_level_number_reader_receives_locales(locales):
+    expected = recognize._number_reader_key(
+        FlexibleNumberDetector("de_CH", locales=("de_DE", "de_LI"))
+    )
+    members = [
+        member
+        for member in flexible_detectors("de_CH", locales=locales).detectors
+        if member.type == "number:decimal"
+    ]
+
+    assert members
+    assert all(recognize._number_reader_key(member) == expected for member in members)
 
 
 def test_shared_number_reader_matches_unshared_reference():
@@ -154,7 +201,7 @@ def test_shared_number_reader_matches_unshared_reference():
 
 
 def test_shared_number_reader_list_locales():
-    recognize._shared_number_reader_for_key.cache_clear()
+    recognize._clear_shared_number_reader_cache()
     from_list = recognize._shared_number_reader("de_CH", ["de_CH", "de_LI"], True, False)
     from_tuple = recognize._shared_number_reader("de_CH", ("de_CH", "de_LI"), True, False)
 
@@ -163,7 +210,7 @@ def test_shared_number_reader_list_locales():
 
 
 def test_shared_number_reader_distinct_locales():
-    recognize._shared_number_reader_for_key.cache_clear()
+    recognize._clear_shared_number_reader_cache()
     de_de = recognize._shared_number_reader("de_DE", None, True, False)
     de_ch = recognize._shared_number_reader("de_CH", None, True, False)
 
@@ -172,7 +219,7 @@ def test_shared_number_reader_distinct_locales():
 
 
 def test_lowercase_roman_copy_does_not_mutate_shared_reader():
-    recognize._shared_number_reader_for_key.cache_clear()
+    recognize._clear_shared_number_reader_cache()
     shared = recognize._shared_number_reader("en_US", None, True, True)
     rule_sets = shared._roman_rule_sets
 
@@ -184,13 +231,32 @@ def test_lowercase_roman_copy_does_not_mutate_shared_reader():
     assert any("lower" not in name.casefold() for name in shared._roman_rule_sets)
 
 
-def test_cached_roman_alphabets_match_formatter():
-    number = FlexibleNumberDetector("en_US", accept_lowercase_roman=True)
+@pytest.mark.parametrize("order", [(False, True), (True, False)])
+def test_lowercase_roman_single_letter_flag_is_distinct_in_both_orders(order):
+    recognize._clear_shared_number_reader_cache()
+    readers = {
+        flag: FlexibleLowercaseRomanDetector("en_US", accept_single_letter_roman=flag)
+        for flag in order
+    }
+
+    assert recognize._number_reader_key(readers[False]._number) != recognize._number_reader_key(
+        readers[True]._number
+    )
+    for surface in ("i", "v"):
+        assert readers[False].detect(surface) == []
+        assert readers[True].detect(surface)
+
+
+@pytest.mark.parametrize("locale", ["en_US", "de_DE", "hi_IN"])
+def test_cached_roman_alphabets_match_formatter(locale):
+    number = FlexibleNumberDetector(locale, accept_lowercase_roman=True)
 
     for rule_set, alphabet in number._roman_alphabets.items():
-        assert alphabet == frozenset(
+        expected = frozenset(
             character
             for value in range(1, 4000)
             for character in number._roman.format(value, rule_set)
             if recognize._is_word_character(character)
         )
+        assert recognize._roman_alphabet(locale, rule_set) == expected
+        assert alphabet == expected
