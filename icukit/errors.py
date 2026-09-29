@@ -202,6 +202,21 @@ class ExceptionLoadError(RuleLoadError):
         return tuple(item.reason for item in self.refusals)
 
 
+class BreakRuleLoadError(RuleLoadError):
+    """Transactional sentence-break rule-set load failure."""
+
+    def __init__(self, refusals: list[RuleRefusal]):
+        self.refusals = tuple(refusals)
+        self.errors = self.refusals
+        summary = "; ".join(f"{item.rule_id}: {item.reason}" for item in refusals)
+        super().__init__(summary)
+
+    @property
+    def reason_codes(self) -> tuple[str, ...]:
+        """All refusal reason codes, in validation order."""
+        return tuple(item.reason for item in self.refusals)
+
+
 class ExceptionConflictError(ICUKitError):
     """Incompatible exception effects target the same runtime span."""
 

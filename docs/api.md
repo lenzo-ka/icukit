@@ -208,10 +208,22 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`shape`](#icukitshape) — function, `icukit.shape`
 - [`shape_scheme`](#icukitshape) — function, `icukit.shape`
 - [`ProtectedSpan`](#icukittokens) — class, `icukit.tokens`
+- [`TOKEN_PROFILE`](#icukittokens) — constant, `icukit.tokens`
 - [`Token`](#icukittokens) — class, `icukit.tokens`
 - [`tokens`](#icukittokens) — function, `icukit.tokens`
 - [`token_features`](#icukittokens) — function, `icukit.tokens`
 - [`OverlappingProtectedSpans`](#icukiterrors) — class, `icukit.errors`
+- [`BreakRuleIdentity`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakPredicate`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakRule`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakRuleSet`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakDecision`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakBoundary`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakSegmentation`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`SentenceOverride`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`break_rule_identity`](#icukitsentence-override) — function, `icukit.sentence_override`
+- [`load_break_rules`](#icukitsentence-override) — function, `icukit.sentence_override`
+- [`BreakRuleLoadError`](#icukiterrors) — class, `icukit.errors`
 - [`get_base_direction`](#icukitbidi) — function, `icukit.bidi`
 - [`get_bidi_info`](#icukitbidi) — function, `icukit.bidi`
 - [`strip_bidi_controls`](#icukitbidi) — function, `icukit.bidi`
@@ -6862,6 +6874,146 @@ Example:
     >>> search_replace("cafe", "Visit the café", "tea", strength="primary")
     'Visit the tea'
 
+## icukit.sentence_override
+
+Experimental whole-text sentence-break overrides.
+
+ICU always supplies the candidate boundaries: this module can retain or
+suppress them, but never add one. ``base="none"`` is the default and is exactly
+ICU's current sentence output. Incremental operation belongs to the later B2
+API and is deliberately unavailable here.
+
+Example:
+    >>> override = SentenceOverride()
+    >>> [(item["offset"], item["layer"]) for item in override.decide("Hi. Bye.")]
+    [(4, 'icu'), (8, 'icu')]
+
+### class `BreakBoundary`
+
+An open sentence boundary carrying both readings.
+
+### class `BreakDecision`
+
+The attributed decision for one ICU sentence candidate.
+
+### class `BreakPredicate`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `BreakRule`
+
+One ordered sentence candidate rule.
+
+Authored witnesses validate the containing rule set as one isolated rule
+layer. Loader inventories contribute word-level token merges only; their
+sentence-level suppression rules and all deployment layers are excluded.
+
+``run-1`` is the complete left whitespace run truncated at the candidate.
+Its text, lower-case text, length, shapes, first/last character classes,
+leading-whitespace flag, and run shape are all derived from that same
+truncated run, never from only its final token.
+
+A forward character position ``c+n`` has horizon equal to the number of
+right tokens ending at or before that code point, plus one when the code
+point is inside a right token, with a minimum of one. It is readable when
+that horizon is at most ``lookahead``. Thus the gap after token ``+k`` is
+readable at lookahead ``k``, while the first code point of token ``+(k+1)``
+is ``<BEYOND>``. At or past the end of the text, its horizon is the lesser
+of eight and one more than the number of right tokens; a readable position
+returns ``<EOS>``. ``tokens_read`` records this horizon, including ``k``
+rather than ``k+1`` for a gap after token ``+k``. Every ``c+n`` predicate
+therefore requires a declared lookahead of at least one.
+
+### class `BreakRuleIdentity`
+
+Runtime identity against which a break-rule artifact was authored.
+
+### class `BreakRuleSet`
+
+An immutable, validated ordered set of flat break rules.
+
+#### `BreakRuleSet(id: 'str', locale: 'str', status: "Literal['experimental']", features: 'str', runtime_identity: 'Mapping[str, str]', digest: 'str', _rules: 'tuple[_CompiledBreakRule, ...]', provenance: 'Mapping[str, object] | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `BreakSegmentation`
+
+Primary sentence spans plus every boundary left open by a rule.
+
+### class `SentenceOverride`
+
+Apply opt-in flat rules to ICU sentence candidates over complete text.
+
+Args:
+    locale: ICU locale used for both sentence and word boundaries.
+    base: ``"none"`` (the unchanged ICU default), a loaded rule set, or a
+        path to a ``break-rules`` JSON file.
+    before: Ordered caller rules that force a decision before inventories
+        and the base.
+    after: Ordered caller rules that may override the base decision.
+    inventories: Exception inventories; word rules merge tokens and
+        sentence rules suppress candidates.
+    cache: Reserved for API parity with the incremental implementation.
+
+Example:
+    >>> SentenceOverride().spans("Hello. Next.") == break_sentence_spans(
+    ...     "Hello. Next.", "en_US"
+    ... )
+    True
+
+#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet" = 'none', before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `decide(text: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = ()) -> 'list[BreakDecision]'`
+
+Return an attributed decision for every raw ICU sentence candidate.
+
+#### `segmentations(text: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = ()) -> 'BreakSegmentation'`
+
+Return one-best spans and each candidate retaining two alternatives.
+
+#### `spans(text: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = ()) -> 'list[BreakSpan]'`
+
+Return the one-best sentence spans; trailing whitespace stays left.
+
+#### `stream(*args: 'object', **kwargs: 'object') -> 'None'`
+
+Refuse incremental operation, which is reserved for lane B2.
+
+### `break_rule_identity(locale: 'str' = 'en_US', /, *, inventories: 'Sequence[LoadedExceptionInventory]' = ()) -> 'BreakRuleIdentity'`
+
+Return the runtime identity an authored break-rule set must declare.
+
+The token profile binds the explicit :data:`icukit.tokens.TOKEN_PROFILE`
+version, locale, ordered exception inventories, protected-span policy, and
+built-in shape definitions. The profile version is bumped when the golden
+tokenizer behavior changes; it is not a proof derived from implementation
+text. Fixtures should call this function instead of hard-coding versions.
+
+### `load_break_rules(source: 'str | Path | Mapping[str, object]', /, *, locale: 'str' = 'en_US', inventories: 'Sequence[LoadedExceptionInventory]' = ()) -> 'BreakRuleSet'`
+
+Load, validate, identity-check, and witness-test flat break rules.
+
+``source`` may be a parsed JSON object or a path to a ``break-rules`` JSON
+file. Witnesses execute transactionally after compilation; no partially
+validated rule set is returned. An object witness may add an integer
+``offset`` and a ``decision`` of ``break``, ``no-break``, or ``ambiguous``
+to pin the candidate and result. A ``no_match`` witness always requires
+that its rule decide no candidate anywhere in the text. Witnesses evaluate
+the loaded set as one isolated rule layer: ``inventories`` contribute only
+word-level token merges, while sentence-level inventory suppression and
+all other deployment layers are excluded. Callers compose those layers at
+deployment, where each candidate's attribution reports the deciding one.
+
 ## icukit.serialize
 
 recognition-output serializer — converts typed ValueDetection candidates to plain JSON;
@@ -7242,6 +7394,16 @@ Locale-material extensions are likewise deferred to that later integration.
 Example:
     >>> [(token["text"], token["run"]) for token in tokens("the U.S. Then", "en_US")]
     [('the', 0), ('U.S', 1), ('.', 1), ('Then', 2)]
+
+### Constants and type aliases
+
+#### `TOKEN_PROFILE` (constant)
+
+`'icukit.tokens@1'`
+
+Bump this whenever the observable ``tokens()`` policy changes.  The sentence
+override includes it in authored-rule identities, and a golden test below the
+API pins representative punctuation, astral, protection, and inventory cases.
 
 ### class `ProtectedSpan`
 
@@ -7915,6 +8077,14 @@ Error related to alphabetic index operations.
 ### class `BidiError`
 
 Error related to bidirectional text operations.
+
+### class `BreakRuleLoadError`
+
+Transactional sentence-break rule-set load failure.
+
+#### `BreakRuleLoadError(refusals: 'list[RuleRefusal]')`
+
+Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `BreakerError`
 
