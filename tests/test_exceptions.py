@@ -783,7 +783,7 @@ def test_sentence_suppression_joins_abbreviation_to_following_sentence():
 
     negative = "I met Ms. Smith today. She left."
     tailored = layer.break_spans(negative, "sentence", "en")
-    vanilla = break_sentence_spans(negative, "en")
+    vanilla = break_sentence_spans(negative, "en", base="none")
     assert [(span["text"], span["start"], span["end"]) for span in tailored] == [
         (span["text"], span["start"], span["end"]) for span in vanilla
     ]

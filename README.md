@@ -36,14 +36,17 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 
 For English locales, `Breaker`, `SentenceOverride`, and `ik break sentences`
 (as well as `ik break tokenize`) use the learned `en-tn-cart@1` model by
-default, including locales with a region or script. The `POSIX` variant is
-excluded because its ICU word tokens differ from the model profile. Pass
-`base="none"` to either Python API or `--base none` to the CLI for raw ICU
-sentence boundaries. Other locale languages keep raw ICU as their default.
-`AbbreviationSentenceBreaker` remains an explicit, separate lexicon-based
-alternative. The model is derived from CC BY-SA 4.0 data; its measured results
-are agreement with the corpus splitter on synthetic text, not running-text
-accuracy.
+default, including locales with a region or script. Before the model runs, the
+default loads the locale-fallback `break="suppress"` entries from the shipped
+abbreviation lexicon as sentence exceptions. Candidate decisions follow ICU,
+token integrity, caller-before rules, exceptions, the base, then caller-after
+rules. The `POSIX` variant is excluded because its ICU word tokens differ from
+the model profile. Pass `base="none"` to either Python API or `--base none` to
+the CLI for raw ICU sentence boundaries without the shipped list. Other locale
+languages keep raw ICU as their default. `AbbreviationSentenceBreaker` remains
+the explicit alternative that also deposits ambiguous lexicon boundaries. The
+model is derived from CC BY-SA 4.0 data; its measured results are agreement with
+the corpus splitter on synthetic text, not running-text accuracy.
 
 ### Recognition
 

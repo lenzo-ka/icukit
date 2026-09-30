@@ -160,6 +160,29 @@ class TestBreakerClass:
         assert Breaker("en_US").break_sentence_spans(text) == SentenceOverride("en_US").spans(text)
         assert break_sentence_spans(text, "en_US") == SentenceOverride("en_US").spans(text)
 
+    def test_english_default_loads_shipped_exception_list_and_none_stays_raw(self):
+        text = "He met Mr. Smith today. He left."
+
+        assert Breaker("en").break_sentences(text) == [
+            "He met Mr. Smith today. ",
+            "He left.",
+        ]
+        assert Breaker("en", base="en-tn-cart@1").break_sentences(text) == [
+            "He met Mr. Smith today. ",
+            "He left.",
+        ]
+        assert Breaker("en", base="none").break_sentences(text) == [
+            "He met Mr. ",
+            "Smith today. ",
+            "He left.",
+        ]
+        first = SentenceOverride("en").decide(text)[0]
+        assert (first["decision"], first["layer"], first["id"]) == (
+            "no-break",
+            "exceptions",
+            "abbreviation:Mr.",
+        )
+
     def test_posix_variant_defaults_and_explicit_learned_bases(self):
         text = "The U.S. Supreme Court ruled. Markets moved."
         for locale in ("en_US_POSIX", "en_US_POSIX_FOO", "en_POSIX"):

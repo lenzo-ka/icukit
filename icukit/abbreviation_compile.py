@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cache
+from typing import TYPE_CHECKING
 
 from .abbreviations import AbbreviationLexicon, Entry, Pattern, load_locale_lexicon
 from .errors import AbbreviationError
+
+if TYPE_CHECKING:
+    from .exceptions import LoadedExceptionInventory
 
 __all__ = ["CompiledLexicon", "PatternMatch", "compile_lexicon"]
 
@@ -114,3 +119,58 @@ def compile_lexicon(locale: str = "en") -> CompiledLexicon | None:
         return CompiledLexicon.from_lexicon(load_locale_lexicon(locale))
     except AbbreviationError:
         return None
+
+
+def _load_break_exception_inventory(locale: str) -> LoadedExceptionInventory | None:
+    """Compile a locale's shipped suppress list as sentence exceptions.
+
+    Only period-final entries can own an ICU sentence candidate. The remaining
+    suppress entries are still useful to abbreviation recognition, but cannot
+    change sentence boundaries. Loading goes through the normal transactional
+    exception-inventory compiler and is cached by the compiled locale content.
+    """
+    compiled = compile_lexicon(locale)
+    if compiled is None:
+        return None
+    return _compile_break_exception_inventory(
+        compiled.lexicon.language, tuple(sorted(compiled.suppress))
+    )
+
+
+@cache
+def _compile_break_exception_inventory(
+    language: str, suppress: tuple[str, ...]
+) -> LoadedExceptionInventory:
+    from .exceptions import ExceptionInventory, load_exception_inventory
+
+    rules = []
+    for surface in suppress:
+        if not surface.endswith("."):
+            continue
+        rules.append(
+            {
+                "id": f"abbreviation:{surface}",
+                "locale": language,
+                "level": "sentence",
+                "effect": "suppress",
+                "surface": surface,
+                "variant": "exact",
+                "conditions": [],
+                "unconditionality": "empirical",
+                "provenance": {
+                    "source": f"icukit/data/abbreviations/{language.replace('-', '_')}.xml"
+                },
+                "witnesses": {
+                    "positive": f"{surface} Smith.",
+                    "near_miss": f"X{surface} Smith.",
+                    "condition_negatives": [],
+                },
+            }
+        )
+    inventory: ExceptionInventory = {
+        "schema_version": 1,
+        "corpus": f"icukit abbreviation lexicon {language}",
+        "named_lists": {},
+        "rules": rules,
+    }
+    return load_exception_inventory(inventory)

@@ -17,16 +17,26 @@ MODEL_PATH = (
 MODEL_DIGEST = "sha256:a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d"
 
 
+def _bare_cartlet() -> SentenceOverride:
+    """Load the model without the named deployment base's exception list."""
+    return SentenceOverride(base=CartletModelRef(MODEL_PATH, MODEL_DIGEST, name="en-tn-cart@1"))
+
+
 @pytest.mark.parametrize("locale", ["en", "en_US", "en_GB", "en_Latn_US", "en-Latn-GB"])
-def test_english_locale_default_is_named_cartlet_model(locale: str) -> None:
+def test_english_locale_default_layers_shipped_exceptions_before_cartlet(locale: str) -> None:
     default = SentenceOverride(locale)
     decisions = default.decide("Mr. Smith arrived. Next.")
 
     assert signature(SentenceOverride).parameters["base"].default is None
     assert default.identity != SentenceOverride(locale, base="none").identity
     assert default.base.ref.name == "en-tn-cart@1"
-    assert all(item["layer"] == "model" for item in decisions)
-    assert all(str(item["id"]).startswith("en-tn-cart@1#leaf:") for item in decisions)
+    assert (decisions[0]["decision"], decisions[0]["layer"], decisions[0]["id"]) == (
+        "no-break",
+        "exceptions",
+        "abbreviation:Mr.",
+    )
+    assert all(item["layer"] == "model" for item in decisions[1:])
+    assert all(str(item["id"]).startswith("en-tn-cart@1#leaf:") for item in decisions[1:])
 
 
 @pytest.mark.parametrize("locale", ["en_US", "en_GB", "en_Latn_US"])
@@ -96,8 +106,8 @@ def test_cartlet_model_ref_and_named_base_are_digest_bound() -> None:
         base=CartletModelRef(MODEL_PATH, MODEL_DIGEST, name="explicit-cart")
     )
 
-    named_decisions = named.decide("Mr. Smith arrived.")
-    explicit_decisions = explicit.decide("Mr. Smith arrived.")
+    named_decisions = named.decide("Hello. Next.")
+    explicit_decisions = explicit.decide("Hello. Next.")
     assert [item["decision"] for item in explicit_decisions] == [
         item["decision"] for item in named_decisions
     ]
@@ -117,7 +127,7 @@ def test_cartlet_model_identity_refuses_mismatch() -> None:
 
 
 def test_cartlet_lazy_decision_matches_close_and_waits_for_unseen_token() -> None:
-    override = SentenceOverride(base="en-tn-cart@1")
+    override = _bare_cartlet()
     text = "Mr. Smith arrived. Next."
     stream = override.stream()
 
@@ -146,7 +156,7 @@ def test_cartlet_traverses_lazy_sequence_only_by_len_and_getitem(monkeypatch) ->
             raise AssertionError("cartlet searched the lazy feature vector")
 
     monkeypatch.setattr(sentence_override_module, "_CartletFeatureVector", GuardedVector)
-    override = SentenceOverride(base="en-tn-cart@1")
+    override = _bare_cartlet()
 
     def refuse_predict(*args, **kwargs):
         raise AssertionError("icukit must use cartlet.predict_path for attribution")
@@ -168,7 +178,7 @@ def test_sentence_override_tokenization_work_scales_linearly(monkeypatch) -> Non
         return result
 
     monkeypatch.setattr(sentence_override_module, "tokens", counted)
-    override = SentenceOverride(base="en-tn-cart@1")
+    override = _bare_cartlet()
     sentence = "Alpha beta gamma. "
 
     override.decide(sentence * 16)
@@ -193,7 +203,7 @@ def test_cartlet_closed_vector_has_explicit_values_at_every_position(monkeypatch
 
 
 def test_cartlet_incremental_unseen_feature_raises_feature_not_yet(monkeypatch) -> None:
-    override = SentenceOverride(base="en-tn-cart@1")
+    override = _bare_cartlet()
     original = override.base.model.predict_path
     raised = False
 
