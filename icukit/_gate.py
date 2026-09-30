@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from functools import lru_cache
+from types import SimpleNamespace
 from typing import Any
 
 import icu
@@ -835,3 +836,11 @@ def _strict_gate(reader: object) -> StartGate | None:
         folded=frozenset(folded),
         tests=frozenset({"icu.not_isalpha"}),
     )
+
+
+@lru_cache(maxsize=256)
+def _strict_pattern_gate(locale: str, pattern: str) -> StartGate | None:
+    """Build the strict gate for one reformat-held ``SimpleDateFormat`` pattern."""
+    parser = icu.SimpleDateFormat(pattern, icu.Locale(locale))
+    source = SimpleNamespace(locale=locale, pattern=pattern, _parser=parser)
+    return _strict_gate(source)

@@ -31,6 +31,7 @@ from ._gate import (
     _record,
     _scan_plan_for,
     _ScanPlan,
+    _strict_pattern_gate,
     folded_heads,
     gates_enabled,
     heads,
@@ -109,6 +110,18 @@ _SLASHES = {"/", "\N{FRACTION SLASH}"}
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
 # Defensive cross-locale bound: ICU RBNF ordinal suffixes are reliable through signed 32-bit.
 _MAX_RBNF_ORDINAL_VALUE = 2_147_483_647
+
+
+def _matcher_folded_heads(surfaces: Iterable[str]) -> frozenset[str]:
+    """Heads under the matchers' Python fold, widened for newer ICU fold tables."""
+    values = tuple(surfaces)
+    result = set(folded_heads(values))
+    for value in values:
+        folded = str(icu.UnicodeString(value).foldCase())
+        if folded:
+            result.add(folded[0])
+    return frozenset(result)
+
 
 # CLDR identifies alphabet repertoires and character categories, but does not carry
 # pronunciations for individual letters. The sole English regional divergence, Z, is
@@ -680,10 +693,19 @@ class FlexibleDateDetector(_GatedReader):
         language = icu_locale.getLanguage()
         self._era_structures = _language_era_date_structures(language, self.locales)
         self._eras = _language_eras(language, self.locales)
+        era_heads = _matcher_folded_heads(
+            form
+            for form, _index, _width in self._eras
+            if any(structure[2] for structure in self._era_structures)
+        )
         _install_gates(
             self,
-            {"date": None},
-            {"date": "numeric and era structures have no single proved opening set"},
+            {
+                "date": StartGate(
+                    chars=frozenset(self._digits),
+                    folded=era_heads,
+                )
+            },
         )
 
     @staticmethod
@@ -1444,14 +1466,19 @@ def _normalize_interval_surface(surface: str) -> str:
     return "".join(" " if character in _SPACES else character for character in surface).casefold()
 
 
-def _date_interval_gate(matchers: Iterable[tuple]) -> StartGate | None:
+def _date_interval_gate(
+    matchers: Iterable[tuple], non_digit_gates: Iterable[StartGate | None] = ()
+) -> StartGate | None:
     """Union interval matcher gates, with an ungated matcher absorbing the lane."""
     matchers = tuple(matchers)
     if not matchers:
         return None
+    non_digit = iter(non_digit_gates)
     result: StartGate | None = StartGate()
     for matcher in matchers:
-        matcher_gate = StartGate(tests=frozenset({"icu.isdigit"})) if matcher[8] else None
+        matcher_gate = (
+            StartGate(tests=frozenset({"icu.isdigit"})) if matcher[8] else next(non_digit, None)
+        )
         if result is not None:
             result = result | matcher_gate
     return result
@@ -1545,17 +1572,29 @@ class FlexibleDateIntervalDetector(_GatedReader):
                 f"FlexibleDateIntervalDetector reads a short year only in a 'y' field, and "
                 f"skeleton {skeleton!r} has none in {locale!r}"
             )
-        interval_gate = _date_interval_gate(self._matchers)
+        interval_gate = _date_interval_gate(
+            self._matchers,
+            (
+                None
+                if _pattern_runs(matcher[5][0])
+                and _pattern_runs(matcher[5][0])[0][0] in _ZONE_LETTERS
+                else _strict_pattern_gate(locale, matcher[5][0])
+                for matcher in self._matchers
+                if not matcher[8]
+            ),
+        )
         _install_gates(
             self,
             {"interval": interval_gate},
             {
                 "interval": (
                     "every matcher tests icu.Char.isdigit at the start"
+                    if interval_gate is not None and all(matcher[8] for matcher in self._matchers)
+                    else "digit-first tests unioned with strict side-one pattern gates"
                     if interval_gate is not None
                     else "ICU exposed no modeled interval matcher"
                     if not self._matchers
-                    else "at least one interval matcher has a non-digit first field"
+                    else "at least one interval matcher has no proved start gate"
                 )
             },
         )
@@ -2335,14 +2374,39 @@ class FlexibleTextDateDetector(_GatedReader):
         )
         pattern = self._structures[0][2] if self._structures else ""
         self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
+
+        def structure_gate(structures) -> StartGate:
+            chars: set[str] = set()
+            names: list[str] = []
+            tables = {
+                "M": self._months,
+                "E": self._weekdays,
+                "Q": self._quarters,
+                "G": self._eras,
+            }
+            for fields, _literals, _pattern in structures:
+                first = fields[0]
+                if first in {"d", "y"}:
+                    chars.update(self._digits)
+                else:
+                    names.extend(surface for surface, *_rest in tables[first])
+            return StartGate(
+                chars=frozenset(chars),
+                folded=_matcher_folded_heads(names),
+            )
+
+        era_chars = frozenset(self._digits) if self._year_first else frozenset()
+        era_names = (form for form, _index, _width in self._eras) if self._era_first else ()
         # note: Bare years and decades remain cardinal candidates for downstream reinterpretation.
         _install_gates(
             self,
-            {"date": None, "day-month": None, "era": None},
             {
-                "date": "the matcher combines numeric and name-first structures",
-                "day-month": "the matcher combines numeric and name-first structures",
-                "era": "era placement varies across the language's locale tables",
+                "date": structure_gate(self._structures),
+                "day-month": structure_gate(self._day_month_structures),
+                "era": StartGate(
+                    chars=era_chars,
+                    folded=_matcher_folded_heads(era_names),
+                ),
             },
         )
 
@@ -3543,10 +3607,14 @@ class FlexibleRelativeDateDetector(_GatedReader):
         self._number = _shared_number_reader(locale, None, True, False)
         self._numeric_templates, self._named_phrases = _relative_date_vocabulary(locale)
         self._spec = RelativeDateSpec(locale)
+        opening_surfaces = [surface for surface, *_rest in self._named_phrases]
+        opening_surfaces.extend(prefix for prefix, *_rest in self._numeric_templates if prefix)
+        relative_gate: StartGate | None = StartGate(folded=_matcher_folded_heads(opening_surfaces))
+        if any(not prefix for prefix, *_rest in self._numeric_templates):
+            relative_gate = relative_gate | self._number.start_gates()["decimal"]
         _install_gates(
             self,
-            {"relative": None},
-            {"relative": "numeric templates and named phrases have heterogeneous prefixes"},
+            {"relative": relative_gate},
         )
 
     @property
@@ -3712,10 +3780,12 @@ class FlexiblePercentDetector(_GatedReader):
             for word in _language_percent_words(icu.Locale(locale).getLanguage(), self.locales)
             if word != self._percent
         )
+        percent_gate = (
+            StartGate(chars=heads((self._percent,))) | self._number.start_gates()["decimal"]
+        )
         _install_gates(
             self,
-            {"percent": None},
-            {"percent": "percent words and symbols may occur before or after the amount"},
+            {"percent": percent_gate},
         )
 
     @staticmethod
@@ -3979,19 +4049,16 @@ class FlexibleCurrencyDetector(_GatedReader):
         self._currencies = tuple(sorted(reflected_symbols, key=len, reverse=True))
         self._spec = NumberFormatSpec(locale, "currency", currency=currency)
         amount_gate = self._number.start_gates()["decimal"]
+        for compact in self._compact:
+            if amount_gate is not None:
+                amount_gate = amount_gate | compact.start_gates()["compact"]
         wraps = heads(
             before for before, _after in _negative_currency_wraps(locale, currency, self.locales)
         )
-        assert amount_gate is not None
+        prefix_gate = StartGate(chars=wraps | heads(self._currencies))
         _install_gates(
             self,
-            {
-                "signed": StartGate(
-                    chars=amount_gate.chars | wraps | heads(self._currencies),
-                    folded=amount_gate.folded,
-                    tests=amount_gate.tests,
-                )
-            },
+            {"signed": prefix_gate | amount_gate},
         )
 
     @staticmethod
@@ -4392,12 +4459,14 @@ class FlexibleMeasureDetector(_GatedReader):
             has_space: tuple(sorted(self._units, key=lambda item: item[2] != has_space))
             for has_space in (False, True)
         }
+        per_heads = heads(
+            surface for surface, _width, _spaced, target in self._units if target != self.unit
+        )
         _install_gates(
             self,
-            {"amount": None, "per-form": None},
             {
-                "amount": "unit surfaces can be prefix or suffix forms",
-                "per-form": "bare per-unit surfaces include locale spacing variants",
+                "amount": self._number.start_gates()["decimal"],
+                "per-form": StartGate(chars=per_heads),
             },
         )
 
@@ -4558,8 +4627,7 @@ class FlexibleMixedMeasureDetector(_GatedReader):
         self._small_unit = parts[-1]
         _install_gates(
             self,
-            {"mixed": None},
-            {"mixed": "mixed-unit component patterns have heterogeneous prefixes"},
+            {"mixed": self._components[0].start_gates()["amount"]},
         )
 
     def _match(self, text: str, start: int) -> _FlexibleMatch | None:
@@ -4842,10 +4910,18 @@ class FlexibleCompactDetector(_GatedReader):
                 affixes.items(), key=lambda item: (-len(item[0][1]), -len(item[0][0]))
             )
         )
+        compact_prefixes = [prefix for prefix, _suffix in affixes if prefix]
+        compact_gate: StartGate | None = (
+            StartGate(folded=_matcher_folded_heads(compact_prefixes))
+            | self._number.start_gates()["decimal"]
+        )
+        if compact_prefixes:
+            compact_gate = (
+                StartGate(chars=heads((self._number._minus, self._number._plus))) | compact_gate
+            )
         _install_gates(
             self,
-            {"compact": None},
-            {"compact": "compact affixes can precede the child number"},
+            {"compact": compact_gate},
         )
 
     @property
@@ -5562,10 +5638,14 @@ class FlexibleCurrencyNameDetector(_GatedReader):
             names.setdefault(canonical.casefold(), (canonical, prefix))
         self._names = tuple(sorted(names.values(), key=lambda item: len(item[0]), reverse=True))
         self._spec = NumberFormatSpec(locale, "currency", currency=canonical)
+        prefix_names = (surface for surface, prefix in self._names if prefix)
+        named_gate = (
+            StartGate(folded=_matcher_folded_heads(prefix_names))
+            | self._number.start_gates()["decimal"]
+        )
         _install_gates(
             self,
-            {"named": None},
-            {"named": "currency long names can be prefix or suffix forms"},
+            {"named": named_gate},
         )
         # note: CLDR does not reflectively expose region-stripped names or minor-unit names.
 
@@ -6075,13 +6155,16 @@ class FlexibleTimeDetector(_GatedReader):
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
+        time_names = (
+            (period for period, _index, _narrow in self._periods) if self._period_prefix else ()
+        )
+        time_gate = StartGate(
+            chars=frozenset(self._digits) | (_SPACES if self._period_prefix else set()),
+            folded=_matcher_folded_heads(time_names),
+        )
         _install_gates(
             self,
-            {"plain": None, "with-units": None},
-            {
-                "plain": "day periods may precede or follow numeric time fields",
-                "with-units": "hour units add prefix and suffix forms",
-            },
+            {"plain": time_gate, "with-units": time_gate},
         )
 
     @staticmethod
@@ -6898,6 +6981,20 @@ class FlexibleDateTimeDetector:
         return found
 
 
+@cache
+def _nfkc_vulgar_fraction_characters() -> frozenset[str]:
+    """ICU ``No`` characters whose NFKC form is a decimal fraction-slash pair."""
+    nfkc = icu.Normalizer2.getNFKCInstance()
+    found = set()
+    for character in icu.UnicodeSet("[:General_Category=Other_Number:]"):
+        if len(character) != 1:
+            continue
+        pieces = nfkc.normalize(character).split("\N{FRACTION SLASH}")
+        if len(pieces) == 2 and all(piece.isdecimal() for piece in pieces):
+            found.add(character)
+    return frozenset(found)
+
+
 class FlexibleFractionDetector(_GatedReader):
     """Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
@@ -6922,10 +7019,14 @@ class FlexibleFractionDetector(_GatedReader):
         symbols = icu.NumberFormat.createInstance(icu.Locale(locale)).getDecimalFormatSymbols()
         self._minus = symbols.getSymbol(icu.DecimalFormatSymbols.kMinusSignSymbol)
         self._plus = symbols.getSymbol(icu.DecimalFormatSymbols.kPlusSignSymbol)
+        starts = frozenset(self._digits) | _nfkc_vulgar_fraction_characters()
         _install_gates(
             self,
-            {"fraction": None},
-            {"fraction": "NFKC vulgar fractions can open on non-locale digits"},
+            {
+                "fraction": StartGate(
+                    chars=starts | heads((self._minus, self._plus)),
+                )
+            },
         )
 
     def _digit_run(self, text: str, start: int) -> int:
