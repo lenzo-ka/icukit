@@ -9,11 +9,13 @@ those candidates unchanged.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from copy import copy
 from dataclasses import dataclass, replace
 from decimal import Decimal, localcontext
 from functools import cache, lru_cache
 from itertools import chain, product
 from math import gcd
+from threading import Lock
 
 import icu
 
@@ -2797,6 +2799,18 @@ def _language_decimal_styles(
     return tuple(styles.values())
 
 
+@cache
+def _roman_alphabet(locale: str, rule_set: str) -> frozenset[str]:
+    """The word characters ICU writes in one Roman-number rule set."""
+    formatter = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.NUMBERING_SYSTEM, icu.Locale(locale))
+    return frozenset(
+        character
+        for value in range(1, 4000)
+        for character in formatter.format(value, rule_set)
+        if _is_word_character(character)
+    )
+
+
 class FlexibleNumberDetector:
     """Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
@@ -2864,16 +2878,9 @@ class FlexibleNumberDetector:
             self._roman_rule_sets = tuple(
                 name for name in self._roman_rule_sets if "lower" not in name.casefold()
             )
-        alphabets: dict[str, frozenset[str]] = {}
-        for rule_set in self._roman_rule_sets:
-            alphabet = frozenset(
-                character
-                for value in range(1, 4000)
-                for character in self._roman.format(value, rule_set)
-                if _is_word_character(character)
-            )
-            alphabets[rule_set] = alphabet
-        self._roman_alphabets = alphabets
+        self._roman_alphabets = {
+            rule_set: _roman_alphabet(locale, rule_set) for rule_set in self._roman_rule_sets
+        }
 
     def _digits_ascii(self, surface: str) -> str:
         return "".join(
@@ -3095,6 +3102,58 @@ class FlexibleNumberDetector:
         return None
 
 
+_SHARED_NUMBER_READER_MISSING = object()
+_SHARED_NUMBER_READER_LOCK = Lock()
+_SHARED_NUMBER_READERS: dict[
+    tuple[str, tuple[str, ...] | None, bool, bool], FlexibleNumberDetector
+] = {}
+
+
+def _shared_number_reader_for_key(
+    locale: str,
+    locales: tuple[str, ...] | None,
+    accept_single_letter_roman: bool,
+    accept_lowercase_roman: bool,
+) -> FlexibleNumberDetector:
+    """Build the one shared number reader for an already normalized key."""
+    key = (locale, locales, accept_single_letter_roman, accept_lowercase_roman)
+    reader = _SHARED_NUMBER_READERS.get(key, _SHARED_NUMBER_READER_MISSING)
+    if reader is not _SHARED_NUMBER_READER_MISSING:
+        return reader
+    with _SHARED_NUMBER_READER_LOCK:
+        reader = _SHARED_NUMBER_READERS.get(key, _SHARED_NUMBER_READER_MISSING)
+        if reader is _SHARED_NUMBER_READER_MISSING:
+            reader = FlexibleNumberDetector(
+                locale,
+                locales=locales,
+                accept_single_letter_roman=accept_single_letter_roman,
+                accept_lowercase_roman=accept_lowercase_roman,
+            )
+            _SHARED_NUMBER_READERS[key] = reader
+        return reader
+
+
+def _clear_shared_number_reader_cache() -> None:
+    """Clear shared number readers for tests that exercise cold construction."""
+    with _SHARED_NUMBER_READER_LOCK:
+        _SHARED_NUMBER_READERS.clear()
+
+
+def _shared_number_reader(
+    locale: str,
+    locales: Iterable[str] | None,
+    accept_single_letter_roman: bool,
+    accept_lowercase_roman: bool,
+) -> FlexibleNumberDetector:
+    """Return one number reader per locale, selection, and Roman-number options."""
+    return _shared_number_reader_for_key(
+        locale,
+        _locale_selection(locale, locales),
+        accept_single_letter_roman,
+        accept_lowercase_roman,
+    )
+
+
 class FlexibleLowercaseRomanDetector:
     """Recognize lowercase Roman cardinals ("iv", "xii") as their own type.
 
@@ -3114,10 +3173,15 @@ class FlexibleLowercaseRomanDetector:
     def __init__(self, locale: str, *, accept_single_letter_roman: bool = True) -> None:
         self.locale = locale
         self.accept_single_letter_roman = accept_single_letter_roman
-        self._number = FlexibleNumberDetector(
-            locale,
-            accept_single_letter_roman=accept_single_letter_roman,
-            accept_lowercase_roman=True,
+        # This composite narrows the rule sets after construction. Copy the cached
+        # reader first so the instance shared by other composites remains immutable.
+        self._number = copy(
+            _shared_number_reader(
+                locale,
+                None,
+                accept_single_letter_roman,
+                True,
+            )
         )
         # Only the rule sets the default reader leaves out, so every reading here is one
         # it refuses; the uppercase ones stay number:cardinal:roman's.
@@ -3283,7 +3347,7 @@ class FlexibleRelativeDateDetector:
             style: _relative_formatter(icu.Locale(locale), style) for style, _ in _RELATIVE_STYLES
         }
         self._forms = dict(_RELATIVE_STYLES)
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
         self._numeric_templates, self._named_phrases = _relative_date_vocabulary(locale)
         self._spec = RelativeDateSpec(locale)
 
@@ -3426,7 +3490,7 @@ class FlexiblePercentDetector:
     def __init__(self, locale: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale
         self.locales = _locale_selection(locale, locales)
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
         number_format = icu.NumberFormat.createPercentInstance(icu.Locale(locale))
         symbols = number_format.getDecimalFormatSymbols()
         self._percent = symbols.getSymbol(icu.DecimalFormatSymbols.kPercentSymbol)
@@ -3590,7 +3654,7 @@ class FlexibleCurrencyDetector:
         self.locales = _locale_selection(locale, locales)
         self.currency = currency
         self.type = f"number:currency:{currency}"
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
         self._compact = (
             FlexibleCompactDetector(locale, "long"),
             FlexibleCompactDetector(locale, "short", fold_symbol_case=True),
@@ -3896,7 +3960,7 @@ class FlexibleMeasureDetector:
         self.locales = _locale_selection(locale, locales)
         self.unit = unit
         self.type = f"measure:{unit}"
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
 
         measure_unit = icu.MeasureUnit.forIdentifier(unit)
         if measure_unit.getIdentifier() != unit:
@@ -4021,7 +4085,7 @@ class FlexibleMixedMeasureDetector:
         parts = unit.split("-and-")
         if len(parts) < 2:
             raise ValueError(f"expected a mixed unit identifier of two or more parts: {unit!r}")
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
         self._components = tuple(
             FlexibleMeasureDetector(locale, part, locales=self.locales) for part in parts
         )
@@ -4269,7 +4333,7 @@ class FlexibleCompactDetector:
         self.width = width
         self.fold_symbol_case = fold_symbol_case
         self.type = f"number:compact:{width}"
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
         self._spec = CompactFormatSpec(locale, width)
 
         styles = {
@@ -4450,7 +4514,7 @@ class FlexibleScientificDetector:
 
     def __init__(self, locale: str) -> None:
         self.locale = locale
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
         symbols = icu.NumberFormat.createInstance(icu.Locale(locale)).getDecimalFormatSymbols()
         self._exponential = symbols.getSymbol(icu.DecimalFormatSymbols.kExponentialSymbol)
         self._minus = self._number._minus
@@ -4935,7 +4999,7 @@ class FlexibleCurrencyNameDetector:
             raise ValueError(f"not an assigned ISO currency: {canonical!r}")
         self.currency = canonical
         self.type = f"number:currency-name:{canonical}"
-        self._number = FlexibleNumberDetector(locale)
+        self._number = _shared_number_reader(locale, None, True, False)
         icu_locale = icu.Locale(locale)
         plural_info = icu.CurrencyPluralInfo(icu_locale)
         plural_rules = icu.PluralRules.forLocale(icu_locale)
@@ -7315,7 +7379,7 @@ class FlexibleNumberRangeDetector:
 
     def _bare_reader(self) -> FlexibleNumberDetector:
         if self._bare is None:
-            self._bare = FlexibleNumberDetector(self.locale, locales=self.locales)
+            self._bare = _shared_number_reader(self.locale, self.locales, True, False)
         return self._bare
 
     def _endpoint_readers(self) -> tuple[object, ...]:

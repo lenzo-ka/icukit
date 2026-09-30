@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Building a detector gang now constructs one number reader per distinct configuration.
+
 ### Added
 
 - Orthographic word shape `cvletters@1` labels vowel and consonant letters from
