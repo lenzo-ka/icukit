@@ -4,10 +4,14 @@
 
 ### Changed
 
-- Detector construction now reuses bounded, thread-safe in-process gang memos and
-  process-wide ICU-derived locale fragments for number readers, currency forms, unit
-  surfaces, and time-zone names. Set `ICUKIT_CACHE=0` to bypass gang memoization, or
-  call `clear_detector_caches()` to clear detector-construction caches explicitly.
+- Building a detector gang now constructs one number reader per distinct configuration.
+- Detector gangs are cached in the process. An equal `generated_detectors` or
+  `flexible_detectors` call returns the gang already built (the 32 most recent are
+  kept), and the unit, currency and time-zone forms ICU writes are computed once for
+  each group of locales whose ICU data is the same, so the other locales of a language
+  build quickly. Setting `ICUKIT_CACHE=0` builds each gang anew, and
+  `clear_detector_caches()` releases the cached gangs and tables. Detection output is
+  unchanged.
 
 ### Added
 
