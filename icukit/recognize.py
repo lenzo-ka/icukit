@@ -487,16 +487,21 @@ class SingleLetterWordDetector:
         return detections
 
 
-def _locale_digit_map(locale: str | icu.Locale) -> dict[str, int]:
+@cache
+def _locale_digit_map_for_name(locale: str) -> dict[str, int]:
     """Map a locale's ten reflectively formatted digit glyphs to their values."""
-    number_format = icu.NumberFormat.createInstance(
-        locale if isinstance(locale, icu.Locale) else icu.Locale(locale)
-    )
+    number_format = icu.NumberFormat.createInstance(icu.Locale(locale))
     # Format every value because a numbering system need not occupy a contiguous range.
     digits = [number_format.format(value) for value in range(10)]
     if any(len(digit) != 1 for digit in digits) or len(set(digits)) != 10:
         raise ValueError(f"locale digits must be ten distinct single code points: {digits!r}")
     return {digit: value for value, digit in enumerate(digits)}
+
+
+def _locale_digit_map(locale: str | icu.Locale) -> dict[str, int]:
+    """Map a locale's digits, cached by its canonical ICU locale name."""
+    name = locale.getName() if isinstance(locale, icu.Locale) else icu.Locale(locale).getName()
+    return _locale_digit_map_for_name(name)
 
 
 @lru_cache(maxsize=1)
@@ -3588,16 +3593,56 @@ def _negative_currency_wraps(
     is the number's own and needs none.
     """
     wraps: dict[tuple[str, str], None] = {}
-    signs = (icu.UNumberSignDisplay.AUTO, icu.UNumberSignDisplay.ACCOUNTING)
     for name in _language_locales(locale, names):
-        base = icu.NumberFormatter.withLocale(icu.Locale(name)).unit(icu.CurrencyUnit(currency))
-        for sign in signs:
-            formatter = base.sign(sign)
-            positive = str(formatter.formatDouble(42.5))
-            negative = str(formatter.formatDouble(-42.5))
-            index = negative.find(positive)
-            if index >= 0 and negative != positive:
-                wraps.setdefault((negative[:index], negative[index + len(positive) :]))
+        for wrap in _locale_negative_currency_wraps(name, currency):
+            wraps.setdefault(wrap)
+    return tuple(wraps)
+
+
+@cache
+def _currency_locale_fingerprint(name: str) -> tuple:
+    """Every locale-varying input used by currency affixes and sign wrappers."""
+    locale = icu.Locale(name)
+    number_format = icu.NumberFormat.createInstance(locale)
+    plain = icu.NumberFormatter.withLocale(locale)
+    return (
+        _resource_data_owner("ICUDATA-curr", name),
+        tuple(sorted(_locale_digit_map(name).items())),
+        number_format.format(1),
+        str(plain.formatInt(1)),
+    )
+
+
+_CURRENCY_FRAGMENT_LOCK = Lock()
+_CURRENCY_WRAP_CACHE: dict[tuple, tuple[tuple[str, str], ...]] = {}
+_CURRENCY_AFFIX_CACHE: dict[tuple, str] = {}
+
+
+def _locale_negative_currency_wraps(name: str, currency: str) -> tuple[tuple[str, str], ...]:
+    """Negative currency wrappers contributed by one equivalent ICU locale."""
+    key = (_currency_locale_fingerprint(name), currency)
+    with _CURRENCY_FRAGMENT_LOCK:
+        found = _CURRENCY_WRAP_CACHE.get(key)
+    if found is not None:
+        return found
+    built = _locale_negative_currency_wraps_uncached(name, currency)
+    with _CURRENCY_FRAGMENT_LOCK:
+        return _CURRENCY_WRAP_CACHE.setdefault(key, built)
+
+
+def _locale_negative_currency_wraps_uncached(
+    name: str, currency: str
+) -> tuple[tuple[str, str], ...]:
+    """Format one exact locale's negative currency wrappers without owner reuse."""
+    wraps: dict[tuple[str, str], None] = {}
+    base = icu.NumberFormatter.withLocale(icu.Locale(name)).unit(icu.CurrencyUnit(currency))
+    for sign in (icu.UNumberSignDisplay.AUTO, icu.UNumberSignDisplay.ACCOUNTING):
+        formatter = base.sign(sign)
+        positive = str(formatter.formatDouble(42.5))
+        negative = str(formatter.formatDouble(-42.5))
+        index = negative.find(positive)
+        if index >= 0 and negative != positive:
+            wraps.setdefault((negative[:index], negative[index + len(positive) :]))
     return tuple(wraps)
 
 
@@ -3642,6 +3687,36 @@ def _plain_number_match(number: FlexibleNumberDetector, text: str, start: int):
 def _currency_amount_memo(key: tuple, text: str) -> dict[int, object]:
     """Amounts of ``text`` as the currency readers of ``key`` read them, by start."""
     return {}
+
+
+def _locale_currency_affix(name: str, currency: str, width: int) -> str:
+    """One currency affix for one equivalent ICU locale, currency, and width."""
+    key = (_currency_locale_fingerprint(name), currency, width)
+    with _CURRENCY_FRAGMENT_LOCK:
+        found = _CURRENCY_AFFIX_CACHE.get(key)
+    if found is not None:
+        return found
+    built = _locale_currency_affix_uncached(name, currency, width)
+    with _CURRENCY_FRAGMENT_LOCK:
+        return _CURRENCY_AFFIX_CACHE.setdefault(key, built)
+
+
+def _locale_currency_affix_uncached(name: str, currency: str, width: int) -> str:
+    """Format one exact locale's currency affix without owner reuse."""
+    locale = icu.Locale(name)
+    formatted = str(
+        icu.NumberFormatter.withLocale(locale)
+        .unit(icu.CurrencyUnit(currency))
+        .unitWidth(width)
+        .formatInt(1)
+    )
+    digits = _locale_digit_map(locale)
+    indexes = [index for index, character in enumerate(formatted) if character in digits]
+    if not indexes:
+        return ""
+    prefix = formatted[: indexes[0]].strip()
+    suffix = formatted[indexes[-1] + 1 :].strip()
+    return prefix or suffix
 
 
 class FlexibleCurrencyDetector:
@@ -3693,19 +3768,7 @@ class FlexibleCurrencyDetector:
 
     @staticmethod
     def _currency_affix(locale: icu.Locale, currency: str, width: int) -> str:
-        formatted = str(
-            icu.NumberFormatter.withLocale(locale)
-            .unit(icu.CurrencyUnit(currency))
-            .unitWidth(width)
-            .formatInt(1)
-        )
-        digits = _locale_digit_map(locale)
-        indexes = [index for index, character in enumerate(formatted) if character in digits]
-        if not indexes:
-            return ""
-        prefix = formatted[: indexes[0]].strip()
-        suffix = formatted[indexes[-1] + 1 :].strip()
-        return prefix or suffix
+        return _locale_currency_affix(locale.getName(), currency, width)
 
     def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         if start > 0 and _is_word_character(text[start - 1]):
@@ -3850,6 +3913,156 @@ def _plural_samples(locale: str) -> tuple[int | float, ...]:
     return tuple(samples.values())
 
 
+@cache
+def _resource_data_owner(package: str, name: str) -> str:
+    """Resolve the locale file that owns one ICU resource tree.
+
+    ICU silently opens a truncated ancestor when a file is absent. A file containing
+    only ``%%Parent`` delegates ownership to that target. The ``___`` key is ICU's
+    empty-bundle sentinel; keep that file distinct, conservatively.
+    """
+    requested = icu.Locale(name).getName()
+    bundle = icu.ResourceBundle(package, icu.Locale(requested))
+    actual = bundle.getLocale(icu.ULocDataLocaleType.ACTUAL_LOCALE).getName()
+    if actual != requested:
+        return _resource_data_owner(package, actual)
+    bundle.resetIterator()
+    keys: list[str] = []
+    while bundle.hasNext():
+        keys.append(bundle.getNext().getKey())
+    visible = set(keys) - {"___"}
+    if not visible:
+        return requested
+    if visible <= {"%%Parent"}:
+        parent = bundle.get("%%Parent").getString()
+        return _resource_data_owner(package, parent)
+    return requested
+
+
+def _unit_data_owner(name: str) -> str:
+    """The ICU unit-resource owner used by ``name``."""
+    return _resource_data_owner("ICUDATA-unit", name)
+
+
+@cache
+def _plain_measure_carrier(name: str, width: int, amount: int | float) -> str:
+    """ICU's plain meter carrier, independent of the denominator unit."""
+    return str(
+        icu.NumberFormatter.withLocale(icu.Locale(name))
+        .unit(icu.MeasureUnit.createMeter())
+        .unitWidth(width)
+        .formatDouble(amount)
+    )
+
+
+@cache
+def _measure_symbol_unit_probes(name: str) -> tuple[str, ...]:
+    """Percent and permille forms whose symbol and spacing come from number data."""
+    plain = icu.NumberFormatter.withLocale(icu.Locale(name))
+    widths = (
+        icu.UNumberUnitWidth.SHORT,
+        icu.UNumberUnitWidth.NARROW,
+        icu.UNumberUnitWidth.FULL_NAME,
+    )
+    return tuple(
+        str(plain.unit(icu.MeasureUnit.forIdentifier(unit)).unitWidth(width).formatInt(1))
+        for unit in ("percent", "permille")
+        for width in widths
+    )
+
+
+@cache
+def _measure_locale_fingerprint(name: str) -> tuple:
+    """Every locale-varying input read while deriving one unit fragment."""
+    locale = icu.Locale(name)
+    number_format = icu.NumberFormat.createInstance(locale)
+    plain = icu.NumberFormatter.withLocale(locale)
+    samples = _plural_samples(name)
+    renderings = tuple(
+        (number_format.format(amount), str(plain.formatDouble(amount)))
+        for amount in samples
+    )
+    return (_unit_data_owner(name), samples, renderings, _measure_symbol_unit_probes(name))
+
+
+_MEASURE_FRAGMENT_LOCK = Lock()
+_MEASURE_FRAGMENT_CACHE: dict[
+    tuple[tuple, str, bool],
+    tuple[
+        tuple[tuple[str, str, bool, str], ...],
+        tuple[tuple[str, str, bool, str], ...],
+    ],
+] = {}
+
+
+def _measure_locale_fragment(
+    name: str, unit: str, per_valid: bool
+) -> tuple[
+    tuple[tuple[str, str, bool, str], ...],
+    tuple[tuple[str, str, bool, str], ...],
+]:
+    """One locale's unit tables, shared by locales with an equal complete fingerprint."""
+    key = (_measure_locale_fingerprint(name), unit, per_valid)
+    with _MEASURE_FRAGMENT_LOCK:
+        found = _MEASURE_FRAGMENT_CACHE.get(key)
+    if found is not None:
+        return found
+    built = _measure_locale_fragment_uncached(name, unit, per_valid)
+    with _MEASURE_FRAGMENT_LOCK:
+        return _MEASURE_FRAGMENT_CACHE.setdefault(key, built)
+
+
+def _measure_locale_fragment_uncached(
+    name: str, unit: str, per_valid: bool
+) -> tuple[
+    tuple[tuple[str, str, bool, str], ...],
+    tuple[tuple[str, str, bool, str], ...],
+]:
+    """Format the surfaces contributed by one locale without cross-locale reuse."""
+    measure_unit = icu.MeasureUnit.forIdentifier(unit)
+    per_unit = f"per-{unit}"
+    surfaces: dict[tuple[str, str, bool, str], None] = {}
+    rates: dict[tuple[str, str, bool, str], None] = {}
+    icu_locale = icu.Locale(name)
+    number_format = icu.NumberFormat.createInstance(icu_locale)
+    base = icu.NumberFormatter.withLocale(icu_locale)
+    for width, width_name in (
+        (icu.UNumberUnitWidth.SHORT, "short"),
+        (icu.UNumberUnitWidth.NARROW, "narrow"),
+        (icu.UNumberUnitWidth.FULL_NAME, "wide"),
+    ):
+        # NumberFormatter also formats composed and SI-prefixed units reflectively.
+        formatter = base.unit(measure_unit).unitWidth(width)
+        carrier = base.unit(icu.MeasureUnit.createMeter()).unitWidth(width)
+        for amount in _plural_samples(name):
+            number_surface = number_format.format(amount)
+            formatted = str(formatter.formatDouble(amount))
+            number_start = formatted.find(number_surface)
+            if number_start < 0:
+                continue
+            number_end = number_start + len(number_surface)
+            prefix = formatted[:number_start].strip()
+            raw_suffix = formatted[number_end:]
+            suffix = raw_suffix.strip()
+            if prefix or not suffix:
+                continue
+            spaced = raw_suffix != raw_suffix.lstrip()
+            for variant in _unit_surface_variants(suffix):
+                surfaces.setdefault((variant, width_name, spaced, unit))
+            if not per_valid:
+                continue
+            plain = _plain_measure_carrier(name, width, amount)
+            try:
+                rate = str(carrier.perUnit(measure_unit).formatDouble(amount))
+            except icu.ICUError:
+                continue
+            if rate.startswith(plain) and len(rate) > len(plain):
+                tail = rate[len(plain) :]
+                for variant in _unit_surface_variants(tail.strip()):
+                    rates.setdefault((variant, width_name, tail != tail.lstrip(), per_unit))
+    return tuple(surfaces), tuple(rates)
+
+
 def _unit_surface_variants(surface: str) -> tuple[str, ...]:
     """A unit surface and the spellings ICU equates with it.
 
@@ -3878,54 +4091,15 @@ def _measure_surfaces(
     Each is ``(surface, width, spaced, unit)``, the detector's own locale first so its
     width names win a tie; see :class:`FlexibleMeasureDetector`.
     """
-    measure_unit = icu.MeasureUnit.forIdentifier(unit)
     per_unit = f"per-{unit}"
     surfaces: dict[tuple[str, str, bool, str], None] = {}
     rates: dict[tuple[str, str, bool, str], None] = {}
     for name in _language_locales(locale, names):
-        icu_locale = icu.Locale(name)
-        number_format = icu.NumberFormat.createInstance(icu_locale)
-        base = icu.NumberFormatter.withLocale(icu_locale)
-        for width, width_name in (
-            (icu.UNumberUnitWidth.SHORT, "short"),
-            (icu.UNumberUnitWidth.NARROW, "narrow"),
-            (icu.UNumberUnitWidth.FULL_NAME, "wide"),
-        ):
-            # NumberFormatter, not MeasureFormat: it also formats a unit ICU composes from
-            # an SI prefix or a product ("kilovolt", "kilonewton"), as CLDR writes it.
-            formatter = base.unit(measure_unit).unitWidth(width)
-            carrier = base.unit(icu.MeasureUnit.createMeter()).unitWidth(width)
-            for amount in _plural_samples(name):
-                number_surface = number_format.format(amount)
-                formatted = str(formatter.formatDouble(amount))
-                number_start = formatted.find(number_surface)
-                if number_start < 0:
-                    continue
-                number_end = number_start + len(number_surface)
-                prefix = formatted[:number_start].strip()
-                raw_suffix = formatted[number_end:]
-                suffix = raw_suffix.strip()
-                if prefix or not suffix:
-                    continue
-                spaced = raw_suffix != raw_suffix.lstrip()
-                for variant in _unit_surface_variants(suffix):
-                    surfaces.setdefault((variant, width_name, spaced, unit))
-                if not per_valid:
-                    continue
-                # CLDR's per pattern: the rate "12 m/km²" is the plain "12 m" followed by
-                # the per form "/km²", which follows a bare number the same way. The
-                # numerator unit is only a carrier for the pattern (meter is a unit every
-                # locale formats); the reading has none, as in "1.0/km²".
-                plain = str(carrier.formatDouble(amount))
-                try:
-                    rate = str(carrier.perUnit(measure_unit).formatDouble(amount))
-                except icu.ICUError:
-                    # ICU formats no per form for some composed units ("/kV").
-                    continue
-                if rate.startswith(plain) and len(rate) > len(plain):
-                    tail = rate[len(plain) :]
-                    for variant in _unit_surface_variants(tail.strip()):
-                        rates.setdefault((variant, width_name, tail != tail.lstrip(), per_unit))
+        locale_surfaces, locale_rates = _measure_locale_fragment(name, unit, per_valid)
+        for item in locale_surfaces:
+            surfaces.setdefault(item)
+        for item in locale_rates:
+            rates.setdefault(item)
     # The language's curated surfaces ICU does not write ("500cc", "185 lbs"; see
     # icukit.unit_surfaces): the unit and its value stay ICU's.
     for surface, target in curated_unit_surfaces(icu.Locale(locale).getLanguage()):
@@ -5209,6 +5383,169 @@ def _language_time_separators(
     return tuple(separators)
 
 
+def _zone_data_owner(name: str) -> str:
+    """The ICU time-zone resource owner used by ``name``."""
+    return _resource_data_owner("ICUDATA-zone", name)
+
+
+def _region_data_owner(name: str) -> str:
+    """The ICU region-name resource owner used by ``name``."""
+    return _resource_data_owner("ICUDATA-region", name)
+
+
+@cache
+def _zone_locale_fingerprint(name: str) -> tuple:
+    """Every locale-varying input used by one locale's zone tables."""
+    locale = icu.Locale(name)
+
+    def format_zone(pattern: str, zone_id: str) -> str:
+        formatter = icu.SimpleDateFormat(pattern, locale)
+        formatter.setTimeZone(icu.TimeZone.createTimeZone(zone_id))
+        return formatter.format(0.0)
+
+    # Zone and region owners cover names and exemplar cities. Digits plus explicit GMT
+    # probes cover number-symbol and gmtZero/gmtFormat differences outside those trees.
+    probes = (
+        format_zone("OOOO", "Etc/GMT"),
+        format_zone("OOOO", "GMT+05:30"),
+        format_zone("VVVV", "America/Los_Angeles"),
+        format_zone("VVVV", "Europe/Paris"),
+        format_zone("VVVV", "Asia/Kolkata"),
+    )
+    return (
+        _zone_data_owner(name),
+        _region_data_owner(name),
+        tuple(sorted(_locale_digit_map(name).items())),
+        probes,
+        _zone_generic_signature(name),
+    )
+
+
+@cache
+def _zone_ids() -> tuple[str, ...]:
+    """The stable ICU time-zone inventory."""
+    return tuple(icu.TimeZone.createEnumeration())
+
+
+@cache
+def _zone_generic_probe_ids(owner: str) -> tuple[str, ...]:
+    """One reflective witness zone for every reusable generic metazone name."""
+    groups: dict[str, list[str]] = {}
+    locale = icu.Locale(owner)
+    for zone_id in _zone_ids():
+        zone = icu.TimeZone.createTimeZone(zone_id)
+        form = zone.getDisplayName(False, icu.TimeZone.LONG_GENERIC, locale)
+        groups.setdefault(form, []).append(zone_id)
+    return tuple(zone_ids[0] for zone_ids in groups.values() if len(zone_ids) > 1)
+
+
+@cache
+def _zone_generic_signature(name: str) -> tuple[tuple[str, str, str, str], ...]:
+    """Territory-sensitive generic forms, once per reflective metazone witness."""
+    locale = icu.Locale(name)
+    owner = _zone_data_owner(name)
+    signature = []
+    for zone_id in _zone_generic_probe_ids(owner):
+        zone = icu.TimeZone.createTimeZone(zone_id)
+        signature.append(
+            (
+                zone.getDisplayName(False, icu.TimeZone.SHORT_GENERIC, locale),
+                zone.getDisplayName(True, icu.TimeZone.SHORT_GENERIC, locale),
+                zone.getDisplayName(False, icu.TimeZone.LONG_GENERIC, locale),
+                zone.getDisplayName(True, icu.TimeZone.LONG_GENERIC, locale),
+            )
+        )
+    return tuple(signature)
+
+
+_ZONE_FRAGMENT_LOCK = Lock()  # Protect fragment publication, never ICU formatting.
+_ZONE_FRAGMENT_CACHE: dict[tuple, tuple[frozenset[str], frozenset[str]]] = {}
+
+
+def _zone_fragment_get(key: tuple):
+    with _ZONE_FRAGMENT_LOCK:
+        return _ZONE_FRAGMENT_CACHE.get(key)
+
+
+def _zone_fragment_put(key: tuple, built: tuple[frozenset[str], frozenset[str]]):
+    with _ZONE_FRAGMENT_LOCK:
+        return _ZONE_FRAGMENT_CACHE.setdefault(key, built)
+
+
+def _zone_locale_tables(name: str) -> tuple[frozenset[str], frozenset[str]]:
+    """One locale's abbreviation and name sets, deduped by complete fingerprints."""
+    fingerprint = _zone_locale_fingerprint(name)
+    owner_key = ("owner", fingerprint[:-1])
+    owner = _zone_fragment_get(owner_key)
+    if owner is None:
+        owner = _zone_fragment_put(owner_key, _zone_locale_owner_tables_uncached(name))
+    generic_key = ("generic", fingerprint)
+    generic = _zone_fragment_get(generic_key)
+    if generic is None:
+        generic = _zone_fragment_put(generic_key, _zone_locale_generic_tables_uncached(name))
+    return owner[0] | generic[0], owner[1] | generic[1]
+
+
+def _zone_locale_tables_uncached(name: str) -> tuple[frozenset[str], frozenset[str]]:
+    """Format all zone forms for one exact locale without cross-locale reuse."""
+    owner = _zone_locale_owner_tables_uncached(name)
+    generic = _zone_locale_generic_tables_uncached(name)
+    return owner[0] | generic[0], owner[1] | generic[1]
+
+
+def _zone_locale_owner_tables_uncached(
+    name: str,
+) -> tuple[frozenset[str], frozenset[str]]:
+    """Zone-owner-stable standard, daylight, and location forms for one locale."""
+    abbreviations: set[str] = set()
+    names: set[str] = set()
+    locale = icu.Locale(name)
+    location = icu.SimpleDateFormat("VVVV", locale)
+    for zone_id in _zone_ids():
+        zone = icu.TimeZone.createTimeZone(zone_id)
+        for style in (icu.TimeZone.SHORT,):
+            for daylight in (False, True):
+                try:
+                    form = zone.getDisplayName(daylight, style, locale)
+                except icu.ICUError:
+                    continue
+                if 2 <= len(form) <= 5 and form.isalpha() and form.isupper():
+                    abbreviations.add(form)
+        for style in (icu.TimeZone.LONG,):
+            for daylight in (False, True):
+                try:
+                    names.add(zone.getDisplayName(daylight, style, locale))
+                except icu.ICUError:
+                    continue
+        location.setTimeZone(zone)
+        names.add(location.format(0.0))
+    return frozenset(abbreviations), frozenset(names)
+
+
+def _zone_locale_generic_tables_uncached(
+    name: str,
+) -> tuple[frozenset[str], frozenset[str]]:
+    """Territory-sensitive generic zone forms for one exact locale."""
+    abbreviations: set[str] = set()
+    names: set[str] = set()
+    locale = icu.Locale(name)
+    for zone_id in _zone_ids():
+        zone = icu.TimeZone.createTimeZone(zone_id)
+        for daylight in (False, True):
+            try:
+                form = zone.getDisplayName(daylight, icu.TimeZone.SHORT_GENERIC, locale)
+            except icu.ICUError:
+                pass
+            else:
+                if 2 <= len(form) <= 5 and form.isalpha() and form.isupper():
+                    abbreviations.add(form)
+            try:
+                names.add(zone.getDisplayName(daylight, icu.TimeZone.LONG_GENERIC, locale))
+            except icu.ICUError:
+                pass
+    return frozenset(abbreviations), frozenset(names)
+
+
 @cache
 def _language_zone_abbreviations(
     language: str, names: tuple[str, ...] | None = None
@@ -5220,20 +5557,10 @@ def _language_zone_abbreviations(
     hand-rolled: it drops the offset forms ("GMT+1") and full names ICU returns when a
     locale has no abbreviation, which are not what a clock time is followed by.
     """
-    styles = (icu.TimeZone.SHORT, icu.TimeZone.SHORT_GENERIC)
     forms: set[str] = set()
-    locales = [icu.Locale(name) for name in _language_locale_names(language, names)]
-    for zone_id in icu.TimeZone.createEnumeration():
-        zone = icu.TimeZone.createTimeZone(zone_id)
-        for locale in locales:
-            for style in styles:
-                for daylight in (False, True):
-                    try:
-                        form = zone.getDisplayName(daylight, style, locale)
-                    except icu.ICUError:
-                        continue
-                    if 2 <= len(form) <= 5 and form.isalpha() and form.isupper():
-                        forms.add(form)
+    for name in _language_locale_names(language, names):
+        abbreviations, _zone_names = _zone_locale_tables(name)
+        forms.update(abbreviations)
     return tuple(sorted(forms, key=lambda form: (-len(form), form)))
 
 
@@ -5254,24 +5581,9 @@ def _language_zone_names(language: str, names: tuple[str, ...] | None = None) ->
     Time"). Offset forms ("GMT-05:00") are left out: they are not names.
     """
     forms: set[str] = set()
-    locales = [icu.Locale(name) for name in _language_locale_names(language, names)]
-    styles = (icu.TimeZone.LONG, icu.TimeZone.LONG_GENERIC)
-    location = {
-        name: icu.SimpleDateFormat("VVVV", icu.Locale(name))
-        for name in _language_locale_names(language, names)
-    }
-    for zone_id in icu.TimeZone.createEnumeration():
-        zone = icu.TimeZone.createTimeZone(zone_id)
-        for icu_locale in locales:
-            for style in styles:
-                for daylight in (False, True):
-                    try:
-                        forms.add(zone.getDisplayName(daylight, style, icu_locale))
-                    except icu.ICUError:
-                        continue
-        for formatter in location.values():
-            formatter.setTimeZone(zone)
-            forms.add(formatter.format(0.0))
+    for name in _language_locale_names(language, names):
+        _abbreviations, zone_names = _zone_locale_tables(name)
+        forms.update(zone_names)
     return tuple(
         sorted(
             (form for form in forms if " " in form and not any(c.isdigit() for c in form)),
@@ -7577,3 +7889,34 @@ class FlexibleNumberRangeDetector:
                 key = (detection["start"], detection["end"], detection["value"])
                 found.setdefault(key, detection)
         return sorted(found.values(), key=lambda item: (item["start"], item["end"]))
+
+
+def _clear_derived_locale_caches() -> None:
+    """Clear process-wide locale fragments and their assembled tables."""
+    cached = (
+        _locale_digit_map_for_name,
+        _negative_currency_wraps,
+        _currency_locale_fingerprint,
+        _plural_samples,
+        _resource_data_owner,
+        _plain_measure_carrier,
+        _measure_locale_fingerprint,
+        _measure_symbol_unit_probes,
+        _measure_surfaces,
+        _zone_locale_fingerprint,
+        _zone_ids,
+        _zone_generic_probe_ids,
+        _zone_generic_signature,
+        _language_zone_abbreviations,
+        _language_zone_names,
+        _zone_forms_by_initial,
+    )
+    for function in cached:
+        function.cache_clear()
+    with _MEASURE_FRAGMENT_LOCK:
+        _MEASURE_FRAGMENT_CACHE.clear()
+    with _CURRENCY_FRAGMENT_LOCK:
+        _CURRENCY_WRAP_CACHE.clear()
+        _CURRENCY_AFFIX_CACHE.clear()
+    with _ZONE_FRAGMENT_LOCK:
+        _ZONE_FRAGMENT_CACHE.clear()

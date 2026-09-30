@@ -193,6 +193,7 @@ from .engine import (
     SPELLOUT_NUMBER_FAMILY,
     WEEKDAY_NAME_FAMILY,
     Family,
+    clear_detector_caches,
     flexible_detectors,
     flexible_detectors_report,
     generated_detectors,
@@ -535,6 +536,7 @@ __all__ = [
     "range_detectors",
     "flexible_detectors",
     "flexible_detectors_report",
+    "clear_detector_caches",
     "detection_to_dict",
     "detections_to_json",
     # Abbreviations

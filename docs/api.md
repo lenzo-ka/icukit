@@ -63,6 +63,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`range_detectors`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors_report`](#icukitengine) — function, `icukit.engine`
+- [`clear_detector_caches`](#icukitengine) — function, `icukit.engine`
 - [`detection_to_dict`](#icukitserialize) — function, `icukit.serialize`
 - [`detections_to_json`](#icukitserialize) — function, `icukit.serialize`
 - [`ABBREVIATION_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -3351,6 +3352,15 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
+### `clear_detector_caches() -> 'None'`
+
+Clear all process-wide detector-construction caches.
+
+This clears generated and flexible gang memos, shared number readers, and derived
+per-locale currency, measure, digit, plural, and time-zone tables. It is useful to
+tests, benchmarks, and long-lived processes that need to release cached gangs.
+``ICUKIT_CACHE=0`` instead bypasses only gang memoization, read at each call.
+
 ### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 A gang of every flexible (recall) reader of :mod:`icukit.recognize` for ``locale``.
@@ -3392,26 +3402,36 @@ default). ``guarded`` adds the readers of the readings the default readers refus
 purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
 built is left out; :func:`flexible_detectors_report` names it and why.
 
-The set is costlier than :func:`generated_detectors`: building it takes seconds (most
-in a language of many locales, where the currency and measure readers read every
-locale's forms), so build it once and reuse it; a ``detect`` costs a small multiple
-of the generated set's, since the currency and measure readers share the numbers
-they read within a text. The shared readings are kept for the 16 texts read last
-(about 110 bytes per character each for en_US).
+Construction is cached process-wide in a bounded memo keyed by every option; equal
+calls return the same frozen set. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for
+a call, or use :func:`clear_detector_caches` to clear it. A ``detect`` costs a small
+multiple of the generated set's, since the currency and measure readers share the
+numbers they read within a text. The shared readings are kept for the 16 texts read
+last (about 110 bytes per character each for en_US).
 
 ### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 The flexible readers for ``locale``, and every spec that could not be built.
 
-See :func:`flexible_detectors`.
+See :func:`flexible_detectors`. The frozen report is memoized by the complete,
+normalized request. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for a call;
+:func:`clear_detector_caches` clears it explicitly.
 
 ### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
+Repeated equal calls return the detector set from the process-wide bounded gang
+memo. Set ``ICUKIT_CACHE=0`` to bypass that memo for a call, or call
+:func:`clear_detector_caches` to clear every detector-construction cache.
+
 ### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
+
+The immutable report is memoized in-process by the complete request, including
+family and material-object identity. Set ``ICUKIT_CACHE=0`` to bypass this gang
+memo for a call; :func:`clear_detector_caches` clears it explicitly.
 
 ### `range_detectors(locale: 'str', detectors: 'DetectorSet', *, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
 
