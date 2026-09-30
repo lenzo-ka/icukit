@@ -8,6 +8,15 @@
 
 ### Added
 
+- The English sentence default now loads the locale-fallback shipped
+  abbreviation lexicon's `break="suppress"` entries before its learned base;
+  attributed decisions report the exception rule, while explicit
+  `base="none"` remains raw ICU without the list. Sentence exception matching
+  now indexes exact punctuation-final rules by their candidate-terminal token,
+  so per-candidate lookup is independent of list size; rules whose exact match
+  cannot be anchored and ICU collation variants retain the whole-text matcher.
+  Sentence-only inventories no longer enter word tokenization, and each
+  sentence operation reuses its ICU candidates and offset maps.
 - Orthographic word shape `cvletters@1` labels vowel and consonant letters from
   runtime ICU data, a curated English table, or additive caller material;
   `cvletters_counts` and token features expose its counts and vowel presence.

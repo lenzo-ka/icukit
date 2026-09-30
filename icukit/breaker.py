@@ -192,9 +192,9 @@ class Breaker:
 
     A versatile text segmentation tool that can break text into sentences,
     words, lines, or grapheme clusters based on locale-specific rules. English
-    sentence breaking uses the learned model by default; ``base="none"`` keeps
-    raw ICU sentence boundaries. Other levels and non-English defaults remain
-    ICU behavior.
+    sentence breaking uses shipped abbreviation suppressions followed by the
+    learned model by default; ``base="none"`` keeps raw ICU sentence boundaries
+    without the list. Other levels and non-English defaults remain ICU behavior.
 
     Example:
         >>> breaker = Breaker('en')

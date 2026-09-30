@@ -43,7 +43,8 @@ ik locale info en_US
 Cartlet 0.7.0 or later is an icukit dependency and is installed by the normal
 icukit installation above once the owner's cartlet 0.7.0 release is available
 from PyPI. English `SentenceOverride` instances use the `en-tn-cart@1`
-sentence-break base by default:
+sentence-break base by default, with the locale's shipped `break="suppress"`
+abbreviation entries applied before the model:
 
 ```bash
 python -c 'from icukit import SentenceOverride; SentenceOverride()'
@@ -52,7 +53,8 @@ python -c 'from icukit import SentenceOverride; SentenceOverride()'
 Cartlet is imported lazily, only when a cartlet model is selected. The English
 `POSIX` locale variant defaults to `base="none"` because its ICU word tokens
 differ from the model profile. Explicit `SentenceOverride(base="none")` and
-non-English locale defaults therefore do not pay its import cost.
+non-English locale defaults therefore do not pay its import cost and do not
+load the abbreviation exception list.
 
 ## Advanced: using a system PyICU
 
