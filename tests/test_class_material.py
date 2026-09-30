@@ -13,6 +13,7 @@ from icukit import (
     MaterialLoadError,
     char_classes,
     class_window,
+    cvletters_counts,
     load_locale_material,
     shape,
     shape_scheme,
@@ -614,3 +615,14 @@ def test_identifier_namespaces_are_separate_except_for_extension_names():
     with pytest.raises(MaterialLoadError) as caught:
         load_locale_material(duplicate_extension)
     assert "DUPLICATE_ID" in _codes(caught.value)
+
+
+def test_cvletters_counts_keep_a_namespaced_refinement_letter_as_a_letter():
+    material = load_locale_material(_shape_material())
+    assert shape("Ab", "cvletters@1", locale="en", material=[material]) == "<upper>C"
+    assert cvletters_counts("Ab", locale="en", material=[material]) == {
+        "letters": 2,
+        "vowels": 0,
+        "consonants": 1,
+        "has_vowel": False,
+    }

@@ -7113,7 +7113,8 @@ Example:
 
 Uncapped orthographic consonant-vowel letter counts.
 
-``letters`` counts code points labeled ``V``, ``C``, ``Y``, or ``L``;
+``letters`` counts code points labeled ``V``, ``C``, ``Y``, or ``L``, plus
+letters that a namespaced shape refinement relabels (still letters);
 ``vowels`` counts ``V``; ``consonants`` counts ``C`` and ``Y``; and
 ``has_vowel`` reports whether ``vowels`` is positive.
 
