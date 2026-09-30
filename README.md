@@ -26,6 +26,10 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 - **Normalization**: NFC, NFD, NFKC, NFKD Unicode normalization forms
 - **Character Names**: Formal names, name aliases of every type (corrections, control names, abbreviations), and extended names of every code point, and lookup from a name or alias to its character
 - **Text Segmentation**: Break text into words, sentences, lines, or grapheme clusters
+- **Word shapes**: `shape` provides `coarse@1`, `cased@1`, and the approximate
+  orthographic `cvletters@1`, with uncapped `cvletters_counts`. It labels vowel
+  letters, not phones: the English table is curated, other alphabets remain `L`
+  unless caller material supplies labels, and phone-level speakability is out of scope.
 - **Unicode Regex**: Full Unicode-aware regular expressions with script and property support
 
 ### Sentence breaking

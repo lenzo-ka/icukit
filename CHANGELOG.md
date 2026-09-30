@@ -4,6 +4,9 @@
 
 ### Added
 
+- Orthographic word shape `cvletters@1` labels vowel and consonant letters from
+  runtime ICU data, a curated English table, or additive caller material;
+  `cvletters_counts` and token features expose its counts and vowel presence.
 - `CartletModelRef` and the named `en-tn-cart@1` sentence-break base add an
   English cartlet model path. The shipped CC BY-SA 4.0 model is
   digest- and runtime-identity-bound and uses a raising lazy feature vector for

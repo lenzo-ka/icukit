@@ -427,7 +427,7 @@ from .sentence_override import (
     load_break_rules,
 )
 from .serialize import detection_to_dict, detections_to_json
-from .shape import ShapeSchemeInfo, shape, shape_scheme
+from .shape import CVLetterCounts, ShapeSchemeInfo, cvletters_counts, shape, shape_scheme
 from .spoof import (
     CONFUSABLE_MIXED_SCRIPT,
     CONFUSABLE_NONE,
@@ -687,7 +687,9 @@ __all__ = [
     "ClassWindow",
     "char_classes",
     "class_window",
+    "CVLetterCounts",
     "ShapeSchemeInfo",
+    "cvletters_counts",
     "shape",
     "shape_scheme",
     "ProtectedSpan",

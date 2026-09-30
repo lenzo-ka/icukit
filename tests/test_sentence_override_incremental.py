@@ -904,14 +904,14 @@ def test_decided_before_rule_waits_for_word_inventory_merge():
 
 def test_token_features_are_cached_once_and_cache_flag_is_semantic_noop(monkeypatch):
     calls = {}
-    original = sentence_override_module.token_features
+    original = sentence_override_module._token_features_base
 
     def counted(toks, index, text):
         key = (toks[index]["start"], toks[index]["end"], toks[index]["text"])
         calls[key] = calls.get(key, 0) + 1
         return original(toks, index, text)
 
-    monkeypatch.setattr(sentence_override_module, "token_features", counted)
+    monkeypatch.setattr(sentence_override_module, "_token_features_base", counted)
     cached = SentenceOverride(base="none", before=[_loaded(_next_upper())], cache=True)
     calls.clear()
     text = "Mr. Smith arrived. Next."
@@ -925,7 +925,7 @@ def test_token_features_are_cached_once_and_cache_flag_is_semantic_noop(monkeypa
 
 def test_cache_retains_future_lookbehind_tokens_after_pending_empties(monkeypatch):
     calls = {}
-    original = sentence_override_module.token_features
+    original = sentence_override_module._token_features_base
 
     def counted(toks, index, text):
         key = (toks[index]["start"], toks[index]["end"], toks[index]["text"])
@@ -942,7 +942,7 @@ def test_cache_retains_future_lookbehind_tokens_after_pending_empties(monkeypatc
         match="A. B.\n\n",
     )
     loaded = _loaded(rule)
-    monkeypatch.setattr(sentence_override_module, "token_features", counted)
+    monkeypatch.setattr(sentence_override_module, "_token_features_base", counted)
     breaker = SentenceOverride(base="none", before=[loaded], cache=True).stream()
     breaker.feed("A. B.\n\nC ")
     assert [item["offset"] for item in breaker.pending()] == [9]

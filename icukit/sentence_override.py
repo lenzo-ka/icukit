@@ -41,8 +41,8 @@ from .tokens import (
     TOKEN_PROFILE,
     ProtectedSpan,
     Token,
+    _token_features_base,
     _validated_protected,
-    token_features,
     tokens,
 )
 
@@ -887,10 +887,10 @@ class _TokenFeatureCache:
 
     def get(self, toks: Sequence[Token], index: int, text: str) -> dict[str, str | int | bool]:
         if not self.enabled:
-            return token_features(toks, index, text)
+            return _token_features_base(toks, index, text)
         key = self._key(toks, index, text)
         if key not in self.values:
-            self.values[key] = token_features(toks, index, text)
+            self.values[key] = _token_features_base(toks, index, text)
         return self.values[key]
 
     def evict_before(self, offset: int) -> None:

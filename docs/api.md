@@ -204,7 +204,9 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`ClassWindow`](#icukitclasses) — class, `icukit.classes`
 - [`char_classes`](#icukitclasses) — function, `icukit.classes`
 - [`class_window`](#icukitclasses) — function, `icukit.classes`
+- [`CVLetterCounts`](#icukitshape) — class, `icukit.shape`
 - [`ShapeSchemeInfo`](#icukitshape) — class, `icukit.shape`
+- [`cvletters_counts`](#icukitshape) — function, `icukit.shape`
 - [`shape`](#icukitshape) — function, `icukit.shape`
 - [`shape_scheme`](#icukitshape) — function, `icukit.shape`
 - [`ProtectedSpan`](#icukittokens) — class, `icukit.tokens`
@@ -7158,22 +7160,41 @@ Example:
     >>> shape("U.S.", "cased@1")
     'X.X.'
 
+### class `CVLetterCounts`
+
+Uncapped orthographic consonant-vowel letter counts.
+
+``letters`` counts code points labeled ``V``, ``C``, ``Y``, or ``L``, plus
+letters that a namespaced shape refinement relabels (still letters);
+``vowels`` counts ``V``; ``consonants`` counts ``C`` and ``Y``; and
+``has_vowel`` reports whether ``vowels`` is positive.
+
 ### class `ShapeSchemeInfo`
 
 Stable metadata identifying a shape scheme and its Unicode runtime.
 
-### `shape(text: 'str', scheme: 'str' = 'coarse@1', /, *, material: 'Iterable[LocaleMaterial]' = ()) -> 'str'`
+### `cvletters_counts(text: 'str', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'CVLetterCounts'`
+
+Count uncapped ``cvletters@1`` labels in ``text``.
+
+``Y`` counts as a consonant. ``L`` contributes only to ``letters``, so
+``letters > vowels + consonants`` reports letters for which no vowel policy
+is available. Digits, absorbed marks, and other characters are excluded.
+
+### `shape(text: 'str', scheme: 'str' = 'coarse@1', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'str'`
 
 Return the versioned ICU shape of ``text``.
 
 ``coarse@1`` collapses letter and digit runs; ``cased@1`` distinguishes
-letter case and caps each same-symbol run at four. Combining marks directly
-following a letter or digit run are absorbed. Validated shape-refinement
-material selects a namespaced symbol before absorption or the base scheme
-and collapses adjacent uses of that symbol as one run. A refined
-punctuation symbol does not make punctuation absorb following marks. An
-extended scheme name checks the supplied material's ids and digest prefixes.
-The name is a label and is not proof of material identity.
+letter case and caps each same-symbol run at four. ``cvletters@1`` is an
+approximate orthographic shape of vowel and consonant letters, not phones;
+its curated Latin table requires an ``en``-descendant ``locale``. Other
+alphabetic letters are ``L`` unless material supplies a label. Combining
+marks directly following a letter or digit run are absorbed unless ICU or a
+refinement labels them. Validated namespaced shape refinements take
+precedence and collapse adjacent uses as one run. An extended scheme name
+checks the supplied material's ids and digest prefixes; the name is a label,
+not proof of material identity.
 
 Example:
     >>> shape("Mr. Smith")
@@ -7181,7 +7202,7 @@ Example:
     >>> shape("Mr. Smith", "cased@1")
     'Xx. Xxxxx'
 
-### `shape_scheme(scheme: 'str' = 'coarse@1', /, *, material: 'Iterable[LocaleMaterial]' = ()) -> 'ShapeSchemeInfo'`
+### `shape_scheme(scheme: 'str' = 'coarse@1', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'ShapeSchemeInfo'`
 
 Describe a shape scheme and return its stable identity digest.
 
@@ -7192,6 +7213,8 @@ name is a label containing each material id and 12-hex digest prefix. Passing
 that label back checks those prefixes against the supplied material as a guard
 against an obvious mismatch; the full extension digests and this record's
 digest, rather than the label, are identities.
+``locale`` is accepted for symmetry with :func:`shape` but does not affect
+scheme metadata or its digest.
 
 ## icukit.spoof
 
@@ -7534,12 +7557,15 @@ A non-whitespace ICU word segment or protected token unit.
 ``protected_types`` is the sorted tuple of every type on equal-extent
 protected spans.
 
-### `token_features(toks: 'Sequence[Token]', i: 'int', text: 'str', /) -> 'dict[str, str | int | bool]'`
+### `token_features(toks: 'Sequence[Token]', i: 'int', text: 'str', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'dict[str, str | int | bool]'`
 
-Return the feature-set-v1 values for token ``i``.
+Return token features, including orthographic consonant-vowel counts.
 
 ``run.shape.cased`` covers the complete whitespace-delimited run containing
-the token. ``lex`` is reserved and is currently always ``"none"``.
+the token. ``lex`` is reserved and is currently always ``"none"``. The
+``shape.cvletters`` and four ``cvletters.*`` values describe the token
+surface. Pass ``locale`` to enable the curated English letter table for an
+``en`` descendant; without a policy, alphabetic letters are labeled ``L``.
 
 ### `tokens(text: 'str', locale: 'str', /, *, inventory: 'LoadedExceptionInventory | None' = None, protected: 'Iterable[ProtectedSpan]' = ()) -> 'list[Token]'`
 

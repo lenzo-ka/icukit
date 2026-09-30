@@ -18,10 +18,11 @@ from typing import Literal, NotRequired, TypedDict, cast
 import icu
 
 from .breaker import break_word_spans
-from .classes import char_classes
+from .classes import _class_materials, char_classes
 from .errors import OverlappingProtectedSpans
 from .exceptions import LoadedExceptionInventory
-from .shape import shape
+from .material import LocaleMaterial
+from .shape import _cvletters_shape_counts_selections, shape
 
 __all__ = ["TOKEN_PROFILE", "ProtectedSpan", "Token", "tokens", "token_features"]
 
@@ -212,12 +213,10 @@ def tokens(
     return result
 
 
-def token_features(toks: Sequence[Token], i: int, text: str, /) -> dict[str, str | int | bool]:
-    """Return the feature-set-v1 values for token ``i``.
-
-    ``run.shape.cased`` covers the complete whitespace-delimited run containing
-    the token. ``lex`` is reserved and is currently always ``"none"``.
-    """
+def _token_features_base(
+    toks: Sequence[Token], i: int, text: str, /
+) -> dict[str, str | int | bool]:
+    """Return the sentence-override feature-set-v1 values for token ``i``."""
     token = toks[i]
     surface = token["text"]
     if not surface:
@@ -242,3 +241,38 @@ def token_features(toks: Sequence[Token], i: int, text: str, /) -> dict[str, str
         "run.shape.cased": shape(text[run_start:run_end], "cased@1"),
         "lex": "none",
     }
+
+
+def token_features(
+    toks: Sequence[Token],
+    i: int,
+    text: str,
+    /,
+    *,
+    locale: str | None = None,
+    material: Iterable[LocaleMaterial] = (),
+) -> dict[str, str | int | bool]:
+    """Return token features, including orthographic consonant-vowel counts.
+
+    ``run.shape.cased`` covers the complete whitespace-delimited run containing
+    the token. ``lex`` is reserved and is currently always ``"none"``. The
+    ``shape.cvletters`` and four ``cvletters.*`` values describe the token
+    surface. Pass ``locale`` to enable the curated English letter table for an
+    ``en`` descendant; without a policy, alphabetic letters are labeled ``L``.
+    """
+    token = toks[i]
+    surface = token["text"]
+    result = _token_features_base(toks, i, text)
+    cv_shape, counts, _selected = _cvletters_shape_counts_selections(
+        surface, locale, _class_materials(material)
+    )
+    result.update(
+        {
+            "shape.cvletters": cv_shape,
+            "cvletters.has_vowel": counts["has_vowel"],
+            "cvletters.letters": counts["letters"],
+            "cvletters.vowels": counts["vowels"],
+            "cvletters.consonants": counts["consonants"],
+        }
+    )
+    return result
