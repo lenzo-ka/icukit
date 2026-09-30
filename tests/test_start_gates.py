@@ -79,11 +79,39 @@ def test_en_US_gate_literals():
         chars=frozenset("$(+-.0123456789U")
     )
     strict = StartGate(
-        folded=frozenset("abdefijmnopstw"),
+        chars=frozenset("0123456789"),
+        folded=frozenset("0123456789abdefijmnopstw"),
         tests=frozenset({"icu.not_isalpha"}),
     )
     assert DateDetector("en_US", "yMd").start_gates()["scan"] == strict
     assert DateDetector("en_US", "MMMd").start_gates()["scan"] == strict
+
+
+def test_strict_number_gate_admits_alphabetic_digits():
+    reader = NumberDetector("en_US@numbers=hanidec", "decimal")
+    digits = frozenset("〇一二三四五六七八九")
+    gate = reader.start_gates()["scan"]
+    assert gate is not None
+    assert digits <= gate.chars
+    assert digits <= gate.folded
+
+    for text, expected in (
+        ("九", [(0, 1, "number:decimal")]),
+        ("x 九 y", [(2, 3, "number:decimal")]),
+    ):
+        actual = [(item["start"], item["end"], item["type"]) for item in reader.detect(text)]
+        with ungated():
+            reference = [(item["start"], item["end"], item["type"]) for item in reader.detect(text)]
+        assert actual == reference == expected
+
+
+def test_strict_date_gate_admits_number_formatter_digits():
+    reader = DateDetector("en_US@numbers=hanidec", "yMd")
+    digits = frozenset("〇一二三四五六七八九")
+    gate = reader.start_gates()["scan"]
+    assert gate is not None
+    assert digits <= gate.chars
+    assert digits <= gate.folded
 
 
 def test_gate_report_accepts_single_detector():

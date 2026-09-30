@@ -696,17 +696,61 @@ def _decimal_symbol_strings(locale: str) -> tuple[str, ...]:
     )
 
 
+_DECIMAL_DIGIT_SYMBOLS = (
+    ("kZeroDigitSymbol", icu.DecimalFormatSymbols.kZeroDigitSymbol),
+    ("kOneDigitSymbol", 18),
+    ("kTwoDigitSymbol", 19),
+    ("kThreeDigitSymbol", 20),
+    ("kFourDigitSymbol", 21),
+    ("kFiveDigitSymbol", 22),
+    ("kSixDigitSymbol", 23),
+    ("kSevenDigitSymbol", 24),
+    ("kEightDigitSymbol", 25),
+    ("kNineDigitSymbol", 26),
+)
+
+
+def _decimal_digit_strings(symbols: Any) -> tuple[str, ...]:
+    """Return all ten digit symbols from ``DecimalFormatSymbols``.
+
+    PyICU 2.16.2 exposes only ``kZeroDigitSymbol`` by name; ICU's public enum values
+    for the later digit symbols are used as fallbacks until PyICU exposes their names.
+    """
+    symbol_type = icu.DecimalFormatSymbols
+    return tuple(
+        str(symbols.getSymbol(getattr(symbol_type, name, fallback)))
+        for name, fallback in _DECIMAL_DIGIT_SYMBOLS
+    )
+
+
+def _date_digit_strings(reader: object) -> tuple[str, ...]:
+    """Format 0--9 through every number formatter held by a strict date reader."""
+    found = set()
+    seen = set()
+    for name in ("_df", "_parser"):
+        formatter = getattr(reader, name, None)
+        if formatter is None or id(formatter) in seen:
+            continue
+        seen.add(id(formatter))
+        number_format = formatter.getNumberFormat()
+        found.update(str(number_format.format(value)) for value in range(10))
+    return tuple(sorted(found))
+
+
 def _strict_gate(reader: object) -> StartGate | None:
     """Build a strict complement gate from the same ICU tables as ``reader``."""
     locale = str(reader.locale)
     strings = set(_date_symbol_strings(locale))
     strings.update(_day_period_strings(locale))
+    digits = set()
     pattern = getattr(reader, "pattern", None)
     if pattern:
         strings.update(_formatted_field_strings(locale, str(pattern)))
+        digits.update(_date_digit_strings(reader))
     strings.update(_decimal_symbol_strings(locale))
     number_format = getattr(reader, "_nf", None)
     if number_format is not None:
+        digits.update(_decimal_digit_strings(number_format.getDecimalFormatSymbols()))
         for value in (-1234567.25, -1234.5, -0.0, 0, 0.5, 12, 250000):
             strings.add(str(number_format.format(value)))
         if getattr(reader, "kind", None) == "currency":
@@ -717,6 +761,7 @@ def _strict_gate(reader: object) -> StartGate | None:
                 formatter = base.sign(sign)
                 for value in (-1234.5, -0.0, 0, 0.5, 12):
                     strings.add(str(formatter.formatDouble(value)))
+    strings.update(digits)
     mismatches = [
         value
         for value in strings
@@ -724,10 +769,12 @@ def _strict_gate(reader: object) -> StartGate | None:
     ]
     alphabetic = [value for value in strings if value and icu.Char.isalpha(value[0])]
     folded = set(folded_heads(alphabetic))
+    folded.update(folded_heads(digits))
     # StartGate admits input through Python casefold, but ICU's parser follows ICU's
     # newer tables.  Adding ICU's head for a mismatching source keeps both spellings.
     folded.update(str(icu.UnicodeString(value).foldCase())[:1] for value in mismatches if value)
     return StartGate(
+        chars=heads(digits),
         folded=frozenset(folded),
         tests=frozenset({"icu.not_isalpha"}),
     )
