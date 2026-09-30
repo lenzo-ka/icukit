@@ -222,6 +222,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`BreakDecision`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`BreakBoundary`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`BreakSegmentation`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`CartletModelRef`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`PendingCandidate`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`IncrementalSentenceBreaker`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`SentenceOverride`](#icukitsentence-override) — class, `icukit.sentence_override`
@@ -449,7 +450,11 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `AbbreviationSentenceBreaker`
 
-Post-filter ICU sentence spans using one compiled abbreviation lexicon.
+Post-filter raw ICU sentence spans with a separate abbreviation lexicon.
+
+For English, :class:`Breaker` and :class:`SentenceOverride` use the learned
+model by default. This class remains the explicit lexicon-based alternative;
+``base="none"`` on those APIs gives raw ICU.
 
 #### `AbbreviationSentenceBreaker(locale: 'str' = 'en_US', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
 
@@ -1018,11 +1023,12 @@ Example:
 Text segmentation using ICU BreakIterator.
 
 This module provides text segmentation capabilities for breaking text into
-sentences, words, lines, or grapheme clusters using ICU's BreakIterator.
+sentences, words, lines, or grapheme clusters. ICU supplies every level's
+boundaries; English sentence candidates use the learned model by default.
 Structured span offsets are Python code-point indices into the source text.
 
 Key Features:
-    * Locale-aware sentence segmentation
+    * Locale-aware sentence segmentation with a learned English default
     * Word tokenization with optional punctuation filtering
     * Line break detection
     * Grapheme cluster iteration (user-perceived characters)
@@ -1071,7 +1077,10 @@ span's end boundary.
 Text segmentation using ICU BreakIterator.
 
 A versatile text segmentation tool that can break text into sentences,
-words, lines, or grapheme clusters based on locale-specific rules.
+words, lines, or grapheme clusters based on locale-specific rules. English
+sentence breaking uses the learned model by default; ``base="none"`` keeps
+raw ICU sentence boundaries. Other levels and non-English defaults remain
+ICU behavior.
 
 Example:
     >>> breaker = Breaker('en')
@@ -1080,12 +1089,15 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: 'str' = 'en_US')`
+#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None)`
 
 Initialize a Breaker instance.
 
 Args:
     locale: Locale code for language-specific rules (e.g., 'en', 'en_US', 'ja').
+    base: Sentence base only. ``None`` selects the locale default,
+        ``"none"`` selects raw ICU, and ``"en-tn@1"`` or
+        ``"en-tn-cart@1"`` selects a learned English base.
 
 Raises:
     BreakerError: If the locale is invalid.
@@ -1129,7 +1141,7 @@ Returns:
 
 #### `break_sentence_spans(text: 'str') -> 'list[BreakSpan]'`
 
-Return every sentence segment as a structured span.
+Return sentence spans from the selected locale-default or named base.
 
 #### `break_sentences(text: 'str', skip_empty: 'bool' = True) -> 'list[str]'`
 
@@ -1200,7 +1212,7 @@ Yields:
 
 #### `iter_sentence_spans(text: 'str') -> 'Iterator[BreakSpan]'`
 
-Yield every sentence segment with code-point offsets.
+Yield sentence spans from the selected locale-default or named base.
 
 #### `iter_sentences(text: 'str', skip_empty: 'bool' = True) -> 'Iterator[str]'`
 
@@ -1319,11 +1331,11 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[BreakSpan]'`
 
-Return every sentence segment with code-point offsets.
+Return sentence spans from the locale-default or selected base.
 
-### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True) -> 'list[str]'`
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -1333,6 +1345,8 @@ Args:
     text: The text to segment.
     locale: Locale code for language-specific rules.
     skip_empty: If True, empty sentences are excluded.
+    base: Sentence base; ``None`` selects the locale default and ``"none"``
+        selects raw ICU.
 
 Returns:
     List of sentence strings.
@@ -6881,17 +6895,19 @@ Example:
 
 ## icukit.sentence_override
 
-Experimental whole-text and incremental sentence-break overrides.
+Whole-text and incremental sentence-break overrides.
 
 ICU always supplies the candidate boundaries: this module can retain or
-suppress them, but never add one. ``base="none"`` is the default and is exactly
-ICU's current sentence output. Whole-text and incremental operation share the
-same prefix-aware candidate evaluator.
+suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
+English (language ``en``, with any region or script, except the ``POSIX``
+variant) and ``"none"`` otherwise. Explicit ``base="none"`` is exactly ICU's
+current sentence output. Whole-text and incremental operation share the same
+prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
     >>> [(item["offset"], item["layer"]) for item in override.decide("Hi. Bye.")]
-    [(4, 'icu'), (8, 'icu')]
+    [(4, 'model'), (8, 'model')]
 
 ### class `BreakBoundary`
 
@@ -6900,6 +6916,9 @@ An open sentence boundary carrying both readings.
 ### class `BreakDecision`
 
 The attributed decision for one ICU sentence candidate.
+
+A cartlet model decision appends its model-global leaf id to ``id`` as
+``"<model>#leaf:<id>"``.
 
 ### class `BreakPredicate`
 
@@ -6953,6 +6972,20 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Primary sentence spans plus every boundary left open by a rule.
 
+### class `CartletModelRef`
+
+A digest- and runtime-bound reference to a cartlet model.
+
+Constructing a reference does not import cartlet. The dependency is
+imported only when a :class:`SentenceOverride` uses this reference. Model
+evaluation requires cartlet 0.7 or later.
+Models use ``icukit.features@1`` and are tied to the ICU, Unicode, and
+tokenizer identity under which those features were measured.
+
+#### `CartletModelRef(path: 'str | Path', digest: 'str', identity: 'Mapping[str, str]' = <factory>, features: 'str' = 'icukit.features@1', name: 'str' = 'cartlet') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `IncrementalSentenceBreaker`
 
 Incrementally decide ICU sentence candidates with immutable output.
@@ -6999,21 +7032,38 @@ An ICU candidate awaiting stable context, a rule feature, or protection.
 
 ### class `SentenceOverride`
 
-Apply opt-in flat rules to ICU sentence candidates.
+Apply rules or a cartlet model to ICU sentence candidates.
 
-``en-tn@1`` is a learned, experimental, opt-in English rule base under
+``en-tn@1`` is a learned English rule base under
 CC BY-SA 4.0. Its reported development and test figures measure agreement
 with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
-not accuracy on naturally occurring running text. The unchanged default is
-always ``base="none"``. Its witnesses are synthesized from each rule's
-predicates, which include lexical values mined from the corpus (e.g.
-``lower`` token values); no corpus sentence or row was read or copied.
+not accuracy on naturally occurring running text. Its witnesses are
+synthesized from each rule's predicates, which include lexical values
+mined from the corpus (e.g. ``lower`` token values); no corpus sentence or
+row was read or copied.
+
+The locale-default base is:
+
+================ =================
+Locale language  Default base
+================ =================
+``en``           ``en-tn-cart@1`` (except ``POSIX``)
+every other      ``none``
+================ =================
+
+Region and script do not change the English default. The ``POSIX`` variant
+uses ``"none"`` because its ICU word tokens differ from the model profile.
+Pass ``base="none"`` explicitly for plain ICU sentence boundaries. Cartlet
+is an icukit dependency and is imported lazily only when a cartlet model is
+selected.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.
-    base: ``"none"`` (the unchanged ICU default), the opt-in learned base
-        ``"en-tn@1"``, a loaded rule set, or a path to a ``break-rules``
-        JSON file. Unknown names are refused.
+    base: ``None`` selects the locale default in the table above. Otherwise,
+        ``"none"`` selects plain ICU, ``"en-tn@1"`` selects the learned
+        rule base, ``"en-tn-cart@1"`` selects the learned model, and callers
+        may supply a loaded rule set, a :class:`CartletModelRef`, or a path
+        to a ``break-rules`` JSON file. Unknown names are refused.
     before: Ordered caller rules that force a decision before inventories
         and the base.
     after: Ordered caller rules that may override the base decision.
@@ -7022,12 +7072,13 @@ Args:
     cache: Reuse immutable per-token features in incremental evaluation.
 
 Example:
-    >>> SentenceOverride().spans("Hello. Next.") == break_sentence_spans(
-    ...     "Hello. Next.", "en_US"
+    >>> from icukit import break_sentence_spans
+    >>> SentenceOverride(base="none").spans("Hello. Next.") == break_sentence_spans(
+    ...     "Hello. Next.", "en_US", base="none"
     ... )
     True
 
-#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet" = 'none', before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
+#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 

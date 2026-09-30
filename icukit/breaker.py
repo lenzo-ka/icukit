@@ -2,11 +2,12 @@
 Text segmentation using ICU BreakIterator.
 
 This module provides text segmentation capabilities for breaking text into
-sentences, words, lines, or grapheme clusters using ICU's BreakIterator.
+sentences, words, lines, or grapheme clusters. ICU supplies every level's
+boundaries; English sentence candidates use the learned model by default.
 Structured span offsets are Python code-point indices into the source text.
 
 Key Features:
-    * Locale-aware sentence segmentation
+    * Locale-aware sentence segmentation with a learned English default
     * Word tokenization with optional punctuation filtering
     * Line break detection
     * Grapheme cluster iteration (user-perceived characters)
@@ -23,7 +24,8 @@ Example:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import NotRequired, TypedDict
+from functools import cache
+from typing import Literal, NotRequired, TypedDict
 
 import icu
 
@@ -54,6 +56,8 @@ BREAK_SENTENCE = "sentence"
 BREAK_WORD = "word"
 BREAK_LINE = "line"
 BREAK_CHARACTER = "character"
+
+_SENTENCE_BASES = {"none", "en-tn@1", "en-tn-cart@1"}
 
 
 class BreakSpan(TypedDict):
@@ -161,11 +165,36 @@ def _skip_word(span: BreakSpan, skip_whitespace: bool, skip_punctuation: bool) -
     )
 
 
+def _raw_break_sentence_spans(text: str, locale: str = "en_US") -> list[BreakSpan]:
+    """Return unmodified ICU sentence candidates for internal composition."""
+    locale_obj = icu.Locale(locale)
+    try:
+        bi = icu.BreakIterator.createSentenceInstance(locale_obj)
+        return [
+            _make_span(text, start, end, [], [], maps)
+            for start, end, _statuses, maps in _iter_spans(bi, text)
+            if start != end
+        ]
+    except icu.ICUError as e:
+        raise BreakerError(f"Failed to break sentences: {e}") from e
+
+
+@cache
+def _sentence_override(locale: str, base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None):
+    """Return the shared immutable sentence override for one selection."""
+    from .sentence_override import SentenceOverride
+
+    return SentenceOverride(locale, base=base)
+
+
 class Breaker:
     """Text segmentation using ICU BreakIterator.
 
     A versatile text segmentation tool that can break text into sentences,
-    words, lines, or grapheme clusters based on locale-specific rules.
+    words, lines, or grapheme clusters based on locale-specific rules. English
+    sentence breaking uses the learned model by default; ``base="none"`` keeps
+    raw ICU sentence boundaries. Other levels and non-English defaults remain
+    ICU behavior.
 
     Example:
         >>> breaker = Breaker('en')
@@ -175,16 +204,27 @@ class Breaker:
         ['Hello', 'world']
     """
 
-    def __init__(self, locale: str = "en_US"):
+    def __init__(
+        self,
+        locale: str = "en_US",
+        *,
+        base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None = None,
+    ):
         """Initialize a Breaker instance.
 
         Args:
             locale: Locale code for language-specific rules (e.g., 'en', 'en_US', 'ja').
+            base: Sentence base only. ``None`` selects the locale default,
+                ``"none"`` selects raw ICU, and ``"en-tn@1"`` or
+                ``"en-tn-cart@1"`` selects a learned English base.
 
         Raises:
             BreakerError: If the locale is invalid.
         """
+        if base is not None and base not in _SENTENCE_BASES:
+            raise ValueError(f"unknown sentence base {base!r}")
         self.locale = locale
+        self.base = base
         try:
             self._locale_obj = icu.Locale(locale)
         except icu.ICUError as e:
@@ -224,17 +264,14 @@ class Breaker:
         return list(self.iter_word_spans(text, skip_whitespace, skip_punctuation))
 
     def iter_sentence_spans(self, text: str) -> Iterator[BreakSpan]:
-        """Yield every sentence segment with code-point offsets."""
-        try:
-            bi = icu.BreakIterator.createSentenceInstance(self._locale_obj)
-            for start, end, _statuses, maps in _iter_spans(bi, text):
-                if start != end:
-                    yield _make_span(text, start, end, [], [], maps)
-        except icu.ICUError as e:
-            raise BreakerError(f"Failed to break sentences: {e}") from e
+        """Yield sentence spans from the selected locale-default or named base."""
+        if self.base == "none":
+            yield from _raw_break_sentence_spans(text, self.locale)
+            return
+        yield from _sentence_override(self.locale, self.base).spans(text)
 
     def break_sentence_spans(self, text: str) -> list[BreakSpan]:
-        """Return every sentence segment as a structured span."""
+        """Return sentence spans from the selected locale-default or named base."""
         return list(self.iter_sentence_spans(text))
 
     def iter_line_spans(self, text: str) -> Iterator[BreakSpan]:
@@ -459,7 +496,8 @@ class Breaker:
         return result
 
     def __repr__(self) -> str:
-        return f"Breaker(locale='{self.locale}')"
+        suffix = "" if self.base is None else f", base={self.base!r}"
+        return f"Breaker(locale='{self.locale}'{suffix})"
 
 
 def default_rules(kind: str = "word", locale: str = "en_US") -> str:
@@ -564,6 +602,8 @@ def break_sentences(
     text: str,
     locale: str = "en_US",
     skip_empty: bool = True,
+    *,
+    base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None = None,
 ) -> list[str]:
     """Break text into sentences.
 
@@ -573,6 +613,8 @@ def break_sentences(
         text: The text to segment.
         locale: Locale code for language-specific rules.
         skip_empty: If True, empty sentences are excluded.
+        base: Sentence base; ``None`` selects the locale default and ``"none"``
+            selects raw ICU.
 
     Returns:
         List of sentence strings.
@@ -581,7 +623,7 @@ def break_sentences(
         >>> break_sentences('Hello. World.', 'en')
         ['Hello. ', 'World.']
     """
-    return Breaker(locale).break_sentences(text, skip_empty)
+    return Breaker(locale, base=base).break_sentences(text, skip_empty)
 
 
 def break_words(
@@ -650,9 +692,14 @@ def break_word_spans(
     return Breaker(locale).break_word_spans(text, skip_whitespace, skip_punctuation)
 
 
-def break_sentence_spans(text: str, locale: str = "en_US") -> list[BreakSpan]:
-    """Return every sentence segment with code-point offsets."""
-    return Breaker(locale).break_sentence_spans(text)
+def break_sentence_spans(
+    text: str,
+    locale: str = "en_US",
+    *,
+    base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None = None,
+) -> list[BreakSpan]:
+    """Return sentence spans from the locale-default or selected base."""
+    return Breaker(locale, base=base).break_sentence_spans(text)
 
 
 def break_line_spans(text: str, locale: str = "en_US") -> list[BreakSpan]:

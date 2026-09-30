@@ -19,13 +19,17 @@ import icu
 from ._offsets import OffsetMaps, offset_maps, set_span_offsets
 from .breaker import (
     BreakSpan,
+    _raw_break_sentence_spans,
     break_grapheme_spans,
     break_line_spans,
-    break_sentence_spans,
     break_word_spans,
 )
 from .detect import Detection, collation_detect, regex_detect
 from .errors import ExceptionConflictError, ExceptionLoadError, RuleRefusal
+
+# Exception inventories remain a raw-ICU post-filter, independently of
+# Breaker's learned English sentence default.
+break_sentence_spans = _raw_break_sentence_spans
 
 __all__ = [
     "Condition",
