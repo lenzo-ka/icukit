@@ -11,7 +11,7 @@ import re
 from bisect import bisect_left
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from functools import cache
+from functools import lru_cache
 from importlib.resources import files
 from json import loads
 from typing import Literal, NotRequired, TypedDict, cast
@@ -909,28 +909,48 @@ def _candidate_keys(text: str, end: int) -> tuple[str, ...]:
     )
 
 
-@cache
+def _cased_letter(char: str) -> bool:
+    return char.isalpha() and char.lower() != char.upper()
+
+
+def _can_anchor_sentence_rule(rule: _CompiledRule) -> bool:
+    """Whether every possible internal sentence candidate is ruled out."""
+    if rule.variant != "exact" or not rule.surface or not _PUNCTUATION.contains(rule.surface[-1]):
+        return False
+    for index, char in enumerate(rule.surface[:-1]):
+        if char.isspace():
+            return False
+        if _PUNCTUATION.contains(char) and (
+            char != "."
+            or index == 0
+            or not _cased_letter(rule.surface[index - 1])
+            or not _cased_letter(rule.surface[index + 1])
+        ):
+            return False
+    return True
+
+
+@lru_cache(maxsize=128)
 def _sentence_rule_index(rules: tuple[_CompiledRule, ...], locale: str) -> _SentenceRuleIndex:
     """Compile sentence rules into candidate-terminal lookup buckets.
 
-    Exact, punctuation-final surfaces have a fixed match extent and can be
-    confirmed backward from a candidate. ICU collation search cannot use an
-    equivalent fold key for every strength: contractions are contextual and
-    primary-ignorable code points make the matched extent unbounded. Collation
-    rules therefore retain the legacy matcher. Exact surfaces without terminal
-    punctuation also retain it because they can contain a candidate without
-    ending at any later candidate anchor.
+    Exact, punctuation-final surfaces without a possible internal sentence
+    candidate can be confirmed backward from a candidate. Internal periods are
+    safe only when they directly join cased letters, as in the shipped ``U.S.``
+    forms. Multi-token surfaces and other internal punctuation retain the
+    legacy matcher because they may own a candidate strictly inside the match.
+
+    ICU collation search cannot use an equivalent fold key for every strength:
+    contractions are contextual and primary-ignorable code points make the
+    matched extent unbounded, so collation rules also retain the legacy matcher.
+    The bounded cache avoids retaining every transient caller-authored rule set.
     """
     del locale  # Reserved in the cache key for locale-sensitive indexes.
     exact: dict[str, list[_AnchoredRule]] = {}
     fallback: list[_AnchoredRule] = []
     for order, rule in enumerate(rules):
         indexed = _AnchoredRule(order, rule)
-        if (
-            rule.variant != "exact"
-            or not rule.surface
-            or not _PUNCTUATION.contains(rule.surface[-1])
-        ):
+        if not _can_anchor_sentence_rule(rule):
             fallback.append(indexed)
             continue
         token = _last_token(rule.surface)

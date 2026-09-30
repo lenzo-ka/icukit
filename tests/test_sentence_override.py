@@ -866,6 +866,155 @@ def test_anchored_sentence_claims_match_legacy_on_repo_text_and_shipped_lists():
         )
 
 
+def test_internal_candidate_exact_rule_routes_to_legacy_matcher():
+    from icukit.breaker import _raw_break_sentence_spans
+    from icukit.exceptions import (
+        ExceptionPolicy,
+        _boundary_claims,
+        _mandatory_info_supplier,
+        _sentence_boundary_claims,
+    )
+
+    seed = _inventory(levels=("sentence",))._rules[0]
+    rule = replace(seed, id="multi-token", surface="Mr. Smith.")
+    text = "He met Mr. Smith.today."
+    base = _raw_break_sentence_spans(text, "en")
+    arguments = (
+        text,
+        base,
+        [rule],
+        "en",
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "en"),
+    )
+
+    assert _boundary_claims(*arguments) == {11: ["multi-token"]}
+    assert _sentence_boundary_claims(*arguments) == _boundary_claims(*arguments)
+
+
+def test_sentence_rule_routing_preserves_positions_conditions_and_attribution():
+    from icukit.exceptions import (
+        ExceptionPolicy,
+        _boundary_claims,
+        _mandatory_info_supplier,
+        _sentence_boundary_claims,
+    )
+
+    condition_rule = _suppression("conditional-seed", "Dr.", ["sentence"])
+    condition_rule["conditions"] = [
+        {
+            "id": "next-z",
+            "kind": "unicode_set",
+            "direction": "right",
+            "set": "[Z]",
+            "skip": {"kind": "whitespace", "max": 1},
+        }
+    ]
+    condition_rule["unconditionality"] = "conditional"
+    condition_rule["witnesses"] = {
+        "positive": "Dr. Z",
+        "near_miss": "SomeDr. Z",
+        "condition_negatives": ["Dr. X"],
+    }
+    condition = (
+        load_exception_inventory(
+            {
+                "schema_version": 1,
+                "corpus": "condition seed",
+                "named_lists": {},
+                "rules": [condition_rule],
+            }
+        )
+        ._rules[0]
+        .conditions
+    )
+    seed = _inventory(levels=("sentence",))._rules[0]
+    rules = [
+        replace(seed, id="overlap", surface="Smith."),
+        replace(seed, id="multi", surface="Mr. Smith."),
+        replace(seed, id="multi-conditional", surface="Mr. Smith.", conditions=condition),
+        replace(seed, id="at-end", surface="Capt."),
+        replace(seed, id="after", surface="Dr."),
+    ]
+    text = "Before. Mr. Smith. Z Capt. Dr. Next."
+    multi_start = text.index("Mr.")
+    candidate_ends = sorted(
+        {
+            multi_start,
+            multi_start + len("Mr. "),
+            text.index("Capt.") + len("Capt."),
+            text.index("Dr.") + len("Dr. "),
+            len(text),
+        }
+    )
+    base = [{"end": end} for end in candidate_ends]
+    arguments = (
+        text,
+        base,
+        rules,
+        "en",
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "en"),
+    )
+
+    legacy = _boundary_claims(*arguments)
+    anchored = _sentence_boundary_claims(*arguments)
+
+    assert anchored == legacy
+    assert anchored[multi_start + len("Mr. ")] == ["multi", "multi-conditional"]
+    assert anchored[text.index("Capt.") + len("Capt.")] == ["at-end"]
+    assert anchored[text.index("Dr.") + len("Dr. ")] == ["after"]
+
+
+def test_sentence_rule_index_cache_is_bounded():
+    from icukit.exceptions import _sentence_rule_index
+
+    seed = _inventory(levels=("sentence",))._rules[0]
+    _sentence_rule_index.cache_clear()
+    try:
+        for index in range(256):
+            rule = replace(seed, id=f"synthetic:{index}", surface=f"X{index}.")
+            _sentence_rule_index((rule,), "en")
+        assert _sentence_rule_index.cache_info().maxsize == 128
+        assert _sentence_rule_index.cache_info().currsize == 128
+    finally:
+        _sentence_rule_index.cache_clear()
+
+
+def test_collation_fallback_matches_legacy_with_a_different_surface():
+    from icukit.breaker import _raw_break_sentence_spans
+    from icukit.exceptions import (
+        ExceptionPolicy,
+        _boundary_claims,
+        _mandatory_info_supplier,
+        _sentence_boundary_claims,
+    )
+
+    seed = _inventory(levels=("sentence",))._rules[0]
+    rule = replace(
+        seed,
+        id="street",
+        locale="de",
+        surface="Straße.",
+        variant="collation",
+        strength="primary",
+    )
+    text = "Er wohnt in STRASSE. Weiter."
+    base = _raw_break_sentence_spans(text, "de")
+    arguments = (
+        text,
+        base,
+        [rule],
+        "de",
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "de"),
+    )
+
+    legacy = _boundary_claims(*arguments)
+    assert legacy == {21: ["street"]}
+    assert _sentence_boundary_claims(*arguments) == legacy
+
+
 def test_anchored_sentence_matching_work_is_independent_of_list_size():
     from dataclasses import replace as replace_dataclass
 
