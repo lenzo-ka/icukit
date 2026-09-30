@@ -12,12 +12,12 @@ def _nest_once(monkeypatch, detector, nested_text, on_call, scan="_detect_flexib
     real = getattr(recognize, scan)
     calls = {"count": 0, "nested": False}
 
-    def wrapped(*args):
+    def wrapped(*args, **kwargs):
         calls["count"] += 1
         if calls["count"] == on_call and not calls["nested"]:
             calls["nested"] = True
             detector.detect(nested_text)
-        return real(*args)
+        return real(*args, **kwargs)
 
     monkeypatch.setattr(recognize, scan, wrapped)
     return calls

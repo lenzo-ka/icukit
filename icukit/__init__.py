@@ -36,6 +36,7 @@ _check_icu_available()
 
 # ruff: noqa: E402
 # flake8: noqa: E402
+from ._gate import StartGate, candidate_starts, ungated
 from .abbreviation_breaker import (
     AbbreviationBoundary,
     AbbreviationProvenance,
@@ -140,6 +141,7 @@ from .detectors import (
     DateIntervalValue,
     DateTimeValue,
     DetectorSet,
+    GatedDetector,
     MeasureValue,
     NumberRangeSpec,
     NumberRangeValue,
@@ -514,6 +516,10 @@ __all__ = [
     "PluralNumeralDetector",
     "SingleLetterWordDetector",
     "DetectorSet",
+    "GatedDetector",
+    "StartGate",
+    "candidate_starts",
+    "ungated",
     "ABBREVIATION_KINDS",
     "IcuAbbreviation",
     "icu_abbreviations",

@@ -19,6 +19,19 @@ from threading import Lock
 
 import icu
 
+from ._gate import (
+    GATE_AUDIT,
+    GATE_STATS,
+    StartGate,
+    _audit_probe,
+    _candidate_starts,
+    _GatedReader,
+    _install_gates,
+    _record,
+    folded_heads,
+    gates_enabled,
+    heads,
+)
 from ._offsets import boundary_maps
 from .breaker import break_grapheme_spans
 from .detectors import (
@@ -617,7 +630,7 @@ def _era_date_structure(pattern: str):
     return (*structure, era_first, literal)
 
 
-class FlexibleDateDetector:
+class FlexibleDateDetector(_GatedReader):
     """Recognize flexible numeric dates using CLDR short-date structures.
 
     The stable ``date:flexible`` type distinguishes recall candidates from strict,
@@ -661,6 +674,11 @@ class FlexibleDateDetector:
         language = icu_locale.getLanguage()
         self._era_structures = _language_era_date_structures(language, self.locales)
         self._eras = _language_eras(language, self.locales)
+        _install_gates(
+            self,
+            {"date": None},
+            {"date": "numeric and era structures have no single proved opening set"},
+        )
 
     @staticmethod
     def _date_structure(
@@ -843,7 +861,15 @@ class FlexibleDateDetector:
             for fields, separators, pattern in self._structures
         ] + [self._era_matcher(*structure) for structure in self._era_structures]
         for matcher in matchers:
-            for detection in _detect_flexible(text, self.locale, self.type, self._spec, matcher):
+            for detection in _detect_flexible(
+                text,
+                self.locale,
+                self.type,
+                self._spec,
+                matcher,
+                gate=self._start_gates["date"],
+                stats_key=self._lane_key("date"),
+            ):
                 key = (detection["start"], detection["end"], detection["value"])
                 found.setdefault(key, detection)
         return sorted(found.values(), key=lambda d: (d["start"], d["end"]))
@@ -1412,7 +1438,20 @@ def _normalize_interval_surface(surface: str) -> str:
     return "".join(" " if character in _SPACES else character for character in surface).casefold()
 
 
-class FlexibleDateIntervalDetector:
+def _date_interval_gate(matchers: Iterable[tuple]) -> StartGate | None:
+    """Union interval matcher gates, with an ungated matcher absorbing the lane."""
+    matchers = tuple(matchers)
+    if not matchers:
+        return None
+    result: StartGate | None = StartGate()
+    for matcher in matchers:
+        matcher_gate = StartGate(tests=frozenset({"icu.isdigit"})) if matcher[8] else None
+        if result is not None:
+            result = result | matcher_gate
+    return result
+
+
+class FlexibleDateIntervalDetector(_GatedReader):
     """Recognize date/time interval surfaces by inverting ICU DateIntervalFormat recipes.
 
     Each greatest-difference field's recipe is CLDR's interval pattern when
@@ -1500,6 +1539,20 @@ class FlexibleDateIntervalDetector:
                 f"FlexibleDateIntervalDetector reads a short year only in a 'y' field, and "
                 f"skeleton {skeleton!r} has none in {locale!r}"
             )
+        interval_gate = _date_interval_gate(self._matchers)
+        _install_gates(
+            self,
+            {"interval": interval_gate},
+            {
+                "interval": (
+                    "every matcher tests icu.Char.isdigit at the start"
+                    if interval_gate is not None
+                    else "ICU exposed no modeled interval matcher"
+                    if not self._matchers
+                    else "at least one interval matcher has a non-digit first field"
+                )
+            },
+        )
 
     @property
     def has_patterns(self) -> bool:
@@ -1945,7 +1998,14 @@ class FlexibleDateIntervalDetector:
         def match(source: str, start: int):
             return self._match(source, start, offset_maps)
 
-        found = _detect_flexible_alternatives(text, self.locale, self.type, match)
+        found = _detect_flexible_alternatives(
+            text,
+            self.locale,
+            self.type,
+            match,
+            gate=self._start_gates["interval"],
+            stats_key=self._lane_key("interval"),
+        )
         found = [item for item in found if self._year_range_holds(text, item)]
         if not self._year_floor:
             return found
@@ -2097,7 +2157,7 @@ _YEAR_WIDTHS = frozenset({4})
 _SHORT_YEAR_WIDTHS = frozenset({2, 3})
 
 
-class FlexibleTextDateDetector:
+class FlexibleTextDateDetector(_GatedReader):
     """Recognize textual-month dates licensed by CLDR date patterns and symbols.
 
     The structures are the locale's own medium, long, and full patterns (with their
@@ -2253,6 +2313,15 @@ class FlexibleTextDateDetector:
         pattern = self._structures[0][2] if self._structures else ""
         self._spec = DateFormatSpec(locale, "yMMMd", pattern, self._calendar)
         # note: Bare years and decades remain cardinal candidates for downstream reinterpretation.
+        _install_gates(
+            self,
+            {"date": None, "day-month": None, "era": None},
+            {
+                "date": "the matcher combines numeric and name-first structures",
+                "day-month": "the matcher combines numeric and name-first structures",
+                "era": "era placement varies across the language's locale tables",
+            },
+        )
 
     def _quarter_names(self, icu_locale: icu.Locale):
         """The quarter names ICU writes in the language ("Q1", "1st quarter"), longest first.
@@ -2574,11 +2643,33 @@ class FlexibleTextDateDetector:
         Each kind is its own pass, so their readings may overlap ("5 May 2000 AD" gives
         the date and "2000 AD"); none takes a start from another.
         """
-        dates = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
-        day_month = _detect_flexible(
-            text, self.locale, self.type, self._spec, self._match_day_month
+        dates = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["date"],
+            stats_key=self._lane_key("date"),
         )
-        eras = _detect_flexible(text, self.locale, self.type, self._era_spec, self._match_era)
+        day_month = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match_day_month,
+            gate=self._start_gates["day-month"],
+            stats_key=self._lane_key("day-month"),
+        )
+        eras = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._era_spec,
+            self._match_era,
+            gate=self._start_gates["era"],
+            stats_key=self._lane_key("era"),
+        )
         # A day-month reading inside a fuller date adds nothing ("July 25" in "July 25,
         # 2012"); one that only overlaps a date is a different path and stays.
         extra = [
@@ -2619,7 +2710,13 @@ class FlexibleShortYearDateDetector(FlexibleTextDateDetector):
         return [
             date
             for date in _detect_flexible(
-                text, self.locale, self.type, self._spec, self._match_short
+                text,
+                self.locale,
+                self.type,
+                self._spec,
+                self._match_short,
+                gate=self._start_gates["date"],
+                stats_key=self._lane_key("date"),
             )
             if _short_year_without_era(date["captures"])
         ]
@@ -2633,7 +2730,7 @@ def _short_year_without_era(captures) -> bool:
     )
 
 
-class _FlexibleDateNameDetector:
+class _FlexibleDateNameDetector(_GatedReader):
     """A month or weekday name alone, where the text-date reader reads no date.
 
     The names, their widths, and the lexicon's dotted and extra forms ("Sept.",
@@ -2662,6 +2759,10 @@ class _FlexibleDateNameDetector:
             form: DateFormatSpec(locale, skeleton, generator.getBestPattern(skeleton), "gregorian")
             for form, skeleton in self._skeletons.items()
         }
+        _install_gates(
+            self,
+            {"name": StartGate(folded=folded_heads(surface for surface, *_ in self._names))},
+        )
 
     @property
     def has_names(self) -> bool:
@@ -2685,7 +2786,15 @@ class _FlexibleDateNameDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return the names read alone, in source order, outside the text-date readings."""
-        found = _detect_flexible(text, self.locale, self.type, None, self._match)
+        found = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            None,
+            self._match,
+            gate=self._start_gates["name"],
+            stats_key=self._lane_key("name"),
+        )
         if not found:
             return []
         dates = self._dates.detect(text)
@@ -2816,7 +2925,7 @@ def _roman_alphabet(locale: str, rule_set: str) -> frozenset[str]:
     )
 
 
-class FlexibleNumberDetector:
+class FlexibleNumberDetector(_GatedReader):
     """Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
     Beside the locale's own grouping, a number reads in each other grouping ICU gives a
@@ -2886,6 +2995,26 @@ class FlexibleNumberDetector:
         self._roman_alphabets = {
             rule_set: _roman_alphabet(locale, rule_set) for rule_set in self._roman_rule_sets
         }
+        signs = heads((self._minus, self._plus))
+        digits = frozenset(self._digits)
+        own = StartGate(chars=signs | digits | heads((self._decimal,)))
+        styles = StartGate(
+            chars=signs | digits | heads(style[1] for style in self._decimal_styles if style[1])
+        )
+        roman_chars = (
+            frozenset().union(*self._roman_alphabets.values())
+            if self._roman_alphabets
+            else frozenset()
+        )
+        _install_gates(
+            self,
+            {
+                "decimal": own,
+                "other-groupings": own,
+                "decimal-styles": styles,
+                "roman": StartGate(chars=roman_chars),
+            },
+        )
 
     def _digits_ascii(self, surface: str) -> str:
         return "".join(
@@ -3041,13 +3170,26 @@ class FlexibleNumberDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible decimal candidates in source order."""
-        decimals = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        decimals = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["decimal"],
+            stats_key=self._lane_key("decimal"),
+        )
         if self._other_groupings:
             spans = {(item["start"], item["end"]) for item in decimals}
             decimals.extend(
                 item
                 for item in _detect_flexible_alternatives(
-                    text, self.locale, self.type, self._match_other_groupings
+                    text,
+                    self.locale,
+                    self.type,
+                    self._match_other_groupings,
+                    gate=self._start_gates["other-groupings"],
+                    stats_key=self._lane_key("other-groupings"),
                 )
                 if (item["start"], item["end"]) not in spans
             )
@@ -3059,12 +3201,23 @@ class FlexibleNumberDetector:
             decimals.extend(
                 item
                 for item in _detect_flexible_alternatives(
-                    text, self.locale, self.type, self._match_decimal_styles
+                    text,
+                    self.locale,
+                    self.type,
+                    self._match_decimal_styles,
+                    gate=self._start_gates["decimal-styles"],
+                    stats_key=self._lane_key("decimal-styles"),
                 )
                 if not any(s <= item["start"] and item["end"] <= e for s, e in own)
             )
         romans = _detect_flexible(
-            text, self.locale, "number:cardinal:roman", self._spec, self._match_roman
+            text,
+            self.locale,
+            "number:cardinal:roman",
+            self._spec,
+            self._match_roman,
+            gate=self._start_gates["roman"],
+            stats_key=self._lane_key("roman"),
         )
         return sorted((*decimals, *romans), key=lambda item: (item["start"], item["end"]))
 
@@ -3159,7 +3312,7 @@ def _shared_number_reader(
     )
 
 
-class FlexibleLowercaseRomanDetector:
+class FlexibleLowercaseRomanDetector(_GatedReader):
     """Recognize lowercase Roman cardinals ("iv", "xii") as their own type.
 
     :class:`FlexibleNumberDetector` refuses these by default, since the surfaces collide
@@ -3193,6 +3346,11 @@ class FlexibleLowercaseRomanDetector:
         self._number._roman_rule_sets = tuple(
             name for name in self._number._roman_rule_sets if "lower" in name.casefold()
         )
+        alphabets = [self._number._roman_alphabets[name] for name in self._number._roman_rule_sets]
+        _install_gates(
+            self,
+            {"roman": StartGate(chars=frozenset().union(*alphabets) if alphabets else frozenset())},
+        )
 
     @property
     def has_rule_sets(self) -> bool:
@@ -3202,7 +3360,13 @@ class FlexibleLowercaseRomanDetector:
     def detect(self, text: str) -> list[ValueDetection]:
         """Return lowercase Roman cardinals in source order."""
         return _detect_flexible(
-            text, self.locale, self.type, self._number._spec, self._number._match_roman
+            text,
+            self.locale,
+            self.type,
+            self._number._spec,
+            self._number._match_roman,
+            gate=self._start_gates["roman"],
+            stats_key=self._lane_key("roman"),
         )
 
 
@@ -3339,7 +3503,7 @@ def _relative_date_vocabulary(locale: str):
     ), tuple(sorted(named.values(), key=lambda item: (-len(item[0]), item[0])))
 
 
-class FlexibleRelativeDateDetector:
+class FlexibleRelativeDateDetector(_GatedReader):
     """Recognize relative dates by inverting locale-relative ICU formatting."""
 
     group = "date"
@@ -3355,6 +3519,11 @@ class FlexibleRelativeDateDetector:
         self._number = _shared_number_reader(locale, None, True, False)
         self._numeric_templates, self._named_phrases = _relative_date_vocabulary(locale)
         self._spec = RelativeDateSpec(locale)
+        _install_gates(
+            self,
+            {"relative": None},
+            {"relative": "numeric templates and named phrases have heterogeneous prefixes"},
+        )
 
     @property
     def reachable_units(self) -> tuple[str, ...]:
@@ -3456,7 +3625,15 @@ class FlexibleRelativeDateDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping relative-date candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["relative"],
+            stats_key=self._lane_key("relative"),
+        )
 
 
 @cache
@@ -3482,7 +3659,7 @@ def _language_percent_words(language: str, names: tuple[str, ...] | None = None)
     return tuple(sorted(words, key=len, reverse=True))
 
 
-class FlexiblePercentDetector:
+class FlexiblePercentDetector(_GatedReader):
     """Recognize flexible numbers adjacent to the locale's percent symbol.
 
     The percent may also be written as a wide name ICU gives the percent unit in any
@@ -3510,6 +3687,11 @@ class FlexiblePercentDetector:
             word
             for word in _language_percent_words(icu.Locale(locale).getLanguage(), self.locales)
             if word != self._percent
+        )
+        _install_gates(
+            self,
+            {"percent": None},
+            {"percent": "percent words and symbols may occur before or after the amount"},
         )
 
     @staticmethod
@@ -3578,7 +3760,15 @@ class FlexiblePercentDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible percent candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["percent"],
+            stats_key=self._lane_key("percent"),
+        )
 
 
 @cache
@@ -3719,7 +3909,7 @@ def _locale_currency_affix_uncached(name: str, currency: str, width: int) -> str
     return prefix or suffix
 
 
-class FlexibleCurrencyDetector:
+class FlexibleCurrencyDetector(_GatedReader):
     """Recognize a reflective currency symbol or name around a scaled flexible number."""
 
     group = "number"
@@ -3759,6 +3949,21 @@ class FlexibleCurrencyDetector:
         )
         self._currencies = tuple(sorted(reflected_symbols, key=len, reverse=True))
         self._spec = NumberFormatSpec(locale, "currency", currency=currency)
+        amount_gate = self._number.start_gates()["decimal"]
+        wraps = heads(
+            before for before, _after in _negative_currency_wraps(locale, currency, self.locales)
+        )
+        assert amount_gate is not None
+        _install_gates(
+            self,
+            {
+                "signed": StartGate(
+                    chars=amount_gate.chars | wraps | heads(self._currencies),
+                    folded=amount_gate.folded,
+                    tests=amount_gate.tests,
+                )
+            },
+        )
 
     @staticmethod
     def _space(text: str, cursor: int) -> int:
@@ -3876,7 +4081,15 @@ class FlexibleCurrencyDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible currency candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match_signed)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match_signed,
+            gate=self._start_gates["signed"],
+            stats_key=self._lane_key("signed"),
+        )
 
 
 @cache
@@ -4111,7 +4324,7 @@ def _measure_surfaces(
     return list(surfaces), list(rates)
 
 
-class FlexibleMeasureDetector:
+class FlexibleMeasureDetector(_GatedReader):
     """Recognize a flexible number followed by a reflectively derived ICU unit surface.
 
     The surfaces are the unit's short, narrow, and wide forms as ICU formats them
@@ -4153,6 +4366,14 @@ class FlexibleMeasureDetector:
             has_space: tuple(sorted(self._units, key=lambda item: item[2] != has_space))
             for has_space in (False, True)
         }
+        _install_gates(
+            self,
+            {"amount": None, "per-form": None},
+            {
+                "amount": "unit surfaces can be prefix or suffix forms",
+                "per-form": "bare per-unit surfaces include locale spacing variants",
+            },
+        )
 
     @staticmethod
     def _space(text: str, cursor: int) -> int:
@@ -4224,18 +4445,34 @@ class FlexibleMeasureDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return flexible measure candidates in source order, a bare per form beside them."""
-        measures = _detect_flexible(text, self.locale, self.type, None, self._match)
+        measures = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            None,
+            self._match,
+            gate=self._start_gates["amount"],
+            stats_key=self._lane_key("amount"),
+        )
         # A per form inside a rate with its amount ("5 per square kilometre") is that
         # rate's, not a bare one.
         rates = [
             item
-            for item in _detect_flexible(text, self.locale, self.type, None, self._match_per_form)
+            for item in _detect_flexible(
+                text,
+                self.locale,
+                self.type,
+                None,
+                self._match_per_form,
+                gate=self._start_gates["per-form"],
+                stats_key=self._lane_key("per-form"),
+            )
             if not any(m["start"] <= item["start"] and item["end"] <= m["end"] for m in measures)
         ]
         return sorted((*measures, *rates), key=lambda item: (item["start"], item["end"]))
 
 
-class FlexibleMixedMeasureDetector:
+class FlexibleMixedMeasureDetector(_GatedReader):
     """Recognize a mixed-unit measure, such as feet and inches: "5'10\"", "5 ft, 10 in".
 
     ``unit`` is an ICU mixed-unit identifier of two or more components (``foot-and-inch``,
@@ -4293,6 +4530,11 @@ class FlexibleMixedMeasureDetector:
             )
         self._spec = MeasureFormatSpec(locale, unit, "mixed")
         self._small_unit = parts[-1]
+        _install_gates(
+            self,
+            {"mixed": None},
+            {"mixed": "mixed-unit component patterns have heterogeneous prefixes"},
+        )
 
     def _match(self, text: str, start: int) -> _FlexibleMatch | None:
         first = self._components[0]._match(text, start, digit_may_follow=True)
@@ -4321,7 +4563,15 @@ class FlexibleMixedMeasureDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping mixed-unit measures in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["mixed"],
+            stats_key=self._lane_key("mixed"),
+        )
 
 
 # CLDR's numeric duration patterns (durationUnits) and the ICU mixed unit each writes.
@@ -4382,7 +4632,7 @@ def _numeric_duration_patterns(
     return tuple(patterns)
 
 
-class FlexibleNumericDurationDetector:
+class FlexibleNumericDurationDetector(_GatedReader):
     """Recognize a numeric duration as CLDR writes one: "1:47.22", "2:03:04", "2:30".
 
     The patterns are CLDR's numeric duration units (``m:ss``, ``h:mm:ss``, ``h:mm``) in
@@ -4403,6 +4653,7 @@ class FlexibleNumericDurationDetector:
         self.locales = _locale_selection(locale, locales)
         self._digits = {digit: str(value) for digit, value in _locale_digit_map(locale).items()}
         self._patterns = _numeric_duration_patterns(icu.Locale(locale).getLanguage(), self.locales)
+        _install_gates(self, {"duration": StartGate(chars=frozenset(self._digits))})
 
     def _digit_run(self, text: str, cursor: int) -> int:
         end = cursor
@@ -4475,7 +4726,14 @@ class FlexibleNumericDurationDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return numeric durations in source order, every pattern's reading at a start."""
-        return _detect_flexible_alternatives(text, self.locale, self.type, self._match)
+        return _detect_flexible_alternatives(
+            text,
+            self.locale,
+            self.type,
+            self._match,
+            gate=self._start_gates["duration"],
+            stats_key=self._lane_key("duration"),
+        )
 
 
 def _digit_spans(text: str):
@@ -4491,7 +4749,7 @@ def _digit_spans(text: str):
             cursor += 1
 
 
-class FlexibleCompactDetector:
+class FlexibleCompactDetector(_GatedReader):
     """Recognize a flexible number with reflectively derived ICU compact affixes.
 
     ``fold_symbol_case`` licenses case variants of single-letter compact symbols when
@@ -4557,6 +4815,11 @@ class FlexibleCompactDetector:
             for (prefix, suffix), magnitude in sorted(
                 affixes.items(), key=lambda item: (-len(item[0][1]), -len(item[0][0]))
             )
+        )
+        _install_gates(
+            self,
+            {"compact": None},
+            {"compact": "compact affixes can precede the child number"},
         )
 
     @property
@@ -4676,10 +4939,18 @@ class FlexibleCompactDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible compact numbers in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["compact"],
+            stats_key=self._lane_key("compact"),
+        )
 
 
-class FlexibleScientificDetector:
+class FlexibleScientificDetector(_GatedReader):
     """Recognize scientific notation using locale symbols reflected from ICU."""
 
     group = "number"
@@ -4694,6 +4965,7 @@ class FlexibleScientificDetector:
         self._plus = self._number._plus
         self._digits = self._number._digits
         self._spec = NumberFormatSpec(locale, "scientific")
+        _install_gates(self, {"scientific": self._number.start_gates()["decimal"]})
 
     @staticmethod
     def _continues_word(text: str, cursor: int) -> bool:
@@ -4801,7 +5073,15 @@ class FlexibleScientificDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping scientific numbers in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["scientific"],
+            stats_key=self._lane_key("scientific"),
+        )
 
 
 def _spellout_rulesets(locale: str) -> tuple[str, ...]:
@@ -4843,7 +5123,7 @@ def _spellout_formatter_and_ruleset(
     return formatter, ruleset
 
 
-class FlexibleSpelloutDetector:
+class FlexibleSpelloutDetector(_GatedReader):
     """Recognize canonical ICU spelled-out numbers derived from locale RBNF data.
 
     The cardinal rule set by default; ``ruleset`` chooses another the locale has (see
@@ -4926,6 +5206,10 @@ class FlexibleSpelloutDetector:
         }
         self._ambiguous_units = frozenset(
             self._rbnf.format(value, self._ruleset).casefold() for value in range(10)
+        )
+        _install_gates(
+            self,
+            {"spellout": StartGate(folded=frozenset(self._tokens_by_first))},
         )
         # note: This lane is SPELLOUT cardinals only; RBNF NUMBERING_SYSTEM Roman
         # numerals are intentionally out of scope.
@@ -5071,7 +5355,15 @@ class FlexibleSpelloutDetector:
         def match(source: str, start: int):
             return self._match(source, start, token_end, guard)
 
-        return _detect_flexible(text, self.locale, self.type, self._spec, match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            match,
+            gate=self._start_gates["spellout"],
+            stats_key=self._lane_key("spellout"),
+        )
 
 
 class MaterialSpelloutDetector(FlexibleSpelloutDetector):
@@ -5157,7 +5449,7 @@ class MaterialLoneSpelloutDetector(MaterialSpelloutDetector):
         ]
 
 
-class FlexibleCurrencyNameDetector:
+class FlexibleCurrencyNameDetector(_GatedReader):
     """Recognize flexible numbers adjacent to reflective spelled currency names."""
 
     group = "number"
@@ -5225,6 +5517,11 @@ class FlexibleCurrencyNameDetector:
             names.setdefault(canonical.casefold(), (canonical, prefix))
         self._names = tuple(sorted(names.values(), key=lambda item: len(item[0]), reverse=True))
         self._spec = NumberFormatSpec(locale, "currency", currency=canonical)
+        _install_gates(
+            self,
+            {"named": None},
+            {"named": "currency long names can be prefix or suffix forms"},
+        )
         # note: CLDR does not reflectively expose region-stripped names or minor-unit names.
 
     @staticmethod
@@ -5285,7 +5582,15 @@ class FlexibleCurrencyNameDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping spelled-currency candidates in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["named"],
+            stats_key=self._lane_key("named"),
+        )
 
 
 @cache
@@ -5656,7 +5961,7 @@ def _language_flexible_periods(
     )
 
 
-class FlexibleTimeDetector:
+class FlexibleTimeDetector(_GatedReader):
     """Recognize clock times using a locale's CLDR short-time structure.
 
     The ``time:flexible`` type marks recall candidates for hours:minutes, an optional
@@ -5723,6 +6028,14 @@ class FlexibleTimeDetector:
 
         self._digits = _locale_digit_map(icu_locale)
         self._spec = DateFormatSpec(locale, "Hms", self.pattern, "gregorian")
+        _install_gates(
+            self,
+            {"plain": None, "with-units": None},
+            {
+                "plain": "day periods may precede or follow numeric time fields",
+                "with-units": "hour units add prefix and suffix forms",
+            },
+        )
 
     @staticmethod
     def _time_structure(pattern: str) -> tuple[str, bool, str | None] | None:
@@ -6142,7 +6455,15 @@ class FlexibleTimeDetector:
             return []
         # Whether to read a trailing unit is an argument of each pass, not detector state,
         # so one detector can serve concurrent or nested calls.
-        plain = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        plain = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["plain"],
+            stats_key=self._lane_key("plain"),
+        )
 
         def match_with_units(source: str, start: int):
             return self._match(source, start, read_units=True)
@@ -6150,7 +6471,13 @@ class FlexibleTimeDetector:
         with_units = [
             reading
             for detection in _detect_flexible(
-                text, self.locale, self.type, self._spec, match_with_units
+                text,
+                self.locale,
+                self.type,
+                self._spec,
+                match_with_units,
+                gate=self._start_gates["with-units"],
+                stats_key=self._lane_key("with-units"),
             )
             for reading in self._one_reading_per_zone(detection)
         ]
@@ -6176,7 +6503,7 @@ def _hour_cycle_letter(pattern: str) -> str | None:
     return None
 
 
-class FlexibleBareHourDetector:
+class FlexibleBareHourDetector(_GatedReader):
     """Recognize a lone number as a clock hour ("at 3"), which the time reader refuses.
 
     :class:`FlexibleTimeDetector` reads an hour without minutes only with a day period
@@ -6239,6 +6566,11 @@ class FlexibleBareHourDetector:
         self._text_dates = FlexibleTextDateDetector(locale, locales=locales)
         self._numeric_dates = FlexibleDateDetector(locale, locales=locales)
         self._spec = DateFormatSpec(locale, "j", self.pattern, "gregorian")
+        _install_gates(
+            self,
+            {"hour": None},
+            {"hour": "lone-hour guards inspect neighboring date and time readers"},
+        )
 
     def _opens(self, character: str) -> bool:
         return character.isspace() or (
@@ -6274,7 +6606,15 @@ class FlexibleBareHourDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return lone clock hours in source order, outside the time and date readings."""
-        found = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        found = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["hour"],
+            stats_key=self._lane_key("hour"),
+        )
         if not found:
             return []
         taken = [
@@ -6511,7 +6851,7 @@ class FlexibleDateTimeDetector:
         return found
 
 
-class FlexibleFractionDetector:
+class FlexibleFractionDetector(_GatedReader):
     """Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
 
     The ``fraction:flexible`` type marks recall candidates. Locale digits are reflective;
@@ -6535,6 +6875,11 @@ class FlexibleFractionDetector:
         symbols = icu.NumberFormat.createInstance(icu.Locale(locale)).getDecimalFormatSymbols()
         self._minus = symbols.getSymbol(icu.DecimalFormatSymbols.kMinusSignSymbol)
         self._plus = symbols.getSymbol(icu.DecimalFormatSymbols.kPlusSignSymbol)
+        _install_gates(
+            self,
+            {"fraction": None},
+            {"fraction": "NFKC vulgar fractions can open on non-locale digits"},
+        )
 
     def _digit_run(self, text: str, start: int) -> int:
         cursor = start
@@ -6727,7 +7072,15 @@ class FlexibleFractionDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible fractions in source order."""
-        return _detect_flexible(text, self.locale, self.type, self._spec, self._match)
+        return _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["fraction"],
+            stats_key=self._lane_key("fraction"),
+        )
 
 
 @cache
@@ -6811,7 +7164,7 @@ def _punctuation_ordinal_markers() -> frozenset[str]:
     return frozenset(markers)
 
 
-class FlexibleOrdinalDetector:
+class FlexibleOrdinalDetector(_GatedReader):
     """Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
 
     The ``ordinal:flexible`` type marks recall candidates. Ordinal affixes are obtained
@@ -6888,6 +7241,11 @@ class FlexibleOrdinalDetector:
             default=0,
         )
         self._spec = NumberFormatSpec(locale, "decimal")
+        _install_gates(
+            self,
+            {"digit": None, "roman": StartGate(chars=self._roman_letters)},
+            {"digit": "ordinal prefixes are value-dependent RBNF output"},
+        )
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
         cursor = start
@@ -7096,8 +7454,24 @@ class FlexibleOrdinalDetector:
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return flexible ordinals in source order: digit ordinals, then Roman ones."""
-        digits = _detect_flexible(text, self.locale, self.type, self._spec, self._match)
-        romans = _detect_flexible(text, self.locale, self.type, self._spec, self._match_roman)
+        digits = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match,
+            gate=self._start_gates["digit"],
+            stats_key=self._lane_key("digit"),
+        )
+        romans = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._spec,
+            self._match_roman,
+            gate=self._start_gates["roman"],
+            stats_key=self._lane_key("roman"),
+        )
         return sorted((*digits, *romans), key=lambda item: (item["start"], item["end"]))
 
 
@@ -7112,22 +7486,44 @@ def _detect_flexible_alternatives(
     locale: str,
     type_label: str,
     match: Callable[[str, int], list[_FlexibleMatch]],
+    *,
+    gate: StartGate | None = None,
+    stats_key: str | None = None,
 ) -> list[ValueDetection]:
     """Like :func:`_detect_flexible`, but keep every distinct reading at a start.
 
     One pass over the text, however many alternative matchers ``match`` compiles; the
     scan resumes after the longest reading at a start.
     """
-    starts = _grapheme_starts(text, locale)
+    inspect_gate = GATE_STATS and gates_enabled() and gate is not None
+    starts = (
+        _grapheme_starts(text, locale) if inspect_gate else _candidate_starts(text, locale, gate)
+    )
     interior = _word_interior_offsets(text, locale)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
         if start < cursor or start in interior:
             continue
+        if inspect_gate and not gate.admits(text[start]):
+            _record(stats_key, "gated_out")
+            if GATE_AUDIT:
+                _audit_probe(stats_key, lambda start=start: match(text, start))
+            continue
+        if GATE_STATS:
+            _record(stats_key, "tried")
         ends: set[int] = set()
         kept: set[tuple[int, object, tuple[object, ...]]] = set()
-        for result in match(text, start):
+        try:
+            results = match(text, start)
+        except Exception:
+            if GATE_STATS:
+                _record(stats_key, "non_miss")
+            raise
+        if results:
+            if GATE_STATS:
+                _record(stats_key, "non_miss")
+        for result in results:
             # Readings of one value in different zones stay distinct.
             key = (result.end, result.value, _zone_key(result.captures))
             if result.end in interior or key in kept:
@@ -7156,17 +7552,37 @@ def _detect_flexible(
     type_label: str,
     spec: object | None,
     match: Callable[[str, int], tuple[int, tuple[Capture, ...], object] | _FlexibleMatch | None],
+    *,
+    gate: StartGate | None = None,
+    stats_key: str | None = None,
 ) -> list[ValueDetection]:
-    starts = _grapheme_starts(text, locale)
+    inspect_gate = GATE_STATS and gates_enabled() and gate is not None
+    starts = (
+        _grapheme_starts(text, locale) if inspect_gate else _candidate_starts(text, locale, gate)
+    )
     interior = _word_interior_offsets(text, locale)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
         if start < cursor or start in interior:
             continue
-        result = match(text, start)
+        if inspect_gate and not gate.admits(text[start]):
+            _record(stats_key, "gated_out")
+            if GATE_AUDIT:
+                _audit_probe(stats_key, lambda start=start: match(text, start))
+            continue
+        if GATE_STATS:
+            _record(stats_key, "tried")
+        try:
+            result = match(text, start)
+        except Exception:
+            if GATE_STATS:
+                _record(stats_key, "non_miss")
+            raise
         if result is None:
             continue
+        if GATE_STATS:
+            _record(stats_key, "non_miss")
         if isinstance(result, _FlexibleMatch):
             end, captures, value = result.end, result.captures, result.value
             match_spec = result.spec if result.spec is not None else spec
