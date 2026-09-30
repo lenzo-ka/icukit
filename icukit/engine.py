@@ -27,7 +27,7 @@ from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cache
-from threading import Event, Lock
+from threading import Event, Lock, get_ident
 from typing import cast
 
 import icu
@@ -138,6 +138,7 @@ class _GangFlight:
 
     event: Event
     generation: int
+    thread: int
     result: object | None = None
     error: BaseException | None = None
 
@@ -163,9 +164,14 @@ class _GangMemo:
             flight = self._flights.get(key)
             owner = flight is None
             if owner:
-                flight = _GangFlight(Event(), self._generation)
+                flight = _GangFlight(Event(), self._generation, get_ident())
                 self._flights[key] = flight
         assert flight is not None
+        if not owner and flight.thread == get_ident():
+            # The same request, made again while this thread builds it (a family that
+            # builds a gang as it enumerates): build it uncached, as waiting would
+            # wait on this thread itself.
+            return build()
         if not owner:
             flight.event.wait()
             if flight.error is not None:
@@ -176,7 +182,8 @@ class _GangMemo:
         except BaseException as error:
             with self._lock:
                 flight.error = error
-                self._flights.pop(key, None)
+                if self._flights.get(key) is flight:
+                    del self._flights[key]
                 flight.event.set()
             raise
         with self._lock:
@@ -185,13 +192,17 @@ class _GangMemo:
                 self._cache[key] = result
                 while len(self._cache) > self.maxsize:
                     self._cache.popitem(last=False)
-            self._flights.pop(key, None)
+            if self._flights.get(key) is flight:
+                del self._flights[key]
             flight.event.set()
         return result
 
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()
+            # A request made after clearing builds anew rather than joining a build
+            # begun before it; that build's own waiters still receive its result.
+            self._flights.clear()
             self._generation += 1
 
 
@@ -791,8 +802,9 @@ def generated_detectors_report(
     """Derive detectors for ``locale`` and report specs that could not be inverted.
 
     The immutable report is memoized in-process by the complete request, including
-    family and material-object identity. Set ``ICUKIT_CACHE=0`` to bypass this gang
-    memo for a call; :func:`clear_detector_caches` clears it explicitly.
+    family and material-object identity, so a family must enumerate and build the same
+    readers each time it is given the same locale. Set ``ICUKIT_CACHE=0`` to bypass
+    this gang memo for a call; :func:`clear_detector_caches` clears it explicitly.
     """
     families = tuple(families)
     materials = tuple(_require_loaded(item) for item in material)

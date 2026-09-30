@@ -181,3 +181,38 @@ def test_two_threads_can_detect_with_one_memoized_gang():
         found = tuple(pool.map(lambda _index: detections_to_json(gang.detect(text)), range(2)))
 
     assert found == (expected, expected)
+
+
+def test_gang_requested_while_its_own_build_runs_does_not_wait_on_itself():
+    entered = []
+
+    def specs(_locale):
+        if not entered:
+            entered.append(True)
+            engine.generated_detectors_report("en_US", (family,))
+        return ()
+
+    family = engine.Family("nested", specs, lambda *_: None, lambda *_: None)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        report = pool.submit(engine.generated_detectors_report, "en_US", (family,))
+        assert report.result(timeout=30).detectors.detectors == ()
+
+
+def test_request_after_clear_does_not_join_an_earlier_build():
+    memo = engine._GangMemo(4)
+    started, release = Event(), Event()
+
+    def old():
+        started.set()
+        release.wait()
+        return "old"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first = pool.submit(memo.get_or_build, ("key",), old)
+        assert started.wait(10)
+        memo.clear()
+        second = pool.submit(memo.get_or_build, ("key",), lambda: "new")
+        assert second.result(timeout=10) == "new"
+        release.set()
+        assert first.result(timeout=10) == "old"
+    assert memo.get_or_build(("key",), lambda: "rebuilt") == "new"

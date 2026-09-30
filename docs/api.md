@@ -3430,8 +3430,9 @@ memo. Set ``ICUKIT_CACHE=0`` to bypass that memo for a call, or call
 Derive detectors for ``locale`` and report specs that could not be inverted.
 
 The immutable report is memoized in-process by the complete request, including
-family and material-object identity. Set ``ICUKIT_CACHE=0`` to bypass this gang
-memo for a call; :func:`clear_detector_caches` clears it explicitly.
+family and material-object identity, so a family must enumerate and build the same
+readers each time it is given the same locale. Set ``ICUKIT_CACHE=0`` to bypass
+this gang memo for a call; :func:`clear_detector_caches` clears it explicitly.
 
 ### `range_detectors(locale: 'str', detectors: 'DetectorSet', *, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
 
