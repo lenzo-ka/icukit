@@ -216,6 +216,48 @@ def test_strict_month_fallback_refusal_kept():
     )
 
 
+def test_pattern_literal_heads_keep_date_readings():
+    cases = {
+        "dsb_DE": (
+            ("Hm", "stw, zeg. 3:04"),
+            ("Hm", "zeg. 3:04"),
+            ("Hm", "wał, zeg. 16:27"),
+        ),
+        "nds_DE": (
+            ("Hms", "Klock 16.27:38"),
+            ("Hm", "2.1.2020 Kl. 3.04 – 19.8.2021 Kl. 16.27"),
+            ("Hm", "Kl. 3.04"),
+            ("Hms", "Klock 3.04:05"),
+        ),
+    }
+    gangs = {
+        locale: (
+            generated_detectors(locale).with_(*flexible_detectors(locale).detectors),
+            generated_detectors(locale).with_(*flexible_detectors(locale, guarded=True).detectors),
+        )
+        for locale in cases
+    }
+    readers = {
+        (locale, skeleton): DateDetector(locale, skeleton)
+        for locale, rows in cases.items()
+        for skeleton in dict.fromkeys(skeleton for skeleton, _surface in rows)
+    }
+
+    for locale, rows in cases.items():
+        for skeleton, surface in rows:
+            for text in (surface, f"x {surface} y."):
+                reader = readers[locale, skeleton]
+                with ungated():
+                    expected = detections_to_json(reader.detect(text))
+                assert expected
+                assert detections_to_json(reader.detect(text)) == expected
+                for gang in gangs[locale]:
+                    with ungated():
+                        expected = detections_to_json(gang.detect(text))
+                    assert expected
+                    assert detections_to_json(gang.detect(text)) == expected
+
+
 def test_gate_audit_catches_canary():
     script = """
 import json

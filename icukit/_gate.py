@@ -531,6 +531,50 @@ def _pattern_runs(pattern: str) -> tuple[tuple[str, int], ...]:
     return tuple(runs)
 
 
+def _pattern_literal_runs(pattern: str) -> tuple[str, ...]:
+    """Return quoted literals and unquoted non-pattern letter runs."""
+    runs = []
+    unquoted = []
+    quoted: list[str] | None = None
+
+    def flush_unquoted() -> None:
+        if unquoted:
+            runs.append("".join(unquoted))
+            unquoted.clear()
+
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "'":
+            if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                if quoted is not None:
+                    quoted.append("'")
+                else:
+                    flush_unquoted()
+                index += 2
+                continue
+            if quoted is None:
+                flush_unquoted()
+                quoted = []
+            else:
+                if quoted:
+                    runs.append("".join(quoted))
+                quoted = None
+            index += 1
+            continue
+        if quoted is not None:
+            quoted.append(char)
+        elif not char.isascii() and icu.Char.isalpha(char):
+            unquoted.append(char)
+        else:
+            flush_unquoted()
+        index += 1
+    flush_unquoted()
+    if quoted:
+        runs.append("".join(quoted))
+    return tuple(runs)
+
+
 def _format_field(locale: str, letter: str, width: int, calendars: Iterable[Any]) -> set[str]:
     formatter = icu.SimpleDateFormat(letter * width, icu.Locale(locale))
     formatter.setTimeZone(icu.TimeZone.getGMT())
@@ -570,6 +614,21 @@ def _format_pattern_field_outputs(locale: str, pattern: str, calendars: Iterable
     return found
 
 
+def _format_pattern_outputs(locale: str, pattern: str, calendars: Iterable[Any]) -> set[str]:
+    formatter = icu.SimpleDateFormat(pattern, icu.Locale(locale))
+    formatter.setTimeZone(icu.TimeZone.getGMT())
+    found = set()
+    for calendar in calendars:
+        try:
+            instant = calendar.getTime() if hasattr(calendar, "getTime") else calendar
+            value = str(formatter.format(instant))
+        except icu.ICUError:
+            continue
+        if value:
+            found.add(value)
+    return found
+
+
 @lru_cache(maxsize=256)
 def _formatted_field_strings(locale: str, pattern: str) -> tuple[str, ...]:
     """Enumerate every field output over P4's required domains."""
@@ -605,6 +664,8 @@ def _formatted_field_strings(locale: str, pattern: str) -> tuple[str, ...]:
         found.update(_format_field(locale, letter, width, calendars))
         full_pattern_domain.extend(calendars)
     found.update(_format_pattern_field_outputs(locale, pattern, full_pattern_domain))
+    found.update(_format_pattern_outputs(locale, pattern, full_pattern_domain))
+    found.update(_pattern_literal_runs(pattern))
 
     calendar = str(icu.Calendar.createInstance(icu.Locale(locale)).getType())
     month_patterns = _resource_descendant_strings(locale, ("calendar", calendar, "monthPatterns"))
