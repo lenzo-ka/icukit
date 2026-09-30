@@ -7,7 +7,9 @@ cross that encoding-unit seam.
 
 from __future__ import annotations
 
-from collections.abc import MutableMapping
+from collections.abc import Iterator, MutableMapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import NamedTuple
 
 
@@ -19,8 +21,12 @@ class OffsetMaps(NamedTuple):
     utf16_to_cp: dict[int, int]
 
 
-def offset_maps(text: str) -> OffsetMaps:
-    """Build UTF-8, UTF-16, and code-point boundary maps in one linear pass."""
+_active_offset_maps: ContextVar[tuple[str, OffsetMaps] | None] = ContextVar(
+    "icukit_active_offset_maps", default=None
+)
+
+
+def _build_offset_maps(text: str) -> OffsetMaps:
     cp_to_utf8 = [0]
     cp_to_utf16 = [0]
     utf16_to_cp = {0: 0}
@@ -33,6 +39,29 @@ def offset_maps(text: str) -> OffsetMaps:
         cp_to_utf16.append(utf16_offset)
         utf16_to_cp[utf16_offset] = cp_index
     return OffsetMaps(cp_to_utf8, cp_to_utf16, utf16_to_cp)
+
+
+def offset_maps(text: str) -> OffsetMaps:
+    """Build UTF-8, UTF-16, and code-point boundary maps in one linear pass."""
+    active = _active_offset_maps.get()
+    if active is not None and (active[0] is text or active[0] == text):
+        return active[1]
+    return _build_offset_maps(text)
+
+
+@contextmanager
+def _offset_map_scope(text: str) -> Iterator[OffsetMaps]:
+    """Share one read-only offset map through a nested operation on ``text``."""
+    active = _active_offset_maps.get()
+    if active is not None and (active[0] is text or active[0] == text):
+        yield active[1]
+        return
+    maps = _build_offset_maps(text)
+    token = _active_offset_maps.set((text, maps))
+    try:
+        yield maps
+    finally:
+        _active_offset_maps.reset(token)
 
 
 def set_span_offsets(

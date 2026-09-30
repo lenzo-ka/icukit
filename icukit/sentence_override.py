@@ -3,9 +3,11 @@
 ICU always supplies the candidate boundaries: this module can retain or
 suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
 English (language ``en``, with any region or script, except the ``POSIX``
-variant) and ``"none"`` otherwise. Explicit ``base="none"`` is exactly ICU's
-current sentence output. Whole-text and incremental operation share the same
-prefix-aware candidate evaluator.
+variant) and ``"none"`` otherwise. That English default and the two learned
+English named bases apply the locale's shipped abbreviation suppressions before
+their rules or model. Explicit ``base="none"`` is exactly ICU's current
+sentence output, without that list. Whole-text and incremental operation share
+the same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -28,6 +30,8 @@ from typing import Literal, NotRequired, TypedDict, cast
 
 import icu
 
+from ._offsets import _offset_map_scope
+from .abbreviation_compile import _load_break_exception_inventory
 from .breaker import BreakSpan, _raw_break_sentence_spans, break_word_spans
 from .classes import ClassPoint, char_classes, class_window
 from .errors import BreakRuleLoadError, LateProtectedSpan, OverlappingProtectedSpans, RuleRefusal
@@ -36,6 +40,7 @@ from .exceptions import (
     LoadedExceptionInventory,
     _boundary_claims,
     _mandatory_info_supplier,
+    _sentence_boundary_claims,
 )
 from .shape import shape, shape_scheme
 from .tokens import (
@@ -395,6 +400,21 @@ def _inventory_definition(inventory: LoadedExceptionInventory) -> dict[str, obje
     }
 
 
+def _token_inventory_definition(inventory: LoadedExceptionInventory) -> dict[str, object]:
+    """Return only inventory material that can change model token features."""
+    rules = tuple(rule for rule in inventory._rules if "word" in rule.levels)
+    # Retaining all named lists for a word-affecting inventory keeps the guard
+    # conservative without binding sentence-only inventories that cannot alter
+    # tokenization.
+    return _inventory_definition(
+        LoadedExceptionInventory(
+            inventory.corpus,
+            inventory.named_lists if rules else {},
+            rules,
+        )
+    )
+
+
 def _require_raw_sentence_locale(locale: str) -> None:
     if icu.Locale(locale).getKeywordValue("ss") is not None:
         raise ValueError(
@@ -409,16 +429,23 @@ def break_rule_identity(
     """Return the runtime identity an authored break-rule set must declare.
 
     The token profile binds the explicit :data:`icukit.tokens.TOKEN_PROFILE`
-    version, locale, ordered exception inventories, protected-span policy, and
-    built-in shape definitions. The profile version is bumped when the golden
-    tokenizer behavior changes; it is not a proof derived from implementation
-    text. Fixtures should call this function instead of hard-coding versions.
+    version, locale, word-level exception inventory material, protected-span
+    policy, and built-in shape definitions. Sentence-only exception rules are
+    recorded in :attr:`SentenceOverride.identity` but do not enter this token
+    profile because they cannot change model features. The profile version is
+    bumped when the golden tokenizer behavior changes; it is not a proof
+    derived from implementation text. Fixtures should call this function
+    instead of hard-coding versions.
     """
     _require_raw_sentence_locale(locale)
     profile = {
         "schema": TOKEN_PROFILE,
         "locale": locale,
-        "inventories": [_inventory_definition(item) for item in inventories],
+        "inventories": [
+            definition
+            for item in inventories
+            if (definition := _token_inventory_definition(item))["rules"]
+        ],
         "protected": {
             "scope_default": "token",
             "token": "outermost-wins; equal-extents-union; strict-interior-suppresses",
@@ -1487,19 +1514,7 @@ def _run_witnesses(
                     "ambiguous": ("break", "no-break"),
                 }
                 protected_items = tuple(cast(Iterable[ProtectedSpan], protected))
-                combined_inventory = (
-                    LoadedExceptionInventory(
-                        " + ".join(item.corpus for item in inventories),
-                        {
-                            key: value
-                            for item in inventories
-                            for key, value in item.named_lists.items()
-                        },
-                        tuple(rule for item in inventories for rule in item._rules),
-                    )
-                    if inventories
-                    else None
-                )
+                combined_inventory = _combined_inventory(inventories, levels=frozenset({"word"}))
                 toks = tokens(text, locale, inventory=combined_inventory, protected=protected_items)
                 decisions = []
                 for span in _raw_break_sentence_spans(text, locale):
@@ -1561,9 +1576,37 @@ def _run_witnesses(
 
 
 def _inventory_claims(
-    inventory: LoadedExceptionInventory, text: str, locale: str
+    inventory: LoadedExceptionInventory,
+    text: str,
+    locale: str,
+    base: list[BreakSpan] | None = None,
 ) -> dict[int, list[str]]:
-    base = _raw_break_sentence_spans(text, locale)
+    base = base if base is not None else _raw_break_sentence_spans(text, locale)
+    selected = [
+        rule
+        for rule in inventory._rules
+        if "sentence" in rule.levels
+        and rule.effect == "suppress"
+        and _locale_applies(rule.locale, locale)
+    ]
+    return _sentence_boundary_claims(
+        text,
+        base,
+        selected,
+        locale,
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, locale),
+    )
+
+
+def _inventory_claims_legacy(
+    inventory: LoadedExceptionInventory,
+    text: str,
+    locale: str,
+    base: list[BreakSpan] | None = None,
+) -> dict[int, list[str]]:
+    """Return sentence claims through the former whole-text rule scan."""
+    base = base if base is not None else _raw_break_sentence_spans(text, locale)
     selected = [
         rule
         for rule in inventory._rules
@@ -1583,13 +1626,21 @@ def _inventory_claims(
 
 def _combined_inventory(
     inventories: Sequence[LoadedExceptionInventory],
+    *,
+    levels: frozenset[str] | None = None,
 ) -> LoadedExceptionInventory | None:
-    if not inventories:
+    rules = tuple(
+        rule
+        for item in inventories
+        for rule in item._rules
+        if levels is None or levels & set(rule.levels)
+    )
+    if not rules:
         return None
     return LoadedExceptionInventory(
         " + ".join(item.corpus for item in inventories),
         {key: value for item in inventories for key, value in item.named_lists.items()},
-        tuple(rule for item in inventories for rule in item._rules),
+        rules,
     )
 
 
@@ -1717,6 +1768,7 @@ def _protected_types_by_offset(
 
 def _candidate_observed(
     owner: SentenceOverride,
+    word_inventories: Sequence[LoadedExceptionInventory],
     text: str,
     offset: int,
     toks: Sequence[Token],
@@ -1724,16 +1776,12 @@ def _candidate_observed(
     closed: bool,
     cache: _TokenFeatureCache,
     inventory_claims: dict[int, dict[int, list[str]]],
+    candidates: list[BreakSpan],
 ) -> _ObservedResult:
     pivot = cache.index_after(toks, offset)
     previous = toks[pivot - 1] if pivot else None
     containing = previous if previous is not None and offset < previous["end"] else None
     end = containing["end"] if containing is not None else cache.logical_end(toks, offset)
-    word_inventories = tuple(
-        inventory
-        for inventory in owner.inventories
-        if _inventory_rules(inventory, owner.locale, frozenset({"word"}))
-    )
     if containing is not None:
         completion_horizon = containing["end"]
         if word_inventories and "protected" not in containing:
@@ -1811,7 +1859,7 @@ def _candidate_observed(
     for inventory in owner.inventories:
         key = id(inventory)
         if key not in inventory_claims:
-            inventory_claims[key] = _inventory_claims(inventory, text, owner.locale)
+            inventory_claims[key] = _inventory_claims(inventory, text, owner.locale, candidates)
         rule_ids = inventory_claims[key].get(offset)
         if rule_ids:
             return _ObservedResult(
@@ -1895,9 +1943,11 @@ def _decide_core(
     base: BreakRuleSet | _LoadedCartletModel | None,
     after: Sequence[BreakRuleSet],
     protected: Iterable[ProtectedSpan],
+    *,
+    candidates: list[BreakSpan] | None = None,
 ) -> list[BreakDecision]:
     protected_items = tuple(protected)
-    candidates = _raw_break_sentence_spans(text, locale)
+    candidates = candidates if candidates is not None else _raw_break_sentence_spans(text, locale)
     if not candidates:
         return []
     owner = SentenceOverride.__new__(SentenceOverride)
@@ -1918,18 +1968,24 @@ def _decide_core(
     toks = tokens(
         text,
         locale,
-        inventory=_combined_inventory(inventories),
+        inventory=_combined_inventory(inventories, levels=frozenset({"word"})),
         protected=protected_items,
     )
     protected_types = _protected_types_by_offset(
         protected_items, tuple(span["end"] for span in candidates)
     )
     inventory_claims: dict[int, dict[int, list[str]]] = {}
+    word_inventories = tuple(
+        inventory
+        for inventory in owner.inventories
+        if _inventory_rules(inventory, owner.locale, frozenset({"word"}))
+    )
     result: list[BreakDecision] = []
     for span in candidates:
         offset = span["end"]
         observed = _candidate_observed(
             owner,
+            word_inventories,
             text,
             offset,
             toks,
@@ -1937,6 +1993,7 @@ def _decide_core(
             True,
             cache,
             inventory_claims,
+            candidates,
         )
         if observed.decision is None:
             raise AssertionError("closed candidate remained pending")
@@ -2019,6 +2076,11 @@ class IncrementalSentenceBreaker:
         return items
 
     def _evaluate(self, *, closed: bool) -> list[BreakDecision]:
+        text = self._text[self._segment_start :]
+        with _offset_map_scope(text):
+            return self._evaluate_scoped(closed=closed)
+
+    def _evaluate_scoped(self, *, closed: bool) -> list[BreakDecision]:
         emitted: list[BreakDecision] = []
         pending: list[PendingCandidate] = []
         earlier_pending = False
@@ -2036,7 +2098,7 @@ class IncrementalSentenceBreaker:
             for item in self._protected
             if item["start"] >= segment_start
         ]
-        combined = _combined_inventory(self._owner.inventories)
+        combined = _combined_inventory(self._owner.inventories, levels=frozenset({"word"}))
         toks = tokens(
             text,
             self._owner.locale,
@@ -2048,6 +2110,11 @@ class IncrementalSentenceBreaker:
             protected, tuple(span["end"] for span in candidates)
         )
         inventory_claims: dict[int, dict[int, list[str]]] = {}
+        word_inventories = tuple(
+            inventory
+            for inventory in self._owner.inventories
+            if _inventory_rules(inventory, self._owner.locale, frozenset({"word"}))
+        )
         for span in candidates:
             local_offset = span["end"]
             offset = segment_start + local_offset
@@ -2067,6 +2134,7 @@ class IncrementalSentenceBreaker:
                 continue
             observed = _candidate_observed(
                 self._owner,
+                word_inventories,
                 text,
                 local_offset,
                 toks,
@@ -2074,6 +2142,7 @@ class IncrementalSentenceBreaker:
                 closed,
                 self._cache,
                 inventory_claims,
+                candidates,
             )
             if observed.decision is None:
                 pending.append(
@@ -2202,9 +2271,13 @@ class SentenceOverride:
 
     Region and script do not change the English default. The ``POSIX`` variant
     uses ``"none"`` because its ICU word tokens differ from the model profile.
-    Pass ``base="none"`` explicitly for plain ICU sentence boundaries. Cartlet
-    is an icukit dependency and is imported lazily only when a cartlet model is
-    selected.
+    The English default and the two learned English named bases load the
+    locale-fallback abbreviation lexicon's ``break="suppress"`` entries as
+    sentence exceptions. Decisions are ordered as ICU candidates, token
+    integrity, caller-before rules, exceptions, the base, and caller-after
+    rules. Pass ``base="none"`` explicitly for plain ICU sentence boundaries
+    without the shipped list. Cartlet is an icukit dependency and is imported
+    lazily only when a cartlet model is selected.
 
     Args:
         locale: ICU locale used for both sentence and word boundaries.
@@ -2246,10 +2319,20 @@ class SentenceOverride:
             raise TypeError("cache must be bool")
         self.locale = locale
         self.cache = cache
-        self.inventories = tuple(inventories)
-        expected = break_rule_identity(locale, inventories=self.inventories)
-        if base is None:
+        locale_default = base is None
+        if locale_default:
             base = "en-tn-cart@1" if _uses_english_cartlet_default(locale) else "none"
+        selected_inventories = tuple(inventories)
+        if (
+            isinstance(base, str)
+            and base in {"en-tn@1", "en-tn-cart@1"}
+            and _uses_english_cartlet_default(locale)
+        ):
+            shipped = _load_break_exception_inventory(locale)
+            if shipped is not None:
+                selected_inventories = (shipped, *selected_inventories)
+        self.inventories = selected_inventories
+        expected = break_rule_identity(locale, inventories=self.inventories)
         if base == "none":
             loaded_base = None
         elif isinstance(base, BreakRuleSet):
@@ -2353,20 +2436,32 @@ class SentenceOverride:
         self, text: str, /, *, protected: Iterable[ProtectedSpan] = ()
     ) -> list[BreakDecision]:
         """Return an attributed decision for every raw ICU sentence candidate."""
-        return _decide_core(
-            text,
-            self.locale,
-            self.inventories,
-            self.before,
-            self.base,
-            self.after,
-            protected,
-        )
+        with _offset_map_scope(text):
+            return _decide_core(
+                text,
+                self.locale,
+                self.inventories,
+                self.before,
+                self.base,
+                self.after,
+                protected,
+            )
 
     def spans(self, text: str, /, *, protected: Iterable[ProtectedSpan] = ()) -> list[BreakSpan]:
         """Return the one-best sentence spans; trailing whitespace stays left."""
-        decisions = self.decide(text, protected=protected)
-        originals = _raw_break_sentence_spans(text, self.locale)
+        protected_items = tuple(protected)
+        with _offset_map_scope(text):
+            originals = _raw_break_sentence_spans(text, self.locale)
+            decisions = _decide_core(
+                text,
+                self.locale,
+                self.inventories,
+                self.before,
+                self.base,
+                self.after,
+                protected_items,
+                candidates=originals,
+            )
         if not originals:
             return []
         result: list[BreakSpan] = []
@@ -2403,19 +2498,21 @@ class SentenceOverride:
     ) -> BreakSegmentation:
         """Return one-best spans and each candidate retaining two alternatives."""
         protected_items = tuple(protected)
-        decisions = self.decide(text, protected=protected_items)
-        boundaries: list[BreakBoundary] = [
-            {
-                "offset": item["offset"],
-                "end": item["end"],
-                "alternatives": item["alternatives"],
-                "layer": item["layer"],
-                "id": item["id"],
-            }
-            for item in decisions
-            if len(item["alternatives"]) == 2
-        ]
-        return {"spans": self.spans(text, protected=protected_items), "boundaries": boundaries}
+        with _offset_map_scope(text):
+            decisions = self.decide(text, protected=protected_items)
+            boundaries: list[BreakBoundary] = [
+                {
+                    "offset": item["offset"],
+                    "end": item["end"],
+                    "alternatives": item["alternatives"],
+                    "layer": item["layer"],
+                    "id": item["id"],
+                }
+                for item in decisions
+                if len(item["alternatives"]) == 2
+            ]
+            spans = self.spans(text, protected=protected_items)
+        return {"spans": spans, "boundaries": boundaries}
 
     def stream(
         self, *, protection: Literal["none", "watermark"] = "none"

@@ -5,9 +5,25 @@
 ### Changed
 
 - Building a detector gang now constructs one number reader per distinct configuration.
+- Detector gangs are cached in the process. An equal `generated_detectors` or
+  `flexible_detectors` call returns the gang already built (the 32 most recent are
+  kept), and the unit, currency and time-zone forms ICU writes are computed once for
+  each group of locales whose ICU data is the same, so the other locales of a language
+  build quickly. Setting `ICUKIT_CACHE=0` builds each gang anew, and
+  `clear_detector_caches()` releases the cached gangs and tables. Detection output is
+  unchanged.
 
 ### Added
 
+- The English sentence default now loads the locale-fallback shipped
+  abbreviation lexicon's `break="suppress"` entries before its learned base;
+  attributed decisions report the exception rule, while explicit
+  `base="none"` remains raw ICU without the list. Sentence exception matching
+  now indexes exact punctuation-final rules by their candidate-terminal token,
+  so per-candidate lookup is independent of list size; rules whose exact match
+  cannot be anchored and ICU collation variants retain the whole-text matcher.
+  Sentence-only inventories no longer enter word tokenization, and each
+  sentence operation reuses its ICU candidates and offset maps.
 - Orthographic word shape `cvletters@1` labels vowel and consonant letters from
   runtime ICU data, a curated English table, or additive caller material;
   `cvletters_counts` and token features expose its counts and vowel presence.

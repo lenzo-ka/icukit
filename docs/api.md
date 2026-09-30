@@ -67,6 +67,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`range_detectors`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors_report`](#icukitengine) — function, `icukit.engine`
+- [`clear_detector_caches`](#icukitengine) — function, `icukit.engine`
 - [`detection_to_dict`](#icukitserialize) — function, `icukit.serialize`
 - [`detections_to_json`](#icukitserialize) — function, `icukit.serialize`
 - [`ABBREVIATION_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -462,9 +463,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Post-filter raw ICU sentence spans with a separate abbreviation lexicon.
 
-For English, :class:`Breaker` and :class:`SentenceOverride` use the learned
-model by default. This class remains the explicit lexicon-based alternative;
-``base="none"`` on those APIs gives raw ICU.
+For English, :class:`Breaker` and :class:`SentenceOverride` apply shipped
+suppress entries before the learned model by default. This class remains
+the explicit lexicon-only alternative that also deposits ambiguous
+boundaries; ``base="none"`` on those APIs gives raw ICU without the list.
 
 #### `AbbreviationSentenceBreaker(locale: 'str' = 'en_US', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
 
@@ -1088,9 +1090,9 @@ Text segmentation using ICU BreakIterator.
 
 A versatile text segmentation tool that can break text into sentences,
 words, lines, or grapheme clusters based on locale-specific rules. English
-sentence breaking uses the learned model by default; ``base="none"`` keeps
-raw ICU sentence boundaries. Other levels and non-English defaults remain
-ICU behavior.
+sentence breaking uses shipped abbreviation suppressions followed by the
+learned model by default; ``base="none"`` keeps raw ICU sentence boundaries
+without the list. Other levels and non-English defaults remain ICU behavior.
 
 Example:
     >>> breaker = Breaker('en')
@@ -3384,6 +3386,15 @@ A formatter specification that its family could not invert.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
+### `clear_detector_caches() -> 'None'`
+
+Clear all process-wide detector-construction caches.
+
+This clears generated and flexible gang memos, shared number readers, and derived
+per-locale currency, measure, digit, plural, and time-zone tables. It is useful to
+tests, benchmarks, and long-lived processes that need to release cached gangs.
+``ICUKIT_CACHE=0`` instead bypasses only gang memoization, read at each call.
+
 ### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 A gang of every flexible (recall) reader of :mod:`icukit.recognize` for ``locale``.
@@ -3425,26 +3436,37 @@ default). ``guarded`` adds the readers of the readings the default readers refus
 purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
 built is left out; :func:`flexible_detectors_report` names it and why.
 
-The set is costlier than :func:`generated_detectors`: building it takes seconds (most
-in a language of many locales, where the currency and measure readers read every
-locale's forms), so build it once and reuse it; a ``detect`` costs a small multiple
-of the generated set's, since the currency and measure readers share the numbers
-they read within a text. The shared readings are kept for the 16 texts read last
-(about 110 bytes per character each for en_US).
+Construction is cached process-wide in a bounded memo keyed by every option; equal
+calls return the same frozen set. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for
+a call, or use :func:`clear_detector_caches` to clear it. A ``detect`` costs a small
+multiple of the generated set's, since the currency and measure readers share the
+numbers they read within a text. The shared readings are kept for the 16 texts read
+last (about 110 bytes per character each for en_US).
 
 ### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 The flexible readers for ``locale``, and every spec that could not be built.
 
-See :func:`flexible_detectors`.
+See :func:`flexible_detectors`. The frozen report is memoized by the complete,
+normalized request. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for a call;
+:func:`clear_detector_caches` clears it explicitly.
 
 ### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
 Derive all invertible detectors introspectively registered for ``locale``.
 
+Repeated equal calls return the detector set from the process-wide bounded gang
+memo. Set ``ICUKIT_CACHE=0`` to bypass that memo for a call, or call
+:func:`clear_detector_caches` to clear every detector-construction cache.
+
 ### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 Derive detectors for ``locale`` and report specs that could not be inverted.
+
+The immutable report is memoized in-process by the complete request, including
+family and material-object identity, so a family must enumerate and build the same
+readers each time it is given the same locale. Set ``ICUKIT_CACHE=0`` to bypass
+this gang memo for a call; :func:`clear_detector_caches` clears it explicitly.
 
 ### `range_detectors(locale: 'str', detectors: 'DetectorSet', *, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
 
@@ -7006,9 +7028,11 @@ Whole-text and incremental sentence-break overrides.
 ICU always supplies the candidate boundaries: this module can retain or
 suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
 English (language ``en``, with any region or script, except the ``POSIX``
-variant) and ``"none"`` otherwise. Explicit ``base="none"`` is exactly ICU's
-current sentence output. Whole-text and incremental operation share the same
-prefix-aware candidate evaluator.
+variant) and ``"none"`` otherwise. That English default and the two learned
+English named bases apply the locale's shipped abbreviation suppressions before
+their rules or model. Explicit ``base="none"`` is exactly ICU's current
+sentence output, without that list. Whole-text and incremental operation share
+the same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -7159,9 +7183,13 @@ every other      ``none``
 
 Region and script do not change the English default. The ``POSIX`` variant
 uses ``"none"`` because its ICU word tokens differ from the model profile.
-Pass ``base="none"`` explicitly for plain ICU sentence boundaries. Cartlet
-is an icukit dependency and is imported lazily only when a cartlet model is
-selected.
+The English default and the two learned English named bases load the
+locale-fallback abbreviation lexicon's ``break="suppress"`` entries as
+sentence exceptions. Decisions are ordered as ICU candidates, token
+integrity, caller-before rules, exceptions, the base, and caller-after
+rules. Pass ``base="none"`` explicitly for plain ICU sentence boundaries
+without the shipped list. Cartlet is an icukit dependency and is imported
+lazily only when a cartlet model is selected.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.
@@ -7219,10 +7247,13 @@ In text without whitespace or punctuation/symbol edges whose
 Return the runtime identity an authored break-rule set must declare.
 
 The token profile binds the explicit :data:`icukit.tokens.TOKEN_PROFILE`
-version, locale, ordered exception inventories, protected-span policy, and
-built-in shape definitions. The profile version is bumped when the golden
-tokenizer behavior changes; it is not a proof derived from implementation
-text. Fixtures should call this function instead of hard-coding versions.
+version, locale, word-level exception inventory material, protected-span
+policy, and built-in shape definitions. Sentence-only exception rules are
+recorded in :attr:`SentenceOverride.identity` but do not enter this token
+profile because they cannot change model features. The profile version is
+bumped when the golden tokenizer behavior changes; it is not a proof
+derived from implementation text. Fixtures should call this function
+instead of hard-coding versions.
 
 ### `load_break_rules(source: 'str | Path | Mapping[str, object]', /, *, locale: 'str' = 'en_US', inventories: 'Sequence[LoadedExceptionInventory]' = ()) -> 'BreakRuleSet'`
 

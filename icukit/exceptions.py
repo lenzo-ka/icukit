@@ -8,8 +8,10 @@ only ever see the immutable compiled inventory.
 from __future__ import annotations
 
 import re
+from bisect import bisect_left
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib.resources import files
 from json import loads
 from typing import Literal, NotRequired, TypedDict, cast
@@ -733,7 +735,11 @@ class LoadedExceptionInventory:
         boundary_rules = [
             rule for rule in selected if rule.effect == "suppress" or policy.disposition != "rule"
         ]
-        claims = _boundary_claims(text, base, boundary_rules, locale, policy, mandatory_info)
+        claims = (
+            _sentence_boundary_claims(text, base, boundary_rules, locale, policy, mandatory_info)
+            if level == "sentence"
+            else _boundary_claims(text, base, boundary_rules, locale, policy, mandatory_info)
+        )
         if policy.overlap == "error" and any(len(rule_ids) > 1 for rule_ids in claims.values()):
             raise ExceptionConflictError("OVERLAPPING_EXCEPTION_RULES")
         if policy.overlap == "first":
@@ -868,6 +874,209 @@ def _boundary_claims(
     mandatory = mandatory_info().boundaries
     return {
         boundary: rule_ids for boundary, rule_ids in claims.items() if boundary not in mandatory
+    }
+
+
+@dataclass(frozen=True)
+class _AnchoredRule:
+    order: int
+    rule: _CompiledRule
+
+
+@dataclass(frozen=True)
+class _SentenceRuleIndex:
+    exact: dict[str, tuple[_AnchoredRule, ...]]
+    fallback: tuple[_AnchoredRule, ...]
+
+
+def _last_token(value: str) -> str:
+    end = len(value)
+    start = end
+    while start and not value[start - 1].isspace():
+        start -= 1
+    return value[start:end]
+
+
+def _candidate_keys(text: str, end: int) -> tuple[str, ...]:
+    start = end
+    while start and not text[start - 1].isspace():
+        start -= 1
+    return tuple(
+        text[index:end]
+        for index in range(start, end)
+        if (text[index].isalnum() or text[index] == "_")
+        and (index == start or not (text[index - 1].isalnum() or text[index - 1] == "_"))
+    )
+
+
+def _cased_letter(char: str) -> bool:
+    return char.isalpha() and char.lower() != char.upper()
+
+
+def _can_anchor_sentence_rule(rule: _CompiledRule) -> bool:
+    """Whether every possible internal sentence candidate is ruled out."""
+    if rule.variant != "exact" or not rule.surface or not _PUNCTUATION.contains(rule.surface[-1]):
+        return False
+    for index, char in enumerate(rule.surface[:-1]):
+        if char.isspace():
+            return False
+        if _PUNCTUATION.contains(char) and (
+            char != "."
+            or index == 0
+            or not _cased_letter(rule.surface[index - 1])
+            or not _cased_letter(rule.surface[index + 1])
+        ):
+            return False
+    return True
+
+
+@lru_cache(maxsize=128)
+def _sentence_rule_index(rules: tuple[_CompiledRule, ...], locale: str) -> _SentenceRuleIndex:
+    """Compile sentence rules into candidate-terminal lookup buckets.
+
+    Exact, punctuation-final surfaces without a possible internal sentence
+    candidate can be confirmed backward from a candidate. Internal periods are
+    safe only when they directly join cased letters, as in the shipped ``U.S.``
+    forms. Multi-token surfaces and other internal punctuation retain the
+    legacy matcher because they may own a candidate strictly inside the match.
+
+    ICU collation search cannot use an equivalent fold key for every strength:
+    contractions are contextual and primary-ignorable code points make the
+    matched extent unbounded, so collation rules also retain the legacy matcher.
+    The bounded cache avoids retaining every transient caller-authored rule set.
+    """
+    del locale  # Reserved in the cache key for locale-sensitive indexes.
+    exact: dict[str, list[_AnchoredRule]] = {}
+    fallback: list[_AnchoredRule] = []
+    for order, rule in enumerate(rules):
+        indexed = _AnchoredRule(order, rule)
+        if not _can_anchor_sentence_rule(rule):
+            fallback.append(indexed)
+            continue
+        token = _last_token(rule.surface)
+        if not token or not (token[0].isalnum() or token[0] == "_"):
+            fallback.append(indexed)
+            continue
+        exact.setdefault(token, []).append(indexed)
+    return _SentenceRuleIndex(
+        {
+            key: tuple(sorted(items, key=lambda item: (-len(item.rule.surface), item.order)))
+            for key, items in exact.items()
+        },
+        tuple(fallback),
+    )
+
+
+def _anchored_detection(
+    indexed: _AnchoredRule,
+    text: str,
+    end: int,
+    locale: str,
+    policy: ExceptionPolicy,
+    mandatory_info: Callable[[], _MandatoryLineInfo],
+) -> Detection | None:
+    rule = indexed.rule
+    start = end - len(rule.surface)
+    if start < 0 or text[start:end] != rule.surface:
+        return None
+    if start and (text[start - 1].isalnum() or text[start - 1] == "_"):
+        return None
+    if rule.conditions:
+        predicate = all if policy.conditions == "all" else any
+        if not predicate(
+            _condition_result(condition, text, start, end, locale, policy, mandatory_info)
+            for condition in rule.conditions
+        ):
+            return None
+    return Detection(text=rule.surface, start=start, end=end, type=cast(str, rule.type))
+
+
+def _claimed_boundaries(
+    text: str, boundaries: tuple[int, ...], match: Detection
+) -> tuple[int, ...]:
+    first = bisect_left(boundaries, match["start"] + 1)
+    last = bisect_left(boundaries, match["end"])
+    internal = boundaries[first:last]
+    if internal:
+        return internal
+    following_index = bisect_left(boundaries, match["end"])
+    following = next(
+        (
+            boundary
+            for boundary in boundaries[following_index:]
+            if text[match["end"] : boundary].isspace()
+        ),
+        None,
+    )
+    owns_punctuation = _PUNCTUATION.contains(text[match["end"] - 1])
+    if match["end"] in boundaries and owns_punctuation:
+        return (match["end"],)
+    if following is not None and owns_punctuation:
+        return (following,)
+    return ()
+
+
+def _sentence_boundary_claims(
+    text: str,
+    base: list[BreakSpan],
+    rules: list[_CompiledRule],
+    locale: str,
+    policy: ExceptionPolicy,
+    mandatory_info: Callable[[], _MandatoryLineInfo],
+    *,
+    stats: dict[str, int] | None = None,
+) -> dict[int, list[str]]:
+    """Claim sentence candidates by terminal-token lookup, preserving legacy results."""
+    claimable = tuple(sorted(span["end"] for span in base[:-1]))
+    if not claimable or not rules:
+        return {}
+    anchors = tuple(span["end"] for span in base)
+    index = _sentence_rule_index(tuple(rules), locale)
+    claimed: dict[int, list[tuple[int, int, str]]] = {}
+    occurrence = 0
+    for anchor in anchors:
+        end = anchor
+        while end and text[end - 1].isspace():
+            end -= 1
+        for token in _candidate_keys(text, end):
+            if stats is not None:
+                stats["lookups"] = stats.get("lookups", 0) + 1
+            for indexed in index.exact.get(token, ()):
+                if stats is not None:
+                    stats["confirm_attempts"] = stats.get("confirm_attempts", 0) + 1
+                match = _anchored_detection(indexed, text, end, locale, policy, mandatory_info)
+                if match is None:
+                    continue
+                for boundary in _claimed_boundaries(text, claimable, match):
+                    claimed.setdefault(boundary, []).append(
+                        (indexed.order, occurrence, indexed.rule.id)
+                    )
+                occurrence += 1
+
+    if index.fallback:
+        if stats is not None:
+            stats["fallback_rules"] = len(index.fallback)
+        fallback_rules = [item.rule for item in index.fallback]
+        fallback_claims = _boundary_claims(
+            text, base, fallback_rules, locale, policy, mandatory_info
+        )
+        orders = {item.rule.id: item.order for item in index.fallback}
+        for boundary, rule_ids in fallback_claims.items():
+            for rule_id in rule_ids:
+                claimed.setdefault(boundary, []).append((orders[rule_id], occurrence, rule_id))
+                occurrence += 1
+
+    may_include_mandatory = any(
+        boundary
+        and icu.Char.getIntPropertyValue(ord(text[boundary - 1]), icu.UProperty.LINE_BREAK)
+        in _MANDATORY_LINE_BREAK_VALUES
+        for boundary in claimed
+    )
+    mandatory = mandatory_info().boundaries if may_include_mandatory else frozenset()
+    return {
+        boundary: [item[2] for item in sorted(items)]
+        for boundary, items in claimed.items()
+        if boundary not in mandatory
     }
 
 

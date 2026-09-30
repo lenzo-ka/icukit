@@ -777,7 +777,7 @@ def test_long_run_completion_and_feature_work_is_linear(monkeypatch):
     assert CountedText.slices == 1
 
 
-def test_sentence_inventory_claims_are_computed_once(monkeypatch):
+def test_sentence_inventory_claims_reuse_icu_candidates(monkeypatch):
     original = sentence_override_module._raw_break_sentence_spans
     calls = 0
 
@@ -788,7 +788,269 @@ def test_sentence_inventory_claims_are_computed_once(monkeypatch):
 
     monkeypatch.setattr(sentence_override_module, "_raw_break_sentence_spans", counted)
     SentenceOverride(base="none", inventories=[_inventory(levels=("sentence",))]).decide("A!" * 64)
-    assert calls == 2
+    assert calls == 1
+
+
+def test_anchored_claim_skips_unneeded_mandatory_line_pass(monkeypatch):
+    import icukit.exceptions as exceptions_module
+
+    override = SentenceOverride("en")
+    original = exceptions_module.break_line_spans
+    calls = 0
+
+    def counted(text, locale):
+        nonlocal calls
+        calls += 1
+        return original(text, locale)
+
+    monkeypatch.setattr(exceptions_module, "break_line_spans", counted)
+    override.decide("He met Mr. Smith today. He left.")
+    assert calls == 0
+
+    override.decide("He met Mr.\nSmith today.")
+    assert calls == 1
+
+
+def test_sentence_only_inventory_does_not_change_tokenization():
+    from icukit.abbreviation_compile import _load_break_exception_inventory
+    from icukit.tokens import tokens
+
+    inventory = _load_break_exception_inventory("en")
+    assert inventory is not None
+    combined = sentence_override_module._combined_inventory(
+        (inventory,), levels=frozenset({"word"})
+    )
+    assert combined is None
+    text = "He met Mr. Smith today. He left."
+    assert tokens(text, "en", inventory=combined) == tokens(text, "en")
+
+
+def test_sentence_spans_build_offset_maps_once(monkeypatch):
+    import icukit._offsets as offsets_module
+
+    original = offsets_module._build_offset_maps
+    calls = 0
+
+    def counted(text):
+        nonlocal calls
+        calls += 1
+        return original(text)
+
+    monkeypatch.setattr(offsets_module, "_build_offset_maps", counted)
+    SentenceOverride("en").spans("He met Mr. Smith today. He left.")
+    assert calls == 1
+
+
+def test_anchored_sentence_claims_match_legacy_on_repo_text_and_shipped_lists():
+    from icukit.abbreviation_compile import _load_break_exception_inventory
+    from icukit.tokens import tokens
+
+    inventories = [
+        _load_break_exception_inventory("en"),
+        _load_break_exception_inventory("en_US"),
+    ]
+    text = Path("README.md").read_text(encoding="utf-8") + (
+        "\nHe met Mr. Smith today. He left. The U.S. Supreme Court ruled. Markets moved."
+    )
+    for locale, inventory in zip(("en", "en_US"), inventories, strict=True):
+        assert inventory is not None
+        base = sentence_override_module._raw_break_sentence_spans(text, locale)
+        assert sentence_override_module._inventory_claims(
+            inventory, text, locale, base
+        ) == sentence_override_module._inventory_claims_legacy(inventory, text, locale, base)
+        word_inventory = sentence_override_module._combined_inventory(
+            (inventory,), levels=frozenset({"word"})
+        )
+        assert tokens(text, locale, inventory=inventory) == tokens(
+            text, locale, inventory=word_inventory
+        )
+
+
+def test_internal_candidate_exact_rule_routes_to_legacy_matcher():
+    from icukit.breaker import _raw_break_sentence_spans
+    from icukit.exceptions import (
+        ExceptionPolicy,
+        _boundary_claims,
+        _mandatory_info_supplier,
+        _sentence_boundary_claims,
+    )
+
+    seed = _inventory(levels=("sentence",))._rules[0]
+    rule = replace(seed, id="multi-token", surface="Mr. Smith.")
+    text = "He met Mr. Smith.today."
+    base = _raw_break_sentence_spans(text, "en")
+    arguments = (
+        text,
+        base,
+        [rule],
+        "en",
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "en"),
+    )
+
+    assert _boundary_claims(*arguments) == {11: ["multi-token"]}
+    assert _sentence_boundary_claims(*arguments) == _boundary_claims(*arguments)
+
+
+def test_sentence_rule_routing_preserves_positions_conditions_and_attribution():
+    from icukit.exceptions import (
+        ExceptionPolicy,
+        _boundary_claims,
+        _mandatory_info_supplier,
+        _sentence_boundary_claims,
+    )
+
+    condition_rule = _suppression("conditional-seed", "Dr.", ["sentence"])
+    condition_rule["conditions"] = [
+        {
+            "id": "next-z",
+            "kind": "unicode_set",
+            "direction": "right",
+            "set": "[Z]",
+            "skip": {"kind": "whitespace", "max": 1},
+        }
+    ]
+    condition_rule["unconditionality"] = "conditional"
+    condition_rule["witnesses"] = {
+        "positive": "Dr. Z",
+        "near_miss": "SomeDr. Z",
+        "condition_negatives": ["Dr. X"],
+    }
+    condition = (
+        load_exception_inventory(
+            {
+                "schema_version": 1,
+                "corpus": "condition seed",
+                "named_lists": {},
+                "rules": [condition_rule],
+            }
+        )
+        ._rules[0]
+        .conditions
+    )
+    seed = _inventory(levels=("sentence",))._rules[0]
+    rules = [
+        replace(seed, id="overlap", surface="Smith."),
+        replace(seed, id="multi", surface="Mr. Smith."),
+        replace(seed, id="multi-conditional", surface="Mr. Smith.", conditions=condition),
+        replace(seed, id="at-end", surface="Capt."),
+        replace(seed, id="after", surface="Dr."),
+    ]
+    text = "Before. Mr. Smith. Z Capt. Dr. Next."
+    multi_start = text.index("Mr.")
+    candidate_ends = sorted(
+        {
+            multi_start,
+            multi_start + len("Mr. "),
+            text.index("Capt.") + len("Capt."),
+            text.index("Dr.") + len("Dr. "),
+            len(text),
+        }
+    )
+    base = [{"end": end} for end in candidate_ends]
+    arguments = (
+        text,
+        base,
+        rules,
+        "en",
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "en"),
+    )
+
+    legacy = _boundary_claims(*arguments)
+    anchored = _sentence_boundary_claims(*arguments)
+
+    assert anchored == legacy
+    assert anchored[multi_start + len("Mr. ")] == ["multi", "multi-conditional"]
+    assert anchored[text.index("Capt.") + len("Capt.")] == ["at-end"]
+    assert anchored[text.index("Dr.") + len("Dr. ")] == ["after"]
+
+
+def test_sentence_rule_index_cache_is_bounded():
+    from icukit.exceptions import _sentence_rule_index
+
+    seed = _inventory(levels=("sentence",))._rules[0]
+    _sentence_rule_index.cache_clear()
+    try:
+        for index in range(256):
+            rule = replace(seed, id=f"synthetic:{index}", surface=f"X{index}.")
+            _sentence_rule_index((rule,), "en")
+        assert _sentence_rule_index.cache_info().maxsize == 128
+        assert _sentence_rule_index.cache_info().currsize == 128
+    finally:
+        _sentence_rule_index.cache_clear()
+
+
+def test_collation_fallback_matches_legacy_with_a_different_surface():
+    from icukit.breaker import _raw_break_sentence_spans
+    from icukit.exceptions import (
+        ExceptionPolicy,
+        _boundary_claims,
+        _mandatory_info_supplier,
+        _sentence_boundary_claims,
+    )
+
+    seed = _inventory(levels=("sentence",))._rules[0]
+    rule = replace(
+        seed,
+        id="street",
+        locale="de",
+        surface="Straße.",
+        variant="collation",
+        strength="primary",
+    )
+    text = "Er wohnt in STRASSE. Weiter."
+    base = _raw_break_sentence_spans(text, "de")
+    arguments = (
+        text,
+        base,
+        [rule],
+        "de",
+        ExceptionPolicy(),
+        _mandatory_info_supplier(text, "de"),
+    )
+
+    legacy = _boundary_claims(*arguments)
+    assert legacy == {21: ["street"]}
+    assert _sentence_boundary_claims(*arguments) == legacy
+
+
+def test_anchored_sentence_matching_work_is_independent_of_list_size():
+    from dataclasses import replace as replace_dataclass
+
+    from icukit.abbreviation_compile import _load_break_exception_inventory
+    from icukit.breaker import _raw_break_sentence_spans
+    from icukit.exceptions import (
+        ExceptionPolicy,
+        _mandatory_info_supplier,
+        _sentence_boundary_claims,
+    )
+
+    inventory = _load_break_exception_inventory("en")
+    assert inventory is not None
+    shipped = list(inventory._rules)
+    synthetic = shipped + [
+        replace_dataclass(rule, id=f"synthetic:{copy}:{rule.id}", surface=f"X{copy}{rule.surface}")
+        for copy in range(1, 10)
+        for rule in shipped
+    ]
+    assert len(synthetic) == len(shipped) * 10
+
+    text = "He met Mr. Smith today. He left."
+    base = _raw_break_sentence_spans(text, "en")
+    small_stats: dict[str, int] = {}
+    large_stats: dict[str, int] = {}
+    for rules, stats in ((shipped, small_stats), (synthetic, large_stats)):
+        _sentence_boundary_claims(
+            text,
+            base,
+            rules,
+            "en",
+            ExceptionPolicy(),
+            _mandatory_info_supplier(text, "en"),
+            stats=stats,
+        )
+    assert small_stats == large_stats == {"lookups": 3, "confirm_attempts": 1}
 
 
 def test_protected_candidate_index_handles_unsorted_overlapping_spans_linearly():
@@ -930,7 +1192,9 @@ def test_shipped_en_tn_identity_mismatch_is_refused(tmp_path: Path):
 
 def test_shipped_en_tn_authored_harness_cases():
     """Row 25: fixed authored cases agree with the harness's first-match semantics."""
-    override = SentenceOverride(base="en-tn@1")
+    override = SentenceOverride(
+        base=load_break_rules(sentence_override_module._NAMED_RULE_BASES["en-tn@1"])
+    )
     cases = [
         ("alpha a a a\n(1111). continues", "en.sb.0001", "no-break"),
         ("alpha a a 2014.\na continues", "en.sb.0004", "break"),

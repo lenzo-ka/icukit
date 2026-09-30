@@ -69,9 +69,10 @@ def _candidate(text: str, boundary: int) -> tuple[str, int] | None:
 class AbbreviationSentenceBreaker:
     """Post-filter raw ICU sentence spans with a separate abbreviation lexicon.
 
-    For English, :class:`Breaker` and :class:`SentenceOverride` use the learned
-    model by default. This class remains the explicit lexicon-based alternative;
-    ``base="none"`` on those APIs gives raw ICU.
+    For English, :class:`Breaker` and :class:`SentenceOverride` apply shipped
+    suppress entries before the learned model by default. This class remains
+    the explicit lexicon-only alternative that also deposits ambiguous
+    boundaries; ``base="none"`` on those APIs gives raw ICU without the list.
     """
 
     def __init__(
