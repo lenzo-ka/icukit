@@ -8,6 +8,47 @@
 
 ### Added
 
+- Orthographic word shape `cvletters@1` labels vowel and consonant letters from
+  runtime ICU data, a curated English table, or additive caller material;
+  `cvletters_counts` and token features expose its counts and vowel presence.
+- `CartletModelRef` and the named `en-tn-cart@1` sentence-break base add an
+  English cartlet model path. The shipped CC BY-SA 4.0 model is
+  digest- and runtime-identity-bound and uses a raising lazy feature vector for
+  incremental decisions. Cartlet 0.7 or later is now a required dependency.
+- The learned English sentence rule base `en-tn@1` ships as a CC BY-SA 4.0
+  artifact. The ordered 200-rule artifact is derived
+  from the Google TN English corpus, carries full license, attribution, and
+  measurement receipts, and loads only when its ICU, Unicode, and empty-
+  inventory token-profile identity matches. Its frozen test-pool F1 of
+  0.978025 measures agreement with the corpus splitter on synthetic `glue2`
+  concatenations, not running-text accuracy. The package license expression
+  becomes `BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0`.
+- `SentenceOverride.stream()` returns an experimental `IncrementalSentenceBreaker`
+  with prefix-stable `feed`, `pending`, `flush`, and `close`: for any chunking,
+  the returned decisions equal the whole-text `decide()`, and a returned decision
+  never changes. It shares the whole-text decision core, decides a candidate as
+  soon as everything its deciding rule reads is final, computes each token's
+  features once, and supports protected-span watermarks. Streaming refuses
+  exception inventories with collation-variant rules, because primary-ignorable
+  code points make their extent unbounded; `decide()` still accepts them.
+- A generated provenance manifest now records the declared source, license, shipping
+  class, notice, and byte hash of every data file under `icukit/data`. A license guard
+  rejects missing entries and entries changed since last recorded, rejects unknown
+  class labels, and accepts only UTF-8 text or manifest-declared gzip whose payload is
+  UTF-8 text. It scans that text and decoded JSON/XML for known internal corpus names,
+  rejecting a match unless the manifest records and classifies the reference, and
+  checks that required notices ship. Each notice file is
+  hash-pinned and labeled with the license it carries. Archive members under
+  `icukit/data` are hash-verified against the manifest and compared between wheel and
+  sdist. The package license expression
+  now includes the Unicode License v3 term that covers its bundled CLDR and UCD
+  snapshots.
+- Experimental whole-text sentence-break overrides can retain, suppress, or
+  leave open ICU sentence candidates with caller-authored flat rules, protected
+  spans, exception inventories, per-candidate attribution, and lattice output.
+  Rule artifacts declare and verify their ICU, Unicode, and explicitly
+  versioned tokenizer-profile identity and run candidate- and decision-aware
+  authored witnesses when loaded.
 - Experimental `char-classes` and `shape-refinement` locale-material kinds add
   namespaced character classes and extended shape symbols at runtime. They are
   witness-checked, canonically digested, explicitly passed with `material=`, and
@@ -133,6 +174,15 @@
   plurals therefore retain complete surfaces and code-point capture offsets.
 
 ### Changed
+
+- **Behavior change:** English sentence output now uses `"en-tn-cart@1"` by
+  default across `Breaker` sentence spans (including its sentence text and
+  tokenization methods and the module-level helpers), `SentenceOverride`, and
+  `ik break` sentence output. This applies to language `en`, with any region or
+  script except the `POSIX` variant. Pass `base="none"` to either Python API or
+  `--base none` to the CLI for the former raw-ICU output. Every other locale
+  language still defaults to raw ICU. `AbbreviationSentenceBreaker` remains
+  the unchanged, separate lexicon-based alternative.
 
 - `detector_key` now returns five components. The fifth is the material content digest,
   or `None` for every reader built from ICU or curated data, so readers of one type from

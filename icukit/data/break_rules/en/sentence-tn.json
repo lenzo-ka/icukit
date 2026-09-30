@@ -1,0 +1,7852 @@
+{
+  "schema_version": 1,
+  "kind": "break-rules",
+  "id": "icukit/en/sentence-tn",
+  "locale": "en",
+  "status": "experimental",
+  "features": "icukit.features@1",
+  "identity": {
+    "icu": "78.3",
+    "unicode": "17.0",
+    "token_profile": "sha256:14989ce05e894b86c0502fb563c1d0e89399c2bd39dd835bba7cfa2422e7c451"
+  },
+  "provenance": {
+    "source": "google/tn-en_with_types",
+    "pools": [
+      "training"
+    ],
+    "derivation": "sb-decision-list@sha256:ab44dc37951ebbbad6f38798af3a677081ec439e46d4246573f3f3829ecbc24c",
+    "license": {
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike"
+    }
+  },
+  "training": {
+    "k": "1"
+  },
+  "rules": [
+    {
+      "id": "en.sb.0001",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(dddd)."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 66263,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(1111). continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0002",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "\""
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 27698,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n\" continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0003",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-3",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        },
+        {
+          "at": -2,
+          "f": "ws.before",
+          "in": [
+            false
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 813633,
+        "n_break": 813525
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a author\"a\na continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a,author\"a\na continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0004",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "2014."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 155459,
+        "n_break": 155450
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 2014.\na continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0005",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(Xxxxx"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 7375,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(Aaaaa continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0006",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "2015."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 10
+        }
+      ],
+      "receipt": {
+        "n": 165670,
+        "n_break": 165650
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 2015.\na continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0007",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "dddd)."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 9
+        }
+      ],
+      "receipt": {
+        "n": 241419,
+        "n_break": 241375
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 1111).\na continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0008",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "shape.coarse",
+          "in": [
+            "&"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 6152,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n& continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0009",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "2013."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 137393,
+        "n_break": 137375
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 2013.\na continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0010",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "2010."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 91784,
+        "n_break": 91775
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 2010.\na continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0011",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            ")"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "sentence_break.first",
+          "in": [
+            "Upper"
+          ]
+        },
+        {
+          "at": "c+2",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 170160,
+        "n_break": 170138
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha Alpha ) a\nwardauth continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x ) a\nwardauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0012",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "ddd."
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 35326,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoraa\n111. continues",
+            "offset": 19,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n111. continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0013",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "2012."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 11
+        }
+      ],
+      "receipt": {
+        "n": 126523,
+        "n_break": 126500
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 2012.\na continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0014",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(dddd)"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3873,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(1111) continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0015",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            ")"
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 70475,
+        "n_break": 70475
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a ) a\n\"ordauth continues",
+            "offset": 12,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0016",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx\"."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3458,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nAaaaa\". continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0017",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 86288,
+        "n_break": 86288
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. a\n\"ordauth continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0018",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            ")"
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "word_break",
+          "in": [
+            "WSegSpace"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 56655,
+        "n_break": 56650
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a ) a\nwo dauth continues",
+            "offset": 12,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\nwo dauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0019",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "U.S."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "ge": 4
+        }
+      ],
+      "receipt": {
+        "n": 20386,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a U.S.\naaaa continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\naaaa continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0020",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "\"X.X."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2938,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha \"A.A. a a\na continues",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0021",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "dd,"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 103515,
+        "n_break": 103500
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha 11, 1111. Dr.\nword continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x 1111. Dr.\nword continues",
+            "offset": 14
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0022",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxxx."
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 272938,
+        "n_break": 272938
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a aaaa.\n\"ordauth continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0023",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            ")"
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 9
+        }
+      ],
+      "receipt": {
+        "n": 249707,
+        "n_break": 249575
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a ) a\nwoadauth continues",
+            "offset": 12,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\nwoadauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0024",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "shape.cased",
+          "in": [
+            "xx"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "ge": 2
+        }
+      ],
+      "receipt": {
+        "n": 144687,
+        "n_break": 144650
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha aa 1111. Dr.\naa continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x 1111. Dr.\naa continues",
+            "offset": 14
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0025",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(dddd-dd-dd)."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2490,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(1111-11-11). continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0026",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(dd"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2457,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(11 continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0027",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "retrieved"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 171153,
+        "n_break": 171150
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha word a aaaa.\nretrieved continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha word A aaaa.\nretrieved continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0028",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-4",
+          "f": "general_category",
+          "in": [
+            "Close_Punctuation"
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "sentence_break",
+          "in": [
+            "Close"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 37727,
+        "n_break": 37725
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a autho)\"a\na continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a authoa\"a\na continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0029",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "ed."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "le": 37
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            false
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 32951,
+        "n_break": 32950
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta,x ed. Author",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x ed. Author",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0030",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Press."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 36788,
+        "n_break": 36788
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Press.\nword continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nword continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0031",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxxx."
+          ]
+        },
+        {
+          "at": "c+4",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "sentence_break.first",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 853178,
+        "n_break": 852950
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha alpha a aaaa.\nworaauth continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha alpha A aaaa.\nworaauth continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0032",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "he"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 152744,
+        "n_break": 152688
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoaaa\nhe continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nhe continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0033",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "2009."
+          ]
+        },
+        {
+          "at": "c+2",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 35931,
+        "n_break": 35925
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 2009.\nwardauth continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nwardauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0034",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "2016."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 28714,
+        "n_break": 28712
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 2016.\na continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0035",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Ph."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2044,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Ph.\na continues",
+            "offset": 14,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0036",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-8",
+          "f": "word_break",
+          "in": [
+            "<BOS>"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1982,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "a\na continues",
+            "offset": 2,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "authors\na continues",
+            "offset": 8
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0037",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-3",
+          "f": "sentence_break",
+          "in": [
+            "STerm"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 24425,
+        "n_break": 24425
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a author!a\na continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0038",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "\"X."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1910,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha \"A. a a\na continues",
+            "offset": 14,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0039",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "in"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "word_break",
+          "in": [
+            "WSegSpace"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 163427,
+        "n_break": 163400
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nIn uthor continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a ZZZZZZZZZZZZ\nIn uthor continues",
+            "offset": 23
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0040",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "p."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Decimal_Number"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 51310,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a p.\nword1 continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nword1 continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0041",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxxx.\""
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 22262,
+        "n_break": 22262
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a aaaa.\"\na continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0042",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Times."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 28594,
+        "n_break": 28588
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Times.\na continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0043",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "(x."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1694,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a (a.\na continues",
+            "offset": 14,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0044",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xx"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "le": 9
+        }
+      ],
+      "receipt": {
+        "n": 44018,
+        "n_break": 44012
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. a\nAa continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\nAa continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0045",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(Xxxx"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1658,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(Aaaa continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0046",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 201350,
+        "n_break": 201350
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\n\"ordauth continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0047",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(dddd),"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1552,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(1111), continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0048",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "shape.cased",
+          "in": [
+            "Xxx"
+          ]
+        },
+        {
+          "at": "c-7",
+          "f": "word_break",
+          "in": [
+            "WSegSpace"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 61093,
+        "n_break": 61075
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. 1999.\nAaa continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a 1111. x\nAaa continues",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0049",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "retrieved"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 119220,
+        "n_break": 119200
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha word a Aaaaa.\nretrieved continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha word A Aaaaa.\nretrieved continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0050",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "pp."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "le": 4
+        }
+      ],
+      "receipt": {
+        "n": 27588,
+        "n_break": 27588
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a pp.\nword continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a authors pp.\nword continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0051",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "it"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 114408,
+        "n_break": 114338
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nit continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a authoa.a\nx continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0052",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx.\""
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 15962,
+        "n_break": 15962
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\"\na continues",
+            "offset": 18,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0053",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "the"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "word_break.first",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 176426,
+        "n_break": 176362
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha alpha a Aaaaa.\nthe continues",
+            "offset": 21,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha alpha 1 Aaaaa.\nthe continues",
+            "offset": 21
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0054",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.cased",
+          "in": [
+            "x.x"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1213,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a.a a\na continues",
+            "offset": 14,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0055",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "sentence_break.first",
+          "in": [
+            "Upper"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 79352,
+        "n_break": 79312
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta Alpha 2024. Alice",
+            "offset": 23,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x 2024. Alice",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0056",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "she"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 37750,
+        "n_break": 37738
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoaaa\nshe continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nshe continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0057",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx\"."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1188,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha Aaaaa\". a a\na continues",
+            "offset": 18,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0058",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "ddd."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "x."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 31953,
+        "n_break": 31950
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a. 123. Alice",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x 123. Alice",
+            "offset": 13
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0059",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "(X."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1158,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a (A.\na continues",
+            "offset": 14,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0060",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-3",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "ge": 2
+        },
+        {
+          "at": "c-2",
+          "f": "word_break",
+          "in": [
+            "MidNumLet"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 33638,
+        "n_break": 33625
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha an \". Author",
+            "offset": 12,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x \". Author",
+            "offset": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0061",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "(Xxx"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1128,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n(Aaa continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0062",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "as"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 25138,
+        "n_break": 25138
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nas continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a ZZZZZZZZZZZZ\nas continues",
+            "offset": 23
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0063",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx,"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 94686,
+        "n_break": 94662
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\nAaaaa, continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaaaa, continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0064",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            "N,N"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "le": 6
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 15340,
+        "n_break": 15338
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1,1 a\na continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha authors 1,1 a\na continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0065",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxx"
+          ]
+        },
+        {
+          "at": "c-8",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 301800,
+        "n_break": 301700
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a aaaa.\nAaa continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a 1 aaaa.\nAaa continues",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0066",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Y."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1011,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Y.\na continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0067",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            ")"
+          ]
+        },
+        {
+          "at": "c-7",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        },
+        {
+          "at": "c-8",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 39572,
+        "n_break": 39538
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a ) a11hor.a\na continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a11hor.a\na continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0068",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "al."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 12
+        }
+      ],
+      "receipt": {
+        "n": 16681,
+        "n_break": 16675
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a al.\na continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0069",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.cased",
+          "in": [
+            "ddddx"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 9
+        }
+      ],
+      "receipt": {
+        "n": 12938,
+        "n_break": 12938
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111a a\na continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0070",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": "c+6",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 109584,
+        "n_break": 109538
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\nworda1th continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nworda1th continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0071",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "(X.X."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 904,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a (A.A.\na continues",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0072",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "d,"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "ge": 3
+        }
+      ],
+      "receipt": {
+        "n": 24368,
+        "n_break": 24362
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha 1, 1111. Alice.\naaa continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x 1111. Alice.\naaa continues",
+            "offset": 14
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0073",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "at"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "shape.cased",
+          "in": [
+            "Xx"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 20778,
+        "n_break": 20775
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nAt continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a autho1.a\nAt continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0074",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "A.V."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 846,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a A.V.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0075",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxx"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "shape.coarse",
+          "in": [
+            "A"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 100260,
+        "n_break": 100212
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha word a Aaaaa.\nAaaa continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha word A Aaaaa.\nAaaa continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0076",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Oct."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 816,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Oct.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0077",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd)."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 809,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha 1111). a a\na continues",
+            "offset": 17,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0078",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Sun."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 792,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Sun.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0079",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "(dddd)."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 792,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha (1111). a a\na continues",
+            "offset": 18,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0080",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxx."
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 23950,
+        "n_break": 23950
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaa.\n\"ordauth continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0081",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "dddd-dd-dd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 10
+        }
+      ],
+      "receipt": {
+        "n": 31162,
+        "n_break": 31112
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a 1111-11-11.\na continues",
+            "offset": 22,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0082",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "xxxx\"."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 748,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha aaaa\". a a\na continues",
+            "offset": 17,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0083",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": "c+7",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 253755,
+        "n_break": 253575
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha word a Aaaaa.\nwordauah continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha word A Aaaaa.\nwordauah continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0084",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Nov."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 730,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Nov.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0085",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Jan."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 722,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Jan.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0086",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx,"
+          ]
+        },
+        {
+          "at": -2,
+          "f": "len",
+          "le": 9
+        }
+      ],
+      "receipt": {
+        "n": 20980,
+        "n_break": 20975
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. a\nAaaaa, continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\nAaaaa, continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0087",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "W."
+          ]
+        },
+        {
+          "at": "c-5",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 6176,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a W.\na continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a 1 W.\na continues",
+            "offset": 13
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0088",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J."
+          ]
+        },
+        {
+          "at": "c-5",
+          "f": "sentence_break",
+          "in": [
+            "SContinue"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 9295,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma: J. Author",
+            "offset": 21,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x J. Author",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0089",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 70520,
+        "n_break": 70475
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaa.\nAaaaa continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaaaa continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0090",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "on"
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "word_break",
+          "in": [
+            "WSegSpace"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 33614,
+        "n_break": 33612
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoraa\nOn uthor continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nOn uthor continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0091",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.cased",
+          "in": [
+            "ddd"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 19
+        }
+      ],
+      "receipt": {
+        "n": 35455,
+        "n_break": 35425
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 111 a\nword continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\nword continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0092",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Dec."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 636,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Dec.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0093",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxx."
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 9
+        }
+      ],
+      "receipt": {
+        "n": 74948,
+        "n_break": 74900
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a aaa.\nwoadauth continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nwoadauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0094",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 20647,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a autho1.a\nAaaaa. continues",
+            "offset": 19,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaaaa. continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0095",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Feb."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 621,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Feb.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0096",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 4446,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha 1111. a aut1or.a\na continues",
+            "offset": 23,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a aut1or.a\na continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0097",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxx"
+          ]
+        },
+        {
+          "at": -2,
+          "f": "len",
+          "le": 6
+        }
+      ],
+      "receipt": {
+        "n": 21604,
+        "n_break": 21588
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. ended.a\nAaaa continues",
+            "offset": 22,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x ended.a\nAaaa continues",
+            "offset": 18
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0098",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "years."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "ge": 2
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "ge": 2
+        }
+      ],
+      "receipt": {
+        "n": 8626,
+        "n_break": 8625
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma years.\naa continues",
+            "offset": 24,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x years.\naa continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0099",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "v."
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 4083,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma v.\na continues",
+            "offset": 20,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x v.\na continues",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0100",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "shape.coarse",
+          "in": [
+            "("
+          ]
+        },
+        {
+          "at": -2,
+          "f": "len",
+          "le": 7
+        }
+      ],
+      "receipt": {
+        "n": 4165,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\n( continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a ZZZZZZZZZZZZ a\n( continues",
+            "offset": 23
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0101",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxxx."
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 217022,
+        "n_break": 216925
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma word.\nabc1",
+            "offset": 23,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta gamma x\nabc1",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0102",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "X.;"
+          ]
+        },
+        {
+          "at": -2,
+          "f": "len",
+          "le": 5
+        }
+      ],
+      "receipt": {
+        "n": 9834,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nA.; continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a authors a\nA.; continues",
+            "offset": 18
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0103",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "Numeric"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "x."
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "word_break",
+          "in": [
+            "Numeric"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 23552,
+        "n_break": 23550
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a. a autho11a\na continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a autho11a\na continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0104",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-2",
+          "f": "word_break",
+          "in": [
+            "WSegSpace"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 506,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a author. \na continues",
+            "offset": 19,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a author.a\na continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0105",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 8
+        }
+      ],
+      "receipt": {
+        "n": 25014,
+        "n_break": 24988
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. ended.a\nAaaaa continues",
+            "offset": 22,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x ended.a\nAaaaa continues",
+            "offset": 18
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0106",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd-"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1362,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha 1111- a a\na continues",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0107",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "by"
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 9476,
+        "n_break": 9475
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoraa\nby continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nby continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0108",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -1,
+          "f": "shape.coarse",
+          "in": [
+            ")"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 479,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a )\na continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0109",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "dd"
+          ]
+        },
+        {
+          "at": -2,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 23112,
+        "n_break": 23112
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\n11 continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n11 continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0110",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "his"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 12422,
+        "n_break": 12412
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nhis continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a authoa.a\nx continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0111",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx'x."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 456,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa'a.\na continues",
+            "offset": 19,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0112",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "during"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 6262,
+        "n_break": 6262
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nduring continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a authoa.a\nx continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0113",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "H."
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 9950,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma H.\na continues",
+            "offset": 20,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x H.\na continues",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0114",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Aug."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 438,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aug.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0115",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "K."
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 5291,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma K.\na continues",
+            "offset": 20,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x K.\na continues",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0116",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxx"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 56057,
+        "n_break": 56000
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\nAaa continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaa continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0117",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "War."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 5150,
+        "n_break": 5150
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a War.\na continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0118",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "Numeric"
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 15425,
+        "n_break": 15425
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a autho1.a\n\"ordauth continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0119",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Co."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        },
+        {
+          "at": "c-8",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 11324,
+        "n_break": 11312
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Co.\na continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha A a Co.\na continues",
+            "offset": 14
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0120",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "the"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 22046,
+        "n_break": 22038
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaa.\nthe continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nthe continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0121",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "eerdmans"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 389,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\neerdmans continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0122",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 6632,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a autho1.a\n1111. continues",
+            "offset": 19,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n1111. continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0123",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Uppercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3148,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.\nUSA continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nUSA continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0124",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxx."
+          ]
+        },
+        {
+          "at": -2,
+          "f": "len",
+          "le": 5
+        }
+      ],
+      "receipt": {
+        "n": 2783,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nAaaa. continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a authors a\nAaaa. continues",
+            "offset": 18
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0125",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Mar."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 367,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Mar.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0126",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            "%"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 4826,
+        "n_break": 4825
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a % a\na continues",
+            "offset": 12,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0127",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx,"
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 47532,
+        "n_break": 47462
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta Bravo, Alice.\nabc1",
+            "offset": 25,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x Alice.\nabc1",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0128",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "R."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            false
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 6883,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta,x R. Author",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x R. Author",
+            "offset": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0129",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Numeric"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 11057,
+        "n_break": 11050
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. ended.a\n1ordauth continues",
+            "offset": 22,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x ended.a\n1ordauth continues",
+            "offset": 18
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0130",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "\"X.X.X."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 359,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha \"A.A.A. a a\na continues",
+            "offset": 18,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0131",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            "N.N"
+          ]
+        },
+        {
+          "at": "c+2",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": -2,
+          "f": "len",
+          "le": 6
+        }
+      ],
+      "receipt": {
+        "n": 7112,
+        "n_break": 7112
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1.1 a\nwardauth continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\nwardauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0132",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dd."
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 22889,
+        "n_break": 22850
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 11. autaor.a\nwoadauth continues",
+            "offset": 21,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x autaor.a\nwoadauth continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0133",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "c-3",
+          "f": "sentence_break",
+          "in": [
+            "Close"
+          ]
+        },
+        {
+          "at": "c+2",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 10
+        }
+      ],
+      "receipt": {
+        "n": 14126,
+        "n_break": 14112
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma word). Alexanders",
+            "offset": 24,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta gamma word). A",
+            "offset": 24
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0134",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Q."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 325,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Q.\na continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0135",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "W.W."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 324,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a W.W.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0136",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxx\"."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 323,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nAaaa\". continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0137",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "P."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            false
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3957,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta,x P. Author",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x P. Author",
+            "offset": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0138",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx,"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 12
+        }
+      ],
+      "receipt": {
+        "n": 13029,
+        "n_break": 13025
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaa.\nAaaaa, continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaaaa, continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0139",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "G.I."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 314,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a G.I.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0140",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xx"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 13496,
+        "n_break": 13488
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha word a Aaaaa.\nAa continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha word A Aaaaa.\nAa continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0141",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "G."
+          ]
+        },
+        {
+          "at": "c+4",
+          "f": "word_break",
+          "in": [
+            "<BEYOND>"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3640,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a G.\naa B continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\naa B continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0142",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Apr."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 307,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Apr.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0143",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx)."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 307,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nAaaaa). continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0144",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "W."
+          ]
+        },
+        {
+          "at": "c+3",
+          "f": "word_break",
+          "in": [
+            "<BEYOND>"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2734,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta 1 W.\na B",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta 1 x\na B",
+            "offset": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0145",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "com"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 298,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\ncom continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0146",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxx,"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 9540,
+        "n_break": 9538
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\nAaaa, continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaaa, continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0147",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx,"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2408,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.\nAaaaa, continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaaaa, continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0148",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "run.shape.cased",
+          "in": [
+            "dddd."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "ge": 7
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "le": 9
+        }
+      ],
+      "receipt": {
+        "n": 22434,
+        "n_break": 22388
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 1111. ended.a\naaaaaaa continues",
+            "offset": 22,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x ended.a\naaaaaaa continues",
+            "offset": 18
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0149",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "(xx."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 4416,
+        "n_break": 4412
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a (aa.\na continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0150",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": "c+5",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        },
+        {
+          "at": -2,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 21732,
+        "n_break": 21675
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaaa.\nword continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nword continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0151",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "M."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "shape.coarse",
+          "in": [
+            "<Lu>"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3934,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a M.\nI continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nI continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0152",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "ge": 7
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 15403,
+        "n_break": 15375
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta 1 Alice.\nauthors",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta 1 x\nauthors",
+            "offset": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0153",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "V."
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3230,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma V.\na continues",
+            "offset": 20,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x V.\na continues",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0154",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "LLC."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3250,
+        "n_break": 3250
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a LLC.\na continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0155",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.coarse",
+          "in": [
+            ")"
+          ]
+        },
+        {
+          "at": "c-2",
+          "f": "word_break",
+          "in": [
+            "MidNumLet"
+          ]
+        },
+        {
+          "at": "c-5",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 5687,
+        "n_break": 5675
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma aa). A123456789",
+            "offset": 22,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta gamma Aa). A123456789",
+            "offset": 22
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0156",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xx."
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 9350,
+        "n_break": 9350
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a aa.\n\"ordauth continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0157",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxx."
+          ]
+        },
+        {
+          "at": "c+5",
+          "f": "word_break",
+          "in": [
+            "WSegSpace"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "ge": 2
+        }
+      ],
+      "receipt": {
+        "n": 14055,
+        "n_break": 14050
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma Aaaa.\nword uth continues",
+            "offset": 23,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x Aaaa.\nword uth continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0158",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx)."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 254,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha Aaaaa). a a\na continues",
+            "offset": 18,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0159",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "X&X."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 248,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a A&A.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0160",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx\""
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 246,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nAaaaa\" continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0161",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "the"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 6932,
+        "n_break": 6925
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta 1 Alice.\nthe",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta 1 x\nthe",
+            "offset": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0162",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.cased",
+          "in": [
+            "x.x.x"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 241,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a.a.a a\na continues",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0163",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "L.P."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 240,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a L.P.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0164",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "II."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "sentence_break.first",
+          "in": [
+            "Upper"
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 4803,
+        "n_break": 4800
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta Ab II. Author",
+            "offset": 18,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x II. Author",
+            "offset": 17
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0165",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "(X)"
+          ]
+        },
+        {
+          "at": "c-3",
+          "f": "word_break",
+          "in": [
+            "Numeric"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3025,
+        "n_break": 3025
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha (A) a author1a\na continues",
+            "offset": 21,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a author1a\na continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0166",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "ge": 7
+        },
+        {
+          "at": "c+6",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 25776,
+        "n_break": 25762
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta ,authors Alice.\nauthor1",
+            "offset": 27,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x Alice.\nauthor1",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0167",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J.M."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 233,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.M.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0168",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "A.J."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 231,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a A.J.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0169",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J."
+          ]
+        },
+        {
+          "at": "c+7",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1791,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.\nwordau1h continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nwordau1h continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0170",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Decimal_Number"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "len",
+          "ge": 2
+        }
+      ],
+      "receipt": {
+        "n": 42342,
+        "n_break": 42338
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta an word.\nab1",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x word.\nab1",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0171",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "E."
+          ]
+        },
+        {
+          "at": "c-6",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 9440,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta gamma E.\na continues",
+            "offset": 20,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x E.\na continues",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0172",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "H.M."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 223,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a H.M.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0173",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "UK."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3027,
+        "n_break": 3025
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a UK.\na continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0174",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -2,
+          "f": "shape.cased",
+          "in": [
+            "dd"
+          ]
+        },
+        {
+          "at": "c-8",
+          "f": "word_break",
+          "in": [
+            "Numeric"
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 15936,
+        "n_break": 15912
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a 11 a1thor.a\nword continues",
+            "offset": 20,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a x a1thor.a\nword continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0175",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "knopf"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 235,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nknopf continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0176",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "if"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "word_break",
+          "in": [
+            "ALetter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 3162,
+        "n_break": 3162
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nif continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a authoa.a\nx continues",
+            "offset": 19
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0177",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "dd."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 210,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha 11. a a\na continues",
+            "offset": 14,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x a a\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0178",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "D.M."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 209,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a D.M.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0179",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "xxxx."
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 4693,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta word. ). A1234567890",
+            "offset": 20,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x ). A1234567890",
+            "offset": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0180",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxx.\""
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2600,
+        "n_break": 2600
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaa.\"\na continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0181",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "the"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 5764,
+        "n_break": 5762
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a aa.\nthe continues",
+            "offset": 14,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nthe continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0182",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "XXX."
+          ]
+        },
+        {
+          "at": "c+2",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        },
+        {
+          "at": "c-7",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 16168,
+        "n_break": 16138
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a AAA.\nwardauth continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a A AAA.\nwardauth continues",
+            "offset": 15
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0183",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "run.shape.cased",
+          "in": [
+            "X."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "general_category.last",
+          "in": [
+            "Lowercase_Letter"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 10106,
+        "n_break": 10088
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta B. Alice.\nauthor",
+            "offset": 21,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x Alice.\nauthor",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0184",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J.B."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 195,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.B.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0185",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "S."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            false
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 5952,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta,x S. Author",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x S. Author",
+            "offset": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0186",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "Cup."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2412,
+        "n_break": 2412
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Cup.\na continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0187",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "M."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "Xxxxx,"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 2354,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a M.\nAaaaa, continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nAaaaa, continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0188",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "xxx."
+          ]
+        },
+        {
+          "at": "c+1",
+          "f": "word_break",
+          "in": [
+            "Double_Quote"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 13688,
+        "n_break": 13688
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a aaa.\n\"ordauth continues",
+            "offset": 15,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\n\"ordauth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0189",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J.C."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 187,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.C.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0190",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "lower",
+          "in": [
+            "u.s"
+          ]
+        },
+        {
+          "at": "c-4",
+          "f": "sentence_break",
+          "in": [
+            "Lower"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 4425,
+        "n_break": 4425
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a authoa.a\nu.s continues",
+            "offset": 19,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a ZZZZZZZZZZZZ\nu.s continues",
+            "offset": 23
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0191",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxxx."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "shape.cased",
+          "in": [
+            "xx"
+          ]
+        },
+        {
+          "at": "c+7",
+          "f": "word_break",
+          "in": [
+            "WSegSpace"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 16218,
+        "n_break": 16212
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta an Alice.\nauthor continues",
+            "offset": 21,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha beta x Alice.\nauthor continues",
+            "offset": 20
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0192",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "(xxxx."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "le": 11
+        }
+      ],
+      "receipt": {
+        "n": 2740,
+        "n_break": 2738
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a (aaaa.\na continues",
+            "offset": 17,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0193",
+      "effect": "break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "shape.cased",
+          "in": [
+            "Xxxx."
+          ]
+        },
+        {
+          "at": "c+4",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            true
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 8448,
+        "n_break": 8438
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a Aaaa.\nwor1auth continues",
+            "offset": 16,
+            "decision": "break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nwor1auth continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0194",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": 1,
+          "f": "run.shape.cased",
+          "in": [
+            "XxXxxxx."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 180,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a a\nAaAaaaa. continues",
+            "offset": 12,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a a\nx continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0195",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "(Ph."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 179,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a (Ph.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0196",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "I."
+          ]
+        },
+        {
+          "at": -3,
+          "f": "ws.before",
+          "in": [
+            false
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1320,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha beta,x I. Author",
+            "offset": 16,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha x I. Author",
+            "offset": 11
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0197",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J.R."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 177,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.R.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0198",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "G."
+          ]
+        },
+        {
+          "at": 1,
+          "f": "len",
+          "ge": 7
+        }
+      ],
+      "receipt": {
+        "n": 2398,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a G.\naaaaaaa continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\naaaaaaa continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0199",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J."
+          ]
+        },
+        {
+          "at": "c+8",
+          "f": "script",
+          "in": [
+            "Common"
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 1280,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.\nwordaut1 continues",
+            "offset": 13,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\nwordaut1 continues",
+            "offset": 12
+          }
+        ]
+      }
+    },
+    {
+      "id": "en.sb.0200",
+      "effect": "no-break",
+      "lookahead": 1,
+      "when": [
+        {
+          "at": "run-1",
+          "f": "text",
+          "in": [
+            "J.P."
+          ]
+        }
+      ],
+      "receipt": {
+        "n": 172,
+        "n_break": 0
+      },
+      "witnesses": {
+        "match": [
+          {
+            "text": "alpha a a J.P.\na continues",
+            "offset": 15,
+            "decision": "no-break"
+          }
+        ],
+        "no_match": [
+          {
+            "text": "alpha a a x\na continues",
+            "offset": 12
+          }
+        ]
+      }
+    }
+  ]
+}

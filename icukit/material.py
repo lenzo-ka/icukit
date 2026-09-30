@@ -872,7 +872,7 @@ _BASE_PROPERTY_KEYS = frozenset(
         "word_break",
     }
 )
-_BASE_SHAPE_SYMBOLS = frozenset({"A", "N", "X", "x", "a", "d", "¤", "<Lu>"})
+_BASE_SHAPE_SYMBOLS = frozenset({"A", "N", "L", "X", "x", "a", "d", "¤", "<Lu>"})
 
 
 def _classlike_top_keys(kind: str) -> frozenset[str]:
@@ -1298,8 +1298,13 @@ def _classlike(
                             )
                         )
                         continue
+                    scheme = (
+                        "cvletters@1"
+                        if refinement_by_name[name].symbol in {"V", "C", "Y"}
+                        else "coarse@1"
+                    )
                     actual, selected_refinements = _shape_with_selections(
-                        text, "coarse@1", (provisional,)
+                        text, scheme, (provisional,), locale=None
                     )
                     if not isinstance(expected, str) or actual != expected:
                         errors.append(

@@ -204,6 +204,7 @@ from .errors import (
     AlphaIndexError,
     BidiError,
     BreakerError,
+    BreakRuleLoadError,
     CalendarError,
     CollatorError,
     DateTimeError,
@@ -214,6 +215,7 @@ from .errors import (
     FormatError,
     ICUKitError,
     IDNAError,
+    LateProtectedSpan,
     ListFormatError,
     LocaleError,
     MeasureError,
@@ -409,8 +411,23 @@ from .script import (
     list_scripts_info,
 )
 from .search import StringSearcher, search_all, search_count, search_first, search_replace
+from .sentence_override import (
+    BreakBoundary,
+    BreakDecision,
+    BreakPredicate,
+    BreakRule,
+    BreakRuleIdentity,
+    BreakRuleSet,
+    BreakSegmentation,
+    CartletModelRef,
+    IncrementalSentenceBreaker,
+    PendingCandidate,
+    SentenceOverride,
+    break_rule_identity,
+    load_break_rules,
+)
 from .serialize import detection_to_dict, detections_to_json
-from .shape import ShapeSchemeInfo, shape, shape_scheme
+from .shape import CVLetterCounts, ShapeSchemeInfo, cvletters_counts, shape, shape_scheme
 from .spoof import (
     CONFUSABLE_MIXED_SCRIPT,
     CONFUSABLE_NONE,
@@ -430,7 +447,7 @@ from .timezone import (
     list_timezones,
     list_timezones_info,
 )
-from .tokens import ProtectedSpan, Token, token_features, tokens
+from .tokens import TOKEN_PROFILE, ProtectedSpan, Token, token_features, tokens
 from .transliterator import (
     CommonTransliterators,
     Transliterator,
@@ -670,14 +687,32 @@ __all__ = [
     "ClassWindow",
     "char_classes",
     "class_window",
+    "CVLetterCounts",
     "ShapeSchemeInfo",
+    "cvletters_counts",
     "shape",
     "shape_scheme",
     "ProtectedSpan",
+    "TOKEN_PROFILE",
     "Token",
     "tokens",
     "token_features",
     "OverlappingProtectedSpans",
+    "BreakRuleIdentity",
+    "BreakPredicate",
+    "BreakRule",
+    "BreakRuleSet",
+    "BreakDecision",
+    "BreakBoundary",
+    "BreakSegmentation",
+    "CartletModelRef",
+    "PendingCandidate",
+    "IncrementalSentenceBreaker",
+    "SentenceOverride",
+    "break_rule_identity",
+    "load_break_rules",
+    "BreakRuleLoadError",
+    "LateProtectedSpan",
     # Bidi
     "get_base_direction",
     "get_bidi_info",

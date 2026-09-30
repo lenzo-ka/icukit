@@ -13,6 +13,7 @@ from icukit import (
     MaterialLoadError,
     char_classes,
     class_window,
+    cvletters_counts,
     load_locale_material,
     shape,
     shape_scheme,
@@ -182,6 +183,53 @@ def _shape_material():
     }
 
 
+def _finnish_cvletters_material():
+    return {
+        "schema_version": 1,
+        "kind": "classlike",
+        "id": "example/fi-letters",
+        "status": "experimental",
+        "locale": "fi",
+        "classes": [
+            {
+                "name": "example:fi-vowel",
+                "unicode_set": "[aeiouyäöAEIOUYÄÖ]",
+            },
+            {
+                "name": "example:fi-consonant",
+                "unicode_set": "[bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ]",
+            },
+        ],
+        "shape_refinements": [
+            {"name": "example:fi-vowels", "class": "example:fi-vowel", "symbol": "V"},
+            {
+                "name": "example:fi-consonants",
+                "class": "example:fi-consonant",
+                "symbol": "C",
+            },
+        ],
+        "provenance": {"source": "synthetic Finnish orthography test"},
+        "witnesses": [
+            {
+                "id": "fi-aika",
+                "text": "aika",
+                "expect": {
+                    "codepoint_classes": [
+                        ["example:fi-vowel"],
+                        ["example:fi-vowel"],
+                        ["example:fi-consonant"],
+                        ["example:fi-vowel"],
+                    ],
+                    "shapes": {
+                        "example:fi-vowels": "VVCV",
+                        "example:fi-consonants": "VVCV",
+                    },
+                },
+            }
+        ],
+    }
+
+
 def _codes(error: MaterialLoadError) -> set[str]:
     return {item.code for item in error.refusals}
 
@@ -237,6 +285,30 @@ def test_standalone_kinds_execute_witnesses_and_refine_base_gc_runs():
     assert [_base_fields(point) for point in points] == [
         _direct_icu_base_fields(char) for char in "ae"
     ]
+
+
+def test_cvletters_label_material_fills_only_l_and_is_ignored_by_legacy_schemes():
+    material = load_locale_material(_finnish_cvletters_material())
+    assert shape("aika", "cvletters@1", locale="fi", material=[material]) == "VVCV"
+    assert shape("y", "cvletters@1", locale="en", material=[material]) == "Y"
+    assert shape("aika", "coarse@1", material=[material]) == shape("aika", "coarse@1")
+    assert shape("aika", "cased@1", material=[material]) == shape("aika", "cased@1")
+
+
+def test_cvletters_label_witness_mismatch_is_refused():
+    data = _finnish_cvletters_material()
+    data["witnesses"][0]["expect"]["shapes"]["example:fi-vowels"] = "wrong"
+    with pytest.raises(MaterialLoadError) as caught:
+        load_locale_material(data)
+    assert _codes(caught.value) == {"WITNESS_FAILED"}
+
+
+def test_l_shape_symbol_is_reserved():
+    data = _shape_material()
+    data["shape_refinements"][0]["symbol"] = "L"
+    with pytest.raises(MaterialLoadError) as caught:
+        load_locale_material(data)
+    assert "REDEFINES_BASE_SYMBOL" in _codes(caught.value)
 
 
 def test_scheme_name_extensions_and_identities_include_material_digests():
@@ -543,3 +615,14 @@ def test_identifier_namespaces_are_separate_except_for_extension_names():
     with pytest.raises(MaterialLoadError) as caught:
         load_locale_material(duplicate_extension)
     assert "DUPLICATE_ID" in _codes(caught.value)
+
+
+def test_cvletters_counts_keep_a_namespaced_refinement_letter_as_a_letter():
+    material = load_locale_material(_shape_material())
+    assert shape("Ab", "cvletters@1", locale="en", material=[material]) == "<upper>C"
+    assert cvletters_counts("Ab", locale="en", material=[material]) == {
+        "letters": 2,
+        "vowels": 0,
+        "consonants": 1,
+        "has_vowel": False,
+    }

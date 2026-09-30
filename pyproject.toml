@@ -9,12 +9,14 @@ description = "ICU toolkit - library and CLI for Unicode and internationalizatio
 authors = [
     {name = "Kevin Lenzo", email = "kevinlenzo@gmail.com"}
 ]
-license = "BSD-2-Clause"
-# The CLDR data in icukit/data/cldr_symbols and the UCD data in
-# icukit/data/ucd_name_aliases are Unicode, Inc.'s, under the Unicode License v3; its
-# notice ships beside each and among the distribution's licenses.
+license = "BSD-2-Clause AND CC-BY-SA-4.0 AND Unicode-3.0"
+# List the root license and every third-party notice that must ship in both the wheel
+# and sdist. These must be literal paths, not globs. PROVENANCE.json hash-pins each
+# notice, maps it to its SPDX ID, and maps each file under icukit/data to its notice.
 license-files = [
     "LICENSE",
+    "icukit/data/break_rules/en/LICENSE",
+    "icukit/data/break_rules/en/NOTICE",
     "icukit/data/cldr_symbols/LICENSE",
     "icukit/data/ucd_name_aliases/LICENSE",
 ]
@@ -49,6 +51,7 @@ classifiers = [
 # running ICU. A newer ICU reaching CI is meant to turn CI red, and that red is the
 # notice to regenerate the golden.
 dependencies = [
+    "cartlet>=0.7",
     "icukit-pyicu>=78.3.0",
 ]
 
@@ -89,15 +92,23 @@ icukit = [
     "data/abbreviations/*.xml",
     "data/abbreviations/*.rng",
     "data/exceptions/*.json",
+    "data/break_rules/en/*.json",
+    "data/break_rules/en/*.json.gz",
+    "data/break_rules/en/LICENSE",
+    "data/break_rules/en/NOTICE",
     "data/unit_surfaces/*.tsv",
     "data/cldr_symbols/*.tsv",
     "data/cldr_symbols/LICENSE",
     "data/ucd_name_aliases/*.tsv",
     "data/ucd_name_aliases/LICENSE",
+    "data/PROVENANCE.json",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Print each test's time beside it, in run order (per-test times need -v).
+console_output_style = "times"
+addopts = "-v"
 
 [tool.ruff]
 line-length = 100
