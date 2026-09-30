@@ -214,16 +214,23 @@ def tokens(
 
 
 def _token_features_base(
-    toks: Sequence[Token], i: int, text: str, /
+    toks: Sequence[Token],
+    i: int,
+    text: str,
+    /,
+    *,
+    run_shape_cased: str | None = None,
 ) -> dict[str, str | int | bool]:
     """Return the sentence-override feature-set-v1 values for token ``i``."""
     token = toks[i]
     surface = token["text"]
     if not surface:
         raise ValueError("tokens must have nonempty text")
-    run_tokens = [item for item in toks if item["run"] == token["run"]]
-    run_start = min(item["start"] for item in run_tokens)
-    run_end = max(item["end"] for item in run_tokens)
+    if run_shape_cased is None:
+        run_tokens = [item for item in toks if item["run"] == token["run"]]
+        run_start = min(item["start"] for item in run_tokens)
+        run_end = max(item["end"] for item in run_tokens)
+        run_shape_cased = shape(text[run_start:run_end], "cased@1")
     first = surface[0]
     last = surface[-1]
     return {
@@ -238,7 +245,7 @@ def _token_features_base(
         "word_break.first": char_classes(first, "word_break")[0],
         "script.first": char_classes(first, "script")[0],
         "ws.before": token["start"] > 0 and text[token["start"] - 1].isspace(),
-        "run.shape.cased": shape(text[run_start:run_end], "cased@1"),
+        "run.shape.cased": run_shape_cased,
         "lex": "none",
     }
 

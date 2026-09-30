@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import icukit.sentence_override as sentence_override_module
 from icukit import (
     TOKEN_PROFILE,
     AbbreviationSentenceBreaker,
@@ -714,6 +715,112 @@ def test_inventory_acts_at_word_and_sentence_levels_once_and_duplicates_refuse()
     assert "DUPLICATE_RULE_ID" in caught.value.reason_codes
     with pytest.raises(BreakRuleLoadError):
         SentenceOverride(base="none", inventories=[inventory, inventory])
+
+
+def test_empty_decide_does_not_validate_unused_protected_spans():
+    protected = [{"start": 0, "end": 1, "type": "outside-empty-text"}]
+    assert SentenceOverride(base="none").decide("", protected=protected) == []
+
+
+def test_backward_character_token_lookup_is_linear():
+    class CountedTokens(list):
+        visits = 0
+
+        def __iter__(self):
+            for item in super().__iter__():
+                type(self).visits += 1
+                yield item
+
+    text = "A!" * 128
+    toks = CountedTokens(tokens(text, "en_US"))
+    predicate = sentence_override_module._CompiledPredicate("c-1", "text", "in", ("!",))
+    rule = sentence_override_module._CompiledBreakRule("c-1", "no-break", 1, (predicate,))
+    cache = sentence_override_module._TokenFeatureCache(True)
+    for offset in range(2, len(text) + 1, 2):
+        sentence_override_module._observed_feature_value(
+            predicate, rule, text, offset, toks, (), "en_US", (), True, cache
+        )
+    assert CountedTokens.visits <= len(toks) * 4
+
+
+def test_long_run_completion_and_feature_work_is_linear(monkeypatch):
+    class CountedText(str):
+        slices = 0
+
+        def __getitem__(self, key):
+            if isinstance(key, slice):
+                type(self).slices += 1
+            return super().__getitem__(key)
+
+    text = "A!B!" * 64
+    toks = tokens(text, "en_US")
+    predicate = sentence_override_module._CompiledPredicate("run-1", "text", "in", ("never",))
+    rule = sentence_override_module._CompiledBreakRule("run-1", "no-break", 0, (predicate,))
+    cache = sentence_override_module._TokenFeatureCache(True)
+    original = sentence_override_module._token_completion_horizon
+    calls = 0
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sentence_override_module, "_token_completion_horizon", counted)
+    for offset in range(2, len(text) + 1, 2):
+        sentence_override_module._observed_feature_value(
+            predicate, rule, text, offset, toks, (), "en_US", (), True, cache
+        )
+    counted_text = CountedText(text)
+    for index in range(len(toks)):
+        cache.get(toks, index, counted_text)
+    assert calls == len(toks)
+    assert CountedText.slices == 1
+
+
+def test_sentence_inventory_claims_are_computed_once(monkeypatch):
+    original = sentence_override_module._raw_break_sentence_spans
+    calls = 0
+
+    def counted(text, locale):
+        nonlocal calls
+        calls += 1
+        return original(text, locale)
+
+    monkeypatch.setattr(sentence_override_module, "_raw_break_sentence_spans", counted)
+    SentenceOverride(base="none", inventories=[_inventory(levels=("sentence",))]).decide("A!" * 64)
+    assert calls == 2
+
+
+def test_protected_candidate_index_handles_unsorted_overlapping_spans_linearly():
+    class CountedSpan(dict):
+        start_reads = 0
+
+        def __getitem__(self, key):
+            if key == "start":
+                type(self).start_reads += 1
+            return super().__getitem__(key)
+
+    size = 128
+    offsets = tuple(range(2, size * 2 + 1, 2))
+    protected = tuple(
+        CountedSpan(start=index % (size * 2 - 1), end=size * 2, type=f"t{index % 7}")
+        for index in reversed(range(size))
+    )
+    found = sentence_override_module._protected_types_by_offset(protected, offsets)
+    expected = {
+        offset: tuple(
+            sorted(
+                {
+                    item["type"]
+                    for item in protected
+                    if dict.__getitem__(item, "start") < offset < item["end"]
+                }
+            )
+        )
+        for offset in offsets
+    }
+    assert found == expected
+    assert CountedSpan.start_reads <= size * 3
 
 
 def test_word_only_and_sentence_only_inventory_controls_are_independent():
