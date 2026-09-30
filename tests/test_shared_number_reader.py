@@ -10,7 +10,7 @@ from threading import Barrier, BrokenBarrierError, Lock
 import pytest
 
 import icukit.recognize as recognize
-from icukit.engine import flexible_detectors, generated_detectors
+from icukit.engine import clear_detector_caches, flexible_detectors, generated_detectors
 from icukit.recognize import (
     FlexibleCurrencyDetector,
     FlexibleLowercaseRomanDetector,
@@ -64,7 +64,7 @@ def _reader_and_main_key(composite):
 
 
 def test_number_reader_built_once_per_key(monkeypatch):
-    recognize._clear_shared_number_reader_cache()
+    clear_detector_caches()
     original_init = FlexibleNumberDetector.__init__
     constructed = []
 
@@ -77,6 +77,7 @@ def test_number_reader_built_once_per_key(monkeypatch):
 
     keys = {recognize._number_reader_key(reader) for reader in constructed}
     assert len(constructed) == len(keys) == 1
+    clear_detector_caches()
 
 
 def test_shared_number_reader_concurrent_cold_miss_single_instance(monkeypatch):
