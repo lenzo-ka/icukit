@@ -1,0 +1,1489 @@
+{
+  "schema_version": 1,
+  "notices": {
+    "LICENSE": {
+      "spdx": "BSD-2-Clause",
+      "sha256": "5109958f7f2f70de74866b52dc97e7d197f3db90ab44f235b8f1eafc196128ea"
+    },
+    "icukit/data/cldr_symbols/LICENSE": {
+      "spdx": "Unicode-3.0",
+      "sha256": "780ed0d1e595f6bb3e7cad757ea147315596b96e75d6a271ae95e882185c8aa7"
+    },
+    "icukit/data/ucd_name_aliases/LICENSE": {
+      "spdx": "Unicode-3.0",
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+    },
+    "icukit/data/break_rules/en/LICENSE": {
+      "spdx": "CC-BY-SA-4.0",
+      "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5"
+    },
+    "icukit/data/break_rules/en/NOTICE": {
+      "spdx": "CC-BY-SA-4.0",
+      "sha256": "c0d1b835bca0dae886c2b76ce4aabae3af934902b14b6619544edb1676e8ddf6"
+    }
+  },
+  "files": [
+    {
+      "path": "abbreviations/abbreviations.rng",
+      "sha256": "2d0212a0c1b957b48154c78c025268afdf56f288956db4baad13f5f906e19c9e",
+      "source": "curated by hand",
+      "spdx": "BSD-2-Clause",
+      "class": "shippable",
+      "notice": null
+    },
+    {
+      "path": "abbreviations/en.xml",
+      "sha256": "8a7c362faa2f601f8a78a0ba7eb6bd2d848863aee4aa8120265a342fba608653",
+      "source": "curated by hand",
+      "spdx": "BSD-2-Clause",
+      "class": "shippable",
+      "notice": null
+    },
+    {
+      "path": "abbreviations/en_US.xml",
+      "sha256": "751f70db86f453c27ac654611563e322fe95f87d68af1e2b3304e1460e805d0c",
+      "source": "curated by hand",
+      "spdx": "BSD-2-Clause",
+      "class": "shippable",
+      "notice": null
+    },
+    {
+      "path": "break_rules/en/LICENSE",
+      "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5",
+      "source": "Creative Commons Attribution-ShareAlike 4.0 legal code",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE"
+    },
+    {
+      "path": "break_rules/en/NOTICE",
+      "sha256": "c0d1b835bca0dae886c2b76ce4aabae3af934902b14b6619544edb1676e8ddf6",
+      "source": "attribution for google/tn-en_with_types and Wikipedia contributors",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "mention",
+        "note": "the notice names the source corpus to provide attribution"
+      }
+    },
+    {
+      "path": "break_rules/en/RECEIPT.json",
+      "sha256": "bb9e105af57cdc856cfd8d9422ef119d5a6e05984fc0406cb9757a70c10c0f95",
+      "source": "measurement receipt for google/tn-en_with_types rule derivation",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the receipt records measurements for the derived rule artifact"
+      }
+    },
+    {
+      "path": "break_rules/en/sentence-tn-cart.json.gz",
+      "sha256": "a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d",
+      "source": "google/tn-en_with_types sentence-boundary labels",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "encoding": "gzip",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the learned en-tn-cart@1 model artifact is derived from corpus sentence-boundary labels"
+      }
+    },
+    {
+      "path": "break_rules/en/sentence-tn.json",
+      "sha256": "77f7eb05f0feeac2471c4ea8fd7c91d0b285ad90ec0114fef82f7c9311115de6",
+      "source": "google/tn-en_with_types sentence-boundary labels",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the learned en-tn@1 rule artifact is derived from corpus sentence-boundary labels"
+      }
+    },
+    {
+      "path": "cldr_symbols/LICENSE",
+      "sha256": "780ed0d1e595f6bb3e7cad757ea147315596b96e75d6a271ae95e882185c8aa7",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/_parents.tsv",
+      "sha256": "cc5190fd349fed8d766499b58375c80eb8ac08624bc87be591e6d3f03e129999",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/af.tsv",
+      "sha256": "0194da9da86532d6fbd4ef2e3868710fbc35f3273e8cfa7fd324bfc49f4931ce",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ak.tsv",
+      "sha256": "c532531f1bdf03bc96cc9c1229e1e2d9d39b448b0bca6b518b4533eb123c2a71",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/am.tsv",
+      "sha256": "d9eb5c5802598f8d16c077e209ff84924c18c1f7ccf8bcc4aaa9b4a39d3cab9e",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ar.tsv",
+      "sha256": "52201d426bc87c503f65a34da558468420492f1ece4fbd377002c409e2383911",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/as.tsv",
+      "sha256": "08fe4ea9bc0093af8fe98c6d9646a6bbc3e35b42e7c05d0a7543b0f2d4cfc23b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ast.tsv",
+      "sha256": "87ded157c222f8e90ea2d7c317b28164b371d7a1988fedebe92fdcc73171244f",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/az.tsv",
+      "sha256": "747b6904487c53185ac0e850e921a01c8c011fdc6859fd556a90f3ee958f981f",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ba.tsv",
+      "sha256": "5080f9b3fe64febb707557bd244f5d10f69c29a5a271b2244d52a452b7fad359",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/be.tsv",
+      "sha256": "984b284ce61f1cc14e73d0102c138ce812671226508072cd9bf3b65682729ac5",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/bew.tsv",
+      "sha256": "cfeb2c11bd1dd3f6045d52904ac500f257de514a000028899c5b1f6c4d20f72e",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/bg.tsv",
+      "sha256": "fcd667553c59e9bfd5f6195a235be470fed5527d518106bc8ee7f9ae189b7822",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/bgn.tsv",
+      "sha256": "3ea483f69756728ac3e1cb5910c8f00839b0ed0614b1df60cccaae9cb1819255",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/blo.tsv",
+      "sha256": "3f486c14c12cbf2f9eb9a28bf834071a50f9dac1f396143177fbaf65b32cd20a",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/bn.tsv",
+      "sha256": "6b469849babf52d3d55710e9d411138fdb48f7ca3cbb625509629f6d96b449e1",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/br.tsv",
+      "sha256": "3a45d15f2ae9cfb6dac19e8b107759b88f3644034eb7ec045b49c769346b2e7d",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/bs.tsv",
+      "sha256": "8b553b10f1a12b5bac318ead1f43880ba1acd7bb9f0582bdf5e679dd366d7533",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ca.tsv",
+      "sha256": "7dcf1b25ad3b4f36e8112254492ba05821d607f1559e6eb606023f3bf80e4fa9",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ca_ES_VALENCIA.tsv",
+      "sha256": "d5ffd238ee7af158c20861cf8c2c10fbd5ef9951cd2dad4120256f12aa5b8631",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ccp.tsv",
+      "sha256": "2e395b3d15737fbeb800a3a56537b4595c315b3fcb61aa2980bdd207aca215c0",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ceb.tsv",
+      "sha256": "04156cddbe227dfd2797364589e3ecd2e195b466329a034fc0fd549b8d781867",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/chr.tsv",
+      "sha256": "16b6191dcc726254b85730dedc7b12b57dc246e565347b99e4dc11dfc2cb386d",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ckb.tsv",
+      "sha256": "e24623874d63ee563e8bf8d10023b4186bad7b1daca3014aadca90f6473fd3e1",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/cs.tsv",
+      "sha256": "ae6f492ff147a05883149f876b4274a99d1b8a97d39597d1b048377ac0bd9889",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/cv.tsv",
+      "sha256": "83831251dd88bd178fbbeb59a5f1fdabde2e789eee25c2398a8c22501acf861a",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/cy.tsv",
+      "sha256": "c23a2677fd8ae3180a96028c9e94ac9271897976b7d9ef7695009b5208a27bd9",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/da.tsv",
+      "sha256": "e3340e433d84cd576a3f74bb5ef781ff24685db099be2c75759d145e3c6cb90b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/de.tsv",
+      "sha256": "877f31bdf2e61faa34d963c7661bb3d2dab86fc7bc5c07aa667b605f5f479032",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/de_CH.tsv",
+      "sha256": "0208f48cae97e9e884d722de35cd39c3910f92f769821da61ea462580d14e75d",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/doi.tsv",
+      "sha256": "cd661b5f3642218629a3505cbc53bae55d0bfc73a30047b7784763a5baded615",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/dsb.tsv",
+      "sha256": "4cbea2c4eb7e2245ddf5681de9e112f14878668c89bf0229dc6dbb9383710c9e",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/el.tsv",
+      "sha256": "fa21d5d67db02ab86df443889d735963fa62ac51a54796016051893ef301459e",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/en.tsv",
+      "sha256": "203377bc26aad9e54765873b774e011bb6a7e53bf1259bab82b85182f747626c",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/en_001.tsv",
+      "sha256": "7390b0060c572f59bdff0350b503241ad7dbf576614ae216439e4a12ba070220",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/en_AU.tsv",
+      "sha256": "637148152370651452b6c39a6574b14d593225b55853cafd1d172b9de9fbebe3",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/en_CA.tsv",
+      "sha256": "f22fa68df5bd2d716cb3e9dcaca85fd40e08b9447d51036a85c12a583f647de1",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/en_GB.tsv",
+      "sha256": "1bdaa2eb0ddeeacbab0c3e034b5fa770c0695423fcc5f940c0dc24364a135a62",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/en_IN.tsv",
+      "sha256": "e3c2eccbb0fd137fd3498fa6b21dff9421b98fda8dd6b2d9b7bd36050100158f",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/es.tsv",
+      "sha256": "2143fb4a6fdfe9ed5e7721b50110ca569c039a287f337a90c6f579a8008052cd",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/es_419.tsv",
+      "sha256": "0d0ba5cd5ebd6f7c289a9882906149bff553a42c72aaf4ed9b39d8d5e831c744",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/es_MX.tsv",
+      "sha256": "ae8a6a55f9d78b7cbe6d8686f1143972f6611411e5c51e2be7b477599e19a447",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/es_US.tsv",
+      "sha256": "975e87f30e9626961c91abf4e413e12fb74a0c01809dfdb2d34158d470bbc983",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/et.tsv",
+      "sha256": "11e6523bda704e45a3229c8088bd2a2c39f96988f65bf11a8d8c5b11c28ff289",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/eu.tsv",
+      "sha256": "641f0946713f4791191e294a82912a94d29940fb5d058301014e49bc960c233b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/fa.tsv",
+      "sha256": "ea00941f99874891e0811c3b321a144329583e618e42cfa0f49a826aa414b8c2",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ff.tsv",
+      "sha256": "3d73b55d334b68610632565ec0469f2e435c0fb59468380796bc65ba268ab3d1",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ff_Adlm.tsv",
+      "sha256": "11f8300f77c1f6b43b5b3dbcbe8c99ab357e00e010ebaf1a362c07c77b4e8245",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/fi.tsv",
+      "sha256": "13cf4524d9025dd21fbd889bc7aa833fbd89e095b9294180804fb93e53fcf247",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/fil.tsv",
+      "sha256": "9c96e1e0865bac8e24ff21826ca6ed395dc6666e3cdc78be6baa29e6b6f0ee94",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/fo.tsv",
+      "sha256": "66e434eff3238bdd1e52c5cd5f3dcc4ac21f320981dc4a951e5bc5591305f464",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/fr.tsv",
+      "sha256": "85d680950d65bc31a2e0427917d9ae54c1726de15f75afc757febe7709c11670",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/fr_CA.tsv",
+      "sha256": "6fbb6136def02246912b8828441e753570cdc4d233ed8130f120babf19c80620",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/frr.tsv",
+      "sha256": "45f0cd5a751dd19452d4fec69335a90e98ea3554065baf9e555dc3b296f77695",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ga.tsv",
+      "sha256": "8032cea32f92388a3b261d264e76b41439d64344afd89a8cae85d2aa3b5f90f3",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/gd.tsv",
+      "sha256": "5ddb86531abd88d7accd2e128dcb34bf87d4979fd88629eee15d541a55f37b33",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/gl.tsv",
+      "sha256": "d515b5c5e72f8a7981bfe7b39438f593b1bd39d639c54df77842175204f00284",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/gu.tsv",
+      "sha256": "d764f3b200edce6c44262f8002e93782495d3374a11102126b129f99a53f551a",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ha.tsv",
+      "sha256": "7fd603bbd786a954a61ffbd3e45ccfd7c424bfcd1d13a359767a770c8db12b05",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ha_NE.tsv",
+      "sha256": "0c77b38ba7c8b38d1241f3a5c3dea82c04c0f8168c9d6119d7ca2dbe1223c42e",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/he.tsv",
+      "sha256": "9ca3533d1bdbf76e11bd9b9b170ee53250188a5b567487ee52d035da6f2a9706",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/hi.tsv",
+      "sha256": "c08845da0216cdf9c7314ce112b541c01c4322d252075d20f597712bdc3df496",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/hi_Latn.tsv",
+      "sha256": "dd1cb9ce3b759229b6adb5fa51b8264bd862518991b15babf1b1d3ad3b19b6c4",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/hr.tsv",
+      "sha256": "648347bdaae203d0274f7ea75cec906ea7669a12423a77f27564c568ee6ee9e4",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/hsb.tsv",
+      "sha256": "8657da7cd09e99612d7aae4d4932e1dc8f5b3acf98102ef9e0cf19d2a25a848b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/hu.tsv",
+      "sha256": "5373871b29388b68ee9e9eb743acd198c1157d29d39e9a8a2d138bfecd475543",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/hy.tsv",
+      "sha256": "8cd19364f76909586e0cbc95ccf442c93214f8428be696ac2f652ead4b626a52",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ia.tsv",
+      "sha256": "6178c353670aac91c4b529240752fb734a755df776e4b708169f043a86183cda",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/id.tsv",
+      "sha256": "cf447bdb464fdc17665033be2d4ff2ed3ed8ef79b4f4879062e84e20fdbdabfa",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ig.tsv",
+      "sha256": "1acf963ba33956576dc875417aa3cdab50c091a3a2e72a388a74e112b2a4c274",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/is.tsv",
+      "sha256": "9ee21c03978f8f58a00fe6fff4e3517610b867767916bc177d104a267301feef",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/it.tsv",
+      "sha256": "9dc983c921407c5bdc100f4d18cacad605050e8d6b3107e1ed2e744bcb6497b9",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ja.tsv",
+      "sha256": "b18c6f99db3ac6cf0e4036bc6478d8370462d434264ce8d6be2369bb61bbd80e",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/jv.tsv",
+      "sha256": "25ade90dd2caf3ffdac5c79ff903271d2397c6695b87ec04f11ad4ce7487131b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ka.tsv",
+      "sha256": "686e0dbe0b0c1951332f40feb92455b0646da6ec64526f7ce7c29977d6f20142",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/kab.tsv",
+      "sha256": "be54c826b625aa08a0e97f9daebe22ae513984fc0b4d666ae91476c5d9e1f578",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/kk.tsv",
+      "sha256": "4b8f68abb30330190b4ffb05fed1dcef433dd14871f269ec1bc863e8a3a9764b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/kk_Arab.tsv",
+      "sha256": "004a71c7cabe1f20aa2c4349bf71525118998d40772117cfc04106b3d76b94b3",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/kl.tsv",
+      "sha256": "05ab392502bccd816ae8bb06fb9121507d873c28f2c5c000e67cc1908b3ac6f1",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/km.tsv",
+      "sha256": "5c3e3bcaf97e203f22697e876e88e25e373cbd6e29f01512338e795356fd38aa",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/kn.tsv",
+      "sha256": "5fdba1634aafe7dfdcd77edecd2d176c4df2a58eefa1c6a168e794b4ad927c24",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ko.tsv",
+      "sha256": "e57087eef414ae015c57c5277ac2543ac408e0fc2e5505138d6b99a084bfec85",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/kok.tsv",
+      "sha256": "4df36d0dba36d2b295163f2c7aaac537fb7d83a8a9373a685678c14d08512660",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ku.tsv",
+      "sha256": "f44a5820cba745a928670ca1251690940e9ee367ac8527d050115e5bf03e87d0",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ky.tsv",
+      "sha256": "b495ef761f6b5aa7bfe9fe5977a4ad1d5f544542602221abac1798f64edbef12",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/lb.tsv",
+      "sha256": "a618e97ef50cb70e52712326073db3555d417b95ca20dafdb938e7325910cff7",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/lij.tsv",
+      "sha256": "e198826032ce7d62c31a9f82819a9a104d29f104d9ff1e2824b9abf2d6c3466f",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/lo.tsv",
+      "sha256": "99b6748327173d5414683b7646607e21b595d26db91c740209b1d7572de39446",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/lt.tsv",
+      "sha256": "fa3187c7759166d5735ea74309228b517a27645553a88bc45f4427eb7565cbd9",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/lv.tsv",
+      "sha256": "7fa817c92660d9dd9ed0fd5be6565381bed4d312e2ed2aecfbee1722b1cdf6e5",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/mai.tsv",
+      "sha256": "1bbe624541823bcef18c9e92e1941844a9491c8250881e6a7956674f6d0b69a4",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/mi.tsv",
+      "sha256": "9f658dc205f16eda18004b28794b763251fed125b655e98372f97c8aefb7cefd",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/mk.tsv",
+      "sha256": "e3e37c6c097544e79eed05b89bdd610621e1babea6c83cb49f2df579a6408e73",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ml.tsv",
+      "sha256": "a6c586ed28f7e4407218b8e17da3296fec00a7363cf6ac43771b9901630db5f7",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/mn.tsv",
+      "sha256": "82d72ee5c245722e5401fec8c8b73b65e02abec5352320558876027a8995ec15",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/mni.tsv",
+      "sha256": "11b192528f59474e76fb0894ccf82d67b311765fb8d5b1865e41a23ae3335a01",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/mr.tsv",
+      "sha256": "f10419235b557c1ca70b766f6a04eaac78049a1afb955b9d673de122f9dfbd4c",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ms.tsv",
+      "sha256": "5e9d54c55498ab70fceccf5dbd79924deaaa37e3377d36bc1377e6a9f360c5be",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/mt.tsv",
+      "sha256": "4ae37c7e8bf70a873e36ea646d1afb967d86cd584363fabf90cfc9e6d3444f41",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/my.tsv",
+      "sha256": "d1c2e31427a8d96c2f3252c21d4e266a4deb410da63ce6dbb4572a7ffc04ee6f",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ne.tsv",
+      "sha256": "237e99ce354b78919acffb7dbf9e1c27cbda47aa518d785dcca73cdf235a64d7",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/nl.tsv",
+      "sha256": "d6ffed81ad1e8fc31356a5759a38f7e6670271333b19daa0d86b05c57def2efd",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/nn.tsv",
+      "sha256": "bf136327bd0bb37954a9ca7eb05f8a62370245c1ac812f8960c2db91b22f8cc8",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/no.tsv",
+      "sha256": "61072dec4be7caca7421778ac3d88a82556230f1433abe124ed9c90807e389be",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/nso.tsv",
+      "sha256": "921ef5d896719e679517d913d69872a1c9a5b6f1539b33721c1106ca297ef906",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/oc.tsv",
+      "sha256": "69ad3d0f424cd51d24164d6fd0cad5b37814d84b969ee9bc02a523d58ac173bc",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/om.tsv",
+      "sha256": "575abbfc5b6f8e210f04ab1a2ff5b8a5e028392f81225ad18eb331e9461f1cf2",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/or.tsv",
+      "sha256": "6c264d0b6fb333dea68601593e9643a829cb050ae979b2d254602c74964e4623",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/pa.tsv",
+      "sha256": "95a2f82e14fad6987601496e07691ca91a1d5be8a8737643472dda1e62b6a5f6",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/pa_Arab.tsv",
+      "sha256": "09868c9ea1af2ab3a8803dbb9f18066e3b70e0b6d530d1246873e975ba7abc14",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/pcm.tsv",
+      "sha256": "7033bd1a72f4b82186ffc8d95f446a6903937e966fe2568d676f41f8d8d844af",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/pl.tsv",
+      "sha256": "501b6ba092e66de998f288e047705a8e5dc58497dccdc923c60868f4fcaacc56",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ps.tsv",
+      "sha256": "bdd20fa0b273bce6f21cf50ac9623a9615da6fe168cd95bc4944396e0cbd724c",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/pt.tsv",
+      "sha256": "ea98442db57ada5066ae22913025fee3e6a7670c39db89f33ecfe70ebed055d6",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/pt_PT.tsv",
+      "sha256": "bd8610f982361784be016c9d0121ee779c13e05170810770c4d84d00ef928380",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/qu.tsv",
+      "sha256": "70b36126b441634d4c593703f80011a042e47c0935b4a4a41886e4859f24118f",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/quc.tsv",
+      "sha256": "3f42962df7f60a001809d7a9dc226e06e93f97869a4cfc0acb95a271f9e318d4",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/rhg.tsv",
+      "sha256": "87faf9e0baacb61cc7150c13628150741f3c51596c5b45afe5cd3c3b41fb020c",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/rm.tsv",
+      "sha256": "8337a93ee372abccf76b6926831d7674e16e55108ee432f5a0fd614e703d36ff",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ro.tsv",
+      "sha256": "bbc2023edfe7db171bb75605676882db2da71c841113e54b65660232cf43b46c",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ru.tsv",
+      "sha256": "d0e7d6192e8a941f2f0e06a03d8942400eda04c68408528b67400716905610e3",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/rw.tsv",
+      "sha256": "20914e370969e52663d74cbb1d3eeb0f487787b191170249a116d000408f3089",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sa.tsv",
+      "sha256": "49f097426875abcdb3866c0e768050955092d5030d9fe8edda1cb7c960b8e0df",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sat.tsv",
+      "sha256": "76c3dba4275577284246451cda3dfcf0711a78876a48cf84035e1a1013683281",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sc.tsv",
+      "sha256": "8b99304a6b00ff0078b4f832bc29aa5afe9c32103a2ed9e0c4d69d65684ff8a0",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sd.tsv",
+      "sha256": "f6ba144434a997c0b55cbaa6e4f585d72a1a5a04afa74700e831a4a5c9b7c122",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/shn.tsv",
+      "sha256": "b4debd7369944084f49bfc8d74bd0712dab9af8a2f933a54fe1da6cd6a951147",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/si.tsv",
+      "sha256": "9235cac796c2d8a38266ff99f0ff97cd5c2ac5d5c03fb4a55d11865369155ca2",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sk.tsv",
+      "sha256": "31d6d55c3cfb4fbe80235c02886c6ed82ac77c150f8cf92f10f22990493b98a3",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sl.tsv",
+      "sha256": "fb5578c0cfb7d86d8b93961b734c11df67feb505e5912513f2dc9373311cd375",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/so.tsv",
+      "sha256": "0d0259bef3742b543d7deabbce9b6a21f572040f7b999337bcd35f8d18f771d8",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sq.tsv",
+      "sha256": "cb1ec38afbddc4bef8815df80f0e99b88bb09eddccd1342a4d50c8c41b777b58",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sr.tsv",
+      "sha256": "a9ad2406361d8aeb7a3a8510b2df74d028aa9edd2d3336d31e73cd522948829a",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sr_Cyrl_BA.tsv",
+      "sha256": "5ad9d7c6558b8d4935a461a66cad5c8fa0d2def2389931d8287c1fa290e5b4be",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sr_Latn.tsv",
+      "sha256": "41997e8c12a7beb95c202d1435509cb180bdf96c97cfb653d7113c59c642485b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sr_Latn_BA.tsv",
+      "sha256": "23267d906bbcd2eb6dbdf70a7f620651e434ed09ddbdbaa63da6f9ce15f06252",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/su.tsv",
+      "sha256": "e1806f533461157c08d332e3b1eaf9d21313f6260c032d40f570ab8f65ba6b91",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sv.tsv",
+      "sha256": "22477a3705f9712a84820a2ba96a3e9aeb4f7dabb50664a9fefb6c47af900dd8",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sv_FI.tsv",
+      "sha256": "e69672e52c1d244ddd9d96d47baf28fdad7bfc4bb8cea81b472239fdbcb5c5dd",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sw.tsv",
+      "sha256": "b79dc74f0b44fa215275d30142bc2231c2b7932a717526dcaad5845d8632d5b7",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/sw_KE.tsv",
+      "sha256": "8acfee7af7b764680e33b4609ff6e68af58f6fd81a6e539291292bc57572882a",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/syr.tsv",
+      "sha256": "611923e8b5272cf9bb66fc49e70cc678ffed76d0afd3442df72782b446bc768a",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ta.tsv",
+      "sha256": "fc7c4774124d118b7d5e8cfd1039ecd0202d0d819be8f6512ffed65af8accaa8",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/te.tsv",
+      "sha256": "94017ec281b2f6e28f8a4e1fae6ca59b6a6580fda65725f4dc00be6300dd3a00",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/tg.tsv",
+      "sha256": "49402d05fcfbbbbe42b1a6bde0e2a0e8db69971efb995f44235365e0d1eea18c",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/th.tsv",
+      "sha256": "b850222d30b2bfb654aeb4f0a1c809de62d26c3fc92f86cba904e67fec910f38",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ti.tsv",
+      "sha256": "a6defc0e7f447c5137e565b6b8c05e57625d3d91afc78cbf7e35f5fbad2dbe70",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/tk.tsv",
+      "sha256": "83384f4e87dd78a19d814917ccdf6f94fb279913823850c3ef10e33dd1bf00c6",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/tn.tsv",
+      "sha256": "abe9f3d28df858f7c6a6de3a7edf19c024fe9aa58ec9159ce0cac27a553710a8",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/to.tsv",
+      "sha256": "82ba85dd3b8a445236850b5d8aab3a98300ddd768ca7d2899016bab57e16f1a2",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/tr.tsv",
+      "sha256": "e4d3093d183814e3e15af083e95c6d4673a2fa3ad566dbb3b60c730c9858bc16",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/tt.tsv",
+      "sha256": "752c71c0750074c6910e12b08105993e104509bda8227d62643ff1618f4bba63",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ug.tsv",
+      "sha256": "373849ad665701cafec7232be291e9dff503f4b1adcb8f82b38d0ae0aeb7fade",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/uk.tsv",
+      "sha256": "675e02edde04199834405a1e5b10025f63ba5e46479a6fc8524a557841c7a659",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/ur.tsv",
+      "sha256": "1f376edae4d6dbc7fdaca6f336583f7eb01acf675be43e07970eecbfb27bf0f6",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/uz.tsv",
+      "sha256": "d35b9a6c1ef50d078a35d41e3efa68044617f6aef38c5fed0dee13f93df1b051",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/vec.tsv",
+      "sha256": "d49efff1cc08e6e27a74316c87e780bb8726b513dc5ee9f51f4d7f5807446fe4",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/vi.tsv",
+      "sha256": "d8f89bcaa5e343b2afe97480b39ad8cc301eec846b1b526c7605f1e6b545c12b",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/wo.tsv",
+      "sha256": "5f4509d1f5eda0b4809390fb3aeb3167e29379f1e19ff20821567512318207a8",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/xh.tsv",
+      "sha256": "4ca33f71437528afda3346057d3b9d2f577c24d0bddccd42d5147d468dba3e44",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/yo.tsv",
+      "sha256": "dab8fbdb4752f131c6c028777c623c3b9443f4b7fcdce9a81fcb81467c8e8c60",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/yo_BJ.tsv",
+      "sha256": "f24874ea78e75dfc39a9f062432e9211e06cb8987f96b5faed0785408f4a8d9f",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/yue.tsv",
+      "sha256": "efde2106a9fd1cd38a731bcce077967560581acda3b85628342948b377cdd51a",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/yue_Hans.tsv",
+      "sha256": "60e1f526029e25a4bdaa1e78f637e966bdb375e29d6692cc69baf2516cb8af90",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/zh.tsv",
+      "sha256": "7abacc18653944e53ad7be1790b3c81b3609f4965304d50d9c63e7222220d4ef",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/zh_Hant.tsv",
+      "sha256": "324d920595e5d86adbb92b793a561ab7090749f922388cca1f576629a7c1c7e2",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/zh_Hant_HK.tsv",
+      "sha256": "77b1d2dfabf2562388435156102165c0d6689d1e4fbc94dc47350ae4441da9a8",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "cldr_symbols/zu.tsv",
+      "sha256": "91298d45cb68c49c61345c7a1e20d3a97c398b8de2bd3013d20e978c93786b25",
+      "source": "CLDR",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/cldr_symbols/LICENSE"
+    },
+    {
+      "path": "exceptions/examples-en.json",
+      "sha256": "4e2e97ddc777b9dcaf6f22f9b24e194efc4600ac91ae27f0eb9ce34fcca1ca2c",
+      "source": "authored example",
+      "spdx": "BSD-2-Clause",
+      "class": "shippable",
+      "notice": null
+    },
+    {
+      "path": "ucd_name_aliases/LICENSE",
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96",
+      "source": "UCD",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/ucd_name_aliases/LICENSE"
+    },
+    {
+      "path": "ucd_name_aliases/NameAliases.tsv",
+      "sha256": "032fb7954049f91e248653242b0e655a7d1c40ad841564ddc2b5bd0ea4f56b06",
+      "source": "UCD",
+      "spdx": "Unicode-3.0",
+      "class": "shippable",
+      "notice": "icukit/data/ucd_name_aliases/LICENSE"
+    },
+    {
+      "path": "unit_surfaces/en.tsv",
+      "sha256": "2dff1da9d63787672ae155b720338fe3c979685321602032fdd7c76e4ad6367c",
+      "source": "curated by hand",
+      "spdx": "BSD-2-Clause",
+      "class": "shippable",
+      "notice": null,
+      "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question",
+      "corpus_reference": {
+        "kind": "mention",
+        "note": "entry selection was measured against an internal corpus census; whether that makes the table corpus-derived is an open owner question"
+      }
+    }
+  ]
+}

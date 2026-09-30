@@ -10,6 +10,7 @@ from icukit import (
     OverlappingProtectedSpans,
     char_classes,
     class_window,
+    cvletters_counts,
     load_exception_inventory,
     shape,
     shape_scheme,
@@ -109,6 +110,120 @@ def test_unknown_shape_scheme_is_refused():
 
 def test_cased_shape_caps_a_run_at_four():
     assert shape("Kennedy", "cased@1") == "Xxxxx"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("pdf", "CCC"),
+        ("Gbit", "CCVC"),
+        ("fMRI", "CCCV"),
+        ("Det", "CVC"),
+        ("yew", "YVY"),
+        ("strengths", "CCCVCCCC"),
+        ("B2B", "CNC"),
+        ("café", "CVCV"),
+    ],
+)
+def test_cvletters_english_examples(text, expected):
+    assert shape(text, "cvletters@1", locale="en_US") == expected
+
+
+def test_cvletters_uses_runtime_indic_syllabic_categories_only_on_letters_and_marks():
+    prop = icu.UProperty.INDIC_SYLLABIC_CATEGORY
+    long = icu.UPropertyNameChoice.LONG_PROPERTY_NAME
+
+    def indic_category(char):
+        return icu.Char.getPropertyValueName(
+            prop, icu.Char.getIntPropertyValue(ord(char), prop), long
+        )
+
+    assert [indic_category(char) for char in "नमस्ते"] == [
+        "Consonant",
+        "Consonant",
+        "Consonant",
+        "Virama",
+        "Consonant",
+        "Vowel_Dependent",
+    ]
+    assert indic_category("-") == indic_category("\N{NO-BREAK SPACE}") == "Consonant_Placeholder"
+    assert shape("नमस्ते", "cvletters@1") == "CCCCV"
+    assert shape("-\N{NO-BREAK SPACE}", "cvletters@1") == "-\N{NO-BREAK SPACE}"
+
+
+@pytest.mark.parametrize(
+    ("text", "locale", "expected"),
+    [
+        ("abc", None, "LLL"),
+        ("abc", "fr", "LLL"),
+        ("日本", None, "LL"),
+        ("λόγος", "en", "LLLL"),
+    ],
+)
+def test_cvletters_unknown_alphabet_fallback(text, locale, expected):
+    assert shape(text, "cvletters@1", locale=locale) == expected
+
+
+def test_cvletters_counts_are_uncapped_and_exclude_nonletters():
+    assert cvletters_counts("pdf", locale="en_US") == {
+        "letters": 3,
+        "vowels": 0,
+        "consonants": 3,
+        "has_vowel": False,
+    }
+    assert cvletters_counts("Gbit", locale="en_US") == {
+        "letters": 4,
+        "vowels": 1,
+        "consonants": 3,
+        "has_vowel": True,
+    }
+    assert cvletters_counts("नमस्ते") == {
+        "letters": 5,
+        "vowels": 1,
+        "consonants": 4,
+        "has_vowel": True,
+    }
+    unknown = cvletters_counts("abc123")
+    assert unknown == {"letters": 3, "vowels": 0, "consonants": 0, "has_vowel": False}
+    assert unknown["letters"] > unknown["vowels"] + unknown["consonants"]
+
+
+def test_cvletters_scheme_identity_is_stable_and_locale_independent():
+    expected = "sha256:9a534bef51126e025d7a4a0a73f34294f16c75268b8df4be8ace3afcb12c449a"
+    info = shape_scheme("cvletters@1")
+    assert info["name"] == "cvletters"
+    assert info["version"] == 1
+    assert info["digest"] == expected
+    assert shape_scheme("cvletters@1", locale="en_US") == info
+
+
+@pytest.mark.parametrize(
+    ("text", "coarse", "cased"),
+    [
+        ("ASCII", "A", "XXXX"),
+        ("12345", "N", "dddd"),
+        ("$£€", "¤", "¤¤¤"),
+        ("e\u0301", "A", "x"),
+        ("नमस्ते", "A", "aaaa"),
+        ("日本", "A", "aa"),
+        ("U.S.", "A.A.", "X.X."),
+        ("I", "<Lu>", "X"),
+    ],
+)
+def test_legacy_shape_outputs_remain_exact(text, coarse, cased):
+    assert shape(text, "coarse@1") == coarse
+    assert shape(text, "cased@1") == cased
+
+
+def test_legacy_shape_digests_remain_exact():
+    assert (
+        shape_scheme("coarse@1")["digest"]
+        == "sha256:c2a3a2a09014262563a18b3e2037a02a69245096c0bd8d76585b60743bd1269b"
+    )
+    assert (
+        shape_scheme("cased@1")["digest"]
+        == "sha256:9c7bdf87ed656cae0c137ce2cab6bb44bc8c83d48eb1acba0c278e378bbddba8"
+    )
 
 
 def test_char_classes_are_long_and_property_aliases_are_canonicalized():
@@ -224,6 +339,11 @@ def test_tokens_default_and_token_features_plan_examples():
         "len": 4,
         "shape.coarse": "A",
         "shape.cased": "Xxxx",
+        "shape.cvletters": "LLLL",
+        "cvletters.has_vowel": False,
+        "cvletters.letters": 4,
+        "cvletters.vowels": 0,
+        "cvletters.consonants": 0,
         "general_category.first": "Uppercase_Letter",
         "general_category.last": "Lowercase_Letter",
         "sentence_break.first": "Upper",
@@ -233,6 +353,18 @@ def test_tokens_default_and_token_features_plan_examples():
         "run.shape.cased": "Xxxx",
         "lex": "none",
     }
+
+
+def test_token_features_cvletters_values_use_token_surface_and_locale():
+    found = tokens("a Gbit token", "en_US")
+    features = token_features(found, 1, "a Gbit token", locale="en_US")
+    assert {key: features[key] for key in features if key.startswith("cvletters.")} == {
+        "cvletters.has_vowel": True,
+        "cvletters.letters": 4,
+        "cvletters.vowels": 1,
+        "cvletters.consonants": 3,
+    }
+    assert features["shape.cvletters"] == "CCVC"
 
 
 def test_token_features_lowercase_is_independent_of_default_locale():
@@ -492,6 +624,6 @@ def test_tokens_translate_icu_utf16_offsets_to_code_points():
     ],
 )
 def test_breaker_authored_regression(text, sentences, words):
-    breaker = Breaker("en_US")
+    breaker = Breaker("en_US", base="none")
     assert breaker.break_sentences(text) == sentences
     assert breaker.break_words(text) == words

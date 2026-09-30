@@ -208,14 +208,32 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`ClassWindow`](#icukitclasses) — class, `icukit.classes`
 - [`char_classes`](#icukitclasses) — function, `icukit.classes`
 - [`class_window`](#icukitclasses) — function, `icukit.classes`
+- [`CVLetterCounts`](#icukitshape) — class, `icukit.shape`
 - [`ShapeSchemeInfo`](#icukitshape) — class, `icukit.shape`
+- [`cvletters_counts`](#icukitshape) — function, `icukit.shape`
 - [`shape`](#icukitshape) — function, `icukit.shape`
 - [`shape_scheme`](#icukitshape) — function, `icukit.shape`
 - [`ProtectedSpan`](#icukittokens) — class, `icukit.tokens`
+- [`TOKEN_PROFILE`](#icukittokens) — constant, `icukit.tokens`
 - [`Token`](#icukittokens) — class, `icukit.tokens`
 - [`tokens`](#icukittokens) — function, `icukit.tokens`
 - [`token_features`](#icukittokens) — function, `icukit.tokens`
 - [`OverlappingProtectedSpans`](#icukiterrors) — class, `icukit.errors`
+- [`BreakRuleIdentity`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakPredicate`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakRule`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakRuleSet`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakDecision`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakBoundary`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`BreakSegmentation`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`CartletModelRef`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`PendingCandidate`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`IncrementalSentenceBreaker`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`SentenceOverride`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`break_rule_identity`](#icukitsentence-override) — function, `icukit.sentence_override`
+- [`load_break_rules`](#icukitsentence-override) — function, `icukit.sentence_override`
+- [`BreakRuleLoadError`](#icukiterrors) — class, `icukit.errors`
+- [`LateProtectedSpan`](#icukiterrors) — class, `icukit.errors`
 - [`get_base_direction`](#icukitbidi) — function, `icukit.bidi`
 - [`get_bidi_info`](#icukitbidi) — function, `icukit.bidi`
 - [`strip_bidi_controls`](#icukitbidi) — function, `icukit.bidi`
@@ -442,7 +460,11 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `AbbreviationSentenceBreaker`
 
-Post-filter ICU sentence spans using one compiled abbreviation lexicon.
+Post-filter raw ICU sentence spans with a separate abbreviation lexicon.
+
+For English, :class:`Breaker` and :class:`SentenceOverride` use the learned
+model by default. This class remains the explicit lexicon-based alternative;
+``base="none"`` on those APIs gives raw ICU.
 
 #### `AbbreviationSentenceBreaker(locale: 'str' = 'en_US', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
 
@@ -1011,11 +1033,12 @@ Example:
 Text segmentation using ICU BreakIterator.
 
 This module provides text segmentation capabilities for breaking text into
-sentences, words, lines, or grapheme clusters using ICU's BreakIterator.
+sentences, words, lines, or grapheme clusters. ICU supplies every level's
+boundaries; English sentence candidates use the learned model by default.
 Structured span offsets are Python code-point indices into the source text.
 
 Key Features:
-    * Locale-aware sentence segmentation
+    * Locale-aware sentence segmentation with a learned English default
     * Word tokenization with optional punctuation filtering
     * Line break detection
     * Grapheme cluster iteration (user-perceived characters)
@@ -1064,7 +1087,10 @@ span's end boundary.
 Text segmentation using ICU BreakIterator.
 
 A versatile text segmentation tool that can break text into sentences,
-words, lines, or grapheme clusters based on locale-specific rules.
+words, lines, or grapheme clusters based on locale-specific rules. English
+sentence breaking uses the learned model by default; ``base="none"`` keeps
+raw ICU sentence boundaries. Other levels and non-English defaults remain
+ICU behavior.
 
 Example:
     >>> breaker = Breaker('en')
@@ -1073,12 +1099,15 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: 'str' = 'en_US')`
+#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None)`
 
 Initialize a Breaker instance.
 
 Args:
     locale: Locale code for language-specific rules (e.g., 'en', 'en_US', 'ja').
+    base: Sentence base only. ``None`` selects the locale default,
+        ``"none"`` selects raw ICU, and ``"en-tn@1"`` or
+        ``"en-tn-cart@1"`` selects a learned English base.
 
 Raises:
     BreakerError: If the locale is invalid.
@@ -1122,7 +1151,7 @@ Returns:
 
 #### `break_sentence_spans(text: 'str') -> 'list[BreakSpan]'`
 
-Return every sentence segment as a structured span.
+Return sentence spans from the selected locale-default or named base.
 
 #### `break_sentences(text: 'str', skip_empty: 'bool' = True) -> 'list[str]'`
 
@@ -1193,7 +1222,7 @@ Yields:
 
 #### `iter_sentence_spans(text: 'str') -> 'Iterator[BreakSpan]'`
 
-Yield every sentence segment with code-point offsets.
+Yield sentence spans from the selected locale-default or named base.
 
 #### `iter_sentences(text: 'str', skip_empty: 'bool' = True) -> 'Iterator[str]'`
 
@@ -1312,11 +1341,11 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US') -> 'list[BreakSpan]'`
+### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[BreakSpan]'`
 
-Return every sentence segment with code-point offsets.
+Return sentence spans from the locale-default or selected base.
 
-### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True) -> 'list[str]'`
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -1326,6 +1355,8 @@ Args:
     text: The text to segment.
     locale: Locale code for language-specific rules.
     skip_empty: If True, empty sentences are excluded.
+    base: Sentence base; ``None`` selects the locale default and ``"none"``
+        selects raw ICU.
 
 Returns:
     List of sentence strings.
@@ -6968,6 +6999,246 @@ Example:
     >>> search_replace("cafe", "Visit the café", "tea", strength="primary")
     'Visit the tea'
 
+## icukit.sentence_override
+
+Whole-text and incremental sentence-break overrides.
+
+ICU always supplies the candidate boundaries: this module can retain or
+suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
+English (language ``en``, with any region or script, except the ``POSIX``
+variant) and ``"none"`` otherwise. Explicit ``base="none"`` is exactly ICU's
+current sentence output. Whole-text and incremental operation share the same
+prefix-aware candidate evaluator.
+
+Example:
+    >>> override = SentenceOverride()
+    >>> [(item["offset"], item["layer"]) for item in override.decide("Hi. Bye.")]
+    [(4, 'model'), (8, 'model')]
+
+### class `BreakBoundary`
+
+An open sentence boundary carrying both readings.
+
+### class `BreakDecision`
+
+The attributed decision for one ICU sentence candidate.
+
+A cartlet model decision appends its model-global leaf id to ``id`` as
+``"<model>#leaf:<id>"``.
+
+### class `BreakPredicate`
+
+dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object's
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)
+
+### class `BreakRule`
+
+One ordered sentence candidate rule.
+
+Authored witnesses validate the containing rule set as one isolated rule
+layer. Loader inventories contribute word-level token merges only; their
+sentence-level suppression rules and all deployment layers are excluded.
+
+``run-1`` is the complete left whitespace run truncated at the candidate.
+Its text, lower-case text, length, shapes, first/last character classes,
+leading-whitespace flag, and run shape are all derived from that same
+truncated run, never from only its final token.
+
+A forward character position ``c+n`` has horizon equal to the number of
+right tokens ending at or before that code point, plus one when the code
+point is inside a right token, with a minimum of one. It is readable when
+that horizon is at most ``lookahead``. Thus the gap after token ``+k`` is
+readable at lookahead ``k``, while the first code point of token ``+(k+1)``
+is ``<BEYOND>``. At or past the end of the text, its horizon is the lesser
+of eight and one more than the number of right tokens; a readable position
+returns ``<EOS>``. ``tokens_read`` records this horizon, including ``k``
+rather than ``k+1`` for a gap after token ``+k``. Every ``c+n`` predicate
+therefore requires a declared lookahead of at least one.
+
+### class `BreakRuleIdentity`
+
+Runtime identity against which a break-rule artifact was authored.
+
+### class `BreakRuleSet`
+
+An immutable, validated ordered set of flat break rules.
+
+#### `BreakRuleSet(id: 'str', locale: 'str', status: "Literal['experimental']", features: 'str', runtime_identity: 'Mapping[str, str]', digest: 'str', _rules: 'tuple[_CompiledBreakRule, ...]', provenance: 'Mapping[str, object] | None' = None) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `BreakSegmentation`
+
+Primary sentence spans plus every boundary left open by a rule.
+
+### class `CartletModelRef`
+
+A digest- and runtime-bound reference to a cartlet model.
+
+Constructing a reference does not import cartlet. The dependency is
+imported only when a :class:`SentenceOverride` uses this reference. Model
+evaluation requires cartlet 0.7 or later.
+Models use ``icukit.features@1`` and are tied to the ICU, Unicode, and
+tokenizer identity under which those features were measured.
+
+#### `CartletModelRef(path: 'str | Path', digest: 'str', identity: 'Mapping[str, str]' = <factory>, features: 'str' = 'icukit.features@1', name: 'str' = 'cartlet') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `IncrementalSentenceBreaker`
+
+Incrementally decide ICU sentence candidates with immutable output.
+
+Instances are created by :meth:`SentenceOverride.stream`. Offsets are code
+points in all text supplied so far. ``flush()`` treats the current end as
+END but permits later input; ``close()`` also prevents further input.
+
+Example:
+    >>> stream = SentenceOverride().stream()
+    >>> stream.feed("Hello. N") + stream.feed("ext.") + stream.close()
+    [{'offset': 7, 'end': 6, 'decision': 'break', 'alternatives': ('break',),
+      'layer': 'icu', 'id': None, 'tokens_read': 0},
+     {'offset': 11, 'end': 11, 'decision': 'break', 'alternatives': ('break',),
+      'layer': 'icu', 'id': None, 'tokens_read': 0}]
+
+#### `IncrementalSentenceBreaker(owner: 'SentenceOverride', protection: "Literal['none', 'watermark']") -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `close() -> 'list[BreakDecision]'`
+
+Flush once and reject later input; repeated calls return an empty list.
+
+#### `feed(chunk: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = (), protected_through: 'int | None' = None) -> 'list[BreakDecision]'`
+
+Append a chunk and return decisions made immutable by this prefix.
+
+#### `flush() -> 'list[BreakDecision]'`
+
+End the current logical segment without closing the stream.
+
+Current candidates are decided with END as context. Later input starts
+a new ICU segment, so its decisions equal whole-text decisions for the
+post-flush text alone, shifted by the flushed stream length.
+
+#### `pending() -> 'list[PendingCandidate]'`
+
+Return snapshots of candidates that still need context or protection.
+
+### class `PendingCandidate`
+
+An ICU candidate awaiting stable context, a rule feature, or protection.
+
+### class `SentenceOverride`
+
+Apply rules or a cartlet model to ICU sentence candidates.
+
+``en-tn@1`` is a learned English rule base under
+CC BY-SA 4.0. Its reported development and test figures measure agreement
+with the Google TN corpus splitter on synthetic ``glue2`` concatenations,
+not accuracy on naturally occurring running text. Its witnesses are
+synthesized from each rule's predicates, which include lexical values
+mined from the corpus (e.g. ``lower`` token values); no corpus sentence or
+row was read or copied.
+
+The locale-default base is:
+
+================ =================
+Locale language  Default base
+================ =================
+``en``           ``en-tn-cart@1`` (except ``POSIX``)
+every other      ``none``
+================ =================
+
+Region and script do not change the English default. The ``POSIX`` variant
+uses ``"none"`` because its ICU word tokens differ from the model profile.
+Pass ``base="none"`` explicitly for plain ICU sentence boundaries. Cartlet
+is an icukit dependency and is imported lazily only when a cartlet model is
+selected.
+
+Args:
+    locale: ICU locale used for both sentence and word boundaries.
+    base: ``None`` selects the locale default in the table above. Otherwise,
+        ``"none"`` selects plain ICU, ``"en-tn@1"`` selects the learned
+        rule base, ``"en-tn-cart@1"`` selects the learned model, and callers
+        may supply a loaded rule set, a :class:`CartletModelRef`, or a path
+        to a ``break-rules`` JSON file. Unknown names are refused.
+    before: Ordered caller rules that force a decision before inventories
+        and the base.
+    after: Ordered caller rules that may override the base decision.
+    inventories: Exception inventories; word rules merge tokens and
+        sentence rules suppress candidates.
+    cache: Reuse immutable per-token features in incremental evaluation.
+
+Example:
+    >>> from icukit import break_sentence_spans
+    >>> SentenceOverride(base="none").spans("Hello. Next.") == break_sentence_spans(
+    ...     "Hello. Next.", "en_US", base="none"
+    ... )
+    True
+
+#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `decide(text: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = ()) -> 'list[BreakDecision]'`
+
+Return an attributed decision for every raw ICU sentence candidate.
+
+#### `segmentations(text: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = ()) -> 'BreakSegmentation'`
+
+Return one-best spans and each candidate retaining two alternatives.
+
+#### `spans(text: 'str', /, *, protected: 'Iterable[ProtectedSpan]' = ()) -> 'list[BreakSpan]'`
+
+Return the one-best sentence spans; trailing whitespace stays left.
+
+#### `stream(*, protection: "Literal['none', 'watermark']" = 'none') -> 'IncrementalSentenceBreaker'`
+
+Return an incremental breaker sharing this override's decision core.
+
+Collation-variant word- and sentence-level exception rules are refused:
+primary-ignorable code points make their surface-match extent unbounded,
+so no bounded incremental hold can decide them safely. Use those rules
+with whole-text methods such as :meth:`decide`, or use exact variants.
+
+In text without whitespace or punctuation/symbol edges whose
+``Word_Break`` value is ``Other``, a decision may wait for whitespace,
+:meth:`IncrementalSentenceBreaker.flush`, or
+:meth:`IncrementalSentenceBreaker.close`.
+
+### `break_rule_identity(locale: 'str' = 'en_US', /, *, inventories: 'Sequence[LoadedExceptionInventory]' = ()) -> 'BreakRuleIdentity'`
+
+Return the runtime identity an authored break-rule set must declare.
+
+The token profile binds the explicit :data:`icukit.tokens.TOKEN_PROFILE`
+version, locale, ordered exception inventories, protected-span policy, and
+built-in shape definitions. The profile version is bumped when the golden
+tokenizer behavior changes; it is not a proof derived from implementation
+text. Fixtures should call this function instead of hard-coding versions.
+
+### `load_break_rules(source: 'str | Path | Mapping[str, object]', /, *, locale: 'str' = 'en_US', inventories: 'Sequence[LoadedExceptionInventory]' = ()) -> 'BreakRuleSet'`
+
+Load, validate, identity-check, and witness-test flat break rules.
+
+``source`` may be a parsed JSON object or a path to a ``break-rules`` JSON
+file. Witnesses execute transactionally after compilation; no partially
+validated rule set is returned. An object witness may add an integer
+``offset`` and a ``decision`` of ``break``, ``no-break``, or ``ambiguous``
+to pin the candidate and result. A ``no_match`` witness always requires
+that its rule decide no candidate anywhere in the text. Witnesses evaluate
+the loaded set as one isolated rule layer: ``inventories`` contribute only
+word-level token merges, while sentence-level inventory suppression and
+all other deployment layers are excluded. Callers compose those layers at
+deployment, where each candidate's attribution reports the deciding one.
+
 ## icukit.serialize
 
 recognition-output serializer — converts typed ValueDetection candidates to plain JSON;
@@ -6995,22 +7266,41 @@ Example:
     >>> shape("U.S.", "cased@1")
     'X.X.'
 
+### class `CVLetterCounts`
+
+Uncapped orthographic consonant-vowel letter counts.
+
+``letters`` counts code points labeled ``V``, ``C``, ``Y``, or ``L``, plus
+letters that a namespaced shape refinement relabels (still letters);
+``vowels`` counts ``V``; ``consonants`` counts ``C`` and ``Y``; and
+``has_vowel`` reports whether ``vowels`` is positive.
+
 ### class `ShapeSchemeInfo`
 
 Stable metadata identifying a shape scheme and its Unicode runtime.
 
-### `shape(text: 'str', scheme: 'str' = 'coarse@1', /, *, material: 'Iterable[LocaleMaterial]' = ()) -> 'str'`
+### `cvletters_counts(text: 'str', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'CVLetterCounts'`
+
+Count uncapped ``cvletters@1`` labels in ``text``.
+
+``Y`` counts as a consonant. ``L`` contributes only to ``letters``, so
+``letters > vowels + consonants`` reports letters for which no vowel policy
+is available. Digits, absorbed marks, and other characters are excluded.
+
+### `shape(text: 'str', scheme: 'str' = 'coarse@1', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'str'`
 
 Return the versioned ICU shape of ``text``.
 
 ``coarse@1`` collapses letter and digit runs; ``cased@1`` distinguishes
-letter case and caps each same-symbol run at four. Combining marks directly
-following a letter or digit run are absorbed. Validated shape-refinement
-material selects a namespaced symbol before absorption or the base scheme
-and collapses adjacent uses of that symbol as one run. A refined
-punctuation symbol does not make punctuation absorb following marks. An
-extended scheme name checks the supplied material's ids and digest prefixes.
-The name is a label and is not proof of material identity.
+letter case and caps each same-symbol run at four. ``cvletters@1`` is an
+approximate orthographic shape of vowel and consonant letters, not phones;
+its curated Latin table requires an ``en``-descendant ``locale``. Other
+alphabetic letters are ``L`` unless material supplies a label. Combining
+marks directly following a letter or digit run are absorbed unless ICU or a
+refinement labels them. Validated namespaced shape refinements take
+precedence and collapse adjacent uses as one run. An extended scheme name
+checks the supplied material's ids and digest prefixes; the name is a label,
+not proof of material identity.
 
 Example:
     >>> shape("Mr. Smith")
@@ -7018,7 +7308,7 @@ Example:
     >>> shape("Mr. Smith", "cased@1")
     'Xx. Xxxxx'
 
-### `shape_scheme(scheme: 'str' = 'coarse@1', /, *, material: 'Iterable[LocaleMaterial]' = ()) -> 'ShapeSchemeInfo'`
+### `shape_scheme(scheme: 'str' = 'coarse@1', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'ShapeSchemeInfo'`
 
 Describe a shape scheme and return its stable identity digest.
 
@@ -7029,6 +7319,8 @@ name is a label containing each material id and 12-hex digest prefix. Passing
 that label back checks those prefixes against the supplied material as a guard
 against an obvious mismatch; the full extension digests and this record's
 digest, rather than the label, are identities.
+``locale`` is accepted for symmetry with :func:`shape` but does not affect
+scheme metadata or its digest.
 
 ## icukit.spoof
 
@@ -7349,6 +7641,16 @@ Example:
     >>> [(token["text"], token["run"]) for token in tokens("the U.S. Then", "en_US")]
     [('the', 0), ('U.S', 1), ('.', 1), ('Then', 2)]
 
+### Constants and type aliases
+
+#### `TOKEN_PROFILE` (constant)
+
+`'icukit.tokens@1'`
+
+Bump this whenever the observable ``tokens()`` policy changes.  The sentence
+override includes it in authored-rule identities, and a golden test below the
+API pins representative punctuation, astral, protection, and inventory cases.
+
 ### class `ProtectedSpan`
 
 A caller-owned code-point span used as a token unit or a later hint.
@@ -7361,12 +7663,15 @@ A non-whitespace ICU word segment or protected token unit.
 ``protected_types`` is the sorted tuple of every type on equal-extent
 protected spans.
 
-### `token_features(toks: 'Sequence[Token]', i: 'int', text: 'str', /) -> 'dict[str, str | int | bool]'`
+### `token_features(toks: 'Sequence[Token]', i: 'int', text: 'str', /, *, locale: 'str | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'dict[str, str | int | bool]'`
 
-Return the feature-set-v1 values for token ``i``.
+Return token features, including orthographic consonant-vowel counts.
 
 ``run.shape.cased`` covers the complete whitespace-delimited run containing
-the token. ``lex`` is reserved and is currently always ``"none"``.
+the token. ``lex`` is reserved and is currently always ``"none"``. The
+``shape.cvletters`` and four ``cvletters.*`` values describe the token
+surface. Pass ``locale`` to enable the curated English letter table for an
+``en`` descendant; without a policy, alphabetic letters are labeled ``L``.
 
 ### `tokens(text: 'str', locale: 'str', /, *, inventory: 'LoadedExceptionInventory | None' = None, protected: 'Iterable[ProtectedSpan]' = ()) -> 'list[Token]'`
 
@@ -8022,6 +8327,14 @@ Error related to alphabetic index operations.
 
 Error related to bidirectional text operations.
 
+### class `BreakRuleLoadError`
+
+Transactional sentence-break rule-set load failure.
+
+#### `BreakRuleLoadError(refusals: 'list[RuleRefusal]')`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### class `BreakerError`
 
 Error related to text breaking operations.
@@ -8069,6 +8382,10 @@ Base exception for all icukit errors.
 ### class `IDNAError`
 
 Error related to IDNA encoding/decoding.
+
+### class `LateProtectedSpan`
+
+A protected span arrived after streaming output made it unsafe.
 
 ### class `ListFormatError`
 

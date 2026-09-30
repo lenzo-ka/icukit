@@ -67,7 +67,12 @@ def _candidate(text: str, boundary: int) -> tuple[str, int] | None:
 
 
 class AbbreviationSentenceBreaker:
-    """Post-filter ICU sentence spans using one compiled abbreviation lexicon."""
+    """Post-filter raw ICU sentence spans with a separate abbreviation lexicon.
+
+    For English, :class:`Breaker` and :class:`SentenceOverride` use the learned
+    model by default. This class remains the explicit lexicon-based alternative;
+    ``base="none"`` on those APIs gives raw ICU.
+    """
 
     def __init__(
         self, locale: str = "en_US", lexicon: AbbreviationLexicon | CompiledLexicon | None = None
@@ -82,7 +87,7 @@ class AbbreviationSentenceBreaker:
         self.classified_surfaces = (
             self.compiled.classified_surfaces if self.compiled is not None else frozenset()
         )
-        self._breaker = Breaker(locale)
+        self._breaker = Breaker(locale, base="none")
 
     def segmentations(self, text: str) -> AbbreviationSegmentation:
         """Return maximally merged spans and every ambiguous boundary."""

@@ -18,12 +18,19 @@ from typing import Literal, NotRequired, TypedDict, cast
 import icu
 
 from .breaker import break_word_spans
-from .classes import char_classes
+from .classes import _class_materials, char_classes
 from .errors import OverlappingProtectedSpans
 from .exceptions import LoadedExceptionInventory
-from .shape import shape
+from .material import LocaleMaterial
+from .shape import _cvletters_shape_counts_selections, shape
 
-__all__ = ["ProtectedSpan", "Token", "tokens", "token_features"]
+__all__ = ["TOKEN_PROFILE", "ProtectedSpan", "Token", "tokens", "token_features"]
+
+
+# Bump this whenever the observable ``tokens()`` policy changes.  The sentence
+# override includes it in authored-rule identities, and a golden test below the
+# API pins representative punctuation, astral, protection, and inventory cases.
+TOKEN_PROFILE = "icukit.tokens@1"
 
 
 class ProtectedSpan(TypedDict):
@@ -206,19 +213,24 @@ def tokens(
     return result
 
 
-def token_features(toks: Sequence[Token], i: int, text: str, /) -> dict[str, str | int | bool]:
-    """Return the feature-set-v1 values for token ``i``.
-
-    ``run.shape.cased`` covers the complete whitespace-delimited run containing
-    the token. ``lex`` is reserved and is currently always ``"none"``.
-    """
+def _token_features_base(
+    toks: Sequence[Token],
+    i: int,
+    text: str,
+    /,
+    *,
+    run_shape_cased: str | None = None,
+) -> dict[str, str | int | bool]:
+    """Return the sentence-override feature-set-v1 values for token ``i``."""
     token = toks[i]
     surface = token["text"]
     if not surface:
         raise ValueError("tokens must have nonempty text")
-    run_tokens = [item for item in toks if item["run"] == token["run"]]
-    run_start = min(item["start"] for item in run_tokens)
-    run_end = max(item["end"] for item in run_tokens)
+    if run_shape_cased is None:
+        run_tokens = [item for item in toks if item["run"] == token["run"]]
+        run_start = min(item["start"] for item in run_tokens)
+        run_end = max(item["end"] for item in run_tokens)
+        run_shape_cased = shape(text[run_start:run_end], "cased@1")
     first = surface[0]
     last = surface[-1]
     return {
@@ -233,6 +245,41 @@ def token_features(toks: Sequence[Token], i: int, text: str, /) -> dict[str, str
         "word_break.first": char_classes(first, "word_break")[0],
         "script.first": char_classes(first, "script")[0],
         "ws.before": token["start"] > 0 and text[token["start"] - 1].isspace(),
-        "run.shape.cased": shape(text[run_start:run_end], "cased@1"),
+        "run.shape.cased": run_shape_cased,
         "lex": "none",
     }
+
+
+def token_features(
+    toks: Sequence[Token],
+    i: int,
+    text: str,
+    /,
+    *,
+    locale: str | None = None,
+    material: Iterable[LocaleMaterial] = (),
+) -> dict[str, str | int | bool]:
+    """Return token features, including orthographic consonant-vowel counts.
+
+    ``run.shape.cased`` covers the complete whitespace-delimited run containing
+    the token. ``lex`` is reserved and is currently always ``"none"``. The
+    ``shape.cvletters`` and four ``cvletters.*`` values describe the token
+    surface. Pass ``locale`` to enable the curated English letter table for an
+    ``en`` descendant; without a policy, alphabetic letters are labeled ``L``.
+    """
+    token = toks[i]
+    surface = token["text"]
+    result = _token_features_base(toks, i, text)
+    cv_shape, counts, _selected = _cvletters_shape_counts_selections(
+        surface, locale, _class_materials(material)
+    )
+    result.update(
+        {
+            "shape.cvletters": cv_shape,
+            "cvletters.has_vowel": counts["has_vowel"],
+            "cvletters.letters": counts["letters"],
+            "cvletters.vowels": counts["vowels"],
+            "cvletters.consonants": counts["consonants"],
+        }
+    )
+    return result
