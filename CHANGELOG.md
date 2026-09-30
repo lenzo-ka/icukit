@@ -4,6 +4,9 @@
 
 ### Added
 
+- Orthographic word shape `cvletters@1` labels vowel and consonant letters from
+  runtime ICU data, a curated English table, or additive caller material;
+  `cvletters_counts` and token features expose its counts and vowel presence.
 - Provisionally, under owner choices D2 and D3, the learned English sentence
   rule base `en-tn@1` ships as an experimental, opt-in CC BY-SA 4.0 artifact;
   `base="none"` remains the default. The ordered 200-rule artifact is derived

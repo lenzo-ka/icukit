@@ -287,7 +287,13 @@ new symbol takes precedence in the extended scheme, and adjacent matches collaps
 as a run. A refinement that selects a mark takes precedence over mark absorption.
 Only a letter or decimal-digit base run absorbs following unrefined marks; refining
 punctuation or another base category does not make it absorb marks. Base symbols
-(`A`, `N`, `X`, `x`, `a`, `d`, `¤`, and `<Lu>`) are reserved.
+(`A`, `N`, `L`, `X`, `x`, `a`, `d`, `¤`, and `<Lu>`) are reserved.
+
+The symbols `V`, `C`, and `Y` instead declare a `cvletters@1` label refinement.
+They fill only code points that the built-in policy labeled `L`; they never replace
+an ICU Indic_Syllabic_Category label or the curated English Latin label. These
+refinements are ignored entirely by `coarse@1` and `cased@1`. `V` is a vowel,
+while `C` and ambiguous `Y` count as consonants in `cvletters_counts`.
 
 Refinement selection must be unambiguous. Loading refuses
 `AMBIGUOUS_REFINEMENT` if two refinements can select the same code point: their
@@ -299,13 +305,15 @@ Character witnesses contain exactly `id`, `text`, and `expect`, and `text` must 
 non-empty. A `char-classes`
 witness has `expect.codepoint_classes`, one ordered list of extension names per code
 point. A `shape-refinement` witness has `expect.shapes`, mapping refinement ids to
-the expected complete `coarse@1` output. Across the witnesses, every declared class
-must appear on at least one witnessed code point and every declared refinement must
-actually select at least one witnessed code point (or collapsed run), with its symbol
-emitted there in the checked output. Coverage is attributed by the refinement selected
-at each position, never by searching for its symbol as a substring. Empty expectations,
-unexercised declarations, and output mismatches refuse the complete material as
-`WITNESS_FAILED`.
+the expected complete output. A `V`, `C`, or `Y` label refinement is checked under
+`cvletters@1`, with `locale=None` and only that material; every other refinement is
+checked under `coarse@1`. Across the witnesses, every declared class must appear on
+at least one witnessed code point and every declared refinement must actually select
+at least one witnessed code point (or collapsed run). For a cvletters label,
+"selected" means that it filled at least one `L` code point. Coverage is attributed
+by the refinement selected at each position, never by searching for its symbol as a
+substring. Empty expectations, unexercised declarations, and output mismatches refuse
+the complete material as `WITNESS_FAILED`.
 
 Pass loaded material explicitly to `char_classes`, `class_window`, `shape`, or
 `shape_scheme`. Empty material preserves the base result exactly. A class window's
@@ -359,6 +367,46 @@ digest; none uses the short extended name. Absent material or a prefix mismatch 
       "id": "uppercase-w1",
       "text": "AA",
       "expect": {"shapes": {"example:uppercase-run": "<upper>"}}
+    }
+  ]
+}
+```
+
+This compatibility composite can supply an alphabet policy to `cvletters@1` without
+changing either legacy shape scheme:
+
+```json
+{
+  "schema_version": 1,
+  "kind": "classlike",
+  "id": "example/fi-vowels",
+  "status": "experimental",
+  "locale": "fi",
+  "classes": [
+    {"name": "example:fi-vowel", "unicode_set": "[aeiouyäöAEIOUYÄÖ]"},
+    {"name": "example:fi-consonant", "unicode_set": "[bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ]"}
+  ],
+  "shape_refinements": [
+    {"name": "example:fi-vowels", "class": "example:fi-vowel", "symbol": "V"},
+    {"name": "example:fi-consonants", "class": "example:fi-consonant", "symbol": "C"}
+  ],
+  "provenance": {"source": "application orthography policy"},
+  "witnesses": [
+    {
+      "id": "fi-aika",
+      "text": "aika",
+      "expect": {
+        "codepoint_classes": [
+          ["example:fi-vowel"],
+          ["example:fi-vowel"],
+          ["example:fi-consonant"],
+          ["example:fi-vowel"]
+        ],
+        "shapes": {
+          "example:fi-vowels": "VVCV",
+          "example:fi-consonants": "VVCV"
+        }
+      }
     }
   ]
 }
