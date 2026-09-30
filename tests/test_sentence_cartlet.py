@@ -157,6 +157,29 @@ def test_cartlet_traverses_lazy_sequence_only_by_len_and_getitem(monkeypatch) ->
     assert str(decisions[0]["id"]).startswith("en-tn-cart@1#leaf:")
 
 
+def test_sentence_override_tokenization_work_scales_linearly(monkeypatch) -> None:
+    original = sentence_override_module.tokens
+    token_records = 0
+
+    def counted(*args, **kwargs):
+        nonlocal token_records
+        result = original(*args, **kwargs)
+        token_records += len(result)
+        return result
+
+    monkeypatch.setattr(sentence_override_module, "tokens", counted)
+    override = SentenceOverride(base="en-tn-cart@1")
+    sentence = "Alpha beta gamma. "
+
+    override.decide(sentence * 16)
+    short_work = token_records
+    token_records = 0
+    override.decide(sentence * 128)
+    long_work = token_records
+
+    assert long_work <= short_work * 10
+
+
 def test_cartlet_closed_vector_has_explicit_values_at_every_position(monkeypatch) -> None:
     override = SentenceOverride(base="en-tn-cart@1")
     original = override.base.model.predict_path

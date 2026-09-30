@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -868,14 +869,63 @@ class _TokenFeatureCache:
     def __init__(self, enabled: bool) -> None:
         self.enabled = enabled
         self.values: dict[tuple[object, ...], dict[str, str | int | bool]] = {}
+        self._toks: Sequence[Token] | None = None
+        self._starts: tuple[int, ...] = ()
+        self._ends: tuple[int, ...] = ()
+        self._run_tokens: dict[int, tuple[Token, ...]] = {}
+        self._run_positions: dict[int, int] = {}
 
-    @staticmethod
-    def _key(toks: Sequence[Token], index: int, text: str) -> tuple[object, ...]:
+    def _bind(self, toks: Sequence[Token]) -> None:
+        if self._toks is toks:
+            return
+        self._toks = toks
+        self._starts = tuple(token["start"] for token in toks)
+        self._ends = tuple(token["end"] for token in toks)
+        grouped: dict[int, list[Token]] = {}
+        for index, token in enumerate(toks):
+            group = grouped.setdefault(token["run"], [])
+            self._run_positions[index] = len(group)
+            group.append(token)
+        self._run_tokens = {run: tuple(items) for run, items in grouped.items()}
+
+    def index_after(self, toks: Sequence[Token], offset: int) -> int:
+        self._bind(toks)
+        return bisect_left(self._starts, offset)
+
+    def logical_end(self, toks: Sequence[Token], offset: int) -> int:
+        self._bind(toks)
+        index = bisect_right(self._ends, offset) - 1
+        return self._ends[index] if index >= 0 else offset
+
+    def forward_horizon(self, toks: Sequence[Token], pivot: int, index: int, text: str) -> int:
+        self._bind(toks)
+        if index >= len(text):
+            return min(8, len(toks) - pivot + 1)
+        completed = max(0, bisect_right(self._ends, index) - pivot)
+        position = bisect_right(self._starts, index) - 1
+        containing = position >= pivot and self._ends[position] > index
+        return max(1, completed + int(containing))
+
+    def tokens_ending_by(self, toks: Sequence[Token], pivot: int, offset: int) -> Sequence[Token]:
+        self._bind(toks)
+        return toks[pivot : bisect_right(self._ends, offset)]
+
+    def count_starting_by(self, toks: Sequence[Token], pivot: int, offset: int) -> int:
+        self._bind(toks)
+        return max(0, bisect_right(self._starts, offset) - pivot)
+
+    def run_before(self, toks: Sequence[Token], index: int, offset: int) -> tuple[Token, ...]:
+        self._bind(toks)
+        run_tokens = self._run_tokens[toks[index]["run"]]
+        return run_tokens[: bisect_right(tuple(item["end"] for item in run_tokens), offset)]
+
+    def _key(self, toks: Sequence[Token], index: int, text: str) -> tuple[object, ...]:
+        self._bind(toks)
         token = toks[index]
         run = token["run"]
-        run_tokens = [item for item in toks if item["run"] == run]
-        run_start = min(item["start"] for item in run_tokens)
-        run_end = max(item["end"] for item in run_tokens)
+        run_tokens = self._run_tokens[run]
+        run_start = run_tokens[0]["start"]
+        run_end = run_tokens[-1]["end"]
         return (
             token["start"],
             token["end"],
@@ -890,7 +940,8 @@ class _TokenFeatureCache:
             return _token_features_base(toks, index, text)
         key = self._key(toks, index, text)
         if key not in self.values:
-            self.values[key] = _token_features_base(toks, index, text)
+            run_tokens = self._run_tokens[toks[index]["run"]]
+            self.values[key] = _token_features_base(run_tokens, self._run_positions[index], text)
         return self.values[key]
 
     def evict_before(self, offset: int) -> None:
@@ -900,6 +951,11 @@ class _TokenFeatureCache:
 
     def clear(self) -> None:
         self.values.clear()
+        self._toks = None
+        self._starts = ()
+        self._ends = ()
+        self._run_tokens.clear()
+        self._run_positions.clear()
 
 
 def _is_white_space(char: str) -> bool:
@@ -1007,14 +1063,11 @@ def _observed_feature_value(
     at = predicate.at
     if at == "protected":
         return protected_types, 0, offset
-    pivot = _token_index_after(toks, offset)
+    pivot = cache.index_after(toks, offset)
     if at == "run-1":
         if pivot == 0:
             return _sentinel_features("<BOS>").get(predicate.feature, "<BOS>"), 0, offset
-        previous = toks[pivot - 1]
-        same_run = [
-            item for item in toks if item["run"] == previous["run"] and item["end"] <= offset
-        ]
+        same_run = cache.run_before(toks, pivot - 1, offset)
         completion_horizons = tuple(
             _token_completion_horizon(item, text, locale, inventories, closed) for item in same_run
         )
@@ -1070,11 +1123,10 @@ def _observed_feature_value(
     distance = int(cast(str, at)[1:])
     index = offset + distance - 1 if distance > 0 else offset + distance
     if distance > 0:
-        right = toks[pivot:]
-        horizon = _forward_character_horizon(index, text, right)
+        horizon = cache.forward_horizon(toks, pivot, index, text)
         if index >= len(text) and not closed:
             raise _FeatureNotYet
-        completed_tokens = tuple(token for token in right if token["end"] <= index)
+        completed_tokens = cache.tokens_ending_by(toks, pivot, index)
         completion_horizons = tuple(
             _token_completion_horizon(item, text, locale, inventories, closed)
             for item in completed_tokens
@@ -1106,9 +1158,7 @@ def _observed_feature_value(
     window = class_window(text, index, before=0, after=1)
     tokens_read = 0
     if distance > 0:
-        tokens_read = min(
-            sum(1 for token in toks[pivot:] if token["start"] <= index), rule.lookahead
-        )
+        tokens_read = min(cache.count_starting_by(toks, pivot, index), rule.lookahead)
     horizon = completion_horizon if completion_horizon is not None else index + 1
     return _point_feature(window.after[0], predicate.feature), tokens_read, max(offset, horizon)
 
@@ -1562,11 +1612,10 @@ def _inventory_locality_horizon(
     return None if condition_horizon is None else max(surface_horizon, condition_horizon)
 
 
-def _inventory_anchor(toks: Sequence[Token], offset: int, lookahead: int) -> int:
+def _inventory_anchor(toks: Sequence[Token], pivot: int, offset: int, lookahead: int) -> int:
     """End of the furthest word a candidate's flat rules may inspect."""
     if lookahead <= 0:
         return offset
-    pivot = _token_index_after(toks, offset)
     read = toks[pivot : pivot + lookahead]
     return read[-1]["end"] if read else offset
 
@@ -1575,17 +1624,18 @@ def _candidate_observed(
     owner: SentenceOverride,
     text: str,
     offset: int,
+    toks: Sequence[Token],
     protected: Sequence[ProtectedSpan],
     closed: bool,
     cache: _TokenFeatureCache,
 ) -> _ObservedResult:
-    combined = _combined_inventory(owner.inventories)
-    toks = tokens(text, owner.locale, inventory=combined, protected=protected)
+    pivot = cache.index_after(toks, offset)
     covering = tuple(
         sorted({item["type"] for item in protected if item["start"] < offset < item["end"]})
     )
-    containing = next((token for token in toks if token["start"] < offset < token["end"]), None)
-    end = containing["end"] if containing is not None else _logical_end(toks, offset)
+    previous = toks[pivot - 1] if pivot else None
+    containing = previous if previous is not None and offset < previous["end"] else None
+    end = containing["end"] if containing is not None else cache.logical_end(toks, offset)
     word_inventories = tuple(
         inventory
         for inventory in owner.inventories
@@ -1649,7 +1699,7 @@ def _candidate_observed(
         decision["tokens_read"] = read
         return _ObservedResult(cast(BreakDecision, decision), None, read, horizon)
 
-    anchor = _inventory_anchor(toks, offset, owner.lookahead)
+    anchor = _inventory_anchor(toks, pivot, offset, owner.lookahead)
     locality_horizons = tuple(
         _inventory_locality_horizon(
             inventory,
@@ -1766,9 +1816,15 @@ def _decide_core(
         (*(item.lookahead for item in rule_layers), base.lookahead if base is not None else 0)
     )
     cache = _TokenFeatureCache(True)
+    toks = tokens(
+        text,
+        locale,
+        inventory=_combined_inventory(inventories),
+        protected=protected_items,
+    )
     result: list[BreakDecision] = []
     for span in _raw_break_sentence_spans(text, locale):
-        observed = _candidate_observed(owner, text, span["end"], protected_items, True, cache)
+        observed = _candidate_observed(owner, text, span["end"], toks, protected_items, True, cache)
         if observed.decision is None:
             raise AssertionError("closed candidate remained pending")
         result.append(observed.decision)
@@ -1879,7 +1935,7 @@ class IncrementalSentenceBreaker:
             offset = segment_start + local_offset
             if offset in self._emitted:
                 continue
-            tokens_after = sum(1 for token in toks if token["start"] >= local_offset)
+            tokens_after = len(toks) - self._cache.index_after(toks, local_offset)
             if earlier_pending:
                 pending.append(
                     {"offset": offset, "tokens_after": tokens_after, "waiting_on": "order"}
@@ -1895,6 +1951,7 @@ class IncrementalSentenceBreaker:
                 self._owner,
                 text,
                 local_offset,
+                toks,
                 protected,
                 closed,
                 self._cache,
