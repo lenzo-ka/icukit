@@ -22,9 +22,13 @@ values it chooses from ICU; ``guarded=True`` adds the guarded readers.
 
 from __future__ import annotations
 
+import os
+from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cache
+from threading import Event, Lock, get_ident
+from typing import cast
 
 import icu
 
@@ -62,6 +66,8 @@ from .recognize import (
     MaterialSpelloutDetector,
     PluralNumeralDetector,
     SingleLetterWordDetector,
+    _clear_derived_locale_caches,
+    _clear_shared_number_reader_cache,
     _iso_currency_codes,
     _language_locales,
     _locale_selection,
@@ -95,6 +101,7 @@ __all__ = [
     "SPELLOUT_NUMBER_FAMILY",
     "WEEKDAY_NAME_FAMILY",
     "SkippedSpec",
+    "clear_detector_caches",
     "flexible_detectors",
     "flexible_detectors_report",
     "generated_detectors",
@@ -103,6 +110,104 @@ __all__ = [
 ]
 
 Spec = object
+
+
+class _IdentityTuple:
+    """A tuple key whose items compare by identity and stay alive with the key."""
+
+    __slots__ = ("items", "_hash")
+
+    def __init__(self, items: tuple[object, ...]) -> None:
+        self.items = items
+        self._hash = hash(tuple(map(id, items)))
+
+    def __hash__(self) -> int:
+        return self._hash
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, _IdentityTuple)
+            and len(self.items) == len(other.items)
+            and all(left is right for left, right in zip(self.items, other.items, strict=True))
+        )
+
+
+@dataclass
+class _GangFlight:
+    """One in-progress gang build whose waiters do not hold the memo lock."""
+
+    event: Event
+    generation: int
+    thread: int
+    result: object | None = None
+    error: BaseException | None = None
+
+
+class _GangMemo:
+    """A bounded LRU with per-key single-flight construction."""
+
+    def __init__(self, maxsize: int) -> None:
+        self.maxsize = maxsize
+        self._lock = Lock()
+        self._cache: OrderedDict[tuple, object] = OrderedDict()
+        self._flights: dict[tuple, _GangFlight] = {}
+        self._generation = 0
+
+    def get_or_build(self, key: tuple, build: Callable[[], object]) -> object:
+        if os.environ.get("ICUKIT_CACHE") == "0":
+            return build()
+        with self._lock:
+            found = self._cache.pop(key, None)
+            if found is not None:
+                self._cache[key] = found
+                return found
+            flight = self._flights.get(key)
+            owner = flight is None
+            if owner:
+                flight = _GangFlight(Event(), self._generation, get_ident())
+                self._flights[key] = flight
+        assert flight is not None
+        if not owner and flight.thread == get_ident():
+            # The same request, made again while this thread builds it (a family that
+            # builds a gang as it enumerates): build it uncached, as waiting would
+            # wait on this thread itself.
+            return build()
+        if not owner:
+            flight.event.wait()
+            if flight.error is not None:
+                raise flight.error
+            return flight.result
+        try:
+            result = build()
+        except BaseException as error:
+            with self._lock:
+                flight.error = error
+                if self._flights.get(key) is flight:
+                    del self._flights[key]
+                flight.event.set()
+            raise
+        with self._lock:
+            flight.result = result
+            if flight.generation == self._generation:
+                self._cache[key] = result
+                while len(self._cache) > self.maxsize:
+                    self._cache.popitem(last=False)
+            if self._flights.get(key) is flight:
+                del self._flights[key]
+            flight.event.set()
+        return result
+
+    def clear(self) -> None:
+        with self._lock:
+            self._cache.clear()
+            # A request made after clearing builds anew rather than joining a build
+            # begun before it; that build's own waiters still receive its result.
+            self._flights.clear()
+            self._generation += 1
+
+
+_GENERATED_GANGS = _GangMemo(maxsize=32)
+_FLEXIBLE_GANGS = _GangMemo(maxsize=32)
 
 
 @dataclass(frozen=True, repr=False)
@@ -694,9 +799,28 @@ def generated_detectors_report(
     *,
     material: Iterable[LocaleMaterial] = (),
 ) -> GenerationReport:
-    """Derive detectors for ``locale`` and report specs that could not be inverted."""
+    """Derive detectors for ``locale`` and report specs that could not be inverted.
+
+    The immutable report is memoized in-process by the complete request, including
+    family and material-object identity, so a family must enumerate and build the same
+    readers each time it is given the same locale. Set ``ICUKIT_CACHE=0`` to bypass
+    this gang memo for a call; :func:`clear_detector_caches` clears it explicitly.
+    """
     families = tuple(families)
     materials = tuple(_require_loaded(item) for item in material)
+    key = (locale, _IdentityTuple(families), _IdentityTuple(materials))
+    return cast(
+        GenerationReport,
+        _GENERATED_GANGS.get_or_build(
+            key, lambda: _build_generated_detectors_report(locale, families, materials)
+        ),
+    )
+
+
+def _build_generated_detectors_report(
+    locale: str, families: tuple[Family, ...], materials: tuple[LocaleMaterial, ...]
+) -> GenerationReport:
+    """Build a generated report after its complete inputs have been normalized."""
     detectors = DetectorSet(())
     skipped: list[SkippedSpec] = []
     for family, spec, detector, reason in _family_specs(locale, families):
@@ -739,7 +863,12 @@ def generated_detectors(
     *,
     material: Iterable[LocaleMaterial] = (),
 ) -> DetectorSet:
-    """Derive all invertible detectors introspectively registered for ``locale``."""
+    """Derive all invertible detectors introspectively registered for ``locale``.
+
+    Repeated equal calls return the detector set from the process-wide bounded gang
+    memo. Set ``ICUKIT_CACHE=0`` to bypass that memo for a call, or call
+    :func:`clear_detector_caches` to clear every detector-construction cache.
+    """
     return generated_detectors_report(locale, families, material=material).detectors
 
 
@@ -1095,16 +1224,57 @@ def flexible_detectors_report(
 ) -> GenerationReport:
     """The flexible readers for ``locale``, and every spec that could not be built.
 
-    See :func:`flexible_detectors`.
+    See :func:`flexible_detectors`. The frozen report is memoized by the complete,
+    normalized request. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for a call;
+    :func:`clear_detector_caches` clears it explicitly.
     """
     selection = _locale_selection(locale, locales)
+    currency_selection = None if currencies is None else tuple(currencies)
+    unit_selection = None if units is None else tuple(units)
+    materials = tuple(_require_loaded(item) for item in material)
+    key = (
+        locale,
+        selection,
+        currency_selection,
+        unit_selection,
+        guarded,
+        _IdentityTuple(materials),
+    )
+    return cast(
+        GenerationReport,
+        _FLEXIBLE_GANGS.get_or_build(
+            key,
+            lambda: _build_flexible_detectors_report(
+                locale,
+                selection,
+                currency_selection,
+                unit_selection,
+                guarded,
+                materials,
+            ),
+        ),
+    )
+
+
+def _build_flexible_detectors_report(
+    locale: str,
+    selection: tuple[str, ...] | None,
+    currencies: tuple[str, ...] | None,
+    units: tuple[str, ...] | None,
+    guarded: bool,
+    materials: tuple[LocaleMaterial, ...],
+) -> GenerationReport:
+    """Build a flexible report after its complete inputs have been normalized."""
     families = _flexible_families(
         selection,
-        None if currencies is None else tuple(currencies),
-        None if units is None else tuple(units),
+        currencies,
+        units,
         guarded,
     )
-    report = generated_detectors_report(locale, families, material=material)
+    # These families are closures freshly bound to this flexible request. The outer
+    # memo owns their stable identity boundary, so do not populate the generated memo
+    # with one-use family objects.
+    report = _build_generated_detectors_report(locale, families, materials)
     readers, skipped = _range_readers(locale, report.detectors, selection)
     return GenerationReport(report.detectors.with_(*readers), (*report.skipped, *skipped))
 
@@ -1157,12 +1327,12 @@ def flexible_detectors(
     purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
     built is left out; :func:`flexible_detectors_report` names it and why.
 
-    The set is costlier than :func:`generated_detectors`: building it takes seconds (most
-    in a language of many locales, where the currency and measure readers read every
-    locale's forms), so build it once and reuse it; a ``detect`` costs a small multiple
-    of the generated set's, since the currency and measure readers share the numbers
-    they read within a text. The shared readings are kept for the 16 texts read last
-    (about 110 bytes per character each for en_US).
+    Construction is cached process-wide in a bounded memo keyed by every option; equal
+    calls return the same frozen set. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for
+    a call, or use :func:`clear_detector_caches` to clear it. A ``detect`` costs a small
+    multiple of the generated set's, since the currency and measure readers share the
+    numbers they read within a text. The shared readings are kept for the 16 texts read
+    last (about 110 bytes per character each for en_US).
     """
     return flexible_detectors_report(
         locale,
@@ -1172,6 +1342,20 @@ def flexible_detectors(
         guarded=guarded,
         material=material,
     ).detectors
+
+
+def clear_detector_caches() -> None:
+    """Clear all process-wide detector-construction caches.
+
+    This clears generated and flexible gang memos, shared number readers, and derived
+    per-locale currency, measure, digit, plural, and time-zone tables. It is useful to
+    tests, benchmarks, and long-lived processes that need to release cached gangs.
+    ``ICUKIT_CACHE=0`` instead bypasses only gang memoization, read at each call.
+    """
+    _GENERATED_GANGS.clear()
+    _FLEXIBLE_GANGS.clear()
+    _clear_shared_number_reader_cache()
+    _clear_derived_locale_caches()
 
 
 # note: Flexible recall detectors do not yet generalize to partial date skeletons; that
