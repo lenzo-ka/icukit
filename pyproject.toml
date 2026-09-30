@@ -106,6 +106,8 @@ icukit = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Print each test's time beside it, in run order.
+console_output_style = "times"
 
 [tool.ruff]
 line-length = 100
