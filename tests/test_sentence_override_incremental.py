@@ -906,10 +906,10 @@ def test_token_features_are_cached_once_and_cache_flag_is_semantic_noop(monkeypa
     calls = {}
     original = sentence_override_module._token_features_base
 
-    def counted(toks, index, text):
+    def counted(toks, index, text, **kwargs):
         key = (toks[index]["start"], toks[index]["end"], toks[index]["text"])
         calls[key] = calls.get(key, 0) + 1
-        return original(toks, index, text)
+        return original(toks, index, text, **kwargs)
 
     monkeypatch.setattr(sentence_override_module, "_token_features_base", counted)
     cached = SentenceOverride(base="none", before=[_loaded(_next_upper())], cache=True)
@@ -927,10 +927,10 @@ def test_cache_retains_future_lookbehind_tokens_after_pending_empties(monkeypatc
     calls = {}
     original = sentence_override_module._token_features_base
 
-    def counted(toks, index, text):
+    def counted(toks, index, text, **kwargs):
         key = (toks[index]["start"], toks[index]["end"], toks[index]["text"])
         calls[key] = calls.get(key, 0) + 1
-        return original(toks, index, text)
+        return original(toks, index, text, **kwargs)
 
     rule = _rule(
         "two-token-lookbehind",

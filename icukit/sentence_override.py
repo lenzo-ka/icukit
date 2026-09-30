@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -868,20 +869,120 @@ class _TokenFeatureCache:
     def __init__(self, enabled: bool) -> None:
         self.enabled = enabled
         self.values: dict[tuple[object, ...], dict[str, str | int | bool]] = {}
+        self._toks: Sequence[Token] | None = None
+        self._starts: tuple[int, ...] = ()
+        self._ends: tuple[int, ...] = ()
+        self._run_tokens: dict[int, tuple[Token, ...]] = {}
+        self._run_ends: dict[int, tuple[int, ...]] = {}
+        self._run_positions: dict[int, int] = {}
+        self._run_texts: dict[int, str] = {}
+        self._run_shapes: dict[int, str] = {}
+        self._run_completion_horizons: dict[
+            tuple[int, str, tuple[int, ...], bool], list[int | None]
+        ] = {}
 
-    @staticmethod
-    def _key(toks: Sequence[Token], index: int, text: str) -> tuple[object, ...]:
+    def _bind(self, toks: Sequence[Token]) -> None:
+        if self._toks is toks:
+            return
+        self._toks = toks
+        self._starts = tuple(token["start"] for token in toks)
+        self._ends = tuple(token["end"] for token in toks)
+        self._run_positions.clear()
+        grouped: dict[int, list[Token]] = {}
+        for index, token in enumerate(toks):
+            group = grouped.setdefault(token["run"], [])
+            self._run_positions[index] = len(group)
+            group.append(token)
+        self._run_tokens = {run: tuple(items) for run, items in grouped.items()}
+        self._run_ends = {
+            run: tuple(item["end"] for item in items) for run, items in self._run_tokens.items()
+        }
+        self._run_texts.clear()
+        self._run_shapes.clear()
+        self._run_completion_horizons.clear()
+
+    def index_after(self, toks: Sequence[Token], offset: int) -> int:
+        self._bind(toks)
+        return bisect_left(self._starts, offset)
+
+    def logical_end(self, toks: Sequence[Token], offset: int) -> int:
+        self._bind(toks)
+        index = bisect_right(self._ends, offset) - 1
+        return self._ends[index] if index >= 0 else offset
+
+    def containing(self, toks: Sequence[Token], offset: int) -> Token | None:
+        self._bind(toks)
+        index = bisect_right(self._starts, offset) - 1
+        if index >= 0 and offset < self._ends[index]:
+            return toks[index]
+        return None
+
+    def forward_horizon(self, toks: Sequence[Token], pivot: int, index: int, text: str) -> int:
+        self._bind(toks)
+        if index >= len(text):
+            return min(8, len(toks) - pivot + 1)
+        completed = max(0, bisect_right(self._ends, index) - pivot)
+        position = bisect_right(self._starts, index) - 1
+        containing = position >= pivot and self._ends[position] > index
+        return max(1, completed + int(containing))
+
+    def tokens_ending_by(self, toks: Sequence[Token], pivot: int, offset: int) -> Sequence[Token]:
+        self._bind(toks)
+        return toks[pivot : bisect_right(self._ends, offset)]
+
+    def count_starting_by(self, toks: Sequence[Token], pivot: int, offset: int) -> int:
+        self._bind(toks)
+        return max(0, bisect_right(self._starts, offset) - pivot)
+
+    def run_start_before(self, toks: Sequence[Token], index: int, offset: int) -> int:
+        self._bind(toks)
+        run = toks[index]["run"]
+        if not bisect_right(self._run_ends[run], offset):
+            raise ValueError("no token in run ends by offset")
+        return self._run_tokens[run][0]["start"]
+
+    def run_completion_horizon(
+        self,
+        toks: Sequence[Token],
+        index: int,
+        offset: int,
+        text: str,
+        locale: str,
+        inventories: Sequence[LoadedExceptionInventory],
+        closed: bool,
+    ) -> int | None:
+        self._bind(toks)
+        run = toks[index]["run"]
+        count = bisect_right(self._run_ends[run], offset)
+        key = (run, locale, tuple(id(item) for item in inventories), closed)
+        prefix = self._run_completion_horizons.setdefault(key, [])
+        run_tokens = self._run_tokens[run]
+        while len(prefix) < count:
+            horizon = _token_completion_horizon(
+                run_tokens[len(prefix)], text, locale, inventories, closed
+            )
+            if prefix and prefix[-1] is None:
+                horizon = None
+            elif prefix and horizon is not None:
+                horizon = max(cast(int, prefix[-1]), horizon)
+            prefix.append(horizon)
+        return prefix[count - 1] if count else offset
+
+    def _key(self, toks: Sequence[Token], index: int, text: str) -> tuple[object, ...]:
+        self._bind(toks)
         token = toks[index]
         run = token["run"]
-        run_tokens = [item for item in toks if item["run"] == run]
-        run_start = min(item["start"] for item in run_tokens)
-        run_end = max(item["end"] for item in run_tokens)
+        run_tokens = self._run_tokens[run]
+        run_start = run_tokens[0]["start"]
+        run_end = run_tokens[-1]["end"]
+        if run not in self._run_texts:
+            self._run_texts[run] = text[run_start:run_end]
         return (
             token["start"],
             token["end"],
             token["text"],
             run,
-            text[run_start:run_end],
+            self._run_texts[run],
             token.get("protected_types", ()),
         )
 
@@ -890,7 +991,16 @@ class _TokenFeatureCache:
             return _token_features_base(toks, index, text)
         key = self._key(toks, index, text)
         if key not in self.values:
-            self.values[key] = _token_features_base(toks, index, text)
+            run = toks[index]["run"]
+            run_tokens = self._run_tokens[run]
+            if run not in self._run_shapes:
+                self._run_shapes[run] = shape(self._run_texts[run], "cased@1")
+            self.values[key] = _token_features_base(
+                run_tokens,
+                self._run_positions[index],
+                text,
+                run_shape_cased=self._run_shapes[run],
+            )
         return self.values[key]
 
     def evict_before(self, offset: int) -> None:
@@ -900,6 +1010,15 @@ class _TokenFeatureCache:
 
     def clear(self) -> None:
         self.values.clear()
+        self._toks = None
+        self._starts = ()
+        self._ends = ()
+        self._run_tokens.clear()
+        self._run_ends.clear()
+        self._run_positions.clear()
+        self._run_texts.clear()
+        self._run_shapes.clear()
+        self._run_completion_horizons.clear()
 
 
 def _is_white_space(char: str) -> bool:
@@ -1007,20 +1126,22 @@ def _observed_feature_value(
     at = predicate.at
     if at == "protected":
         return protected_types, 0, offset
-    pivot = _token_index_after(toks, offset)
+    pivot = cache.index_after(toks, offset)
     if at == "run-1":
         if pivot == 0:
             return _sentinel_features("<BOS>").get(predicate.feature, "<BOS>"), 0, offset
-        previous = toks[pivot - 1]
-        same_run = [
-            item for item in toks if item["run"] == previous["run"] and item["end"] <= offset
-        ]
-        completion_horizons = tuple(
-            _token_completion_horizon(item, text, locale, inventories, closed) for item in same_run
+        start = cache.run_start_before(toks, pivot - 1, offset)
+        completion_horizon = cache.run_completion_horizon(
+            toks,
+            pivot - 1,
+            offset,
+            text,
+            locale,
+            inventories,
+            closed,
         )
-        if any(item is None for item in completion_horizons):
+        if completion_horizon is None:
             raise _FeatureNotYet
-        start = min(item["start"] for item in same_run)
         run_text = text[start:offset].rstrip()
         first = run_text[0]
         last = run_text[-1]
@@ -1043,7 +1164,7 @@ def _observed_feature_value(
         return (
             features.get(predicate.feature, "<UNKNOWN>"),
             0,
-            max((offset, *(cast(int, item) for item in completion_horizons))),
+            max(offset, completion_horizon),
         )
     if isinstance(at, int):
         index = pivot + at - 1 if at > 0 else pivot + at
@@ -1070,11 +1191,10 @@ def _observed_feature_value(
     distance = int(cast(str, at)[1:])
     index = offset + distance - 1 if distance > 0 else offset + distance
     if distance > 0:
-        right = toks[pivot:]
-        horizon = _forward_character_horizon(index, text, right)
+        horizon = cache.forward_horizon(toks, pivot, index, text)
         if index >= len(text) and not closed:
             raise _FeatureNotYet
-        completed_tokens = tuple(token for token in right if token["end"] <= index)
+        completed_tokens = cache.tokens_ending_by(toks, pivot, index)
         completion_horizons = tuple(
             _token_completion_horizon(item, text, locale, inventories, closed)
             for item in completed_tokens
@@ -1095,7 +1215,7 @@ def _observed_feature_value(
     if distance > 0:
         window = class_window(text, index, before=0, after=1)
         return _point_feature(window.after[0], predicate.feature), horizon, read_horizon
-    containing = next((token for token in toks if token["start"] <= index < token["end"]), None)
+    containing = cache.containing(toks, index)
     completion_horizon = None
     if containing is not None:
         completion_horizon = _token_completion_horizon(
@@ -1106,9 +1226,7 @@ def _observed_feature_value(
     window = class_window(text, index, before=0, after=1)
     tokens_read = 0
     if distance > 0:
-        tokens_read = min(
-            sum(1 for token in toks[pivot:] if token["start"] <= index), rule.lookahead
-        )
+        tokens_read = min(cache.count_starting_by(toks, pivot, index), rule.lookahead)
     horizon = completion_horizon if completion_horizon is not None else index + 1
     return _point_feature(window.after[0], predicate.feature), tokens_read, max(offset, horizon)
 
@@ -1562,30 +1680,55 @@ def _inventory_locality_horizon(
     return None if condition_horizon is None else max(surface_horizon, condition_horizon)
 
 
-def _inventory_anchor(toks: Sequence[Token], offset: int, lookahead: int) -> int:
+def _inventory_anchor(toks: Sequence[Token], pivot: int, offset: int, lookahead: int) -> int:
     """End of the furthest word a candidate's flat rules may inspect."""
     if lookahead <= 0:
         return offset
-    pivot = _token_index_after(toks, offset)
     read = toks[pivot : pivot + lookahead]
     return read[-1]["end"] if read else offset
+
+
+def _protected_types_by_offset(
+    protected: Sequence[ProtectedSpan], offsets: Sequence[int]
+) -> dict[int, tuple[str, ...]]:
+    """Return protected types strictly covering each candidate offset."""
+    starts = sorted(protected, key=lambda item: item["start"])
+    ends = sorted(protected, key=lambda item: item["end"])
+    active: dict[str, int] = {}
+    result: dict[int, tuple[str, ...]] = {}
+    start_index = 0
+    end_index = 0
+    for offset in sorted(set(offsets)):
+        while start_index < len(starts) and starts[start_index]["start"] < offset:
+            protected_type = starts[start_index]["type"]
+            active[protected_type] = active.get(protected_type, 0) + 1
+            start_index += 1
+        while end_index < len(ends) and ends[end_index]["end"] <= offset:
+            protected_type = ends[end_index]["type"]
+            remaining = active[protected_type] - 1
+            if remaining:
+                active[protected_type] = remaining
+            else:
+                del active[protected_type]
+            end_index += 1
+        result[offset] = tuple(sorted(active))
+    return result
 
 
 def _candidate_observed(
     owner: SentenceOverride,
     text: str,
     offset: int,
-    protected: Sequence[ProtectedSpan],
+    toks: Sequence[Token],
+    protected_types: tuple[str, ...],
     closed: bool,
     cache: _TokenFeatureCache,
+    inventory_claims: dict[int, dict[int, list[str]]],
 ) -> _ObservedResult:
-    combined = _combined_inventory(owner.inventories)
-    toks = tokens(text, owner.locale, inventory=combined, protected=protected)
-    covering = tuple(
-        sorted({item["type"] for item in protected if item["start"] < offset < item["end"]})
-    )
-    containing = next((token for token in toks if token["start"] < offset < token["end"]), None)
-    end = containing["end"] if containing is not None else _logical_end(toks, offset)
+    pivot = cache.index_after(toks, offset)
+    previous = toks[pivot - 1] if pivot else None
+    containing = previous if previous is not None and offset < previous["end"] else None
+    end = containing["end"] if containing is not None else cache.logical_end(toks, offset)
     word_inventories = tuple(
         inventory
         for inventory in owner.inventories
@@ -1634,7 +1777,7 @@ def _candidate_observed(
         offset,
         end,
         toks,
-        covering,
+        protected_types,
         owner.locale,
         owner.inventories,
         closed,
@@ -1649,7 +1792,7 @@ def _candidate_observed(
         decision["tokens_read"] = read
         return _ObservedResult(cast(BreakDecision, decision), None, read, horizon)
 
-    anchor = _inventory_anchor(toks, offset, owner.lookahead)
+    anchor = _inventory_anchor(toks, pivot, offset, owner.lookahead)
     locality_horizons = tuple(
         _inventory_locality_horizon(
             inventory,
@@ -1666,7 +1809,10 @@ def _candidate_observed(
     horizon = max((horizon, *(cast(int, item) for item in locality_horizons)))
 
     for inventory in owner.inventories:
-        rule_ids = _inventory_claims(inventory, text, owner.locale).get(offset)
+        key = id(inventory)
+        if key not in inventory_claims:
+            inventory_claims[key] = _inventory_claims(inventory, text, owner.locale)
+        rule_ids = inventory_claims[key].get(offset)
         if rule_ids:
             return _ObservedResult(
                 _decision(offset, end, "no-break", "exceptions", rule_ids[0], read),
@@ -1685,7 +1831,7 @@ def _candidate_observed(
             offset,
             end,
             toks,
-            covering,
+            protected_types,
             owner.locale,
             owner.inventories,
             closed,
@@ -1703,7 +1849,7 @@ def _candidate_observed(
             offset,
             end,
             toks,
-            covering,
+            protected_types,
             owner.locale,
             owner.inventories,
             closed,
@@ -1724,7 +1870,7 @@ def _candidate_observed(
         offset,
         end,
         toks,
-        covering,
+        protected_types,
         owner.locale,
         owner.inventories,
         closed,
@@ -1751,6 +1897,9 @@ def _decide_core(
     protected: Iterable[ProtectedSpan],
 ) -> list[BreakDecision]:
     protected_items = tuple(protected)
+    candidates = _raw_break_sentence_spans(text, locale)
+    if not candidates:
+        return []
     owner = SentenceOverride.__new__(SentenceOverride)
     owner.locale = locale
     owner.inventories = tuple(inventories)
@@ -1766,9 +1915,29 @@ def _decide_core(
         (*(item.lookahead for item in rule_layers), base.lookahead if base is not None else 0)
     )
     cache = _TokenFeatureCache(True)
+    toks = tokens(
+        text,
+        locale,
+        inventory=_combined_inventory(inventories),
+        protected=protected_items,
+    )
+    protected_types = _protected_types_by_offset(
+        protected_items, tuple(span["end"] for span in candidates)
+    )
+    inventory_claims: dict[int, dict[int, list[str]]] = {}
     result: list[BreakDecision] = []
-    for span in _raw_break_sentence_spans(text, locale):
-        observed = _candidate_observed(owner, text, span["end"], protected_items, True, cache)
+    for span in candidates:
+        offset = span["end"]
+        observed = _candidate_observed(
+            owner,
+            text,
+            offset,
+            toks,
+            protected_types[offset],
+            True,
+            cache,
+            inventory_claims,
+        )
         if observed.decision is None:
             raise AssertionError("closed candidate remained pending")
         result.append(observed.decision)
@@ -1874,12 +2043,17 @@ class IncrementalSentenceBreaker:
             inventory=combined,
             protected=protected,
         )
-        for span in _raw_break_sentence_spans(text, self._owner.locale):
+        candidates = _raw_break_sentence_spans(text, self._owner.locale)
+        protected_types = _protected_types_by_offset(
+            protected, tuple(span["end"] for span in candidates)
+        )
+        inventory_claims: dict[int, dict[int, list[str]]] = {}
+        for span in candidates:
             local_offset = span["end"]
             offset = segment_start + local_offset
             if offset in self._emitted:
                 continue
-            tokens_after = sum(1 for token in toks if token["start"] >= local_offset)
+            tokens_after = len(toks) - self._cache.index_after(toks, local_offset)
             if earlier_pending:
                 pending.append(
                     {"offset": offset, "tokens_after": tokens_after, "waiting_on": "order"}
@@ -1895,9 +2069,11 @@ class IncrementalSentenceBreaker:
                 self._owner,
                 text,
                 local_offset,
-                protected,
+                toks,
+                protected_types[local_offset],
                 closed,
                 self._cache,
+                inventory_claims,
             )
             if observed.decision is None:
                 pending.append(
