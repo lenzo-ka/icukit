@@ -492,6 +492,6 @@ def test_tokens_translate_icu_utf16_offsets_to_code_points():
     ],
 )
 def test_breaker_authored_regression(text, sentences, words):
-    breaker = Breaker("en_US")
+    breaker = Breaker("en_US", base="none")
     assert breaker.break_sentences(text) == sentences
     assert breaker.break_words(text) == words

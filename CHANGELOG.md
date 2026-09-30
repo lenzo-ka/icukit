@@ -4,9 +4,12 @@
 
 ### Added
 
-- Provisionally, under owner choices D2 and D3, the learned English sentence
-  rule base `en-tn@1` ships as an experimental, opt-in CC BY-SA 4.0 artifact;
-  `base="none"` remains the default. The ordered 200-rule artifact is derived
+- `CartletModelRef` and the named `en-tn-cart@1` sentence-break base add an
+  English cartlet model path. The shipped CC BY-SA 4.0 model is
+  digest- and runtime-identity-bound and uses a raising lazy feature vector for
+  incremental decisions. Cartlet 0.7 or later is now a required dependency.
+- The learned English sentence rule base `en-tn@1` ships as a CC BY-SA 4.0
+  artifact. The ordered 200-rule artifact is derived
   from the Google TN English corpus, carries full license, attribution, and
   measurement receipts, and loads only when its ICU, Unicode, and empty-
   inventory token-profile identity matches. Its frozen test-pool F1 of
@@ -38,8 +41,7 @@
   spans, exception inventories, per-candidate attribution, and lattice output.
   Rule artifacts declare and verify their ICU, Unicode, and explicitly
   versioned tokenizer-profile identity and run candidate- and decision-aware
-  authored witnesses when loaded. The default remains `base="none"`, so
-  existing ICU sentence output is unchanged.
+  authored witnesses when loaded.
 - Experimental `char-classes` and `shape-refinement` locale-material kinds add
   namespaced character classes and extended shape symbols at runtime. They are
   witness-checked, canonically digested, explicitly passed with `material=`, and
@@ -165,6 +167,15 @@
   plurals therefore retain complete surfaces and code-point capture offsets.
 
 ### Changed
+
+- **Behavior change:** English sentence output now uses `"en-tn-cart@1"` by
+  default across `Breaker` sentence spans (including its sentence text and
+  tokenization methods and the module-level helpers), `SentenceOverride`, and
+  `ik break` sentence output. This applies to language `en`, with any region or
+  script except the `POSIX` variant. Pass `base="none"` to either Python API or
+  `--base none` to the CLI for the former raw-ICU output. Every other locale
+  language still defaults to raw ICU. `AbbreviationSentenceBreaker` remains
+  the unchanged, separate lexicon-based alternative.
 
 - `detector_key` now returns five components. The fifth is the material content digest,
   or `None` for every reader built from ICU or curated data, so readers of one type from

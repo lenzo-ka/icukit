@@ -11,8 +11,10 @@ pip install icukit
 ```
 
 This pulls in [`icukit-pyicu`](https://github.com/lenzo-ka/icukit-pyicu), which
-bundles pre-built ICU libraries and PyICU. There are no system dependencies to
-install on either **macOS** or **Linux** — the wheels are self-contained.
+bundles pre-built ICU libraries and PyICU, and `cartlet>=0.7`. Cartlet 0.7.0
+must be available from the owner's PyPI release. There are no system
+dependencies to install on either **macOS** or **Linux** — the wheels are
+self-contained.
 
 See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/install.md) for details, including how to use a system PyICU instead.
 
@@ -25,6 +27,19 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 - **Character Names**: Formal names, name aliases of every type (corrections, control names, abbreviations), and extended names of every code point, and lookup from a name or alias to its character
 - **Text Segmentation**: Break text into words, sentences, lines, or grapheme clusters
 - **Unicode Regex**: Full Unicode-aware regular expressions with script and property support
+
+### Sentence breaking
+
+For English locales, `Breaker`, `SentenceOverride`, and `ik break sentences`
+(as well as `ik break tokenize`) use the learned `en-tn-cart@1` model by
+default, including locales with a region or script. The `POSIX` variant is
+excluded because its ICU word tokens differ from the model profile. Pass
+`base="none"` to either Python API or `--base none` to the CLI for raw ICU
+sentence boundaries. Other locale languages keep raw ICU as their default.
+`AbbreviationSentenceBreaker` remains an explicit, separate lexicon-based
+alternative. The model is derived from CC BY-SA 4.0 data; its measured results
+are agreement with the corpus splitter on synthetic text, not running-text
+accuracy.
 
 ### Recognition
 
@@ -201,9 +216,9 @@ The CLDR data bundled in `icukit/data/cldr_symbols` is Unicode, Inc.'s, under th
 
 The UCD data bundled in `icukit/data/ucd_name_aliases` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/ucd_name_aliases/LICENSE).
 
-The experimental, opt-in `en-tn@1` sentence rules in
-`icukit/data/break_rules/en` are derived from the Google Text Normalization
-English corpus and are distributed under
+The `en-tn@1` sentence rules and `en-tn-cart@1` cartlet model in
+`icukit/data/break_rules/en` are derived from the Google Text
+Normalization English corpus and are distributed under
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); their bundled
 `NOTICE` gives attribution and describes the modifications. Validation witnesses
 are synthesized from each rule's predicates, which include lexical values mined
