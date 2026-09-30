@@ -3979,8 +3979,7 @@ def _measure_locale_fingerprint(name: str) -> tuple:
     plain = icu.NumberFormatter.withLocale(locale)
     samples = _plural_samples(name)
     renderings = tuple(
-        (number_format.format(amount), str(plain.formatDouble(amount)))
-        for amount in samples
+        (number_format.format(amount), str(plain.formatDouble(amount))) for amount in samples
     )
     return (_unit_data_owner(name), samples, renderings, _measure_symbol_unit_probes(name))
 
