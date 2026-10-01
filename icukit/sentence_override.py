@@ -36,6 +36,7 @@ from .breaker import BreakSpan, _raw_break_sentence_spans, break_word_spans
 from .classes import ClassPoint, char_classes, class_window
 from .errors import BreakRuleLoadError, LateProtectedSpan, OverlappingProtectedSpans, RuleRefusal
 from .exceptions import (
+    ExceptionContextBounds,
     ExceptionPolicy,
     LoadedExceptionInventory,
     _boundary_claims,
@@ -72,6 +73,9 @@ Effect = Literal["break", "no-break", "ambiguous"]
 Layer = Literal["icu", "token", "before", "exceptions", "rules", "model", "after"]
 _STREAM_WINDOW = 4 * 1024
 _WHOLE_WINDOW = 64 * 1024
+_WHITE_SPACE_SINGLES = frozenset(
+    {0x0020, 0x0085, 0x00A0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000}
+)
 _OPS = {"in", "not_in", "prefix", "le", "ge"}
 _FEATURES = "icukit.features@1"
 _NAMED_RULE_BASES = {
@@ -894,6 +898,85 @@ class _FeatureNotYet(Exception):
     """A prefix does not yet make a requested feature immutable."""
 
 
+@dataclass(frozen=True)
+class _InventoryLocality:
+    """Locale-filtered inventory rules and their once-computed context bounds."""
+
+    source: LoadedExceptionInventory
+    local: LoadedExceptionInventory
+    bounds: ExceptionContextBounds
+
+
+@dataclass(frozen=True)
+class _TextLocalityIndex:
+    """Per-window constant-time whitespace and logarithmic ICU-word lookup.
+
+    The evaluator's tokens are the raw ICU nonwhitespace spans when no word
+    inventory or protected unit can merge them, so that existing tokenization
+    is indexed directly. In the merged case, the raw ICU spans are materialized
+    once for the window rather than once for every sentence candidate.
+    """
+
+    next_whitespace: tuple[int, ...]
+    whitespace_run_end: tuple[int, ...]
+    word_starts: tuple[int, ...]
+    word_ends: tuple[int, ...]
+
+    @classmethod
+    def build(
+        cls,
+        text: str,
+        toks: Sequence[Token],
+        locale: str,
+        *,
+        tokens_are_icu_words: bool,
+        need_words: bool,
+    ) -> _TextLocalityIndex:
+        next_whitespace = [-1] * (len(text) + 1)
+        whitespace_run_end = [-1] * (len(text) + 1)
+        following_whitespace = -1
+        following_nonwhitespace = len(text)
+        for index in range(len(text) - 1, -1, -1):
+            if _is_white_space(text[index]):
+                following_whitespace = index
+                whitespace_run_end[index] = following_nonwhitespace
+            else:
+                following_nonwhitespace = index
+            next_whitespace[index] = following_whitespace
+
+        word_starts: tuple[int, ...] = ()
+        word_ends: tuple[int, ...] = ()
+        if need_words:
+            if tokens_are_icu_words:
+                word_starts = tuple(token["start"] for token in toks)
+                word_ends = tuple(token["end"] for token in toks)
+            else:
+                spans = break_word_spans(text, locale)
+                word_starts = tuple(span["start"] for span in spans)
+                word_ends = tuple(span["end"] for span in spans)
+        return cls(
+            tuple(next_whitespace),
+            tuple(whitespace_run_end),
+            word_starts,
+            word_ends,
+        )
+
+    def whitespace_horizon(self, end: int) -> int | None:
+        if not 0 <= end < len(self.next_whitespace):
+            return None
+        terminator = self.next_whitespace[end]
+        return None if terminator < 0 else terminator + 1
+
+    def following_nonwhitespace(self, whitespace: int) -> int:
+        return self.whitespace_run_end[whitespace]
+
+    def containing_word_end(self, offset: int) -> int | None:
+        position = bisect_right(self.word_starts, offset) - 1
+        if position >= 0 and offset < self.word_ends[position]:
+            return self.word_ends[position]
+        return None
+
+
 class _TokenFeatureCache:
     def __init__(self, enabled: bool) -> None:
         self.enabled = enabled
@@ -977,18 +1060,19 @@ class _TokenFeatureCache:
         offset: int,
         text: str,
         locale: str,
-        inventories: Sequence[LoadedExceptionInventory],
+        localities: Sequence[_InventoryLocality],
+        locality_index: _TextLocalityIndex | None,
         closed: bool,
     ) -> int | None:
         self._bind(toks)
         run = toks[index]["run"]
         count = bisect_right(self._run_ends[run], offset)
-        key = (run, locale, tuple(id(item) for item in inventories), closed)
+        key = (run, locale, tuple(id(item.source) for item in localities), closed)
         prefix = self._run_completion_horizons.setdefault(key, [])
         run_tokens = self._run_tokens[run]
         while len(prefix) < count:
             horizon = _token_completion_horizon(
-                run_tokens[len(prefix)], text, locale, inventories, closed
+                run_tokens[len(prefix)], text, localities, locality_index, closed
             )
             if prefix and prefix[-1] is None:
                 horizon = None
@@ -1103,7 +1187,15 @@ class _TokenFeatureCache:
 
 
 def _is_white_space(char: str) -> bool:
-    return icu.Char.hasBinaryProperty(ord(char), icu.UProperty.WHITE_SPACE)
+    codepoint = ord(char)
+    # Unicode White_Space is a stable binary property. Python's isspace()
+    # contains the same set plus U+001C..U+001F, so spell the property out to
+    # keep ICU-identical semantics without a Python-to-ICU call per character.
+    return (
+        0x0009 <= codepoint <= 0x000D
+        or codepoint in _WHITE_SPACE_SINGLES
+        or 0x2000 <= codepoint <= 0x200A
+    )
 
 
 def _read_edge_stable(end: int, text: str, closed: bool) -> bool:
@@ -1155,8 +1247,8 @@ def _extent_complete(
 def _token_completion_horizon(
     token: Token,
     text: str,
-    locale: str,
-    inventories: Sequence[LoadedExceptionInventory],
+    localities: Sequence[_InventoryLocality],
+    locality_index: _TextLocalityIndex | None,
     closed: bool,
 ) -> int | None:
     if not _extent_complete(
@@ -1168,14 +1260,13 @@ def _token_completion_horizon(
         return None
     horizons = tuple(
         _inventory_locality_horizon(
-            inventory,
+            locality,
             text,
             token["start"],
-            locale,
             closed,
-            levels=frozenset({"word"}),
+            locality_index,
         )
-        for inventory in inventories
+        for locality in localities
     )
     if any(item is None for item in horizons):
         return None
@@ -1199,9 +1290,10 @@ def _observed_feature_value(
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
     locale: str,
-    inventories: Sequence[LoadedExceptionInventory],
+    localities: Sequence[_InventoryLocality],
     closed: bool,
     cache: _TokenFeatureCache,
+    locality_index: _TextLocalityIndex | None = None,
 ) -> tuple[object, int, int]:
     """Return value, tokens read, and exclusive code-point read horizon."""
     at = predicate.at
@@ -1218,7 +1310,8 @@ def _observed_feature_value(
             offset,
             text,
             locale,
-            inventories,
+            localities,
+            locality_index,
             closed,
         )
         if completion_horizon is None:
@@ -1261,7 +1354,9 @@ def _observed_feature_value(
                 len(text),
             )
         token = toks[index]
-        completion_horizon = _token_completion_horizon(token, text, locale, inventories, closed)
+        completion_horizon = _token_completion_horizon(
+            token, text, localities, locality_index, closed
+        )
         if completion_horizon is None:
             raise _FeatureNotYet
         return (
@@ -1277,7 +1372,7 @@ def _observed_feature_value(
             raise _FeatureNotYet
         completed_tokens = cache.tokens_ending_by(toks, pivot, index)
         completion_horizons = tuple(
-            _token_completion_horizon(item, text, locale, inventories, closed)
+            _token_completion_horizon(item, text, localities, locality_index, closed)
             for item in completed_tokens
         )
         if any(item is None for item in completion_horizons):
@@ -1300,7 +1395,7 @@ def _observed_feature_value(
     completion_horizon = None
     if containing is not None:
         completion_horizon = _token_completion_horizon(
-            containing, text, locale, inventories, closed
+            containing, text, localities, locality_index, closed
         )
         if completion_horizon is None:
             raise _FeatureNotYet
@@ -1337,9 +1432,10 @@ def _match_observed_rule(
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
     locale: str,
-    inventories: Sequence[LoadedExceptionInventory],
+    localities: Sequence[_InventoryLocality],
     closed: bool,
     cache: _TokenFeatureCache,
+    locality_index: _TextLocalityIndex | None = None,
 ) -> tuple[bool | None, int, int]:
     """Return match, token reach, and read horizon; None means not yet decidable."""
     read = 0
@@ -1354,9 +1450,10 @@ def _match_observed_rule(
                 toks,
                 protected_types,
                 locale,
-                inventories,
+                localities,
                 closed,
                 cache,
+                locality_index,
             )
         except _FeatureNotYet:
             # Predicate order is semantic.  An unavailable earlier feature
@@ -1381,7 +1478,8 @@ class _CartletFeatureVector(Sequence[object]):
         toks: Sequence[Token],
         protected_types: tuple[str, ...],
         locale: str,
-        inventories: Sequence[LoadedExceptionInventory],
+        localities: Sequence[_InventoryLocality],
+        locality_index: _TextLocalityIndex | None,
         closed: bool,
         cache: _TokenFeatureCache,
     ) -> None:
@@ -1391,7 +1489,8 @@ class _CartletFeatureVector(Sequence[object]):
         self.toks = toks
         self.protected_types = protected_types
         self.locale = locale
-        self.inventories = inventories
+        self.localities = localities
+        self.locality_index = locality_index
         self.closed = closed
         self.cache = cache
         self.tokens_read = 0
@@ -1416,9 +1515,10 @@ class _CartletFeatureVector(Sequence[object]):
             self.toks,
             self.protected_types,
             self.locale,
-            self.inventories,
+            self.localities,
             self.closed,
             self.cache,
+            self.locality_index,
         )
         self.tokens_read = max(self.tokens_read, reached)
         self.horizon = max(self.horizon, horizon)
@@ -1440,7 +1540,8 @@ def _observed_model_decision(
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
     locale: str,
-    inventories: Sequence[LoadedExceptionInventory],
+    localities: Sequence[_InventoryLocality],
+    locality_index: _TextLocalityIndex | None,
     closed: bool,
     cache: _TokenFeatureCache,
 ) -> _ObservedResult:
@@ -1451,7 +1552,8 @@ def _observed_model_decision(
         toks,
         protected_types,
         locale,
-        inventories,
+        localities,
+        locality_index,
         closed,
         cache,
     )
@@ -1518,7 +1620,8 @@ def _observed_rules_decision(
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
     locale: str,
-    inventories: Sequence[LoadedExceptionInventory],
+    localities: Sequence[_InventoryLocality],
+    locality_index: _TextLocalityIndex | None,
     closed: bool,
     cache: _TokenFeatureCache,
 ) -> _ObservedResult:
@@ -1533,9 +1636,10 @@ def _observed_rules_decision(
                 toks,
                 protected_types,
                 locale,
-                inventories,
+                localities,
                 closed,
                 cache,
+                locality_index,
             )
             read = max(read, reached)
             horizon = max(horizon, rule_horizon)
@@ -1554,6 +1658,13 @@ def _run_witnesses(
     inventories: Sequence[LoadedExceptionInventory],
 ) -> list[RuleRefusal]:
     errors: list[RuleRefusal] = []
+    combined_inventory = _combined_inventory(inventories, levels=frozenset({"word"}))
+    word_localities = tuple(
+        locality
+        for inventory in inventories
+        if (locality := _prepare_inventory_locality(inventory, locale, frozenset({"word"})))
+        is not None
+    )
     for rule, raw in zip(rule_set._rules, raw_rules, strict=True):
         witnesses = cast(dict[str, list[str | dict[str, object]]], raw["witnesses"])
         for kind, should_match in (("match", True), ("no_match", False)):
@@ -1568,7 +1679,6 @@ def _run_witnesses(
                     "ambiguous": ("break", "no-break"),
                 }
                 protected_items = tuple(cast(Iterable[ProtectedSpan], protected))
-                combined_inventory = _combined_inventory(inventories, levels=frozenset({"word"}))
                 toks = tokens(text, locale, inventory=combined_inventory, protected=protected_items)
                 decisions = []
                 for span in _raw_break_sentence_spans(text, locale):
@@ -1597,7 +1707,8 @@ def _run_witnesses(
                         toks,
                         covering,
                         locale,
-                        inventories,
+                        word_localities,
+                        None,
                         True,
                         _TokenFeatureCache(True),
                     )
@@ -1634,19 +1745,25 @@ def _inventory_claims(
     text: str,
     locale: str,
     base: list[BreakSpan] | None = None,
+    *,
+    selected: bool = False,
 ) -> dict[int, list[str]]:
     base = base if base is not None else _raw_break_sentence_spans(text, locale)
-    selected = [
-        rule
-        for rule in inventory._rules
-        if "sentence" in rule.levels
-        and rule.effect == "suppress"
-        and _locale_applies(rule.locale, locale)
-    ]
+    rules = (
+        inventory._rules
+        if selected
+        else tuple(
+            rule
+            for rule in inventory._rules
+            if "sentence" in rule.levels
+            and rule.effect == "suppress"
+            and _locale_applies(rule.locale, locale)
+        )
+    )
     return _sentence_boundary_claims(
         text,
         base,
-        selected,
+        rules,
         locale,
         ExceptionPolicy(),
         _mandatory_info_supplier(text, locale),
@@ -1713,25 +1830,33 @@ def _inventory_rules(
     )
 
 
-def _whitespace_terminated_horizon(text: str, end: int) -> int | None:
-    """Return the exclusive end of the first whitespace terminator after ``end``."""
-    if end > len(text):
+def _prepare_inventory_locality(
+    inventory: LoadedExceptionInventory,
+    locale: str,
+    levels: frozenset[str],
+) -> _InventoryLocality | None:
+    rules = _inventory_rules(inventory, locale, levels)
+    if not rules:
         return None
-    terminator = next(
-        (index for index in range(end, len(text)) if _is_white_space(text[index])),
-        None,
-    )
-    return None if terminator is None else terminator + 1
+    local = LoadedExceptionInventory(inventory.corpus, inventory.named_lists, cast(tuple, rules))
+    return _InventoryLocality(inventory, local, local.context_bounds)
+
+
+def _prepare_inventory_localities(
+    inventories: Sequence[LoadedExceptionInventory],
+    locale: str,
+    levels: frozenset[str],
+) -> tuple[_InventoryLocality, ...]:
+    prepared = (_prepare_inventory_locality(item, locale, levels) for item in inventories)
+    return tuple(item for item in prepared if item is not None)
 
 
 def _inventory_locality_horizon(
-    inventory: LoadedExceptionInventory,
+    locality: _InventoryLocality,
     text: str,
     anchor: int,
-    locale: str,
     closed: bool,
-    *,
-    levels: frozenset[str] = frozenset({"word", "sentence"}),
+    index: _TextLocalityIndex | None,
 ) -> int | None:
     """Return the real inventory matcher's exclusive right read horizon.
 
@@ -1745,43 +1870,31 @@ def _inventory_locality_horizon(
     """
     if closed:
         return len(text)
-    rules = _inventory_rules(inventory, locale, levels)
-    if not rules:
-        return anchor
-    local = LoadedExceptionInventory(inventory.corpus, inventory.named_lists, rules)
-    bounds = local.context_bounds
+    if index is None:
+        raise AssertionError("open inventory locality requires a per-text index")
+    bounds = locality.bounds
     surface_end = anchor + bounds.max_surface_length
-    surface_horizon = _whitespace_terminated_horizon(text, surface_end)
+    surface_horizon = index.whitespace_horizon(surface_end)
     if surface_horizon is None:
         return None
 
     reach = bounds.right_from_match_start
     if reach is not None:
         target = anchor + reach
-        horizon = _whitespace_terminated_horizon(text, target)
+        horizon = index.whitespace_horizon(target)
         return None if horizon is None else max(surface_horizon, horizon)
 
-    whitespace = next(
-        (index for index in range(surface_end, len(text)) if _is_white_space(text[index])),
-        None,
-    )
-    if whitespace is None:
+    if not 0 <= surface_end < len(index.next_whitespace):
         return None
-    following = whitespace
-    while following < len(text) and _is_white_space(text[following]):
-        following += 1
+    whitespace = index.next_whitespace[surface_end]
+    if whitespace < 0:
+        return None
+    following = index.following_nonwhitespace(whitespace)
     if following == len(text):
         return None
-    word = next(
-        (
-            span
-            for span in break_word_spans(text, locale)
-            if span["start"] <= following < span["end"]
-        ),
-        None,
-    )
-    end = following + 1 if word is None else word["end"]
-    condition_horizon = _whitespace_terminated_horizon(text, end)
+    word_end = index.containing_word_end(following)
+    end = following + 1 if word_end is None else word_end
+    condition_horizon = index.whitespace_horizon(end)
     return None if condition_horizon is None else max(surface_horizon, condition_horizon)
 
 
@@ -1822,13 +1935,13 @@ def _protected_types_by_offset(
 
 def _candidate_observed(
     owner: SentenceOverride,
-    word_inventories: Sequence[LoadedExceptionInventory],
     text: str,
     offset: int,
     toks: Sequence[Token],
     protected_types: tuple[str, ...],
     closed: bool,
     cache: _TokenFeatureCache,
+    locality_index: _TextLocalityIndex | None,
     inventory_claims: dict[int, dict[int, list[str]]],
     candidates: list[BreakSpan],
 ) -> _ObservedResult:
@@ -1838,12 +1951,12 @@ def _candidate_observed(
     end = containing["end"] if containing is not None else cache.logical_end(toks, offset)
     if containing is not None:
         completion_horizon = containing["end"]
-        if word_inventories and "protected" not in containing:
+        if owner._word_localities and "protected" not in containing:
             observed_horizon = _token_completion_horizon(
                 containing,
                 text,
-                owner.locale,
-                word_inventories,
+                owner._word_localities,
+                locality_index,
                 closed,
             )
             if observed_horizon is None:
@@ -1859,14 +1972,13 @@ def _candidate_observed(
     read = 0
     word_locality_horizons = tuple(
         _inventory_locality_horizon(
-            inventory,
+            locality,
             text,
             offset,
-            owner.locale,
             closed,
-            levels=frozenset({"word"}),
+            locality_index,
         )
-        for inventory in word_inventories
+        for locality in owner._word_localities
     )
     if any(item is None for item in word_locality_horizons):
         return _ObservedResult(None, "exceptions", read, offset)
@@ -1881,7 +1993,8 @@ def _candidate_observed(
         toks,
         protected_types,
         owner.locale,
-        owner.inventories,
+        owner._word_localities,
+        locality_index,
         closed,
         cache,
     )
@@ -1897,23 +2010,24 @@ def _candidate_observed(
     anchor = _inventory_anchor(toks, pivot, offset, owner.lookahead)
     locality_horizons = tuple(
         _inventory_locality_horizon(
-            inventory,
+            locality,
             text,
             anchor,
-            owner.locale,
             closed,
-            levels=frozenset({"sentence"}),
+            locality_index,
         )
-        for inventory in owner.inventories
+        for locality in owner._sentence_localities
     )
     if any(item is None for item in locality_horizons):
         return _ObservedResult(None, "exceptions", read, horizon)
     horizon = max((horizon, *(cast(int, item) for item in locality_horizons)))
 
-    for inventory in owner.inventories:
-        key = id(inventory)
+    for locality in owner._sentence_localities:
+        key = id(locality.source)
         if key not in inventory_claims:
-            inventory_claims[key] = _inventory_claims(inventory, text, owner.locale, candidates)
+            inventory_claims[key] = _inventory_claims(
+                locality.local, text, owner.locale, candidates, selected=True
+            )
         rule_ids = inventory_claims[key].get(offset)
         if rule_ids:
             return _ObservedResult(
@@ -1935,7 +2049,8 @@ def _candidate_observed(
             toks,
             protected_types,
             owner.locale,
-            owner.inventories,
+            owner._word_localities,
+            locality_index,
             closed,
             cache,
         )
@@ -1953,7 +2068,8 @@ def _candidate_observed(
             toks,
             protected_types,
             owner.locale,
-            owner.inventories,
+            owner._word_localities,
+            locality_index,
             closed,
             cache,
         )
@@ -1974,7 +2090,8 @@ def _candidate_observed(
         toks,
         protected_types,
         owner.locale,
-        owner.inventories,
+        owner._word_localities,
+        locality_index,
         closed,
         cache,
     )
@@ -2078,20 +2195,7 @@ class IncrementalSentenceBreaker:
 
     def _inventory_left_context(self) -> int | None:
         """Return finite character lookbehind, or None for an unbounded rule."""
-        reach = 0
-        for inventory in self._owner.inventories:
-            rules = _inventory_rules(inventory, self._owner.locale)
-            if not rules:
-                continue
-            bounds = LoadedExceptionInventory(
-                inventory.corpus,
-                inventory.named_lists,
-                cast(tuple, rules),
-            ).context_bounds
-            if bounds.left is None:
-                return None
-            reach = max(reach, bounds.max_surface_length + bounds.left)
-        return reach
+        return self._owner._inventory_left_reach
 
     def _compact(
         self,
@@ -2198,7 +2302,7 @@ class IncrementalSentenceBreaker:
         pending: list[PendingCandidate] = []
         earlier_pending = False
         protected = self._local_protected()
-        combined = _combined_inventory(self._owner.inventories, levels=frozenset({"word"}))
+        combined = self._owner._word_inventory
         plain_closed = (
             closed
             and self._owner.base is None
@@ -2222,11 +2326,16 @@ class IncrementalSentenceBreaker:
             protected, tuple(span["end"] for span in candidates)
         )
         inventory_claims: dict[int, dict[int, list[str]]] = {}
-        word_inventories = tuple(
-            inventory
-            for inventory in self._owner.inventories
-            if _inventory_rules(inventory, self._owner.locale, frozenset({"word"}))
-        )
+        localities = (*self._owner._word_localities, *self._owner._sentence_localities)
+        locality_index = None
+        if not closed and localities:
+            locality_index = _TextLocalityIndex.build(
+                text,
+                toks,
+                self._owner.locale,
+                tokens_are_icu_words=combined is None and not protected,
+                need_words=any(item.bounds.right_from_match_start is None for item in localities),
+            )
         plain_logical_end: int | None = None
         for span in candidates:
             local_offset = span["end"]
@@ -2259,13 +2368,13 @@ class IncrementalSentenceBreaker:
             else:
                 observed = _candidate_observed(
                     self._owner,
-                    word_inventories,
                     text,
                     local_offset,
                     toks,
                     protected_types[local_offset],
                     closed,
                     self._cache,
+                    locality_index,
                     inventory_claims,
                     candidates,
                 )
@@ -2521,6 +2630,25 @@ class SentenceOverride:
             if shipped is not None:
                 selected_inventories = (shipped, *selected_inventories)
         self.inventories = selected_inventories
+        self._word_inventory = _combined_inventory(self.inventories, levels=frozenset({"word"}))
+        self._word_localities = _prepare_inventory_localities(
+            self.inventories, locale, frozenset({"word"})
+        )
+        self._sentence_localities = _prepare_inventory_localities(
+            self.inventories, locale, frozenset({"sentence"})
+        )
+        all_localities = _prepare_inventory_localities(
+            self.inventories, locale, frozenset({"word", "sentence"})
+        )
+        self._inventory_left_reach: int | None = 0
+        for locality in all_localities:
+            if locality.bounds.left is None:
+                self._inventory_left_reach = None
+                break
+            self._inventory_left_reach = max(
+                self._inventory_left_reach,
+                locality.bounds.max_surface_length + locality.bounds.left,
+            )
         expected = break_rule_identity(locale, inventories=self.inventories)
         if base == "none":
             loaded_base = None

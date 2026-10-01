@@ -63,6 +63,45 @@ def test_retained_window_and_reprocessed_work_scale_linearly(monkeypatch):
     assert large_maximum <= sentence_override_module._STREAM_WINDOW
 
 
+def test_default_whole_text_inventory_work_scales_with_text(monkeypatch):
+    override = SentenceOverride("en")
+    original_build = sentence_override_module._TextLocalityIndex.build.__func__
+    original_rules = sentence_override_module._inventory_rules
+    original_words = sentence_override_module.break_word_spans
+    work = {"indexed": 0, "rule_filters": 0, "word_tokenization": 0}
+
+    def counted_build(cls, text, *args, **kwargs):
+        work["indexed"] += len(text)
+        return original_build(cls, text, *args, **kwargs)
+
+    def counted_rules(*args, **kwargs):
+        work["rule_filters"] += 1
+        return original_rules(*args, **kwargs)
+
+    def counted_words(text, *args, **kwargs):
+        work["word_tokenization"] += len(text)
+        return original_words(text, *args, **kwargs)
+
+    monkeypatch.setattr(
+        sentence_override_module._TextLocalityIndex, "build", classmethod(counted_build)
+    )
+    monkeypatch.setattr(sentence_override_module, "_inventory_rules", counted_rules)
+    monkeypatch.setattr(sentence_override_module, "break_word_spans", counted_words)
+
+    def measure(size):
+        work.update(indexed=0, rule_filters=0, word_tokenization=0)
+        text = ("Alpha beta. Gamma delta! " * (size // 25 + 1))[:size]
+        override.decide(text)
+        return dict(work)
+
+    small = measure(64 * 1024 + 1)
+    large = measure(256 * 1024 + 1)
+
+    assert large["indexed"] <= small["indexed"] * 5
+    assert small["rule_filters"] == large["rule_filters"] == 0
+    assert small["word_tokenization"] == large["word_tokenization"] == 0
+
+
 def test_unbroken_run_is_the_documented_safe_retention_fallback():
     text = "a" * (sentence_override_module._STREAM_WINDOW * 2)
     override = SentenceOverride(base="none")
