@@ -322,14 +322,12 @@ def test_compile_counters_and_implicit_reuse():
     assert info["detect_hits"] == 3
 
 
-def test_cache_opt_out_bypasses_implicit_compilation():
+def test_cache_opt_out_bypasses_implicit_compilation(monkeypatch):
+    monkeypatch.setattr(detector_cache, "_enabled_override", None)
     gang = _small_gang()
     detector_cache.configure(enabled=False)
-    try:
-        assert gang.detect("at 5") == detect("at 5", gang.detectors)
-        assert gang._compiled is None
-    finally:
-        detector_cache.configure(enabled=True)
+    assert gang.detect("at 5") == detect("at 5", gang.detectors)
+    assert gang._compiled is None
 
 
 def test_scan_plan_is_looked_up_once_per_lane(monkeypatch):
