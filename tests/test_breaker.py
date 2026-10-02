@@ -162,26 +162,29 @@ class TestBreakerClass:
 
     def test_english_default_loads_shipped_exception_list_and_none_stays_raw(self):
         text = "He met Mr. Smith today. He left."
+        expected = ["He met Mr. Smith today. ", "He left."]
 
-        assert Breaker("en").break_sentences(text) == [
-            "He met Mr. Smith today. ",
-            "He left.",
-        ]
-        assert Breaker("en", base="en-tn-cart@1").break_sentences(text) == [
-            "He met Mr. Smith today. ",
-            "He left.",
-        ]
+        assert Breaker("en").break_sentences(text) == expected
+        assert [item["text"] for item in break_sentence_spans(text, "en")] == expected
+        assert [item["text"] for item in SentenceOverride("en").spans(text)] == expected
+        assert Breaker("en", base="en-tn-cart@1").break_sentences(text) == expected
         assert Breaker("en", base="none").break_sentences(text) == [
             "He met Mr. ",
             "Smith today. ",
             "He left.",
         ]
-        first = SentenceOverride("en").decide(text)[0]
+        default = SentenceOverride("en")
+        first = default.decide(text)[0]
+        assert default.base is None
         assert (first["decision"], first["layer"], first["id"]) == (
             "no-break",
             "exceptions",
             "abbreviation:Mr.",
         )
+
+        raw = SentenceOverride("en", base="none")
+        assert raw.inventories == ()
+        assert all(item["layer"] != "exceptions" for item in raw.decide(text))
 
     def test_posix_variant_defaults_and_explicit_learned_bases(self):
         text = "The U.S. Supreme Court ruled. Markets moved."
@@ -281,23 +284,30 @@ class TestBreakerCLI:
         assert "Hello" in out
         assert "World" in out
 
-    def test_sentence_base_none_preserves_old_cli_output_and_default_uses_model(self):
+    def test_sentence_base_none_is_raw_and_default_uses_shipped_list(self):
         text = "The U.S. Supreme Court ruled. Markets moved."
         code, raw, err = run_cli("break", "sentences", "--base", "none", "--json", "-t", text)
         assert (code, err) == (0, "")
         assert raw == '[\n  "The U.S.",\n  "Supreme Court ruled.",\n  "Markets moved."\n]\n'
 
-        code, learned, err = run_cli("break", "sentences", "--json", "-t", text)
+        code, default, err = run_cli("break", "sentences", "--json", "-t", text)
         assert (code, err) == (0, "")
-        assert learned == '[\n  "The U.S. Supreme Court ruled.",\n  "Markets moved."\n]\n'
+        assert default == '[\n  "The U.S. Supreme Court ruled.",\n  "Markets moved."\n]\n'
 
         code, raw_tokens, err = run_cli("break", "tokenize", "--base", "none", "--json", "-t", text)
         assert (code, err) == (0, "")
         assert len(json.loads(raw_tokens)) == 3
 
-        code, learned_tokens, err = run_cli("break", "tokenize", "--json", "-t", text)
+        code, default_tokens, err = run_cli("break", "tokenize", "--json", "-t", text)
         assert (code, err) == (0, "")
-        assert len(json.loads(learned_tokens)) == 2
+        assert len(json.loads(default_tokens)) == 2
+
+    def test_sentence_base_help_names_default_and_opt_in_bases(self):
+        code, out, err = run_cli("break", "sentences", "--help")
+        assert (code, err) == (0, "")
+        help_text = " ".join(out.split())
+        assert "ICU + token integrity + shipped list" in help_text
+        assert "en-tn@1 and en-tn-cart@1 are opt-in" in help_text
 
     def test_words(self):
         """Test words subcommand."""

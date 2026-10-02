@@ -3,11 +3,12 @@ Text segmentation using ICU BreakIterator.
 
 This module provides text segmentation capabilities for breaking text into
 sentences, words, lines, or grapheme clusters. ICU supplies every level's
-boundaries; English sentence candidates use the learned model by default.
+boundaries; the English sentence default also applies token integrity and the
+shipped abbreviation list.
 Structured span offsets are Python code-point indices into the source text.
 
 Key Features:
-    * Locale-aware sentence segmentation with a learned English default
+    * Locale-aware sentence segmentation with an English abbreviation list
     * Word tokenization with optional punctuation filtering
     * Line break detection
     * Grapheme cluster iteration (user-perceived characters)
@@ -230,9 +231,11 @@ class Breaker:
 
     A versatile text segmentation tool that can break text into sentences,
     words, lines, or grapheme clusters based on locale-specific rules. English
-    sentence breaking uses shipped abbreviation suppressions followed by the
-    learned model by default; ``base="none"`` keeps raw ICU sentence boundaries
-    without the list. Other levels and non-English defaults remain ICU behavior.
+    sentence breaking applies token integrity and shipped abbreviation
+    suppressions to ICU candidates by default; ``base="none"`` keeps raw ICU
+    sentence boundaries without the list. The learned ``"en-tn@1"`` rules and
+    ``"en-tn-cart@1"`` model are opt-in. Other levels and non-English defaults
+    remain ICU behavior.
 
     Example:
         >>> breaker = Breaker('en')
@@ -252,9 +255,10 @@ class Breaker:
 
         Args:
             locale: Locale code for language-specific rules (e.g., 'en', 'en_US', 'ja').
-            base: Sentence base only. ``None`` selects the locale default,
-                ``"none"`` selects raw ICU, and ``"en-tn@1"`` or
-                ``"en-tn-cart@1"`` selects a learned English base.
+            base: Sentence base only. ``None`` selects ICU plus token integrity
+                and the shipped list for English except POSIX, and raw ICU
+                otherwise. ``"none"`` selects raw ICU without the list;
+                ``"en-tn@1"`` and ``"en-tn-cart@1"`` are opt-in English bases.
 
         Raises:
             BreakerError: If the locale is invalid.
@@ -302,7 +306,11 @@ class Breaker:
         return list(self.iter_word_spans(text, skip_whitespace, skip_punctuation))
 
     def iter_sentence_spans(self, text: str) -> Iterator[BreakSpan]:
-        """Yield sentence spans from the selected locale-default or named base."""
+        """Yield sentence spans from the locale default or selected named base.
+
+        The English default is ICU plus token integrity and the shipped list;
+        non-English and POSIX defaults are raw ICU.
+        """
         if self.base == "none" and self._locale_obj.getKeywordValue("ss") is not None:
             yield from _raw_break_sentence_spans(text, self.locale)
             return
@@ -651,8 +659,9 @@ def break_sentences(
         text: The text to segment.
         locale: Locale code for language-specific rules.
         skip_empty: If True, empty sentences are excluded.
-        base: Sentence base; ``None`` selects the locale default and ``"none"``
-            selects raw ICU.
+        base: Sentence base; ``None`` selects ICU plus token integrity and the
+            shipped list for English except POSIX, and raw ICU otherwise.
+            ``"none"`` selects raw ICU without the list.
 
     Returns:
         List of sentence strings.
@@ -736,7 +745,11 @@ def break_sentence_spans(
     *,
     base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None = None,
 ) -> list[BreakSpan]:
-    """Return sentence spans from the locale-default or selected base."""
+    """Return sentence spans from the locale default or selected base.
+
+    The English default is ICU plus token integrity and the shipped list;
+    non-English and POSIX defaults are raw ICU.
+    """
     return Breaker(locale, base=base).break_sentence_spans(text)
 
 

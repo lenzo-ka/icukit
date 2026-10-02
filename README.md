@@ -35,18 +35,19 @@ See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/insta
 ### Sentence breaking
 
 For English locales, `Breaker`, `SentenceOverride`, and `ik break sentences`
-(as well as `ik break tokenize`) use the learned `en-tn-cart@1` model by
-default, including locales with a region or script. Before the model runs, the
-default loads the locale-fallback `break="suppress"` entries from the shipped
-abbreviation lexicon as sentence exceptions. Candidate decisions follow ICU,
-token integrity, caller-before rules, exceptions, the base, then caller-after
-rules. The `POSIX` variant is excluded because its ICU word tokens differ from
-the model profile. Pass `base="none"` to either Python API or `--base none` to
-the CLI for raw ICU sentence boundaries without the shipped list. Other locale
+(as well as `ik break tokenize`) use ICU sentence candidates with token
+integrity and the locale-fallback `break="suppress"` entries from the shipped
+abbreviation lexicon. This applies to English locales with any region or script
+except the `POSIX` variant. Candidate decisions follow ICU, token integrity,
+caller-before rules, exceptions, an optional base, then caller-after rules.
+The learned `en-tn@1` rule set and `en-tn-cart@1` model remain available as
+opt-in bases. Pass `base="none"` to either Python API or `--base none` to the CLI
+for raw ICU sentence boundaries without the shipped list. Other locale
 languages keep raw ICU as their default. `AbbreviationSentenceBreaker` remains
 the explicit alternative that also deposits ambiguous lexicon boundaries. The
-model is derived from CC BY-SA 4.0 data; its measured results are agreement with
-the corpus splitter on synthetic text, not running-text accuracy.
+learned bases are derived from CC BY-SA 4.0 data; their measured results are
+agreement with the corpus splitter on synthetic text, not running-text
+accuracy.
 
 ### Recognition
 
@@ -223,7 +224,7 @@ The CLDR data bundled in `icukit/data/cldr_symbols` is Unicode, Inc.'s, under th
 
 The UCD data bundled in `icukit/data/ucd_name_aliases` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/ucd_name_aliases/LICENSE).
 
-The `en-tn@1` sentence rules and `en-tn-cart@1` cartlet model in
+The opt-in `en-tn@1` sentence rules and `en-tn-cart@1` cartlet model in
 `icukit/data/break_rules/en` are derived from the Google Text
 Normalization English corpus and are distributed under
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); their bundled
