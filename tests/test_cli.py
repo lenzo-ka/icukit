@@ -32,6 +32,21 @@ class TestCLIBasics:
         assert "transliterate" in out
 
 
+class TestCompileCommand:
+    """The compile command builds real reader gangs and reports their identities."""
+
+    def test_json_report_without_disk_store(self):
+        code, out, err = run_cli("compile", "--locales", "en_US", "--json")
+        assert code == 0, err
+        (row,) = json.loads(out)
+        assert row["locale"] == "en_US"
+        assert row["readers"] > 0
+        assert row["build_s"] > 0
+        assert row["warm_s"] >= 0
+        assert row["tables_loaded"] == row["tables_computed"] == 0
+        assert len(row["tables_digest"]) == len(row["compile_digest"]) == 64
+
+
 class TestDetectCommand:
     """Test typed running-text recognition."""
 

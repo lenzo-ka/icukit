@@ -41,6 +41,12 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`PluralNumeralDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
+- [`CompiledDetectorSet`](#icukitcompiled) — class, `icukit.compiled`
+- [`ReaderSpec`](#icukitcompiled) — class, `icukit.compiled`
+- [`CompileKey`](#icukitcompiled) — class, `icukit.compiled`
+- [`CompileStats`](#icukitcompiled) — class, `icukit.compiled`
+- [`LaneGate`](#start-gates) — class, `icukit`
+- [`compile_detectors`](#icukitcompiled) — function, `icukit.compiled`
 - [`GatedDetector`](#icukitdetectors) — class, `icukit.detectors`
 - [`StartGate`](#start-gates) — class, `icukit`
 - [`candidate_starts`](#start-gates) — function, `icukit`
@@ -65,6 +71,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`generated_detectors`](#icukitengine) — function, `icukit.engine`
 - [`generated_detectors_report`](#icukitengine) — function, `icukit.engine`
 - [`range_detectors`](#icukitengine) — function, `icukit.engine`
+- [`reader_set`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors`](#icukitengine) — function, `icukit.engine`
 - [`flexible_detectors_report`](#icukitengine) — function, `icukit.engine`
 - [`clear_detector_caches`](#icukitengine) — function, `icukit.engine`
@@ -1422,6 +1429,55 @@ Raises:
     BreakerError: If the kind is unsupported, ICU cannot load the rules, or
         the locale factory returns an iterator without extractable rules.
 
+## icukit.cache
+
+Process-level settings and observability for detector caches.
+
+The L3 implementation has no on-disk table store yet.  This module establishes the
+stable public settings and counter surface used by compilation; L4 adds persistence
+behind it without changing callers. One enable switch controls both the in-process
+detector-gang memo and that table store: :func:`configure` overrides the environment
+when passed ``enabled=True`` or ``False``; otherwise ``ICUKIT_CACHE=0`` is read at each
+cache operation.
+
+### Constants and type aliases
+
+#### `StrPath` (type alias)
+
+`str | os.PathLike[str]`
+
+### `cache_enabled() -> 'bool'`
+
+Return whether all detector caches are enabled for this call.
+
+An explicit :func:`configure` override wins. Until one is set, the
+``ICUKIT_CACHE`` environment variable is read on every call so changing it to or
+from ``"0"`` takes effect without re-importing :mod:`icukit.cache`.
+
+### `cache_info() -> 'dict'`
+
+Return process settings, zero table-store counts, and compile reuse counters.
+
+``detect_hits`` counts compiled detects that made a compatible per-text scan plan
+available to the detect phase, not the number of readers or starts that used it.
+``compiled_reuse`` counts gangs observed reusing their implicit compiled object.
+
+### `configure(*, enabled: 'bool | None' = None, directory: 'StrPath | None' = None) -> 'None'`
+
+Configure the process cache before constructing readers.
+
+L3 records the directory that the table store will use but does not create or read
+it. Passing ``True`` or ``False`` for ``enabled`` overrides ``ICUKIT_CACHE`` for
+both detector-gang memoization and the table store. Passing ``None`` leaves any
+existing override unchanged; without an override, the environment is read at each
+cache operation. A directory of ``None`` likewise leaves the root unchanged.
+
+### `flush() -> 'None'`
+
+Flush queued cache entries.
+
+There are no on-disk entries in L3, so this is intentionally a no-op.
+
 ## icukit.calendar
 
 Calendar system information.
@@ -1872,6 +1928,65 @@ Example:
     '1,2 Mio.'
     >>> format_compact(1234567, 'en_US', COMPACT_LONG)
     '1.2 million'
+
+## icukit.compiled
+
+Compiled detector gangs with one immutable scan plan per input text.
+
+### class `CompileKey`
+
+The table environment placeholder and identity of one detector gang.
+
+#### `CompileKey(tables: 'str', locales: 'tuple[str, ...]', readers: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `digest() -> 'str'`
+
+Return SHA-256 over canonical JSON of the fields.
+
+### class `CompileStats`
+
+Measured reader construction/warmup and the resulting lane counts.
+
+#### `CompileStats(build_s: 'float | None', warm_s: 'float', tables_loaded: 'int', tables_computed: 'int', lanes_gated: 'int', lanes_ungated: 'int', table_store: 'str | None') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `CompiledDetectorSet`
+
+A detector gang prepared for shared per-text scanning.
+
+``detectors`` is the immutable source gang. ``key`` and ``stats`` are report
+properties; implicit compilation computes them only on first access.
+
+#### `CompiledDetectorSet(detectors: 'DetectorSet') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Detect with a context-local immutable scan plan, resetting it on every exit.
+
+#### `gate_report() -> 'tuple[LaneGate, ...]'`
+
+Return one gate status row for every declared scan lane.
+
+#### `warm() -> 'CompiledDetectorSet'`
+
+Force lazy sub-readers and zone tables under the build phase.
+
+### class `ReaderSpec`
+
+A declarative detector gang whose construction is measured by compilation.
+
+#### `ReaderSpec(locale: 'str', guarded: 'bool' = False, flexible: 'bool' = False, locales: 'tuple[str, ...] | None' = None, currencies: 'tuple[str, ...]' = (), units: 'tuple[str, ...]' = (), skeletons: 'tuple[str, ...] | None' = None, material: 'tuple[LocaleMaterial, ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `compile_detectors(detectors: 'DetectorSet | Iterable[Detector] | ReaderSpec', *, warm: 'bool' = True) -> 'CompiledDetectorSet'`
+
+Compile a detector gang, measuring construction only for a :class:`ReaderSpec`.
 
 ## icukit.conformance
 
@@ -2591,6 +2706,10 @@ of one type, while same-type readers from different materials coexist.
 #### `DetectorSet(detectors: 'tuple[Detector, ...]') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
+
+#### `compile(*, warm: 'bool' = True) -> 'CompiledDetectorSet'`
+
+Compile this gang explicitly, optionally forcing lazy reader state.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
@@ -3404,7 +3523,10 @@ Clear all process-wide detector-construction caches.
 This clears generated and flexible gang memos, shared number readers, and derived
 per-locale currency, measure, digit, plural, and time-zone tables. It is useful to
 tests, benchmarks, and long-lived processes that need to release cached gangs.
-``ICUKIT_CACHE=0`` instead bypasses only gang memoization, read at each call.
+Compiled sets and their text plans belong to individual :class:`DetectorSet`
+instances, not a process-global cache, so they are not reset here. Use
+:func:`icukit.cache.configure` or ``ICUKIT_CACHE=0`` to bypass both the gang memo
+and the table-store cache layer.
 
 ### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 
@@ -3448,18 +3570,20 @@ purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that canno
 built is left out; :func:`flexible_detectors_report` names it and why.
 
 Construction is cached process-wide in a bounded memo keyed by every option; equal
-calls return the same frozen set. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for
-a call, or use :func:`clear_detector_caches` to clear it. A ``detect`` costs a small
-multiple of the generated set's, since the currency and measure readers share the
-numbers they read within a text. The shared readings are kept for the 16 texts read
-last (about 110 bytes per character each for en_US).
+calls return the same frozen set. Calling :func:`icukit.cache.configure` with
+``enabled=False`` or setting ``ICUKIT_CACHE=0`` bypasses the gang memo; use
+:func:`clear_detector_caches` to clear it. A ``detect`` costs a small multiple of
+the generated set's, since the currency and measure readers share the numbers they
+read within a text. The shared readings are kept for the 16 texts read last (about
+110 bytes per character each for en_US).
 
 ### `flexible_detectors_report(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
 The flexible readers for ``locale``, and every spec that could not be built.
 
 See :func:`flexible_detectors`. The frozen report is memoized by the complete,
-normalized request. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for a call;
+normalized request. Calling :func:`icukit.cache.configure` with ``enabled=False``
+or setting ``ICUKIT_CACHE=0`` bypasses the gang memo;
 :func:`clear_detector_caches` clears it explicitly.
 
 ### `generated_detectors(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
@@ -3467,8 +3591,9 @@ normalized request. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for a call;
 Derive all invertible detectors introspectively registered for ``locale``.
 
 Repeated equal calls return the detector set from the process-wide bounded gang
-memo. Set ``ICUKIT_CACHE=0`` to bypass that memo for a call, or call
-:func:`clear_detector_caches` to clear every detector-construction cache.
+memo. Calling :func:`icukit.cache.configure` with ``enabled=False`` or setting
+``ICUKIT_CACHE=0`` bypasses that memo, and :func:`clear_detector_caches` clears
+every detector-construction cache.
 
 ### `generated_detectors_report(locale: 'str', families: 'Iterable[Family]' = (Family(name='abbreviation'), Family(name='date-time-skeleton'), Family(name='date-interval'), Family(name='compact-number'), Family(name='relative-date'), Family(name='scientific-number'), Family(name='spellout-number'), Family(name='number-range')), *, material: 'Iterable[LocaleMaterial]' = ()) -> 'GenerationReport'`
 
@@ -3476,8 +3601,10 @@ Derive detectors for ``locale`` and report specs that could not be inverted.
 
 The immutable report is memoized in-process by the complete request, including
 family and material-object identity, so a family must enumerate and build the same
-readers each time it is given the same locale. Set ``ICUKIT_CACHE=0`` to bypass
-this gang memo for a call; :func:`clear_detector_caches` clears it explicitly.
+readers each time it is given the same locale. Calling
+:func:`icukit.cache.configure` with ``enabled=False`` or setting
+``ICUKIT_CACHE=0`` bypasses this gang memo; :func:`clear_detector_caches` clears it
+explicitly.
 
 ### `range_detectors(locale: 'str', detectors: 'DetectorSet', *, locales: 'Iterable[str] | None' = None) -> 'DetectorSet'`
 
@@ -3490,6 +3617,13 @@ reads a currency or a unit reads its ranges ("$3–5", "10–15 kg"), and one th
 not, does not. Add them with
 ``detectors.with_(*range_detectors(locale, detectors).detectors)``: each replaces the
 set's own reader of its type, a generated set's ``number:range`` among them.
+
+### `reader_set(locale: 'str', *, guarded: 'bool' = False, flexible: 'bool' = False, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str]' = (), units: 'Iterable[str]' = (), skeletons: 'Iterable[str] | None' = None, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
+
+Build the detector gang selected by the corresponding ``ik detect`` options.
+
+``reader_set(locale, flexible=True)`` is the default generated-plus-flexible gang.
+The order is part of the public result and matches the command-line detector set.
 
 ## icukit.exceptions
 

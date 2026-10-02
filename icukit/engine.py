@@ -22,7 +22,6 @@ values it chooses from ICU; ``guarded=True`` adds the guarded readers.
 
 from __future__ import annotations
 
-import os
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -32,7 +31,15 @@ from typing import cast
 
 import icu
 
-from .detectors import DateDetector, Detector, DetectorSet, NumberDetector
+from .cache import _build_phase, cache_enabled
+from .detectors import (
+    DateDetector,
+    Detector,
+    DetectorSet,
+    NumberDetector,
+    date_detectors,
+    number_detectors,
+)
 from .material import LocaleMaterial, _require_loaded, locale_descends_from
 from .recognize import (
     AlphanumericRunsDetector,
@@ -107,6 +114,7 @@ __all__ = [
     "generated_detectors",
     "generated_detectors_report",
     "range_detectors",
+    "reader_set",
 ]
 
 Spec = object
@@ -154,7 +162,7 @@ class _GangMemo:
         self._generation = 0
 
     def get_or_build(self, key: tuple, build: Callable[[], object]) -> object:
-        if os.environ.get("ICUKIT_CACHE") == "0":
+        if not cache_enabled():
             return build()
         with self._lock:
             found = self._cache.pop(key, None)
@@ -803,8 +811,10 @@ def generated_detectors_report(
 
     The immutable report is memoized in-process by the complete request, including
     family and material-object identity, so a family must enumerate and build the same
-    readers each time it is given the same locale. Set ``ICUKIT_CACHE=0`` to bypass
-    this gang memo for a call; :func:`clear_detector_caches` clears it explicitly.
+    readers each time it is given the same locale. Calling
+    :func:`icukit.cache.configure` with ``enabled=False`` or setting
+    ``ICUKIT_CACHE=0`` bypasses this gang memo; :func:`clear_detector_caches` clears it
+    explicitly.
     """
     families = tuple(families)
     materials = tuple(_require_loaded(item) for item in material)
@@ -821,15 +831,16 @@ def _build_generated_detectors_report(
     locale: str, families: tuple[Family, ...], materials: tuple[LocaleMaterial, ...]
 ) -> GenerationReport:
     """Build a generated report after its complete inputs have been normalized."""
-    detectors = DetectorSet(())
-    skipped: list[SkippedSpec] = []
-    for family, spec, detector, reason in _family_specs(locale, families):
-        if detector is not None:
-            detectors = detectors.with_(detector)
-        else:
-            skipped.append(SkippedSpec(family.name, spec, reason))
-    material_readers, material_skipped = _material_readers(locale, families, materials)
-    return GenerationReport(detectors.with_(*material_readers), (*skipped, *material_skipped))
+    with _build_phase():
+        detectors = DetectorSet(())
+        skipped: list[SkippedSpec] = []
+        for family, spec, detector, reason in _family_specs(locale, families):
+            if detector is not None:
+                detectors = detectors.with_(detector)
+            else:
+                skipped.append(SkippedSpec(family.name, spec, reason))
+        material_readers, material_skipped = _material_readers(locale, families, materials)
+        return GenerationReport(detectors.with_(*material_readers), (*skipped, *material_skipped))
 
 
 def _family_specs(
@@ -866,8 +877,9 @@ def generated_detectors(
     """Derive all invertible detectors introspectively registered for ``locale``.
 
     Repeated equal calls return the detector set from the process-wide bounded gang
-    memo. Set ``ICUKIT_CACHE=0`` to bypass that memo for a call, or call
-    :func:`clear_detector_caches` to clear every detector-construction cache.
+    memo. Calling :func:`icukit.cache.configure` with ``enabled=False`` or setting
+    ``ICUKIT_CACHE=0`` bypasses that memo, and :func:`clear_detector_caches` clears
+    every detector-construction cache.
     """
     return generated_detectors_report(locale, families, material=material).detectors
 
@@ -1225,7 +1237,8 @@ def flexible_detectors_report(
     """The flexible readers for ``locale``, and every spec that could not be built.
 
     See :func:`flexible_detectors`. The frozen report is memoized by the complete,
-    normalized request. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for a call;
+    normalized request. Calling :func:`icukit.cache.configure` with ``enabled=False``
+    or setting ``ICUKIT_CACHE=0`` bypasses the gang memo;
     :func:`clear_detector_caches` clears it explicitly.
     """
     selection = _locale_selection(locale, locales)
@@ -1265,18 +1278,19 @@ def _build_flexible_detectors_report(
     materials: tuple[LocaleMaterial, ...],
 ) -> GenerationReport:
     """Build a flexible report after its complete inputs have been normalized."""
-    families = _flexible_families(
-        selection,
-        currencies,
-        units,
-        guarded,
-    )
-    # These families are closures freshly bound to this flexible request. The outer
-    # memo owns their stable identity boundary, so do not populate the generated memo
-    # with one-use family objects.
-    report = _build_generated_detectors_report(locale, families, materials)
-    readers, skipped = _range_readers(locale, report.detectors, selection)
-    return GenerationReport(report.detectors.with_(*readers), (*report.skipped, *skipped))
+    with _build_phase():
+        families = _flexible_families(
+            selection,
+            currencies,
+            units,
+            guarded,
+        )
+        # These families are closures freshly bound to this flexible request. The
+        # outer memo owns their stable identity boundary, so do not populate the
+        # generated memo with one-use family objects.
+        report = _build_generated_detectors_report(locale, families, materials)
+        readers, skipped = _range_readers(locale, report.detectors, selection)
+        return GenerationReport(report.detectors.with_(*readers), (*report.skipped, *skipped))
 
 
 def flexible_detectors(
@@ -1328,11 +1342,12 @@ def flexible_detectors(
     built is left out; :func:`flexible_detectors_report` names it and why.
 
     Construction is cached process-wide in a bounded memo keyed by every option; equal
-    calls return the same frozen set. Set ``ICUKIT_CACHE=0`` to bypass the gang memo for
-    a call, or use :func:`clear_detector_caches` to clear it. A ``detect`` costs a small
-    multiple of the generated set's, since the currency and measure readers share the
-    numbers they read within a text. The shared readings are kept for the 16 texts read
-    last (about 110 bytes per character each for en_US).
+    calls return the same frozen set. Calling :func:`icukit.cache.configure` with
+    ``enabled=False`` or setting ``ICUKIT_CACHE=0`` bypasses the gang memo; use
+    :func:`clear_detector_caches` to clear it. A ``detect`` costs a small multiple of
+    the generated set's, since the currency and measure readers share the numbers they
+    read within a text. The shared readings are kept for the 16 texts read last (about
+    110 bytes per character each for en_US).
     """
     return flexible_detectors_report(
         locale,
@@ -1350,12 +1365,59 @@ def clear_detector_caches() -> None:
     This clears generated and flexible gang memos, shared number readers, and derived
     per-locale currency, measure, digit, plural, and time-zone tables. It is useful to
     tests, benchmarks, and long-lived processes that need to release cached gangs.
-    ``ICUKIT_CACHE=0`` instead bypasses only gang memoization, read at each call.
+    Compiled sets and their text plans belong to individual :class:`DetectorSet`
+    instances, not a process-global cache, so they are not reset here. Use
+    :func:`icukit.cache.configure` or ``ICUKIT_CACHE=0`` to bypass both the gang memo
+    and the table-store cache layer.
     """
     _GENERATED_GANGS.clear()
     _FLEXIBLE_GANGS.clear()
     _clear_shared_number_reader_cache()
     _clear_derived_locale_caches()
+
+
+def reader_set(
+    locale: str,
+    *,
+    guarded: bool = False,
+    flexible: bool = False,
+    locales: Iterable[str] | None = None,
+    currencies: Iterable[str] = (),
+    units: Iterable[str] = (),
+    skeletons: Iterable[str] | None = None,
+    material: Iterable[LocaleMaterial] = (),
+) -> DetectorSet:
+    """Build the detector gang selected by the corresponding ``ik detect`` options.
+
+    ``reader_set(locale, flexible=True)`` is the default generated-plus-flexible gang.
+    The order is part of the public result and matches the command-line detector set.
+    """
+    with _build_phase():
+        currencies = tuple(currencies)
+        units = tuple(units)
+        material = tuple(material)
+        families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if guarded else DEFAULT_FAMILIES
+        detectors = generated_detectors(locale, families, material=material)
+        plain = not flexible
+        numbers = number_detectors(locale, decimal=plain, percent=plain, currencies=currencies)
+        detectors = detectors.with_(*numbers.detectors)
+        if flexible:
+            flexible_set = flexible_detectors(
+                locale,
+                locales=locales,
+                currencies=currencies or None,
+                units=units or None,
+                guarded=guarded,
+                material=material,
+            )
+            detectors = detectors.with_(*flexible_set.detectors)
+        else:
+            detectors = detectors.with_(*(FlexibleMeasureDetector(locale, unit) for unit in units))
+            if currencies or units:
+                detectors = detectors.with_(*range_detectors(locale, detectors).detectors)
+        if skeletons:
+            detectors = detectors.with_(*date_detectors(locale, skeletons).detectors)
+        return detectors
 
 
 # note: Flexible recall detectors do not yet generalize to partial date skeletons; that

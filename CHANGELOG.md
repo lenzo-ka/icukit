@@ -9,9 +9,14 @@
   `flexible_detectors` call returns the gang already built (the 32 most recent are
   kept), and the unit, currency and time-zone forms ICU writes are computed once for
   each group of locales whose ICU data is the same, so the other locales of a language
-  build quickly. Setting `ICUKIT_CACHE=0` builds each gang anew, and
+  build quickly. Calling `icukit.cache.configure(enabled=False)` or setting
+  `ICUKIT_CACHE=0` builds each gang anew, and
   `clear_detector_caches()` releases the cached gangs and tables. Detection output is
   unchanged.
+- `DetectorSet.detect(text)` now compiles once per instance under a per-instance lock,
+  reuses its compiled gang on later calls, and falls back to the legacy path if
+  compilation fails. Compiled state is process-local and omitted from pickles and
+  deep copies.
 
 ### Added
 
@@ -62,6 +67,16 @@
   Rule artifacts declare and verify their ICU, Unicode, and explicitly
   versioned tokenizer-profile identity and run candidate- and decision-aware
   authored witnesses when loaded.
+- `ReaderSpec`, `compile_detectors`, `CompiledDetectorSet`, `CompileKey`,
+  `CompileStats`, `LaneGate`, and `reader_set` provide explicit and implicit detector
+  compilation. A compiled detection shares one immutable UTF-16 offset map, ICU string,
+  grapheme plan, word-interior plan, and gate index across a gang without changing its
+  detections. `icukit.cache` adds process-level `configure`, `cache_info`, and `flush`;
+  this release reports the future cache root and in-process counters but does not yet
+  read or write tables on disk.
+- `ik compile --locales LOC[,LOC...]` prepares and reports detector gangs without
+  reading text. It accepts the reader-selection flags, `--cache-dir`, and `--json`;
+  disk verification and cache-management flags arrive with the table store.
 - Experimental `char-classes` and `shape-refinement` locale-material kinds add
   namespaced character classes and extended shape symbols at runtime. They are
   witness-checked, canonically digested, explicitly passed with `material=`, and

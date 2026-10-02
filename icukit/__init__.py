@@ -36,7 +36,7 @@ _check_icu_available()
 
 # ruff: noqa: E402
 # flake8: noqa: E402
-from ._gate import StartGate, candidate_starts, ungated
+from ._gate import LaneGate, StartGate, candidate_starts, ungated
 from .abbreviation_breaker import (
     AbbreviationBoundary,
     AbbreviationProvenance,
@@ -115,6 +115,13 @@ from .collator import (
 from .compact import STYLE_LONG as COMPACT_STYLE_LONG
 from .compact import STYLE_SHORT as COMPACT_STYLE_SHORT
 from .compact import CompactFormatter
+from .compiled import (
+    CompiledDetectorSet,
+    CompileKey,
+    CompileStats,
+    ReaderSpec,
+    compile_detectors,
+)
 from .datetime import (
     PATTERNS,
     STYLE_FULL,
@@ -201,6 +208,7 @@ from .engine import (
     generated_detectors,
     generated_detectors_report,
     range_detectors,
+    reader_set,
 )
 from .errors import (
     AbbreviationError,
@@ -516,6 +524,12 @@ __all__ = [
     "PluralNumeralDetector",
     "SingleLetterWordDetector",
     "DetectorSet",
+    "CompiledDetectorSet",
+    "ReaderSpec",
+    "CompileKey",
+    "CompileStats",
+    "LaneGate",
+    "compile_detectors",
     "GatedDetector",
     "StartGate",
     "candidate_starts",
@@ -540,6 +554,7 @@ __all__ = [
     "generated_detectors",
     "generated_detectors_report",
     "range_detectors",
+    "reader_set",
     "flexible_detectors",
     "flexible_detectors_report",
     "clear_detector_caches",

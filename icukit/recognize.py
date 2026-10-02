@@ -24,10 +24,12 @@ from ._gate import (
     GATE_STATS,
     StartGate,
     _audit_probe,
-    _candidate_starts,
+    _candidate_starts_from_plan,
     _GatedReader,
     _install_gates,
     _record,
+    _scan_plan_for,
+    _ScanPlan,
     folded_heads,
     gates_enabled,
     heads,
@@ -64,6 +66,8 @@ from .detectors import (
     _word_interior_offsets,
 )
 from .unit_surfaces import curated_currency_surfaces, curated_unit_surfaces
+
+_PLAN_UNSET = object()
 
 __all__ = [
     "AlphanumericRunsDetector",
@@ -1567,7 +1571,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
             for name, year in endpoint.fields
         )
 
-    def _parse_position(self, formatter, text, start, cp_to_u16, dating):
+    def _parse_position(self, formatter, ustr, start, cp_to_u16, dating):
         # The side is parsed on a GMT calendar, never in the process default zone: GMT
         # has no DST gap or overlap, so a side with no zone text keeps the wall time it
         # writes ("02:30" on a spring-forward date in America/New_York would be moved to
@@ -1578,11 +1582,13 @@ class FlexibleDateIntervalDetector(_GatedReader):
         for name, value in dating.items():
             calendar.set(_INTERVAL_DATING_FIELDS[name], value)
         position = icu.ParsePosition(cp_to_u16[start])
-        formatter.parse(icu.UnicodeString(text), calendar, position)
+        formatter.parse(ustr, calendar, position)
         return position, calendar
 
-    def _parse_side(self, formatter, fields, has_zone, text, start, cp_to_u16, u16_to_cp, dating):
-        position, calendar = self._parse_position(formatter, text, start, cp_to_u16, dating)
+    def _parse_side(
+        self, formatter, fields, has_zone, text, ustr, start, cp_to_u16, u16_to_cp, dating
+    ):
+        position, calendar = self._parse_position(formatter, ustr, start, cp_to_u16, dating)
         end_u16 = position.getIndex()
         if position.getErrorIndex() != -1 or end_u16 <= cp_to_u16[start]:
             return None
@@ -1747,7 +1753,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
 
         return clock(end_values) < clock(start_values)
 
-    def _read(self, matcher, dating, text, start, cp_to_u16, u16_to_cp):
+    def _read(self, matcher, dating, text, ustr, start, cp_to_u16, u16_to_cp):
         """One matcher's readings at ``start``, sides parsed on ``dating``, one per zone.
 
         Zone text that names different zones in the locales of the language gives one
@@ -1757,7 +1763,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
         ``(end, captures, value, zone key, rank)``, the key the zone's metazone on the
         reading's date and the rank ordering the reader's own locale's zone first.
         """
-        own = self._read_as(matcher, self.locale, dating, text, start, cp_to_u16, u16_to_cp)
+        own = self._read_as(matcher, self.locale, dating, text, ustr, start, cp_to_u16, u16_to_cp)
         if matcher[6] is None:
             return [(*own[:3], None, 0)] if own is not None else []
         if own is not None:
@@ -1765,7 +1771,9 @@ class FlexibleDateIntervalDetector(_GatedReader):
                 (capture.text for capture in own[1] if capture.name == "time-zone"), None
             )
         else:
-            zone_text = self._unread_zone_text(matcher, dating, text, start, cp_to_u16, u16_to_cp)
+            zone_text = self._unread_zone_text(
+                matcher, dating, text, ustr, start, cp_to_u16, u16_to_cp
+            )
         if not zone_text:
             return [(*own[:3], None, 0)] if own is not None else []
         attempts = [(own, self.locale)]
@@ -1773,7 +1781,9 @@ class FlexibleDateIntervalDetector(_GatedReader):
             if name != self.locale:
                 attempts.append(
                     (
-                        self._read_as(matcher, name, dating, text, start, cp_to_u16, u16_to_cp),
+                        self._read_as(
+                            matcher, name, dating, text, ustr, start, cp_to_u16, u16_to_cp
+                        ),
                         name,
                     )
                 )
@@ -1801,7 +1811,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
                 readings.append((end, captures, value, metazone, rank))
         return readings
 
-    def _unread_zone_text(self, matcher, dating, text, start, cp_to_u16, u16_to_cp):
+    def _unread_zone_text(self, matcher, dating, text, ustr, start, cp_to_u16, u16_to_cp):
         """The zone name where the reader's own locale stopped parsing a zoned side.
 
         ICU's parse stops at zone text its locale does not write ("IST" in en_US); a
@@ -1809,7 +1819,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
         """
         formatter1, separator, formatter2 = matcher[0], matcher[1], matcher[2]
         has_zone1, has_zone2 = matcher[7]
-        position, _ = self._parse_position(formatter1, text, start, cp_to_u16, dating)
+        position, _ = self._parse_position(formatter1, ustr, start, cp_to_u16, dating)
         has_zone = has_zone1
         if position.getErrorIndex() == -1:
             end1 = u16_to_cp.get(position.getIndex())
@@ -1818,14 +1828,14 @@ class FlexibleDateIntervalDetector(_GatedReader):
             separator_end = self._separator_end(text, end1, separator)
             if separator_end is None:
                 return None
-            position, _ = self._parse_position(formatter2, text, separator_end, cp_to_u16, dating)
+            position, _ = self._parse_position(formatter2, ustr, separator_end, cp_to_u16, dating)
             has_zone = has_zone2
         error = u16_to_cp.get(position.getErrorIndex())
         if not has_zone or error is None:
             return None
         return _zone_form_at(text, error, icu.Locale(self.locale).getLanguage())
 
-    def _read_as(self, matcher, name, dating, text, start, cp_to_u16, u16_to_cp):
+    def _read_as(self, matcher, name, dating, text, ustr, start, cp_to_u16, u16_to_cp):
         """One matcher's reading at ``start``, its zone text read as locale ``name`` does.
 
         ``name`` is the reader's own locale, or another of its language whose zone name
@@ -1838,7 +1848,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
             formatter1 = _interval_side_formatter(patterns[0], name)
             formatter2 = _interval_side_formatter(patterns[1], name)
         parsed1 = self._parse_side(
-            formatter1, fields1, has_zone1, text, start, cp_to_u16, u16_to_cp, dating
+            formatter1, fields1, has_zone1, text, ustr, start, cp_to_u16, u16_to_cp, dating
         )
         if parsed1 is None:
             return None
@@ -1855,6 +1865,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
             fields2,
             has_zone2,
             text,
+            ustr,
             separator_end,
             cp_to_u16,
             u16_to_cp,
@@ -1956,10 +1967,12 @@ class FlexibleDateIntervalDetector(_GatedReader):
         text: str,
         start: int,
         offset_maps: tuple[list[int], dict[int, int]] | None = None,
+        ustr=None,
     ):
         if _continues_interval_word(text, start - 1):
             return []
         cp_to_u16, u16_to_cp = offset_maps if offset_maps is not None else boundary_maps(text)
+        ustr = icu.UnicodeString(text) if ustr is None else ustr
         # One reading per zone: every dating is tried for a zoned matcher, since a zone
         # may write its name on one dating only (Irish time is "IST" in summer).
         readings: dict[tuple, tuple] = {}
@@ -1968,7 +1981,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
             if matcher[8] and not leads_with_digit:
                 continue  # ICU writes this side's first field in digits
             for dating in matcher[9]:
-                found = self._read(matcher, dating, text, start, cp_to_u16, u16_to_cp)
+                found = self._read(matcher, dating, text, ustr, start, cp_to_u16, u16_to_cp)
                 for end, captures, value, zone_key, rank in found:
                     readings.setdefault((end, value, zone_key), (rank, end, captures, value))
                 if found and matcher[6] is None:
@@ -1993,18 +2006,26 @@ class FlexibleDateIntervalDetector(_GatedReader):
         # Compute the code-point/UTF-16 offset maps once per scan and pass them to every
         # candidate start (avoids O(n^2) scanning). They are bound to this call, never
         # stored on the detector, so one detector can serve concurrent or nested calls.
-        offset_maps = boundary_maps(text)
+        gate = self._start_gates["interval"]
+        plan = _scan_plan_for(text, self.locale, gate)
+        if plan is not None and plan.ustr is not None:
+            offset_maps = plan.cp_to_u16, plan.u16_to_cp
+            ustr = plan.ustr
+        else:
+            offset_maps = boundary_maps(text)
+            ustr = icu.UnicodeString(text)
 
         def match(source: str, start: int):
-            return self._match(source, start, offset_maps)
+            return self._match(source, start, offset_maps, ustr)
 
         found = _detect_flexible_alternatives(
             text,
             self.locale,
             self.type,
             match,
-            gate=self._start_gates["interval"],
+            gate=gate,
             stats_key=self._lane_key("interval"),
+            _plan=plan,
         )
         found = [item for item in found if self._year_range_holds(text, item)]
         if not self._year_floor:
@@ -2995,6 +3016,7 @@ class FlexibleNumberDetector(_GatedReader):
         self._roman_alphabets = {
             rule_set: _roman_alphabet(locale, rule_set) for rule_set in self._roman_rule_sets
         }
+        self._memo_key = _number_reader_key(self)
         signs = heads((self._minus, self._plus))
         digits = frozenset(self._digits)
         own = StartGate(chars=signs | digits | heads((self._decimal,)))
@@ -3867,7 +3889,7 @@ def _plain_number_match(number: FlexibleNumberDetector, text: str, start: int):
     once per text. The key holds the reader's options, so a reader built otherwise
     never shares another's readings.
     """
-    memo = _number_memo(_number_reader_key(number), text)
+    memo = _number_memo(number._memo_key, text)
     if start not in memo:
         memo[start] = number._match(text, start)
     return memo[start]
@@ -3923,6 +3945,10 @@ class FlexibleCurrencyDetector(_GatedReader):
         self._compact = (
             FlexibleCompactDetector(locale, "long"),
             FlexibleCompactDetector(locale, "short", fold_symbol_case=True),
+        )
+        self._amount_key = (
+            self._number._memo_key,
+            tuple((c.locale, c.width, c.fold_symbol_case) for c in self._compact),
         )
         self._currency_name = FlexibleCurrencyNameDetector(locale, currency)
         number_format = icu.NumberFormat.createCurrencyInstance(icu.Locale(locale))
@@ -4025,11 +4051,7 @@ class FlexibleCurrencyDetector(_GatedReader):
     def _amount(self, text: str, start: int):
         # An amount depends on the number and compact readers, not on the currency, so
         # the readers of a gang's currencies share it.
-        key = (
-            _number_reader_key(self._number),
-            tuple((c.locale, c.width, c.fold_symbol_case) for c in self._compact),
-        )
-        memo = _currency_amount_memo(key, text)
+        memo = _currency_amount_memo(self._amount_key, text)
         if start not in memo:
             memo[start] = self._read_amount(text, start)
         return memo[start]
@@ -7489,6 +7511,7 @@ def _detect_flexible_alternatives(
     *,
     gate: StartGate | None = None,
     stats_key: str | None = None,
+    _plan: _ScanPlan | None | object = _PLAN_UNSET,
 ) -> list[ValueDetection]:
     """Like :func:`_detect_flexible`, but keep every distinct reading at a start.
 
@@ -7496,10 +7519,19 @@ def _detect_flexible_alternatives(
     scan resumes after the longest reading at a start.
     """
     inspect_gate = GATE_STATS and gates_enabled() and gate is not None
+    plan = _scan_plan_for(text, locale, gate) if _plan is _PLAN_UNSET else _plan
     starts = (
-        _grapheme_starts(text, locale) if inspect_gate else _candidate_starts(text, locale, gate)
+        plan.grapheme_starts[locale]
+        if inspect_gate and plan is not None
+        else _grapheme_starts(text, locale)
+        if inspect_gate
+        else _candidate_starts_from_plan(text, locale, gate, plan)
     )
-    interior = _word_interior_offsets(text, locale)
+    interior = (
+        plan.word_interiors[locale]
+        if plan is not None and locale in plan.word_interiors
+        else _word_interior_offsets(text, locale)
+    )
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
@@ -7557,10 +7589,19 @@ def _detect_flexible(
     stats_key: str | None = None,
 ) -> list[ValueDetection]:
     inspect_gate = GATE_STATS and gates_enabled() and gate is not None
+    plan = _scan_plan_for(text, locale, gate)
     starts = (
-        _grapheme_starts(text, locale) if inspect_gate else _candidate_starts(text, locale, gate)
+        plan.grapheme_starts[locale]
+        if inspect_gate and plan is not None
+        else _grapheme_starts(text, locale)
+        if inspect_gate
+        else _candidate_starts_from_plan(text, locale, gate, plan)
     )
-    interior = _word_interior_offsets(text, locale)
+    interior = (
+        plan.word_interiors[locale]
+        if plan is not None and locale in plan.word_interiors
+        else _word_interior_offsets(text, locale)
+    )
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:

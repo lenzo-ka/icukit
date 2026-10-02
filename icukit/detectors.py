@@ -39,21 +39,28 @@ from __future__ import annotations
 import functools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import field as dataclass_field
 from decimal import Decimal
-from typing import Literal, Protocol, runtime_checkable
+from threading import Lock
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 import icu
+
+if TYPE_CHECKING:
+    from .compiled import CompiledDetectorSet
 
 from ._gate import (
     GATE_AUDIT,
     GATE_STATS,
     StartGate,
     _audit_probe,
-    _candidate_starts,
+    _candidate_starts_from_plan,
     _GatedReader,
     _grapheme_starts,
     _install_gates,
     _record,
+    _scan_plan_for,
+    _ScanPlan,
     _strict_gate,
     gates_enabled,
 )
@@ -1154,7 +1161,9 @@ def _is_word_joiner(character: str) -> bool:
 
 
 @functools.lru_cache(maxsize=16)
-def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
+def _word_interior_offsets(
+    text: str, locale: str, edges: frozenset[int] | None = None
+) -> frozenset[int]:
     """Offsets inside one word with word characters on both sides of them in that word.
 
     A reading may not start or end at one of these: "788" inside "2788" or "ab2,788",
@@ -1167,7 +1176,7 @@ def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
     a script that ICU breaks between letters is a seam, not an interior ("100" in
     "ราคา100บาท").
     """
-    edges = sorted(_word_edges(text, locale))
+    edges = sorted(_word_edges(text, locale) if edges is None else edges)
     interior: set[int] = set()
     for word_start, word_end in zip(edges, edges[1:], strict=False):
         alnum = [
@@ -1186,13 +1195,26 @@ def _word_interior_offsets(text: str, locale: str) -> frozenset[int]:
 @dataclass(frozen=True)
 class _ScanContext:
     ustr: object
-    cp_to_u16: list[int]
-    u16_to_cp: dict[int, int]
+    cp_to_u16: tuple[int, ...] | list[int]
+    u16_to_cp: Mapping[int, int]
     boundaries: frozenset[int]
     interior: frozenset[int]
 
 
-def _scan_context(text: str, locale: str) -> _ScanContext:
+def _scan_context_from_plan(text: str, locale: str, plan: _ScanPlan | None) -> _ScanContext:
+    if (
+        plan is not None
+        and plan.ustr is not None
+        and locale in plan.grapheme_boundaries
+        and locale in plan.word_interiors
+    ):
+        return _ScanContext(
+            plan.ustr,
+            plan.cp_to_u16,
+            plan.u16_to_cp,
+            plan.grapheme_boundaries[locale],
+            plan.word_interiors[locale],
+        )
     ustr = icu.UnicodeString(text)
     cp_to_u16, u16_to_cp = boundary_maps(text)
     boundaries = frozenset((*_grapheme_starts(text, locale), len(text)))
@@ -1203,6 +1225,10 @@ def _scan_context(text: str, locale: str) -> _ScanContext:
         boundaries,
         _word_interior_offsets(text, locale),
     )
+
+
+def _scan_context(text: str, locale: str, gate: StartGate | None = None) -> _ScanContext:
+    return _scan_context_from_plan(text, locale, _scan_plan_for(text, locale, gate))
 
 
 def _scan_step(
@@ -1315,10 +1341,15 @@ def _scan(
     (see :func:`_word_interior_offsets`). After a match ``[s, e)`` the scan resumes at
     ``e`` so one detector never self-overlaps.
     """
-    ctx = _scan_context(text, locale)
+    plan = _scan_plan_for(text, locale, gate)
+    ctx = _scan_context_from_plan(text, locale, plan)
     inspect_gate = GATE_STATS and gates_enabled() and gate is not None
     starts = (
-        _grapheme_starts(text, locale) if inspect_gate else _candidate_starts(text, locale, gate)
+        plan.grapheme_starts[locale]
+        if inspect_gate and plan is not None
+        else _grapheme_starts(text, locale)
+        if inspect_gate
+        else _candidate_starts_from_plan(text, locale, gate, plan)
     )
     out: list[ValueDetection] = []
     cursor = 0
@@ -1404,9 +1435,73 @@ class DetectorSet:
     """
 
     detectors: tuple[Detector, ...]
+    _compiled: object | None = dataclass_field(
+        default=None, init=False, repr=False, compare=False, hash=False
+    )
+    _compiled_reuse_recorded: bool = dataclass_field(
+        default=False, init=False, repr=False, compare=False, hash=False
+    )
+    _compile_lock: Lock = dataclass_field(
+        default_factory=Lock, init=False, repr=False, compare=False, hash=False
+    )
 
     def detect(self, text: str) -> list[ValueDetection]:
-        return detect(text, self.detectors)
+        compiled = self._compiled
+        if compiled is None:
+            try:
+                with self._compile_lock:
+                    compiled = self._compiled
+                    if compiled is None:
+                        from .compiled import _implicit_compile
+
+                        compiled = _implicit_compile(self)
+                        object.__setattr__(self, "_compiled", compiled)
+            except Exception:
+                return detect(text, self.detectors)
+        elif not self._compiled_reuse_recorded:
+            from .cache import _record_compiled_reuse
+
+            _record_compiled_reuse()
+            object.__setattr__(self, "_compiled_reuse_recorded", True)
+        return compiled.detect(text)  # type: ignore[union-attr]
+
+    def compile(self, *, warm: bool = True) -> CompiledDetectorSet:
+        """Compile this gang explicitly, optionally forcing lazy reader state."""
+        from .compiled import compile_detectors
+
+        return compile_detectors(self, warm=warm)
+
+    def __getstate__(self):
+        """Omit process-local compiled state and its lock from pickles and copies."""
+        state = object.__getstate__(self)
+
+        def without_compiled(attributes):
+            if attributes is None:
+                return None
+            attributes = dict(attributes)
+            attributes.pop("_compiled", None)
+            attributes.pop("_compiled_reuse_recorded", None)
+            attributes.pop("_compile_lock", None)
+            return attributes
+
+        if isinstance(state, tuple):
+            attributes, slots = state
+            return without_compiled(attributes), without_compiled(slots)
+        return without_compiled(state)
+
+    def __setstate__(self, state) -> None:
+        if isinstance(state, tuple):
+            attributes, slots = state
+        else:
+            attributes, slots = state, None
+        if attributes is not None:
+            vars(self).update(attributes)
+        if slots is not None:
+            for name, value in slots.items():
+                object.__setattr__(self, name, value)
+        object.__setattr__(self, "_compiled", None)
+        object.__setattr__(self, "_compiled_reuse_recorded", False)
+        object.__setattr__(self, "_compile_lock", Lock())
 
     def names(self) -> tuple[str, ...]:
         """The members' types, in order; a type repeats once per locale it is built for."""
