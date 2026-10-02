@@ -19,6 +19,7 @@ from threading import Lock
 
 import icu
 
+from . import _tables
 from ._gate import (
     GATE_AUDIT,
     GATE_STATS,
@@ -35,6 +36,7 @@ from ._gate import (
     heads,
 )
 from ._offsets import boundary_maps
+from ._tables import persisted
 from .breaker import break_grapheme_spans
 from .detectors import (
     _EXTENDING_CATEGORIES,
@@ -2934,7 +2936,7 @@ def _language_decimal_styles(
     return tuple(styles.values())
 
 
-@cache
+@persisted
 def _roman_alphabet(locale: str, rule_set: str) -> frozenset[str]:
     """The word characters ICU writes in one Roman-number rule set."""
     formatter = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.NUMBERING_SYSTEM, icu.Locale(locale))
@@ -3842,6 +3844,7 @@ def _locale_negative_currency_wraps(name: str, currency: str) -> tuple[tuple[str
         return _CURRENCY_WRAP_CACHE.setdefault(key, built)
 
 
+@persisted
 def _locale_negative_currency_wraps_uncached(
     name: str, currency: str
 ) -> tuple[tuple[str, str], ...]:
@@ -4246,6 +4249,7 @@ def _measure_locale_fragment(
         return _MEASURE_FRAGMENT_CACHE.setdefault(key, built)
 
 
+@persisted
 def _measure_locale_fragment_uncached(
     name: str, unit: str, per_valid: bool
 ) -> tuple[
@@ -4313,7 +4317,7 @@ def _unit_surface_variants(surface: str) -> tuple[str, ...]:
             for character in base
         ]
         variants.update("".join(combination) for combination in product(*choices))
-    return tuple(sorted(variants, key=len, reverse=True))
+    return tuple(sorted(variants, key=lambda variant: (-len(variant), variant)))
 
 
 @cache
@@ -5106,6 +5110,7 @@ class FlexibleScientificDetector(_GatedReader):
         )
 
 
+@persisted
 def _spellout_rulesets(locale: str) -> tuple[str, ...]:
     """The locale's public RBNF spell-out rule sets a reader inverts.
 
@@ -5145,6 +5150,58 @@ def _spellout_formatter_and_ruleset(
     return formatter, ruleset
 
 
+def _build_spellout_table(
+    formatter: icu.RuleBasedNumberFormat, ruleset: str
+) -> tuple[frozenset[str], tuple[str, ...], frozenset[str]]:
+    """Build marshal-safe token tables from one in-memory RBNF formatter."""
+    values = (
+        *range(1001),
+        *(multiplier * 10**power for power in range(2, 13) for multiplier in (*range(1, 12), 100)),
+        *(multiplier * 10**power + 1 for power in range(2, 13) for multiplier in range(1, 12)),
+        *(
+            multiplier * 10**power + 10 ** (power - 1) + 1
+            for power in range(2, 13)
+            for multiplier in (1, 2)
+        ),
+        21,
+        101,
+        1234,
+        2_000_000,
+        999,
+        999_999,
+    )
+    surfaces = tuple(formatter.format(value, ruleset) for value in values)
+    connectors = frozenset(
+        character
+        for surface in surfaces
+        for character in surface
+        if not _is_word_character(character)
+    )
+    tokens: set[str] = set()
+    for surface in surfaces:
+        token: list[str] = []
+        for character in surface:
+            if _is_word_character(character):
+                token.append(character)
+            elif token:
+                tokens.add("".join(token).casefold())
+                token = []
+        if token:
+            tokens.add("".join(token).casefold())
+    ordered = tuple(sorted(tokens, key=lambda token: (-len(token), token)))
+    ambiguous = frozenset(formatter.format(value, ruleset).casefold() for value in range(10))
+    return connectors, ordered, ambiguous
+
+
+@persisted
+def _spellout_table(
+    locale: str, ruleset: str
+) -> tuple[frozenset[str], tuple[str, ...], frozenset[str]]:
+    """The standard ICU spell-out connector, token, and ambiguous-unit tables."""
+    formatter = icu.RuleBasedNumberFormat(icu.URBNFRuleSetTag.SPELLOUT, icu.Locale(locale))
+    return _build_spellout_table(formatter, ruleset)
+
+
 class FlexibleSpelloutDetector(_GatedReader):
     """Recognize canonical ICU spelled-out numbers derived from locale RBNF data.
 
@@ -5172,6 +5229,9 @@ class FlexibleSpelloutDetector(_GatedReader):
     def _format_spec(self) -> SpelloutFormatSpec:
         return SpelloutFormatSpec(self.locale, self._ruleset)
 
+    def _table(self, locale: str, ruleset: str):
+        return _spellout_table(locale, ruleset)
+
     def __init__(self, locale: str, *, ruleset: str | None = None) -> None:
         self.locale = locale
         self._rbnf, self._ruleset = self._formatter_and_ruleset(locale)
@@ -5181,54 +5241,13 @@ class FlexibleSpelloutDetector(_GatedReader):
             self._ruleset = ruleset
             self.type = "number:spellout:" + ruleset.lstrip("%").removeprefix("spellout-")
         self._spec = self._format_spec()
-        values = (
-            *range(1001),
-            *(
-                multiplier * 10**power
-                for power in range(2, 13)
-                for multiplier in (*range(1, 12), 100)
-            ),
-            *(multiplier * 10**power + 1 for power in range(2, 13) for multiplier in range(1, 12)),
-            *(
-                multiplier * 10**power + 10 ** (power - 1) + 1
-                for power in range(2, 13)
-                for multiplier in (1, 2)
-            ),
-            21,
-            101,
-            1234,
-            2_000_000,
-            999,
-            999_999,
-        )
-        surfaces = tuple(self._rbnf.format(value, self._ruleset) for value in values)
-        self._connectors = frozenset(
-            character
-            for surface in surfaces
-            for character in surface
-            if not _is_word_character(character)
-        )
-        tokens: set[str] = set()
-        for surface in surfaces:
-            token: list[str] = []
-            for character in surface:
-                if _is_word_character(character):
-                    token.append(character)
-                elif token:
-                    tokens.add("".join(token).casefold())
-                    token = []
-            if token:
-                tokens.add("".join(token).casefold())
-        self._tokens = tuple(sorted(tokens, key=lambda token: (-len(token), token)))
+        self._connectors, self._tokens, self._ambiguous_units = self._table(locale, self._ruleset)
         tokens_by_first: dict[str, list[str]] = {}
         for token in self._tokens:
             tokens_by_first.setdefault(token[0], []).append(token)
         self._tokens_by_first = {
             first: tuple(first_tokens) for first, first_tokens in tokens_by_first.items()
         }
-        self._ambiguous_units = frozenset(
-            self._rbnf.format(value, self._ruleset).casefold() for value in range(10)
-        )
         _install_gates(
             self,
             {"spellout": StartGate(folded=frozenset(self._tokens_by_first))},
@@ -5413,6 +5432,10 @@ class MaterialSpelloutDetector(FlexibleSpelloutDetector):
 
     def _format_spec(self) -> MaterialSpelloutFormatSpec:
         return MaterialSpelloutFormatSpec(self.locale, self._ruleset, self.material_digest)
+
+    def _table(self, locale: str, ruleset: str):
+        del locale
+        return _build_spellout_table(self._rbnf, ruleset)
 
 
 class FlexibleLoneSpelloutDetector(FlexibleSpelloutDetector):
@@ -5819,6 +5842,7 @@ def _zone_locale_tables_uncached(name: str) -> tuple[frozenset[str], frozenset[s
     return owner[0] | generic[0], owner[1] | generic[1]
 
 
+@persisted
 def _zone_locale_owner_tables_uncached(
     name: str,
 ) -> tuple[frozenset[str], frozenset[str]]:
@@ -5848,6 +5872,7 @@ def _zone_locale_owner_tables_uncached(
     return frozenset(abbreviations), frozenset(names)
 
 
+@persisted
 def _zone_locale_generic_tables_uncached(
     name: str,
 ) -> tuple[frozenset[str], frozenset[str]]:
@@ -8376,3 +8401,4 @@ def _clear_derived_locale_caches() -> None:
         _CURRENCY_AFFIX_CACHE.clear()
     with _ZONE_FRAGMENT_LOCK:
         _ZONE_FRAGMENT_CACHE.clear()
+    _tables._clear_memory()

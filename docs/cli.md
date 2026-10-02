@@ -487,9 +487,14 @@ Examples:
 ## `icukit compile`
 
 Prepare one detector gang per locale without reading input text. Reader construction,
-lazy sub-readers, and zone tables are completed in the build phase. L3 keeps the
-result in process only; the configured cache directory is reported for the on-disk
-table store added in the next cache layer.
+lazy sub-readers, and zone tables are completed in the build phase and flushed to the
+on-disk table store. Cache-management actions may be run without ``--locales``.
+
+The cache directory must be trusted because its marshal files are not safe to load from
+an untrusted writer. Their SHA-256 is an integrity check, not authentication. --verify
+recomputes every entry with ICUKIT_CACHE=0 in a fresh process. --list inspects current
+shards, --prune removes obsolete environment keys, and --clear removes the table store.
+No prebuilt tables ship; use --cache-dir to prepare a Docker or CI cache explicitly.
 
 Example:
   ik compile --locales en_US,de_DE --flexible --json
@@ -504,7 +509,11 @@ Example:
 - `--measure`: Add an ICU measure unit (default: `[]`)
 - `--skeleton`: Add a date skeleton (default: `[]`)
 - `--material`: Add validated locale material from PATH (repeatable) (default: `[]`)
-- `--cache-dir`: Set the cache root reported now and used by the later disk table store
+- `--cache-dir`: Use DIR as the cache root
+- `--verify`: Recompute every cached entry in a fresh process (default: `False`)
+- `--list`: List current cache shards (default: `False`)
+- `--prune`: Remove obsolete table-key caches (default: `False`)
+- `--clear`: Remove all table caches in the root (default: `False`)
 - `--json`: Output JSON (default: `False`)
 
 ## `icukit datetime` (aliases: date, dt)
@@ -738,6 +747,7 @@ Examples:
 - `--measure`: Add an ICU measure unit, single or mixed (with --flexible, the measure readers read only the units given) (default: `[]`)
 - `--flexible`: Add the flexible readers (seconds to build) (default: `False`)
 - `--guarded`: Add the readings the default readers refuse on purpose (default: `False`)
+- `--no-cache`: Disable all on-disk table-cache reads and writes for this process (default: `False`)
 - `--locales`: With --flexible, the other locales of the language to read, comma-separated (default: every one; "" reads the locale alone)
 - `--skeleton`: Add a date skeleton (default: `[]`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)

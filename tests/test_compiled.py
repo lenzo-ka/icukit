@@ -322,6 +322,16 @@ def test_compile_counters_and_implicit_reuse():
     assert info["detect_hits"] == 3
 
 
+def test_cache_opt_out_bypasses_implicit_compilation():
+    gang = _small_gang()
+    detector_cache.configure(enabled=False)
+    try:
+        assert gang.detect("at 5") == detect("at 5", gang.detectors)
+        assert gang._compiled is None
+    finally:
+        detector_cache.configure(enabled=True)
+
+
 def test_scan_plan_is_looked_up_once_per_lane(monkeypatch):
     import icukit.detectors as detectors_module
     import icukit.recognize as recognize

@@ -68,15 +68,17 @@
   versioned tokenizer-profile identity and run candidate- and decision-aware
   authored witnesses when loaded.
 - `ReaderSpec`, `compile_detectors`, `CompiledDetectorSet`, `CompileKey`,
-  `CompileStats`, `LaneGate`, and `reader_set` provide explicit and implicit detector
+  `CompileStats`, `TableKey`, `LaneGate`, and `reader_set` provide explicit and implicit detector
   compilation. A compiled detection shares one immutable UTF-16 offset map, ICU string,
   grapheme plan, word-interior plan, and gate index across a gang without changing its
-  detections. `icukit.cache` adds process-level `configure`, `cache_info`, and `flush`;
-  this release reports the future cache root and in-process counters but does not yet
-  read or write tables on disk.
+  detections. `icukit.cache` adds process-level `configure`, `cache_info`, and `flush`.
+  Expensive pure ICU-derived tables are stored in trusted, environment-keyed,
+  per-language marshal shards with locked merge-on-write updates; no prebuilt tables or
+  user locale material ship in or enter the cache.
 - `ik compile --locales LOC[,LOC...]` prepares and reports detector gangs without
-  reading text. It accepts the reader-selection flags, `--cache-dir`, and `--json`;
-  disk verification and cache-management flags arrive with the table store.
+  reading text. It accepts the reader-selection flags, `--cache-dir`, `--verify`,
+  `--list`, `--prune`, `--clear`, and `--json`. `ik detect --no-cache`,
+  `ICUKIT_CACHE=0`, and `configure(enabled=False)` disable disk cache access.
 - Experimental `char-classes` and `shape-refinement` locale-material kinds add
   namespaced character classes and extended shape symbols at runtime. They are
   witness-checked, canonically digested, explicitly passed with `material=`, and

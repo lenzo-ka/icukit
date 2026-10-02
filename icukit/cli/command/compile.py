@@ -7,7 +7,7 @@ import sys
 
 import icu
 
-from ... import cache
+from ... import _tables, cache
 from ...compiled import ReaderSpec, compile_detectors
 from ...formatters import format_json, format_tsv
 from ...material import MaterialLoadError, load_locale_material
@@ -26,9 +26,14 @@ class CompileCommand(SubcommandBase):
             help="Prepare detector gangs without reading text",
             description="""
 Prepare one detector gang per locale without reading input text. Reader construction,
-lazy sub-readers, and zone tables are completed in the build phase. L3 keeps the
-result in process only; the configured cache directory is reported for the on-disk
-table store added in the next cache layer.
+lazy sub-readers, and zone tables are completed in the build phase and flushed to the
+on-disk table store. Cache-management actions may be run without ``--locales``.
+
+The cache directory must be trusted because its marshal files are not safe to load from
+an untrusted writer. Their SHA-256 is an integrity check, not authentication. --verify
+recomputes every entry with ICUKIT_CACHE=0 in a fresh process. --list inspects current
+shards, --prune removes obsolete environment keys, and --clear removes the table store.
+No prebuilt tables ship; use --cache-dir to prepare a Docker or CI cache explicitly.
 
 Example:
   ik compile --locales en_US,de_DE --flexible --json
@@ -37,7 +42,7 @@ Example:
         )
         parser.add_argument(
             "--locales",
-            required=True,
+            required=False,
             metavar="LOC[,LOC...]",
             help="Locales whose detector gangs to prepare, comma-separated",
         )
@@ -68,7 +73,15 @@ Example:
         parser.add_argument(
             "--cache-dir",
             metavar="DIR",
-            help="Set the cache root reported now and used by the later disk table store",
+            help="Use DIR as the cache root",
+        )
+        parser.add_argument(
+            "--verify", action="store_true", help="Recompute every cached entry in a fresh process"
+        )
+        parser.add_argument("--list", action="store_true", help="List current cache shards")
+        parser.add_argument("--prune", action="store_true", help="Remove obsolete table-key caches")
+        parser.add_argument(
+            "--clear", action="store_true", help="Remove all table caches in the root"
         )
         parser.add_argument("--json", action="store_true", help="Output JSON")
         parser.set_defaults(func=cls.run)
@@ -81,10 +94,17 @@ Example:
     @classmethod
     def run(cls, args):
         """Build, warm, and report each requested detector gang."""
-        locales = cls._split(args.locales)
-        if not locales:
+        locales = cls._split(args.locales or "")
+        managing = args.verify or args.list or args.prune or args.clear
+        if not locales and not managing:
             print("icukit compile: --locales names at least one locale", file=sys.stderr)
             return 2
+        if args.cache_dir:
+            cache.configure(directory=args.cache_dir)
+        if args.clear:
+            _tables.clear()
+        if args.prune:
+            _tables.prune()
         known_locales = set(icu.Locale.getAvailableLocales())
         for locale in locales:
             if icu.Locale(locale).getName() not in known_locales:
@@ -134,8 +154,6 @@ Example:
                 for refusal in error.refusals:
                     print(f"icukit compile: {refusal.code}: {refusal.detail}", file=sys.stderr)
                 return 2
-        if args.cache_dir:
-            cache.configure(directory=args.cache_dir)
         rows = []
         for locale in locales:
             compiled = compile_detectors(
@@ -166,5 +184,26 @@ Example:
                     "path": info["root"],
                 }
             )
-        print(format_json(rows) if args.json else format_tsv(rows))
+        verification = _tables.verify() if args.verify else None
+        entries_verified = verification[0] if verification is not None else None
+        failures = verification[1] if verification is not None else []
+        listed = _tables.list_entries() if args.list else []
+        if managing:
+            report = {
+                "compiled": rows,
+                "cleared": bool(args.clear),
+                "pruned": bool(args.prune),
+                "verified": not failures if args.verify else None,
+                "entries_verified": entries_verified,
+                "verification_failures": len(failures) if args.verify else None,
+                "failures": failures,
+                "entries": listed,
+            }
+            print(format_json(report) if args.json else format_tsv([report]))
+        else:
+            print(format_json(rows) if args.json else format_tsv(rows))
+        if failures:
+            for failure in failures:
+                print(f"icukit compile: verify: {failure}", file=sys.stderr)
+            return 1
         return 0

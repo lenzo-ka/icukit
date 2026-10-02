@@ -1362,13 +1362,12 @@ def flexible_detectors(
 def clear_detector_caches() -> None:
     """Clear all process-wide detector-construction caches.
 
-    This clears generated and flexible gang memos, shared number readers, and derived
-    per-locale currency, measure, digit, plural, and time-zone tables. It is useful to
-    tests, benchmarks, and long-lived processes that need to release cached gangs.
-    Compiled sets and their text plans belong to individual :class:`DetectorSet`
-    instances, not a process-global cache, so they are not reset here. Use
-    :func:`icukit.cache.configure` or ``ICUKIT_CACHE=0`` to bypass both the gang memo
-    and the table-store cache layer.
+    This clears generated and flexible gang memos, shared number readers, derived
+    per-locale currency, measure, digit, plural, and time-zone tables, and the table
+    store's loaded values. It does not delete table-store files. Compiled sets and their
+    text plans belong to individual :class:`DetectorSet` instances, not a process-global
+    cache, so they are not reset here. Use :func:`icukit.cache.configure` or
+    ``ICUKIT_CACHE=0`` to bypass the gang memo, implicit compilation, and table store.
     """
     _GENERATED_GANGS.clear()
     _FLEXIBLE_GANGS.clear()

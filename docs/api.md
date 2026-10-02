@@ -45,6 +45,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`ReaderSpec`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileKey`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileStats`](#icukitcompiled) — class, `icukit.compiled`
+- [`TableKey`](#icukitcompiled) — class, `icukit.compiled`
 - [`LaneGate`](#start-gates) — class, `icukit`
 - [`compile_detectors`](#icukitcompiled) — function, `icukit.compiled`
 - [`GatedDetector`](#icukitdetectors) — class, `icukit.detectors`
@@ -1433,12 +1434,23 @@ Raises:
 
 Process-level settings and observability for detector caches.
 
-The L3 implementation has no on-disk table store yet.  This module establishes the
-stable public settings and counter surface used by compilation; L4 adds persistence
-behind it without changing callers. One enable switch controls both the in-process
-detector-gang memo and that table store: :func:`configure` overrides the environment
-when passed ``enabled=True`` or ``False``; otherwise ``ICUKIT_CACHE=0`` is read at each
-cache operation.
+The first use of an expensive, registered detector table stores a local snapshot;
+no prebuilt tables ship in the wheel. The root is ``ICUKIT_CACHE_DIR`` when set,
+then the platform cache directory. It can instead be selected with
+:func:`configure` before readers are built. The root is created with mode ``0700``.
+
+The directory must be trusted. Table files use :mod:`marshal`; their SHA-256
+detects accidental damage but does not authenticate crafted input. The key covers
+icukit code and data, ICU, PyICU, CLDR, Unicode, Python, the ICU data environment,
+the ICU default locale, and a hash of the available time-zone IDs. A residual risk
+remains: zone display data can change without the wheel version or zone-ID set
+changing. Run ``ik compile --verify`` to recompute and compare every entry.
+
+Only registered, deterministic Python tables are serialized. ICU objects, detector
+instances, and application material remain in memory. Disable all disk reads and
+writes with ``configure(enabled=False)``, ``ICUKIT_CACHE=0``, or
+``ik detect --no-cache``. :func:`flush` writes queued marshal snapshots explicitly;
+process exit is only a fallback.
 
 ### Constants and type aliases
 
@@ -1456,27 +1468,27 @@ from ``"0"`` takes effect without re-importing :mod:`icukit.cache`.
 
 ### `cache_info() -> 'dict'`
 
-Return process settings, zero table-store counts, and compile reuse counters.
+Return process settings, table-store counts, and compile reuse counters.
 
 ``detect_hits`` counts compiled detects that made a compatible per-text scan plan
 available to the detect phase, not the number of readers or starts that used it.
+``table_detect_hits`` counts persisted table entries reused during the detect phase.
 ``compiled_reuse`` counts gangs observed reusing their implicit compiled object.
 
 ### `configure(*, enabled: 'bool | None' = None, directory: 'StrPath | None' = None) -> 'None'`
 
 Configure the process cache before constructing readers.
 
-L3 records the directory that the table store will use but does not create or read
-it. Passing ``True`` or ``False`` for ``enabled`` overrides ``ICUKIT_CACHE`` for
-both detector-gang memoization and the table store. Passing ``None`` leaves any
-existing override unchanged; without an override, the environment is read at each
-cache operation. A directory of ``None`` likewise leaves the root unchanged.
+Passing ``True`` or ``False`` for ``enabled`` overrides ``ICUKIT_CACHE`` for the
+in-process detector caches and the table store. Without an override, the
+environment is read at each cache operation. Passing ``None`` leaves the
+corresponding setting unchanged. Reconfiguration drops process-local table
+snapshots so a newly selected directory is populated from the real table builders.
+A configured directory must be trusted because table files use :mod:`marshal`.
 
 ### `flush() -> 'None'`
 
-Flush queued cache entries.
-
-There are no on-disk entries in L3, so this is intentionally a no-op.
+Write every queued table snapshot now.
 
 ## icukit.calendar
 
@@ -1935,7 +1947,7 @@ Compiled detector gangs with one immutable scan plan per input text.
 
 ### class `CompileKey`
 
-The table environment placeholder and identity of one detector gang.
+The table environment and identity of one detector gang.
 
 #### `CompileKey(tables: 'str', locales: 'tuple[str, ...]', readers: 'str') -> None`
 
@@ -1983,6 +1995,28 @@ A declarative detector gang whose construction is measured by compilation.
 #### `ReaderSpec(locale: 'str', guarded: 'bool' = False, flexible: 'bool' = False, locales: 'tuple[str, ...] | None' = None, currencies: 'tuple[str, ...]' = (), units: 'tuple[str, ...]' = (), skeletons: 'tuple[str, ...] | None' = None, material: 'tuple[LocaleMaterial, ...]' = ()) -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
+
+### class `TableKey`
+
+Every environment field on which a persisted table can depend.
+
+``code`` hashes loader-read package modules (source, or bytecode for a
+sourceless install) and packaged data, including zip imports. ``tz`` hashes
+the sorted ICU zone-ID enumeration. ``icu_env`` records ``ICU_DATA`` and
+``ICU_TIMEZONE_FILES_DIR``. ``default_locale`` separates ICU fallback results
+created under different process defaults.
+
+#### `TableKey(schema: 'int', icukit: 'str', code: 'str', icu: 'str', pyicu: 'str', pyicu_dist: 'str', unicode: 'str', cldr: 'str', tz: 'str', python_tag: 'str', marshal: 'int', py_unicode: 'str', icu_env: 'str', default_locale: 'str') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `digest() -> 'str'`
+
+Return SHA-256 over the canonical fields.
+
+#### `json() -> 'str'`
+
+Return the canonical JSON stored beside every payload.
 
 ### `compile_detectors(detectors: 'DetectorSet | Iterable[Detector] | ReaderSpec', *, warm: 'bool' = True) -> 'CompiledDetectorSet'`
 
@@ -3520,13 +3554,12 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Clear all process-wide detector-construction caches.
 
-This clears generated and flexible gang memos, shared number readers, and derived
-per-locale currency, measure, digit, plural, and time-zone tables. It is useful to
-tests, benchmarks, and long-lived processes that need to release cached gangs.
-Compiled sets and their text plans belong to individual :class:`DetectorSet`
-instances, not a process-global cache, so they are not reset here. Use
-:func:`icukit.cache.configure` or ``ICUKIT_CACHE=0`` to bypass both the gang memo
-and the table-store cache layer.
+This clears generated and flexible gang memos, shared number readers, derived
+per-locale currency, measure, digit, plural, and time-zone tables, and the table
+store's loaded values. It does not delete table-store files. Compiled sets and their
+text plans belong to individual :class:`DetectorSet` instances, not a process-global
+cache, so they are not reset here. Use :func:`icukit.cache.configure` or
+``ICUKIT_CACHE=0`` to bypass the gang memo, implicit compilation, and table store.
 
 ### `flexible_detectors(locale: 'str', *, locales: 'Iterable[str] | None' = None, currencies: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False, material: 'Iterable[LocaleMaterial]' = ()) -> 'DetectorSet'`
 

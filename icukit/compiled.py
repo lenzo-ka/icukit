@@ -22,6 +22,7 @@ from ._gate import (
     _ScanPlan,
 )
 from ._offsets import boundary_maps
+from ._tables import TableKey, table_key
 from .detectors import (
     Detector,
     DetectorSet,
@@ -37,6 +38,7 @@ __all__ = [
     "CompileStats",
     "CompiledDetectorSet",
     "ReaderSpec",
+    "TableKey",
     "compile_detectors",
 ]
 
@@ -79,7 +81,7 @@ class CompileStats:
 
 @dataclass(frozen=True)
 class CompileKey:
-    """The table environment placeholder and identity of one detector gang."""
+    """The table environment and identity of one detector gang."""
 
     tables: str
     locales: tuple[str, ...]
@@ -192,7 +194,7 @@ def _compile_key(detectors: DetectorSet) -> CompileKey:
     locales = tuple(sorted({key[2] for key in keys if isinstance(key[2], str)}))
     identity = repr(sorted(keys, key=repr)).encode()
     return CompileKey(
-        tables=cache._NO_TABLE_STORE_DIGEST,
+        tables=table_key().digest(),
         locales=locales,
         readers=hashlib.sha256(identity).hexdigest(),
     )
@@ -298,6 +300,8 @@ class CompiledDetectorSet:
     detectors: DetectorSet
     _build_s: float | None = field(default=None, init=False, repr=False)
     _warm_s: float = field(default=0.0, init=False, repr=False)
+    _tables_loaded: int = field(default=0, init=False, repr=False)
+    _tables_computed: int = field(default=0, init=False, repr=False)
     _key: CompileKey | None = field(default=None, repr=False)
     _stats: CompileStats | None = field(default=None, repr=False)
     _report: tuple[LaneGate, ...] | None = field(default=None, repr=False)
@@ -310,6 +314,8 @@ class CompiledDetectorSet:
         object.__setattr__(self, "detectors", detectors)
         object.__setattr__(self, "_build_s", None)
         object.__setattr__(self, "_warm_s", 0.0)
+        object.__setattr__(self, "_tables_loaded", 0)
+        object.__setattr__(self, "_tables_computed", 0)
         object.__setattr__(self, "_key", None)
         object.__setattr__(self, "_stats", None)
         object.__setattr__(self, "_report", None)
@@ -339,11 +345,11 @@ class CompiledDetectorSet:
                 CompileStats(
                     build_s=self._build_s,
                     warm_s=self._warm_s,
-                    tables_loaded=0,
-                    tables_computed=0,
+                    tables_loaded=self._tables_loaded,
+                    tables_computed=self._tables_computed,
                     lanes_gated=sum(lane.gated for lane in report),
                     lanes_ungated=sum(not lane.gated for lane in report),
-                    table_store=None,
+                    table_store=self.key.tables if cache.cache_info()["enabled"] else None,
                 ),
             )
         return self._stats
@@ -358,11 +364,23 @@ class CompiledDetectorSet:
 
     def warm(self) -> CompiledDetectorSet:
         """Force lazy sub-readers and zone tables under the build phase."""
+        before_loaded, before_computed = cache._table_counts()
         started = time.perf_counter()
         with cache._build_phase():
             _warm(self.detectors)
             cache.flush()
+        after_loaded, after_computed = cache._table_counts()
         object.__setattr__(self, "_warm_s", self._warm_s + time.perf_counter() - started)
+        object.__setattr__(
+            self,
+            "_tables_loaded",
+            self._tables_loaded + after_loaded - before_loaded,
+        )
+        object.__setattr__(
+            self,
+            "_tables_computed",
+            self._tables_computed + after_computed - before_computed,
+        )
         object.__setattr__(self, "_stats", None)
         return self
 
@@ -405,6 +423,7 @@ def _compile(
 ) -> CompiledDetectorSet:
     build_s: float | None = None
     warm_s = 0.0
+    before_loaded, before_computed = cache._table_counts()
     with cache._build_phase():
         if isinstance(detectors, ReaderSpec):
             from .engine import reader_set
@@ -433,7 +452,20 @@ def _compile(
             _warm(gang)
             cache.flush()
             object.__setattr__(compiled, "_warm_s", time.perf_counter() - started)
+        else:
+            cache.flush()
         cache._record_compile()
+    after_loaded, after_computed = cache._table_counts()
+    object.__setattr__(
+        compiled,
+        "_tables_loaded",
+        after_loaded - before_loaded,
+    )
+    object.__setattr__(
+        compiled,
+        "_tables_computed",
+        after_computed - before_computed,
+    )
     if not defer_report:
         object.__setattr__(compiled, "_key", _compile_key(gang))
         object.__setattr__(compiled, "_report", _lane_report(gang))

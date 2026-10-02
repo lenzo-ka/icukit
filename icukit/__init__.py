@@ -120,6 +120,7 @@ from .compiled import (
     CompileKey,
     CompileStats,
     ReaderSpec,
+    TableKey,
     compile_detectors,
 )
 from .datetime import (
@@ -528,6 +529,7 @@ __all__ = [
     "ReaderSpec",
     "CompileKey",
     "CompileStats",
+    "TableKey",
     "LaneGate",
     "compile_detectors",
     "GatedDetector",
