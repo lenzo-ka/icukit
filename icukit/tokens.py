@@ -17,7 +17,7 @@ from typing import Literal, NotRequired, TypedDict, cast
 
 import icu
 
-from .breaker import break_word_spans
+from .breaker import _raw_break_word_extents, break_word_spans
 from .classes import _class_materials, char_classes
 from .errors import OverlappingProtectedSpans
 from .exceptions import LoadedExceptionInventory
@@ -152,12 +152,30 @@ def tokens(
         ('5-10', 1, 'range')
     """
     token_spans, _hints = _validated_protected(protected, len(text))
+    if inventory is None and not token_spans:
+        result: list[Token] = []
+        run = -1
+        active = False
+        for start, end in _raw_break_word_extents(text, locale):
+            surface = text[start:end]
+            if surface.isspace():
+                active = False
+                continue
+            if not active:
+                run += 1
+                active = True
+            result.append({"start": start, "end": end, "text": surface, "run": run})
+        return result
+
     protected_units = _outermost_spans(token_spans)
-    icu_base = break_word_spans(text, locale)
     inventory_units: list[tuple[int, int, tuple[str, ...]]] = []
     if inventory is None:
+        icu_base = [
+            {"start": start, "end": end} for start, end in _raw_break_word_extents(text, locale)
+        ]
         base = icu_base
     else:
+        icu_base = break_word_spans(text, locale)
         base = []
         for span in inventory.break_spans(text, "word", locale):
             start = span["start"]
@@ -213,6 +231,78 @@ def tokens(
     return result
 
 
+_BASE_FEATURES = frozenset(
+    {
+        "text",
+        "lower",
+        "len",
+        "shape.coarse",
+        "shape.cased",
+        "general_category.first",
+        "general_category.last",
+        "sentence_break.first",
+        "word_break.first",
+        "script.first",
+        "ws.before",
+        "run.shape.cased",
+        "lex",
+    }
+)
+
+
+def _token_features_selected(
+    toks: Sequence[Token],
+    i: int,
+    text: str,
+    /,
+    *,
+    features: frozenset[str],
+    run_shape_cased: str | None = None,
+) -> dict[str, str | int | bool]:
+    """Compute only the requested sentence-override features for token ``i``."""
+    token = toks[i]
+    surface = token["text"]
+    if not surface:
+        raise ValueError("tokens must have nonempty text")
+    if "run.shape.cased" in features and run_shape_cased is None:
+        run_tokens = [item for item in toks if item["run"] == token["run"]]
+        run_start = min(item["start"] for item in run_tokens)
+        run_end = max(item["end"] for item in run_tokens)
+        run_shape_cased = shape(text[run_start:run_end], "cased@1")
+    first = surface[0]
+    last = surface[-1]
+    values: dict[str, str | int | bool] = {}
+    if "text" in features:
+        values["text"] = surface
+    if "lower" in features:
+        values["lower"] = str(icu.UnicodeString(surface).toLower(icu.Locale.getRoot()))
+    if "len" in features:
+        values["len"] = len(surface)
+    if "shape.coarse" in features:
+        values["shape.coarse"] = shape(surface, "coarse@1")
+    if "shape.cased" in features:
+        values["shape.cased"] = shape(surface, "cased@1")
+    if "general_category.first" in features:
+        values["general_category.first"] = char_classes(first, "general_category")[0]
+    if "general_category.last" in features:
+        values["general_category.last"] = char_classes(last, "general_category")[0]
+    if "sentence_break.first" in features:
+        values["sentence_break.first"] = char_classes(first, "sentence_break")[0]
+    if "word_break.first" in features:
+        values["word_break.first"] = char_classes(first, "word_break")[0]
+    if "script.first" in features:
+        values["script.first"] = char_classes(first, "script")[0]
+    if "ws.before" in features:
+        values["ws.before"] = token["start"] > 0 and text[token["start"] - 1].isspace()
+    if "run.shape.cased" in features:
+        if run_shape_cased is None:
+            raise AssertionError("run shape was not computed")
+        values["run.shape.cased"] = run_shape_cased
+    if "lex" in features:
+        values["lex"] = "none"
+    return values
+
+
 def _token_features_base(
     toks: Sequence[Token],
     i: int,
@@ -220,34 +310,16 @@ def _token_features_base(
     /,
     *,
     run_shape_cased: str | None = None,
+    _features: frozenset[str] = _BASE_FEATURES,
 ) -> dict[str, str | int | bool]:
-    """Return the sentence-override feature-set-v1 values for token ``i``."""
-    token = toks[i]
-    surface = token["text"]
-    if not surface:
-        raise ValueError("tokens must have nonempty text")
-    if run_shape_cased is None:
-        run_tokens = [item for item in toks if item["run"] == token["run"]]
-        run_start = min(item["start"] for item in run_tokens)
-        run_end = max(item["end"] for item in run_tokens)
-        run_shape_cased = shape(text[run_start:run_end], "cased@1")
-    first = surface[0]
-    last = surface[-1]
-    return {
-        "text": surface,
-        "lower": str(icu.UnicodeString(surface).toLower(icu.Locale.getRoot())),
-        "len": len(surface),
-        "shape.coarse": shape(surface, "coarse@1"),
-        "shape.cased": shape(surface, "cased@1"),
-        "general_category.first": char_classes(first, "general_category")[0],
-        "general_category.last": char_classes(last, "general_category")[0],
-        "sentence_break.first": char_classes(first, "sentence_break")[0],
-        "word_break.first": char_classes(first, "word_break")[0],
-        "script.first": char_classes(first, "script")[0],
-        "ws.before": token["start"] > 0 and text[token["start"] - 1].isspace(),
-        "run.shape.cased": run_shape_cased,
-        "lex": "none",
-    }
+    """Return requested feature-set-v1 values, or the complete base by default."""
+    return _token_features_selected(
+        toks,
+        i,
+        text,
+        features=_features,
+        run_shape_cased=run_shape_cased,
+    )
 
 
 def token_features(

@@ -24,6 +24,8 @@ Example:
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import cache
 from typing import Literal, NotRequired, TypedDict
 
@@ -58,6 +60,9 @@ BREAK_LINE = "line"
 BREAK_CHARACTER = "character"
 
 _SENTENCE_BASES = {"none", "en-tn@1", "en-tn-cart@1"}
+_ACTIVE_OFFSET_MAPS: ContextVar[tuple[str, OffsetMaps] | None] = ContextVar(
+    "icukit_breaker_offset_maps", default=None
+)
 
 
 class BreakSpan(TypedDict):
@@ -116,11 +121,23 @@ def _make_span(
     return span
 
 
+@contextmanager
+def _shared_offset_maps(text: str) -> Iterator[OffsetMaps]:
+    """Share one immutable map across sentence and word iterators for ``text``."""
+    maps = offset_maps(text)
+    token = _ACTIVE_OFFSET_MAPS.set((text, maps))
+    try:
+        yield maps
+    finally:
+        _ACTIVE_OFFSET_MAPS.reset(token)
+
+
 def _iter_spans(bi, text: str) -> Iterator[tuple[int, int, list[int], OffsetMaps]]:
     """Yield code-point boundaries and statuses from an ICU iterator."""
     us = icu.UnicodeString(text)
     bi.setText(us)
-    maps = offset_maps(text)
+    active = _ACTIVE_OFFSET_MAPS.get()
+    maps = active[1] if active is not None and active[0] is text else offset_maps(text)
 
     start = bi.first()
     for end in bi:
@@ -177,6 +194,27 @@ def _raw_break_sentence_spans(text: str, locale: str = "en_US") -> list[BreakSpa
         ]
     except icu.ICUError as e:
         raise BreakerError(f"Failed to break sentences: {e}") from e
+
+
+def _raw_break_word_extents(text: str, locale: str = "en_US") -> list[tuple[int, int]]:
+    """Return ICU word extents without materializing public span metadata."""
+    try:
+        bi = icu.BreakIterator.createWordInstance(icu.Locale(locale))
+        us = icu.UnicodeString(text)
+        bi.setText(us)
+        active = _ACTIVE_OFFSET_MAPS.get()
+        maps = active[1] if active is not None and active[0] is text else offset_maps(text)
+        result = []
+        start = bi.first()
+        for end in bi:
+            cp_start = maps.utf16_to_cp[start]
+            cp_end = maps.utf16_to_cp[end]
+            if cp_start != cp_end:
+                result.append((cp_start, cp_end))
+            start = end
+        return result
+    except icu.ICUError as error:
+        raise BreakerError(f"Failed to break words: {error}") from error
 
 
 @cache
@@ -265,7 +303,7 @@ class Breaker:
 
     def iter_sentence_spans(self, text: str) -> Iterator[BreakSpan]:
         """Yield sentence spans from the selected locale-default or named base."""
-        if self.base == "none":
+        if self.base == "none" and self._locale_obj.getKeywordValue("ss") is not None:
             yield from _raw_break_sentence_spans(text, self.locale)
             return
         yield from _sentence_override(self.locale, self.base).spans(text)

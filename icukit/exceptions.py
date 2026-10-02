@@ -577,6 +577,18 @@ class _ConditionPosition:
     position: int | None = None
 
 
+def _word_spans_supplier(text: str, locale: str) -> Callable[[], list[BreakSpan]]:
+    cached: list[BreakSpan] | None = None
+
+    def supply() -> list[BreakSpan]:
+        nonlocal cached
+        if cached is None:
+            cached = break_word_spans(text, locale)
+        return cached
+
+    return supply
+
+
 def _condition_matches(
     condition: _CompiledCondition,
     text: str,
@@ -584,11 +596,12 @@ def _condition_matches(
     end: int,
     locale: str,
     position: int,
+    word_spans: Callable[[], list[BreakSpan]] | None = None,
 ) -> bool:
     if condition.kind == "unicode_set":
         assert condition.unicode_set is not None
         return condition.unicode_set.contains(text[position])
-    words = break_word_spans(text, locale)
+    words = word_spans() if word_spans is not None else break_word_spans(text, locale)
     adjacent = next(
         (
             span
@@ -612,6 +625,7 @@ def _condition_result(
     locale: str,
     policy: ExceptionPolicy,
     mandatory_info: Callable[[], _MandatoryLineInfo],
+    word_spans: Callable[[], list[BreakSpan]] | None = None,
 ) -> bool:
     result = _condition_position(text, start, end, condition, policy, mandatory_info)
     if result.outcome == "missing":
@@ -619,7 +633,7 @@ def _condition_result(
     if result.outcome == "barrier":
         return False
     assert result.position is not None
-    return _condition_matches(condition, text, start, end, locale, result.position)
+    return _condition_matches(condition, text, start, end, locale, result.position, word_spans)
 
 
 def _anchored_exact(rule: _CompiledRule, text: str) -> list[Detection]:
@@ -635,6 +649,7 @@ def _detections(
     locale: str,
     policy: ExceptionPolicy | None = None,
     mandatory_info: Callable[[], _MandatoryLineInfo] | None = None,
+    word_spans: Callable[[], list[BreakSpan]] | None = None,
 ) -> list[Detection]:
     policy = policy or ExceptionPolicy()
     mandatory_info = mandatory_info or _mandatory_info_supplier(text, locale)
@@ -661,7 +676,16 @@ def _detections(
         item
         for item in found
         if predicate(
-            _condition_result(c, text, item["start"], item["end"], locale, policy, mandatory_info)
+            _condition_result(
+                c,
+                text,
+                item["start"],
+                item["end"],
+                locale,
+                policy,
+                mandatory_info,
+                word_spans,
+            )
             for c in rule.conditions
         )
     ]
@@ -844,11 +868,13 @@ def _boundary_claims(
     locale: str,
     policy: ExceptionPolicy,
     mandatory_info: Callable[[], _MandatoryLineInfo],
+    word_spans: Callable[[], list[BreakSpan]] | None = None,
 ) -> dict[int, list[str]]:
     boundaries = {span["end"] for span in base[:-1]}
     claims: dict[int, list[str]] = {}
+    word_spans = word_spans or _word_spans_supplier(text, locale)
     for rule in rules:
-        for match in _detections(rule, text, locale, policy, mandatory_info):
+        for match in _detections(rule, text, locale, policy, mandatory_info, word_spans):
             internal = {
                 boundary for boundary in boundaries if match["start"] < boundary < match["end"]
             }
@@ -974,6 +1000,7 @@ def _anchored_detection(
     locale: str,
     policy: ExceptionPolicy,
     mandatory_info: Callable[[], _MandatoryLineInfo],
+    word_spans: Callable[[], list[BreakSpan]],
 ) -> Detection | None:
     rule = indexed.rule
     start = end - len(rule.surface)
@@ -984,7 +1011,16 @@ def _anchored_detection(
     if rule.conditions:
         predicate = all if policy.conditions == "all" else any
         if not predicate(
-            _condition_result(condition, text, start, end, locale, policy, mandatory_info)
+            _condition_result(
+                condition,
+                text,
+                start,
+                end,
+                locale,
+                policy,
+                mandatory_info,
+                word_spans,
+            )
             for condition in rule.conditions
         ):
             return None
@@ -1034,6 +1070,7 @@ def _sentence_boundary_claims(
     index = _sentence_rule_index(tuple(rules), locale)
     claimed: dict[int, list[tuple[int, int, str]]] = {}
     occurrence = 0
+    word_spans = _word_spans_supplier(text, locale)
     for anchor in anchors:
         end = anchor
         while end and text[end - 1].isspace():
@@ -1044,7 +1081,9 @@ def _sentence_boundary_claims(
             for indexed in index.exact.get(token, ()):
                 if stats is not None:
                     stats["confirm_attempts"] = stats.get("confirm_attempts", 0) + 1
-                match = _anchored_detection(indexed, text, end, locale, policy, mandatory_info)
+                match = _anchored_detection(
+                    indexed, text, end, locale, policy, mandatory_info, word_spans
+                )
                 if match is None:
                     continue
                 for boundary in _claimed_boundaries(text, claimable, match):
@@ -1058,7 +1097,7 @@ def _sentence_boundary_claims(
             stats["fallback_rules"] = len(index.fallback)
         fallback_rules = [item.rule for item in index.fallback]
         fallback_claims = _boundary_claims(
-            text, base, fallback_rules, locale, policy, mandatory_info
+            text, base, fallback_rules, locale, policy, mandatory_info, word_spans
         )
         orders = {item.rule.id: item.order for item in index.fallback}
         for boundary, rule_ids in fallback_claims.items():
