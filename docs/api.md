@@ -7040,10 +7040,12 @@ ICU always supplies the candidate boundaries: this module can retain or
 suppress them, but never add one. For English (language ``en``, with any region
 or script, except the ``POSIX`` variant), the locale default applies token
 integrity and the locale's shipped abbreviation suppressions to ICU candidates.
-Other locale defaults and explicit ``base="none"`` are exactly ICU's current
-sentence output, without that list. The English named bases ``"en-tn@1"`` and
-``"en-tn-cart@1"`` apply the same list before their rules or model. Whole-text
-and incremental operation share the same prefix-aware candidate evaluator.
+With no caller inventories or rules, other locale defaults and explicit
+``base="none"`` are exactly ICU's current sentence output, without that list.
+Caller layers still apply over ``base="none"``. The English named bases
+``"en-tn@1"`` and ``"en-tn-cart@1"`` apply the same list before their rules or
+model. Whole-text and incremental operation share the same prefix-aware
+candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -7198,9 +7200,10 @@ uses raw ICU. The English default and the two named English bases load the
 locale-fallback abbreviation lexicon's ``break="suppress"`` entries as
 sentence exceptions. Decisions are ordered as ICU candidates, token
 integrity, caller-before rules, exceptions, the optional base, and
-caller-after rules. Pass ``base="none"`` explicitly for raw ICU sentence
-boundaries without the shipped list. Cartlet is an icukit dependency and
-is imported lazily only when ``"en-tn-cart@1"`` or a
+caller-after rules. With no caller inventories or rules, pass
+``base="none"`` explicitly for raw ICU sentence boundaries without the
+shipped list; caller layers still apply over it. Cartlet is an icukit
+dependency and is imported lazily only when ``"en-tn-cart@1"`` or a
 :class:`CartletModelRef` is selected.
 
 Args:
