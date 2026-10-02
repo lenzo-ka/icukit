@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import random
 from pathlib import Path
 
@@ -112,6 +113,58 @@ def test_unbroken_run_is_the_documented_safe_retention_fallback():
     assert emitted == []
     assert stream._text == text
     assert emitted + stream.close() == override.decide(text)
+
+
+@pytest.mark.parametrize("base", ["none", "en-tn@1", "en-tn-cart@1"])
+@pytest.mark.parametrize("unit", ["Hello!World!", "你好。世界！"])
+def test_whitespace_free_runs_have_bounded_retention_and_linear_icu_work(monkeypatch, base, unit):
+    tokens_module = importlib.import_module("icukit.tokens")
+    original_sentences = sentence_override_module._raw_break_sentence_spans
+    original_words = tokens_module._raw_break_word_extents
+    work = 0
+    maximum_icu_input = 0
+
+    def counted_sentences(text, locale):
+        nonlocal maximum_icu_input, work
+        work += len(text)
+        maximum_icu_input = max(maximum_icu_input, len(text))
+        return original_sentences(text, locale)
+
+    def counted_words(text, locale):
+        nonlocal maximum_icu_input, work
+        work += len(text)
+        maximum_icu_input = max(maximum_icu_input, len(text))
+        return original_words(text, locale)
+
+    monkeypatch.setattr(sentence_override_module, "_raw_break_sentence_spans", counted_sentences)
+    monkeypatch.setattr(tokens_module, "_raw_break_word_extents", counted_words)
+
+    def measure(repetitions):
+        nonlocal maximum_icu_input, work
+        text = unit * repetitions
+        work = maximum_icu_input = 0
+        expected = SentenceOverride(base=base).decide(text)
+        whole_work, whole_maximum = work, maximum_icu_input
+        work = maximum_icu_input = 0
+        stream = SentenceOverride(base=base).stream()
+        actual = []
+        maximum = 0
+        for start in range(0, len(text), 64):
+            actual.extend(stream.feed(text[start : start + 64]))
+            maximum = max(maximum, len(stream._text))
+        actual.extend(stream.close())
+        assert actual == expected
+        return whole_work, whole_maximum, work, maximum
+
+    small_whole_work, small_whole_maximum, small_work, small_maximum = measure(128)
+    large_whole_work, large_whole_maximum, large_work, large_maximum = measure(256)
+
+    assert small_whole_maximum <= sentence_override_module._RUN_WINDOW * 2
+    assert large_whole_maximum <= sentence_override_module._RUN_WINDOW * 2
+    assert large_whole_work <= small_whole_work * 3
+    assert small_maximum <= sentence_override_module._RUN_WINDOW
+    assert large_maximum <= sentence_override_module._RUN_WINDOW
+    assert large_work <= small_work * 3
 
 
 @pytest.mark.parametrize("separator", ["\n\n", "\r\n", "\u2029"])

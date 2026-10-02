@@ -802,6 +802,33 @@ def test_trailing_whitespace_candidate_waits_for_non_whitespace(separator):
     _assert_all_chunkings(override, text, seed=8810 + ord(separator), random_count=300)
 
 
+def test_run_minus_one_survives_restart_before_hard_break_candidate():
+    rule = _rule(
+        "preceding-upper-run",
+        lookahead=0,
+        when=[{"at": "run-1", "f": "shape.cased", "in": ["XXXX."]}],
+        match="UPPER.\n  target. Next.",
+    )
+    override = SentenceOverride(base="none", before=[_loaded(rule)])
+    prefix = "Alpha. Beta. " * 400 + "UPPER.\n  "
+    text = prefix + "target. Next."
+    expected = override.decide(text)
+    breaker = override.stream()
+    emitted = breaker.feed(prefix)
+
+    hard_break = prefix.index("\n") + 1
+    assert any(item["offset"] == hard_break for item in breaker.pending())
+    assert "UPPER." in breaker._text
+    emitted += breaker.feed("target. Next.")
+    emitted += breaker.close()
+    assert emitted == expected
+    decision = next(item for item in emitted if item["offset"] == hard_break)
+    assert (decision["decision"], decision["id"]) == (
+        "no-break",
+        "preceding-upper-run",
+    )
+
+
 def test_false_sentence_exception_right_condition_does_not_hold_candidate():
     override = SentenceOverride(base="none", inventories=[_lowercase_sentence_inventory()])
     breaker = override.stream()
