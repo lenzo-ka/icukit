@@ -15,20 +15,17 @@
 
 ### Added
 
-- The English sentence default now loads the locale-fallback shipped
-  abbreviation lexicon's `break="suppress"` entries before its learned base;
-  attributed decisions report the exception rule, while explicit
-  `base="none"` remains raw ICU without the list. Sentence exception matching
-  now indexes exact punctuation-final rules by their candidate-terminal token,
-  so per-candidate lookup is independent of list size; rules whose exact match
-  cannot be anchored and ICU collation variants retain the whole-text matcher.
+- Sentence exception matching indexes exact punctuation-final rules by their
+  candidate-terminal token, so per-candidate lookup is independent of list
+  size; rules whose exact match cannot be anchored and ICU collation variants
+  retain the whole-text matcher. Attributed decisions report the exception rule.
   Sentence-only inventories no longer enter word tokenization, and each
   sentence operation reuses its ICU candidates and offset maps.
 - Orthographic word shape `cvletters@1` labels vowel and consonant letters from
   runtime ICU data, a curated English table, or additive caller material;
   `cvletters_counts` and token features expose its counts and vowel presence.
-- `CartletModelRef` and the named `en-tn-cart@1` sentence-break base add an
-  English cartlet model path. The shipped CC BY-SA 4.0 model is
+- `CartletModelRef` and the opt-in named `en-tn-cart@1` sentence-break base
+  provide an English cartlet model path. The shipped CC BY-SA 4.0 model is
   digest- and runtime-identity-bound and uses a raising lazy feature vector for
   incremental decisions. Cartlet 0.7 or later is now a required dependency.
 - The learned English sentence rule base `en-tn@1` ships as a CC BY-SA 4.0
@@ -195,14 +192,17 @@
 
 ### Changed
 
-- **Behavior change:** English sentence output now uses `"en-tn-cart@1"` by
-  default across `Breaker` sentence spans (including its sentence text and
-  tokenization methods and the module-level helpers), `SentenceOverride`, and
-  `ik break` sentence output. This applies to language `en`, with any region or
-  script except the `POSIX` variant. Pass `base="none"` to either Python API or
-  `--base none` to the CLI for the former raw-ICU output. Every other locale
-  language still defaults to raw ICU. `AbbreviationSentenceBreaker` remains
-  the unchanged, separate lexicon-based alternative.
+- **Behavior change:** English sentence output now applies token integrity and
+  the locale-fallback shipped abbreviation lexicon's `break="suppress"` entries
+  to ICU sentence candidates by default, across `Breaker` sentence spans
+  (including its sentence text and tokenization methods and the module-level
+  helpers), `SentenceOverride`, and `ik break` sentence output. This applies to
+  language `en`, with any region or script except the `POSIX` variant. The
+  learned `en-tn@1` rule set and `en-tn-cart@1` model are opt-in by name and
+  apply the same list first. Pass `base="none"` to either Python API or
+  `--base none` to the CLI for raw ICU output without the list. Every other
+  locale language still defaults to raw ICU. `AbbreviationSentenceBreaker`
+  remains the separate lexicon-based alternative.
 
 - `detector_key` now returns five components. The fifth is the material content digest,
   or `None` for every reader built from ICU or curated data, so readers of one type from

@@ -23,29 +23,34 @@ def _bare_cartlet() -> SentenceOverride:
 
 
 @pytest.mark.parametrize("locale", ["en", "en_US", "en_GB", "en_Latn_US", "en-Latn-GB"])
-def test_english_locale_default_layers_shipped_exceptions_before_cartlet(locale: str) -> None:
+def test_english_locale_default_uses_shipped_exceptions_without_cartlet(locale: str) -> None:
     default = SentenceOverride(locale)
     decisions = default.decide("Mr. Smith arrived. Next.")
 
     assert signature(SentenceOverride).parameters["base"].default is None
     assert default.identity != SentenceOverride(locale, base="none").identity
-    assert default.base.ref.name == "en-tn-cart@1"
+    assert default.base is None
     assert (decisions[0]["decision"], decisions[0]["layer"], decisions[0]["id"]) == (
         "no-break",
         "exceptions",
         "abbreviation:Mr.",
     )
-    assert all(item["layer"] == "model" for item in decisions[1:])
-    assert all(str(item["id"]).startswith("en-tn-cart@1#leaf:") for item in decisions[1:])
+    assert all(item["layer"] == "icu" for item in decisions[1:])
+    assert all(item["layer"] != "model" for item in decisions)
 
 
-@pytest.mark.parametrize("locale", ["en_US", "en_GB", "en_Latn_US"])
-def test_default_identity_matches_explicit_named_model(locale: str) -> None:
-    default = SentenceOverride(locale)
-    named = SentenceOverride(locale, base="en-tn-cart@1")
+@pytest.mark.parametrize("base", ["en-tn@1", "en-tn-cart@1"])
+def test_named_english_bases_still_load_shipped_exceptions(base: str) -> None:
+    named = SentenceOverride("en_US", base=base)
+    decisions = named.decide("Mr. Smith arrived. Next.")
 
-    assert default.identity == named.identity
-    assert default.decide("Mr. Smith arrived. Next.") == named.decide("Mr. Smith arrived. Next.")
+    assert (decisions[0]["decision"], decisions[0]["layer"], decisions[0]["id"]) == (
+        "no-break",
+        "exceptions",
+        "abbreviation:Mr.",
+    )
+    expected_layer = "rules" if base == "en-tn@1" else "model"
+    assert expected_layer in {item["layer"] for item in decisions[1:]}
 
 
 @pytest.mark.parametrize("locale", ["en_US_POSIX", "en_US_POSIX_FOO", "en_POSIX"])
@@ -63,12 +68,33 @@ def test_english_posix_variant_default_is_plain_icu_and_learned_bases_refuse(
             SentenceOverride(locale, base=base)
 
 
-@pytest.mark.parametrize("base", [None, "en-tn-cart@1"])
-def test_default_and_named_model_refuse_runtime_icu_mismatch(monkeypatch, base) -> None:
+def test_named_model_refuses_runtime_icu_mismatch(monkeypatch) -> None:
     monkeypatch.setattr(sentence_override_module.icu, "ICU_VERSION", "0.0")
 
     with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
-        SentenceOverride("en_GB", base=base)
+        SentenceOverride("en_GB", base="en-tn-cart@1")
+
+
+def test_default_never_loads_or_consults_cartlet_in_whole_text_or_stream(monkeypatch) -> None:
+    def refused(*args, **kwargs):
+        raise AssertionError("the English locale default must not load cartlet")
+
+    monkeypatch.setattr(sentence_override_module, "_load_cartlet_model", refused)
+    text = "He met Mr. Smith today. He left."
+    default = SentenceOverride("en_US")
+    decisions = default.decide(text)
+    stream = default.stream()
+    streamed = stream.feed("He met Mr. S")
+    streamed += stream.feed("mith today. He left.")
+    streamed += stream.close()
+
+    assert default.base is None
+    assert default.inventories
+    assert all(
+        rule.variant == "exact" for inventory in default.inventories for rule in inventory._rules
+    )
+    assert all(item["layer"] != "model" for item in decisions)
+    assert streamed == decisions
 
 
 def test_non_english_locale_default_is_plain_icu() -> None:
@@ -81,23 +107,18 @@ def test_non_english_locale_default_is_plain_icu() -> None:
     assert default.spans(text) == plain.spans(text)
 
 
-@pytest.mark.parametrize(
-    ("locale", "base"),
-    [("en_US", "en-tn-cart@1"), ("fr_FR", "none")],
-)
-def test_stream_uses_resolved_locale_default(locale: str, base: str) -> None:
+@pytest.mark.parametrize("locale", ["en_US", "fr_FR"])
+def test_stream_uses_locale_default(locale: str) -> None:
     text = "Mr. Smith arrived. Next."
     default = SentenceOverride(locale)
-    explicit = SentenceOverride(locale, base=base)
 
     default_stream = default.stream()
-    explicit_stream = explicit.stream()
     streamed = default_stream.feed("Mr. S") + default_stream.feed("mith arrived. Next.")
     streamed += default_stream.close()
-    explicit_decisions = explicit_stream.feed(text) + explicit_stream.close()
 
     assert streamed == default.decide(text)
-    assert streamed == explicit_decisions
+    if locale == "fr_FR":
+        assert streamed == SentenceOverride(locale, base="none").decide(text)
 
 
 def test_cartlet_model_ref_and_named_base_are_digest_bound() -> None:

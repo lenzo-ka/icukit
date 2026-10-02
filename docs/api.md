@@ -463,9 +463,9 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Post-filter raw ICU sentence spans with a separate abbreviation lexicon.
 
-For English, :class:`Breaker` and :class:`SentenceOverride` apply shipped
-suppress entries before the learned model by default. This class remains
-the explicit lexicon-only alternative that also deposits ambiguous
+For English, :class:`Breaker` and :class:`SentenceOverride` apply token
+integrity and shipped suppress entries to ICU candidates by default. This
+class remains the explicit alternative that also deposits ambiguous
 boundaries; ``base="none"`` on those APIs gives raw ICU without the list.
 
 #### `AbbreviationSentenceBreaker(locale: 'str' = 'en_US', lexicon: 'AbbreviationLexicon | CompiledLexicon | None' = None) -> 'None'`
@@ -1036,11 +1036,12 @@ Text segmentation using ICU BreakIterator.
 
 This module provides text segmentation capabilities for breaking text into
 sentences, words, lines, or grapheme clusters. ICU supplies every level's
-boundaries; English sentence candidates use the learned model by default.
+boundaries; the English sentence default also applies token integrity and the
+shipped abbreviation list.
 Structured span offsets are Python code-point indices into the source text.
 
 Key Features:
-    * Locale-aware sentence segmentation with a learned English default
+    * Locale-aware sentence segmentation with an English abbreviation list
     * Word tokenization with optional punctuation filtering
     * Line break detection
     * Grapheme cluster iteration (user-perceived characters)
@@ -1090,9 +1091,11 @@ Text segmentation using ICU BreakIterator.
 
 A versatile text segmentation tool that can break text into sentences,
 words, lines, or grapheme clusters based on locale-specific rules. English
-sentence breaking uses shipped abbreviation suppressions followed by the
-learned model by default; ``base="none"`` keeps raw ICU sentence boundaries
-without the list. Other levels and non-English defaults remain ICU behavior.
+sentence breaking applies token integrity and shipped abbreviation
+suppressions to ICU candidates by default; ``base="none"`` keeps raw ICU
+sentence boundaries without the list. The learned ``"en-tn@1"`` rules and
+``"en-tn-cart@1"`` model are opt-in. Other levels and non-English defaults
+remain ICU behavior.
 
 Example:
     >>> breaker = Breaker('en')
@@ -1107,9 +1110,10 @@ Initialize a Breaker instance.
 
 Args:
     locale: Locale code for language-specific rules (e.g., 'en', 'en_US', 'ja').
-    base: Sentence base only. ``None`` selects the locale default,
-        ``"none"`` selects raw ICU, and ``"en-tn@1"`` or
-        ``"en-tn-cart@1"`` selects a learned English base.
+    base: Sentence base only. ``None`` selects ICU plus token integrity
+        and the shipped list for English except POSIX, and raw ICU
+        otherwise. ``"none"`` selects raw ICU without the list;
+        ``"en-tn@1"`` and ``"en-tn-cart@1"`` are opt-in English bases.
 
 Raises:
     BreakerError: If the locale is invalid.
@@ -1224,7 +1228,10 @@ Yields:
 
 #### `iter_sentence_spans(text: 'str') -> 'Iterator[BreakSpan]'`
 
-Yield sentence spans from the selected locale-default or named base.
+Yield sentence spans from the locale default or selected named base.
+
+The English default is ICU plus token integrity and the shipped list;
+non-English and POSIX defaults are raw ICU.
 
 #### `iter_sentences(text: 'str', skip_empty: 'bool' = True) -> 'Iterator[str]'`
 
@@ -1345,7 +1352,10 @@ Returns:
 
 ### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[BreakSpan]'`
 
-Return sentence spans from the locale-default or selected base.
+Return sentence spans from the locale default or selected base.
+
+The English default is ICU plus token integrity and the shipped list;
+non-English and POSIX defaults are raw ICU.
 
 ### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[str]'`
 
@@ -1357,8 +1367,9 @@ Args:
     text: The text to segment.
     locale: Locale code for language-specific rules.
     skip_empty: If True, empty sentences are excluded.
-    base: Sentence base; ``None`` selects the locale default and ``"none"``
-        selects raw ICU.
+    base: Sentence base; ``None`` selects ICU plus token integrity and the
+        shipped list for English except POSIX, and raw ICU otherwise.
+        ``"none"`` selects raw ICU without the list.
 
 Returns:
     List of sentence strings.
@@ -7026,18 +7037,18 @@ Example:
 Whole-text and incremental sentence-break overrides.
 
 ICU always supplies the candidate boundaries: this module can retain or
-suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
-English (language ``en``, with any region or script, except the ``POSIX``
-variant) and ``"none"`` otherwise. That English default and the two learned
-English named bases apply the locale's shipped abbreviation suppressions before
-their rules or model. Explicit ``base="none"`` is exactly ICU's current
-sentence output, without that list. Whole-text and incremental operation share
-the same prefix-aware candidate evaluator.
+suppress them, but never add one. For English (language ``en``, with any region
+or script, except the ``POSIX`` variant), the locale default applies token
+integrity and the locale's shipped abbreviation suppressions to ICU candidates.
+Other locale defaults and explicit ``base="none"`` are exactly ICU's current
+sentence output, without that list. The English named bases ``"en-tn@1"`` and
+``"en-tn-cart@1"`` apply the same list before their rules or model. Whole-text
+and incremental operation share the same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
     >>> [(item["offset"], item["layer"]) for item in override.decide("Hi. Bye.")]
-    [(4, 'model'), (8, 'model')]
+    [(4, 'icu'), (8, 'icu')]
 
 ### class `BreakBoundary`
 
@@ -7126,10 +7137,11 @@ END but permits later input; ``close()`` also prevents further input.
 
 Example:
     >>> stream = SentenceOverride().stream()
-    >>> stream.feed("Hello. N") + stream.feed("ext.") + stream.close()
+    >>> result = stream.feed("Hello. N") + stream.feed("ext.") + stream.close()
+    >>> result  # doctest: +NORMALIZE_WHITESPACE
     [{'offset': 7, 'end': 6, 'decision': 'break', 'alternatives': ('break',),
       'layer': 'icu', 'id': None, 'tokens_read': 0},
-     {'offset': 11, 'end': 11, 'decision': 'break', 'alternatives': ('break',),
+     {'offset': 12, 'end': 12, 'decision': 'break', 'alternatives': ('break',),
       'layer': 'icu', 'id': None, 'tokens_read': 0}]
 
 #### `IncrementalSentenceBreaker(owner: 'SentenceOverride', protection: "Literal['none', 'watermark']") -> 'None'`
@@ -7162,7 +7174,7 @@ An ICU candidate awaiting stable context, a rule feature, or protection.
 
 ### class `SentenceOverride`
 
-Apply rules or a cartlet model to ICU sentence candidates.
+Apply token integrity, exceptions, rules, or a model to ICU candidates.
 
 ``en-tn@1`` is a learned English rule base under
 CC BY-SA 4.0. Its reported development and test figures measure agreement
@@ -7172,32 +7184,32 @@ synthesized from each rule's predicates, which include lexical values
 mined from the corpus (e.g. ``lower`` token values); no corpus sentence or
 row was read or copied.
 
-The locale-default base is:
+The locale default is:
 
-================ =================
-Locale language  Default base
-================ =================
-``en``           ``en-tn-cart@1`` (except ``POSIX``)
-every other      ``none``
-================ =================
+================ =========================================================
+Locale language  Default
+================ =========================================================
+``en``           ICU + token integrity + shipped list (except ``POSIX``)
+every other      raw ICU
+================ =========================================================
 
 Region and script do not change the English default. The ``POSIX`` variant
-uses ``"none"`` because its ICU word tokens differ from the model profile.
-The English default and the two learned English named bases load the
+uses raw ICU. The English default and the two named English bases load the
 locale-fallback abbreviation lexicon's ``break="suppress"`` entries as
 sentence exceptions. Decisions are ordered as ICU candidates, token
-integrity, caller-before rules, exceptions, the base, and caller-after
-rules. Pass ``base="none"`` explicitly for plain ICU sentence boundaries
-without the shipped list. Cartlet is an icukit dependency and is imported
-lazily only when a cartlet model is selected.
+integrity, caller-before rules, exceptions, the optional base, and
+caller-after rules. Pass ``base="none"`` explicitly for raw ICU sentence
+boundaries without the shipped list. Cartlet is an icukit dependency and
+is imported lazily only when ``"en-tn-cart@1"`` or a
+:class:`CartletModelRef` is selected.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.
     base: ``None`` selects the locale default in the table above. Otherwise,
-        ``"none"`` selects plain ICU, ``"en-tn@1"`` selects the learned
-        rule base, ``"en-tn-cart@1"`` selects the learned model, and callers
-        may supply a loaded rule set, a :class:`CartletModelRef`, or a path
-        to a ``break-rules`` JSON file. Unknown names are refused.
+        ``"none"`` selects raw ICU, ``"en-tn@1"`` selects the learned rule
+        base, ``"en-tn-cart@1"`` selects the learned model, and callers may
+        supply a loaded rule set, a :class:`CartletModelRef`, or a path to a
+        ``break-rules`` JSON file. Unknown names are refused.
     before: Ordered caller rules that force a decision before inventories
         and the base.
     after: Ordered caller rules that may override the base decision.
@@ -7206,11 +7218,9 @@ Args:
     cache: Reuse immutable per-token features in incremental evaluation.
 
 Example:
-    >>> from icukit import break_sentence_spans
-    >>> SentenceOverride(base="none").spans("Hello. Next.") == break_sentence_spans(
-    ...     "Hello. Next.", "en_US", base="none"
-    ... )
-    True
+    >>> override = SentenceOverride()
+    >>> [(item["offset"], item["layer"]) for item in override.decide("Hello. Next.")]
+    [(7, 'icu'), (12, 'icu')]
 
 #### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
 

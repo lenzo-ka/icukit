@@ -114,7 +114,8 @@ class BreakerCommand(SubcommandBase):
             choices=["none", "en-tn@1", "en-tn-cart@1"],
             default=None,
             help=(
-                "Sentence base (default: learned model for English except POSIX; raw ICU otherwise)"
+                "Sentence base (default: ICU + token integrity + shipped list for English except "
+                "POSIX; raw ICU otherwise; en-tn@1 and en-tn-cart@1 are opt-in)"
             ),
         )
 

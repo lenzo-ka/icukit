@@ -1,18 +1,18 @@
 """Whole-text and incremental sentence-break overrides.
 
 ICU always supplies the candidate boundaries: this module can retain or
-suppress them, but never add one. The locale default is ``"en-tn-cart@1"`` for
-English (language ``en``, with any region or script, except the ``POSIX``
-variant) and ``"none"`` otherwise. That English default and the two learned
-English named bases apply the locale's shipped abbreviation suppressions before
-their rules or model. Explicit ``base="none"`` is exactly ICU's current
-sentence output, without that list. Whole-text and incremental operation share
-the same prefix-aware candidate evaluator.
+suppress them, but never add one. For English (language ``en``, with any region
+or script, except the ``POSIX`` variant), the locale default applies token
+integrity and the locale's shipped abbreviation suppressions to ICU candidates.
+Other locale defaults and explicit ``base="none"`` are exactly ICU's current
+sentence output, without that list. The English named bases ``"en-tn@1"`` and
+``"en-tn-cart@1"`` apply the same list before their rules or model. Whole-text
+and incremental operation share the same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
     >>> [(item["offset"], item["layer"]) for item in override.decide("Hi. Bye.")]
-    [(4, 'model'), (8, 'model')]
+    [(4, 'icu'), (8, 'icu')]
 """
 
 from __future__ import annotations
@@ -472,11 +472,11 @@ def break_rule_identity(
 def _cartlet_runtime_identity(
     locale: str, inventories: Sequence[LoadedExceptionInventory]
 ) -> BreakRuleIdentity:
-    identity_locale = "en" if _uses_english_cartlet_default(locale) else locale
+    identity_locale = "en" if _uses_english_default(locale) else locale
     return break_rule_identity(identity_locale, inventories=inventories)
 
 
-def _uses_english_cartlet_default(locale: str) -> bool:
+def _uses_english_default(locale: str) -> bool:
     parsed = icu.Locale(locale)
     variant_subtags = {
         subtag.upper() for subtag in parsed.getVariant().replace("-", "_").split("_") if subtag
@@ -518,8 +518,8 @@ def _load_cartlet_model(
                 )
             ]
         )
-    # Keep this import lazy so base="none" and non-English locale defaults do
-    # not pay the cartlet import cost. Packaging enforces cartlet>=0.7.
+    # Keep this import lazy so locale defaults and base="none" do not pay the
+    # cartlet import cost. Packaging enforces cartlet>=0.7.
     from cartlet import DecisionTree
 
     model = DecisionTree()
@@ -2535,10 +2535,11 @@ class IncrementalSentenceBreaker:
 
     Example:
         >>> stream = SentenceOverride().stream()
-        >>> stream.feed("Hello. N") + stream.feed("ext.") + stream.close()
+        >>> result = stream.feed("Hello. N") + stream.feed("ext.") + stream.close()
+        >>> result  # doctest: +NORMALIZE_WHITESPACE
         [{'offset': 7, 'end': 6, 'decision': 'break', 'alternatives': ('break',),
           'layer': 'icu', 'id': None, 'tokens_read': 0},
-         {'offset': 11, 'end': 11, 'decision': 'break', 'alternatives': ('break',),
+         {'offset': 12, 'end': 12, 'decision': 'break', 'alternatives': ('break',),
           'layer': 'icu', 'id': None, 'tokens_read': 0}]
     """
 
@@ -3002,7 +3003,7 @@ class IncrementalSentenceBreaker:
 
 
 class SentenceOverride:
-    """Apply rules or a cartlet model to ICU sentence candidates.
+    """Apply token integrity, exceptions, rules, or a model to ICU candidates.
 
     ``en-tn@1`` is a learned English rule base under
     CC BY-SA 4.0. Its reported development and test figures measure agreement
@@ -3012,32 +3013,32 @@ class SentenceOverride:
     mined from the corpus (e.g. ``lower`` token values); no corpus sentence or
     row was read or copied.
 
-    The locale-default base is:
+    The locale default is:
 
-    ================ =================
-    Locale language  Default base
-    ================ =================
-    ``en``           ``en-tn-cart@1`` (except ``POSIX``)
-    every other      ``none``
-    ================ =================
+    ================ =========================================================
+    Locale language  Default
+    ================ =========================================================
+    ``en``           ICU + token integrity + shipped list (except ``POSIX``)
+    every other      raw ICU
+    ================ =========================================================
 
     Region and script do not change the English default. The ``POSIX`` variant
-    uses ``"none"`` because its ICU word tokens differ from the model profile.
-    The English default and the two learned English named bases load the
+    uses raw ICU. The English default and the two named English bases load the
     locale-fallback abbreviation lexicon's ``break="suppress"`` entries as
     sentence exceptions. Decisions are ordered as ICU candidates, token
-    integrity, caller-before rules, exceptions, the base, and caller-after
-    rules. Pass ``base="none"`` explicitly for plain ICU sentence boundaries
-    without the shipped list. Cartlet is an icukit dependency and is imported
-    lazily only when a cartlet model is selected.
+    integrity, caller-before rules, exceptions, the optional base, and
+    caller-after rules. Pass ``base="none"`` explicitly for raw ICU sentence
+    boundaries without the shipped list. Cartlet is an icukit dependency and
+    is imported lazily only when ``"en-tn-cart@1"`` or a
+    :class:`CartletModelRef` is selected.
 
     Args:
         locale: ICU locale used for both sentence and word boundaries.
         base: ``None`` selects the locale default in the table above. Otherwise,
-            ``"none"`` selects plain ICU, ``"en-tn@1"`` selects the learned
-            rule base, ``"en-tn-cart@1"`` selects the learned model, and callers
-            may supply a loaded rule set, a :class:`CartletModelRef`, or a path
-            to a ``break-rules`` JSON file. Unknown names are refused.
+            ``"none"`` selects raw ICU, ``"en-tn@1"`` selects the learned rule
+            base, ``"en-tn-cart@1"`` selects the learned model, and callers may
+            supply a loaded rule set, a :class:`CartletModelRef`, or a path to a
+            ``break-rules`` JSON file. Unknown names are refused.
         before: Ordered caller rules that force a decision before inventories
             and the base.
         after: Ordered caller rules that may override the base decision.
@@ -3046,11 +3047,9 @@ class SentenceOverride:
         cache: Reuse immutable per-token features in incremental evaluation.
 
     Example:
-        >>> from icukit import break_sentence_spans
-        >>> SentenceOverride(base="none").spans("Hello. Next.") == break_sentence_spans(
-        ...     "Hello. Next.", "en_US", base="none"
-        ... )
-        True
+        >>> override = SentenceOverride()
+        >>> [(item["offset"], item["layer"]) for item in override.decide("Hello. Next.")]
+        [(7, 'icu'), (12, 'icu')]
     """
 
     def __init__(
@@ -3072,13 +3071,14 @@ class SentenceOverride:
         self.locale = locale
         self.cache = cache
         locale_default = base is None
-        if locale_default:
-            base = "en-tn-cart@1" if _uses_english_cartlet_default(locale) else "none"
+        uses_english_default = locale_default and _uses_english_default(locale)
+        if locale_default and not uses_english_default:
+            base = "none"
         selected_inventories = tuple(inventories)
-        if (
+        if uses_english_default or (
             isinstance(base, str)
             and base in {"en-tn@1", "en-tn-cart@1"}
-            and _uses_english_cartlet_default(locale)
+            and _uses_english_default(locale)
         ):
             shipped = _load_break_exception_inventory(locale)
             if shipped is not None:
@@ -3104,7 +3104,7 @@ class SentenceOverride:
                 locality.bounds.max_surface_length + locality.bounds.left,
             )
         expected = break_rule_identity(locale, inventories=self.inventories)
-        if base == "none":
+        if base is None or base == "none":
             loaded_base = None
         elif isinstance(base, BreakRuleSet):
             loaded_base = base
