@@ -9,6 +9,7 @@ import pytest
 
 import icukit.engine as engine
 import icukit.recognize as recognize
+from icukit import cache as detector_cache
 from icukit.serialize import detections_to_json
 
 
@@ -50,13 +51,52 @@ def test_gang_key_preserves_parameter_order_and_family_identity():
 def test_cache_environment_opt_out_is_read_at_call_time(monkeypatch):
     cached = engine.generated_detectors("en_US")
     assert engine.generated_detectors("en_US") is cached
+    assert detector_cache.cache_info()["enabled"] is True
 
     monkeypatch.setenv("ICUKIT_CACHE", "0")
     uncached = engine.generated_detectors("en_US")
     assert uncached is not cached
+    assert detector_cache.cache_info()["enabled"] is False
 
     monkeypatch.delenv("ICUKIT_CACHE")
     assert engine.generated_detectors("en_US") is cached
+    assert detector_cache.cache_info()["enabled"] is True
+
+
+def test_configure_opt_out_bypasses_gang_memo(monkeypatch):
+    monkeypatch.setattr(detector_cache, "_enabled_override", None)
+    cached = engine.generated_detectors("en_US")
+
+    detector_cache.configure(enabled=False)
+    assert detector_cache.cache_info()["enabled"] is False
+    assert engine.generated_detectors("en_US") is not cached
+
+    monkeypatch.setenv("ICUKIT_CACHE", "0")
+    detector_cache.configure(enabled=True)
+    assert detector_cache.cache_info()["enabled"] is True
+    assert engine.generated_detectors("en_US") is cached
+
+
+def test_build_phase_wraps_only_gang_construction(monkeypatch):
+    phases = []
+
+    def enumerate_empty(_locale):
+        phases.append(("generated", detector_cache._PHASE.get()))
+        return ()
+
+    family = engine.Family("phase", enumerate_empty, lambda *_args: None)
+    generated = engine.generated_detectors_report("en_US", (family,))
+    assert engine.generated_detectors_report("en_US", (family,)) is generated
+
+    def flexible_families(*_args):
+        phases.append(("flexible", detector_cache._PHASE.get()))
+        return ()
+
+    monkeypatch.setattr(engine, "_flexible_families", flexible_families)
+    flexible = engine.flexible_detectors_report("en_US")
+    assert engine.flexible_detectors_report("en_US") is flexible
+
+    assert phases == [("generated", "build"), ("flexible", "build")]
 
 
 def test_clear_detector_caches_discards_gangs_and_locale_fragments():

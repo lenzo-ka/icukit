@@ -12,7 +12,7 @@ import threading
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
@@ -124,15 +124,22 @@ def ungated():
 
 @dataclass(frozen=True)
 class _ScanPlan:
-    """The L2-visible part of a compiled scan plan.
+    """Immutable per-text state shared by a compiled detector gang.
 
-    L3 populates these maps.  They are immutable by contract: readers may inspect but
-    never mutate the shared tuples or maps.
+    Readers may inspect but never mutate ``ustr``.  Every other shared collection is a
+    tuple, frozenset, or read-only mapping.  The leading three fields retain the small
+    constructor used by the L2 plan-fallback tests.
     """
 
     text: str
     grapheme_starts: Mapping[str, tuple[int, ...]]
-    gated_starts: Mapping[StartGate, Mapping[str, tuple[int, ...]]]
+    gated_starts: Mapping[StartGate | None, Mapping[str, tuple[int, ...]]]
+    ustr: object | None = None
+    cp_to_u16: tuple[int, ...] = ()
+    u16_to_cp: Mapping[int, int] = field(default_factory=dict)
+    grapheme_spans: Mapping[str, tuple[tuple[int, int], ...]] = field(default_factory=dict)
+    grapheme_boundaries: Mapping[str, frozenset[int]] = field(default_factory=dict)
+    word_interiors: Mapping[str, frozenset[int]] = field(default_factory=dict)
 
 
 _SCAN_PLAN: ContextVar[_ScanPlan | None] = ContextVar("icukit_scan_plan", default=None)
@@ -150,16 +157,33 @@ def _grapheme_starts(text: str, locale: str) -> tuple[int, ...]:
 
 def _candidate_starts(text: str, locale: str, gate: StartGate | None) -> tuple[int, ...]:
     """Return candidate grapheme starts, consulting a compatible scan plan when present."""
+    return _candidate_starts_from_plan(text, locale, gate, _scan_plan_for(text, locale, gate))
+
+
+def _candidate_starts_from_plan(
+    text: str, locale: str, gate: StartGate | None, plan: _ScanPlan | None
+) -> tuple[int, ...]:
+    """Return candidate starts after the caller's single shared-plan lookup."""
     # This check deliberately precedes both the plan and the gated cache.  An ungated
     # call can therefore never be served a tuple computed while gates were enabled.
     if not gates_enabled() or gate is None:
-        return _grapheme_starts(text, locale)
-    plan = _SCAN_PLAN.get()
-    if plan is not None and plan.text is text:
-        locale_map = plan.gated_starts.get(gate)
-        if locale_map is not None and locale in locale_map:
-            return locale_map[locale]
+        return plan.grapheme_starts[locale] if plan is not None else _grapheme_starts(text, locale)
+    if plan is not None:
+        return plan.gated_starts[gate][locale]
     return _cached_candidate_starts(text, locale, gate)
+
+
+def _scan_plan_for(text: str, locale: str, gate: StartGate | None) -> _ScanPlan | None:
+    """Return the compatible shared plan under the three plan-use conditions."""
+    plan = _SCAN_PLAN.get()
+    if (
+        plan is not None
+        and plan.text is text
+        and gate in plan.gated_starts
+        and locale in plan.grapheme_starts
+    ):
+        return plan
+    return None
 
 
 def candidate_starts(text: str, locale: str, gate: StartGate | None) -> tuple[int, ...]:
@@ -267,6 +291,31 @@ class LaneGate:
     reason: str
 
 
+def _read_start_gates(
+    detector: object,
+) -> tuple[Mapping[object, object] | None, str | None]:
+    """Read and validate a third-party reader's optional gate declaration."""
+    method = getattr(detector, "start_gates", None)
+    if not callable(method):
+        return None, None
+    try:
+        gates = method()
+        if not isinstance(gates, Mapping):
+            return (
+                None,
+                f"invalid start_gates(): expected a mapping, got {type(gates).__name__}; "
+                "reader left ungated",
+            )
+        if not all(gate is None or isinstance(gate, StartGate) for gate in gates.values()):
+            return (
+                gates,
+                "invalid start_gates(): values must be StartGate or None; reader left ungated",
+            )
+    except Exception as error:
+        return None, f"start_gates() raised {type(error).__name__}; reader left ungated"
+    return gates, None
+
+
 def gate_report(detectors: Iterable[object] | object) -> tuple[LaneGate, ...]:
     """Describe every declared start-scanning lane in ``detectors``."""
     from .detectors import DetectorSet, detector_key
@@ -289,8 +338,16 @@ def gate_report(detectors: Iterable[object] | object) -> tuple[LaneGate, ...]:
         method = getattr(detector, "start_gates", None)
         if not callable(method):
             continue
+        gates, invalid_reason = _read_start_gates(detector)
+        if invalid_reason is not None:
+            lanes = gates.keys() if gates else ("<all>",)
+            report.extend(
+                LaneGate(detector_key(detector), str(lane), False, invalid_reason) for lane in lanes
+            )
+            continue
+        assert gates is not None
         reasons = getattr(detector, "_gate_reasons", {})
-        for lane, gate in method().items():
+        for lane, gate in gates.items():
             reason = reasons.get(lane)
             if reason is None:
                 reason = (

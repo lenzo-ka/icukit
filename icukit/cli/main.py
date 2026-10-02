@@ -17,6 +17,7 @@ from .command import (
     CalendarCommand,
     CollatorCommand,
     CompactCommand,
+    CompileCommand,
     DateTimeCommand,
     DetectCommand,
     DiscoverCommand,
@@ -177,6 +178,9 @@ def create_parser():
 
     register_command("compact", ["cmp", "abbrev"])
     CompactCommand.add_subparser(subparsers)
+
+    register_command("compile", [])
+    CompileCommand.add_subparser(subparsers)
 
     register_command("datetime", ["dt", "date"])
     DateTimeCommand.add_subparser(subparsers)

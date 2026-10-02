@@ -10,7 +10,8 @@ import inspect
 import pytest
 
 import icukit
-from icukit.detectors import _word_interior_offsets
+from icukit import compile_detectors
+from icukit.detectors import DetectorSet, _word_interior_offsets
 
 # Words with alphanumerics on both sides of an inner offset, plus the shapes the
 # self-looping detectors read ("3D", "1990s", "C's", "II's").
@@ -63,9 +64,22 @@ def _crossings(name, detector, locale):
 @pytest.mark.parametrize("locale", ["en_US"])
 def test_no_detector_reads_across_a_word_interior(locale):
     checked = []
+    readers = []
     for name, detector in _detectors(locale):
         checked.append(name)
+        readers.append(detector)
         assert _crossings(name, detector, locale) == []
+
+    compiled = compile_detectors(DetectorSet(tuple(readers)), warm=False)
+    for text in _TEXTS:
+        interior = _word_interior_offsets(text, locale)
+        for detection in compiled.detect(text):
+            if detection["type"].split(":", 1)[0] in {"letter", "word"} and (
+                _is_letter_of_a_dotted_initialism(text, detection["start"], detection["end"])
+            ):
+                continue
+            assert detection["start"] not in interior
+            assert detection["end"] not in interior
 
     # The self-looping detectors are among those checked, so the guard is not vacuous.
     assert {

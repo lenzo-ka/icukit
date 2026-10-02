@@ -8,6 +8,7 @@ from .breaker import BreakerCommand
 from .calendar import CalendarCommand
 from .collator import CollatorCommand
 from .compact import CompactCommand
+from .compile import CompileCommand
 from .datetime import DateTimeCommand
 from .detect import DetectCommand
 from .discover import DiscoverCommand
@@ -39,6 +40,7 @@ __all__ = [
     "CalendarCommand",
     "CollatorCommand",
     "CompactCommand",
+    "CompileCommand",
     "DateTimeCommand",
     "DetectCommand",
     "DiscoverCommand",

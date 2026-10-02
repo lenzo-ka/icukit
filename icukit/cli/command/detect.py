@@ -8,17 +8,10 @@ import sys
 
 import icu
 
-from ...detectors import date_detectors, number_detectors
-from ...engine import (
-    DEFAULT_FAMILIES,
-    GUARDED_FAMILIES,
-    flexible_detectors,
-    generated_detectors,
-    range_detectors,
-)
+from ...engine import reader_set
 from ...formatters import format_json, format_tsv
 from ...material import MaterialLoadError, load_locale_material
-from ...recognize import FlexibleMeasureDetector, _iso_currency_codes
+from ...recognize import _iso_currency_codes
 from ...serialize import detection_to_dict, detections_to_json
 from ..subcommand_base import SubcommandBase
 
@@ -187,39 +180,16 @@ Examples:
         material=(),
     ):
         """The readers ``icukit detect`` reads with, for its options."""
-        families = (*DEFAULT_FAMILIES, *GUARDED_FAMILIES) if guarded else DEFAULT_FAMILIES
-        detectors = generated_detectors(locale, families, material=material)
-        # The strict readers. A strict currency reader is built only for a --currency
-        # code; under --flexible its reading stands beside the flexible set's (with
-        # --currency USD, the "$12.50" inside "($12.50)"). The flexible set's decimal and
-        # percent readers read every number the strict ones would, so under --flexible
-        # those are left out.
-        plain = not flexible
-        numbers = number_detectors(locale, decimal=plain, percent=plain, currencies=currencies)
-        detectors = detectors.with_(*numbers.detectors)
-        if flexible:
-            # The flexible set reads the units asked for (or ICU's choice) itself, so the
-            # per-unit measure readers below would only repeat its readings; it reads
-            # the ranges of its own amounts.
-            flexible_set = flexible_detectors(
-                locale,
-                locales=locales,
-                currencies=currencies or None,
-                units=units or None,
-                guarded=guarded,
-                material=material,
-            )
-            detectors = detectors.with_(*flexible_set.detectors)
-        else:
-            detectors = detectors.with_(*(FlexibleMeasureDetector(locale, unit) for unit in units))
-            if currencies or units:
-                # A range's endpoints follow the readers: with a currency or a unit, its
-                # ranges ("$3–5", "10–15 kg") are read too.
-                ranges = range_detectors(locale, detectors)
-                detectors = detectors.with_(*ranges.detectors)
-        if skeletons:
-            detectors = detectors.with_(*date_detectors(locale, skeletons).detectors)
-        return detectors
+        return reader_set(
+            locale,
+            guarded=guarded,
+            flexible=flexible,
+            locales=locales,
+            currencies=currencies,
+            units=units,
+            skeletons=skeletons,
+            material=material,
+        )
 
     @classmethod
     def run(cls, args):

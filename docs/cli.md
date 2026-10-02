@@ -484,6 +484,29 @@ Examples:
 - `-s, --style`: Format style (default: SHORT) (default: `SHORT`)
 - `--separator`: Separator for multiple numbers (default: tab) (default: `	`)
 
+## `icukit compile`
+
+Prepare one detector gang per locale without reading input text. Reader construction,
+lazy sub-readers, and zone tables are completed in the build phase. L3 keeps the
+result in process only; the configured cache directory is reported for the on-disk
+table store added in the next cache layer.
+
+Example:
+  ik compile --locales en_US,de_DE --flexible --json
+
+**Options:**
+
+- `--locales`: Locales whose detector gangs to prepare, comma-separated
+- `--flexible`: Add flexible readers (default: `False`)
+- `--guarded`: Add guarded readers (default: `False`)
+- `--read-locales`: Other locales read by flexible readers ("" reads each locale alone)
+- `--currency`: Add an ISO currency (default: `[]`)
+- `--measure`: Add an ICU measure unit (default: `[]`)
+- `--skeleton`: Add a date skeleton (default: `[]`)
+- `--material`: Add validated locale material from PATH (repeatable) (default: `[]`)
+- `--cache-dir`: Set the cache root reported now and used by the later disk table store
+- `--json`: Output JSON (default: `False`)
+
 ## `icukit datetime` (aliases: date, dt)
 
 Format dates and times according to locale conventions.
