@@ -8,6 +8,7 @@ import sys
 
 import icu
 
+from ... import cache
 from ...engine import reader_set
 from ...formatters import format_json, format_tsv
 from ...material import MaterialLoadError, load_locale_material
@@ -111,6 +112,11 @@ Examples:
             help="Add the readings the default readers refuse on purpose",
         )
         parser.add_argument(
+            "--no-cache",
+            action="store_true",
+            help="Disable all on-disk table-cache reads and writes for this process",
+        )
+        parser.add_argument(
             "--locales",
             default=None,
             metavar="LOC[,LOC...]",
@@ -194,6 +200,8 @@ Examples:
     @classmethod
     def run(cls, args):
         """Recognize and render typed candidates."""
+        if args.no_cache:
+            cache.configure(enabled=False)
         try:
             locales, currencies, units = cls._checked_choices(args)
         except ValueError as error:

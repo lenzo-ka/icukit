@@ -1446,6 +1446,10 @@ class DetectorSet:
     )
 
     def detect(self, text: str) -> list[ValueDetection]:
+        from .cache import cache_enabled
+
+        if not cache_enabled():
+            return detect(text, self.detectors)
         compiled = self._compiled
         if compiled is None:
             try:
