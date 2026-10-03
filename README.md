@@ -11,10 +11,9 @@ pip install icukit
 ```
 
 This pulls in [`icukit-pyicu`](https://github.com/lenzo-ka/icukit-pyicu), which
-bundles pre-built ICU libraries and PyICU, and `cartlet>=0.7`. Cartlet 0.7.0
-must be available from the owner's PyPI release. There are no system
-dependencies to install on either **macOS** or **Linux** — the wheels are
-self-contained.
+bundles pre-built ICU libraries and PyICU, and `cartlet>=0.7` from PyPI. There
+are no system dependencies to install on either **macOS** or **Linux** — the
+wheels are self-contained.
 
 See [Installation Guide](https://github.com/lenzo-ka/icukit/blob/main/docs/install.md) for details, including how to use a system PyICU instead.
 

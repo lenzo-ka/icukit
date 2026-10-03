@@ -30,7 +30,7 @@ from .detect import Detection, collation_detect, regex_detect
 from .errors import ExceptionConflictError, ExceptionLoadError, RuleRefusal
 
 # Exception inventories remain a raw-ICU post-filter, independently of
-# Breaker's learned English sentence default.
+# Breaker's English sentence default layers.
 break_sentence_spans = _raw_break_sentence_spans
 
 __all__ = [
