@@ -117,6 +117,13 @@ Examples:
             help="Disable all on-disk table-cache reads and writes for this process",
         )
         parser.add_argument(
+            "--k",
+            choices=("1", "inf"),
+            default="inf",
+            help="Candidate dial: 1 keeps the leftmost-longest readings and their "
+            "near ties; inf keeps every candidate",
+        )
+        parser.add_argument(
             "--locales",
             default=None,
             metavar="LOC[,LOC...]",
@@ -242,7 +249,7 @@ Examples:
         # user material stays beside ICU's same reading, so its spec (and digest) shows.
         seen = set()
         detections = []
-        for item in detectors.detect(text):
+        for item in detectors.detect(text, k=1 if args.k == "1" else None):
             reading = (
                 item["start"],
                 item["end"],

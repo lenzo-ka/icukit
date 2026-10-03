@@ -79,7 +79,7 @@ def _to_json(obj):
 
 def detection_to_dict(detection: ValueDetection) -> dict:
     """Convert one typed detection to an ordered, plain JSON-native dictionary."""
-    return {
+    result = {
         "text": detection["text"],
         "start": detection["start"],
         "end": detection["end"],
@@ -88,6 +88,9 @@ def detection_to_dict(detection: ValueDetection) -> dict:
         "captures": _to_json(detection["captures"]),
         "spec": _to_json(detection["spec"]),
     }
+    if "near_tie" in detection:
+        result["near_tie"] = detection["near_tie"]
+    return result
 
 
 def detections_to_json(detections) -> list[dict]:

@@ -37,12 +37,14 @@ Everything here is pure icukit over code-point offsets -- no tiergraph.
 from __future__ import annotations
 
 import functools
+import os
 from collections.abc import Callable, Iterable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass, fields, is_dataclass
 from dataclasses import field as dataclass_field
 from decimal import Decimal
 from threading import Lock
-from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, runtime_checkable
 
 import icu
 
@@ -50,15 +52,20 @@ if TYPE_CHECKING:
     from .compiled import CompiledDetectorSet
 
 from ._gate import (
+    _ATTEMPT_MEMBER,
+    _READING_START,
     GATE_AUDIT,
     GATE_STATS,
     StartGate,
+    _attempt_member,
+    _attempt_session,
     _audit_probe,
     _candidate_starts_from_plan,
     _GatedReader,
     _grapheme_starts,
     _install_gates,
     _record,
+    _record_member_attempt,
     _scan_plan_for,
     _ScanPlan,
     _strict_gate,
@@ -352,6 +359,7 @@ class ValueDetection(Detection):
     value: object
     captures: tuple[Capture, ...]
     spec: object
+    near_tie: NotRequired[bool]
 
 
 # --------------------------------------------------------------------------- refusal
@@ -810,6 +818,9 @@ class DateDetector(_GatedReader):
             stats_key=self._lane_key("scan"),
         )
 
+    def _prepare_readings(self, text: str):
+        return _prepare_scan_readings(self, text)
+
 
 # --------------------------------------------------------------------------- numbers
 
@@ -1051,6 +1062,9 @@ class NumberDetector(_GatedReader):
             gate=self._start_gates["scan"],
             stats_key=self._lane_key("scan"),
         )
+
+    def _prepare_readings(self, text: str):
+        return _prepare_scan_readings(self, text)
 
 
 # --------------------------------------------------------------------------- scanner
@@ -1351,6 +1365,11 @@ def _scan(
         if inspect_gate
         else _candidate_starts_from_plan(text, locale, gate, plan)
     )
+    from ._gate import _READING_START
+
+    reading_start = _READING_START.get()
+    if reading_start is not None:
+        starts = (reading_start,)
     out: list[ValueDetection] = []
     cursor = 0
     for start_cp in starts:
@@ -1368,6 +1387,7 @@ def _scan(
             continue
         if GATE_STATS:
             _record(stats_key, "tried")
+            _record_member_attempt(stats_key, start_cp)
         try:
             detection = _scan_step(text, start_cp, locale, type_label, inv, ctx)
         except Exception:
@@ -1381,6 +1401,34 @@ def _scan(
         out.append(detection)
         cursor = detection["end"]
     return out
+
+
+def _prepare_scan_readings(reader: DateDetector | NumberDetector, text: str):
+    """Bind strict-reader scan state once and return its one-start matcher."""
+    gate = reader._start_gates["scan"]
+    plan = _scan_plan_for(text, reader.locale, gate)
+    ctx = _scan_context_from_plan(text, reader.locale, plan)
+    stats_key = reader._lane_key("scan")
+
+    def read(start: int) -> list[ValueDetection]:
+        if start in ctx.interior:
+            return []
+        if GATE_STATS:
+            _record(stats_key, "tried")
+            _record_member_attempt(stats_key, start)
+        try:
+            item = _scan_step(text, start, reader.locale, reader.type, reader._inv, ctx)
+        except Exception:
+            if GATE_STATS:
+                _record(stats_key, "non_miss")
+            raise
+        if item is None:
+            return []
+        if GATE_STATS:
+            _record(stats_key, "non_miss")
+        return [item]
+
+    return read
 
 
 # --------------------------------------------------------------------------- orchestration
@@ -1400,21 +1448,178 @@ def _sort_key(det: ValueDetection) -> tuple[int, int, str, str]:
     return (det["start"], -(det["end"] - det["start"]), det["type"], _value_key(det["value"]))
 
 
-def detect(text: str, detectors: list[Detector] | tuple[Detector, ...]) -> list[ValueDetection]:
-    """Run every detector over ``text`` and return the merged detections.
+def _check_k(k: int | None) -> None:
+    if k not in (None, 1):
+        raise ValueError("1 < k < inf needs path scores; pass k=None and cap paths downstream")
+
+
+def _flag_near_tie(item: ValueDetection) -> ValueDetection:
+    flagged = item.copy()
+    flagged["near_tie"] = True
+    return flagged
+
+
+def _detect_one_best(
+    text: str,
+    detectors: tuple[Detector, ...] | list[Detector],
+    *,
+    near_ties: bool = True,
+) -> list[ValueDetection]:
+    """Drive start-local readers position-major, indexing whole-text fallbacks once."""
+    prepared = _ONE_BEST_PREPARED.get()
+    if prepared is None or prepared[0] is not text:
+        prepared = _prepare_one_best(text, detectors)
+    _, ordered_starts, local_by_start, fallback = prepared
+
+    def readings(start: int) -> list[ValueDetection]:
+        found = list(fallback.get(start, ()))
+        readers = local_by_start.get(start, ())
+        token = _READING_START.set(start)
+        try:
+            if GATE_STATS:
+                member_state = _ATTEMPT_MEMBER.get()
+                assert member_state is not None
+                for member, read_at in readers:
+                    member_state[0] = member
+                    found.extend(read_at(start))
+            else:
+                for read_at in readers:
+                    found.extend(read_at(start))
+        finally:
+            _READING_START.reset(token)
+        return found
+
+    kept: list[ValueDetection] = []
+    cursor = 0
+    index = 0
+    while index < len(ordered_starts):
+        start = ordered_starts[index]
+        index += 1
+        if start < cursor:
+            continue
+        at_start = readings(start)
+        if not at_start:
+            continue
+        winning_end = max(item["end"] for item in at_start)
+        winners = [item for item in at_start if item["end"] == winning_end]
+        rivals: list[ValueDetection] = []
+        if near_ties:
+            rival_index = index
+            winning_length = winning_end - start
+            while rival_index < len(ordered_starts) and ordered_starts[rival_index] < winning_end:
+                rival_start = ordered_starts[rival_index]
+                # No reading can meet the threshold beyond the end of the text.
+                if rival_start + winning_length <= len(text):
+                    rivals.extend(
+                        item
+                        for item in readings(rival_start)
+                        if item["end"] - rival_start >= winning_length
+                    )
+                rival_index += 1
+        if rivals:
+            kept.extend(_flag_near_tie(item) for item in (*winners, *rivals))
+        else:
+            kept.extend(winners)
+        cursor = winning_end
+        while index < len(ordered_starts) and ordered_starts[index] < cursor:
+            index += 1
+    kept.sort(key=_sort_key)
+    return kept
+
+
+_PreparedOneBest = tuple[
+    str,
+    tuple[int, ...],
+    dict[
+        int,
+        list[
+            Callable[[int], list[ValueDetection]]
+            | tuple[object, Callable[[int], list[ValueDetection]]]
+        ],
+    ],
+    dict[int, list[ValueDetection]],
+]
+_ONE_BEST_PREPARED: ContextVar[_PreparedOneBest | None] = ContextVar(
+    "icukit_one_best_prepared", default=None
+)
+
+
+def _prepare_one_best(
+    text: str, detectors: tuple[Detector, ...] | list[Detector]
+) -> _PreparedOneBest:
+    """Prepare reader/start routing and whole-text fallback indexes once."""
+    from ._gate import _candidate_starts, _read_start_gates
+
+    local_by_start: dict[
+        int,
+        list[
+            Callable[[int], list[ValueDetection]]
+            | tuple[object, Callable[[int], list[ValueDetection]]]
+        ],
+    ] = {}
+    fallback: dict[int, list[ValueDetection]] = {}
+    starts: set[int] = set()
+
+    for detector in detectors:
+        prepare_readings = getattr(detector, "_prepare_readings", None)
+        gates, _reason = _read_start_gates(detector)
+        locale = getattr(detector, "locale", None)
+        if (
+            callable(prepare_readings)
+            and gates is not None
+            and isinstance(locale, str)
+            and not getattr(detector, "_kbest_fallback", False)
+        ):
+            read = prepare_readings(text)
+            entry = (id(detector), read) if GATE_STATS else read
+            reader_starts: set[int] = set()
+            for gate in gates.values():
+                reader_starts.update(_candidate_starts(text, locale, gate))
+            for start in reader_starts:
+                local_by_start.setdefault(start, []).append(entry)
+            starts.update(reader_starts)
+        else:
+            for item in detector.detect(text):
+                fallback.setdefault(item["start"], []).append(item)
+                starts.add(item["start"])
+
+    return text, tuple(sorted(starts)), local_by_start, fallback
+
+
+def detect(
+    text: str,
+    detectors: list[Detector] | tuple[Detector, ...],
+    *,
+    k: int | None = None,
+) -> list[ValueDetection]:
+    """Run every detector over ``text`` and return the selected detections.
 
     Detections are returned in a fully deterministic order (start ascending, longer
     extent first, then type, then value key) independent of ``detectors`` order.
     Detections from different detectors may overlap: recognition keeps every
     candidate, and choosing among overlapping readings is left to the consumer.
 
-    Each detector runs its own scan, so a gang's result equals the merge of running its
-    members alone. A single shared scan would be faster; any such scan must give this
-    same merge.
+    ``k=None`` (the default) is the keep-all lattice: each detector runs its existing
+    self-cursor scan and the result equals the merge of running the members alone.
+    ``k=1`` scans the gang position-major, keeps every same-span reading at each
+    leftmost-longest winner, skips to that winner's end, and additionally returns and
+    flags equal-or-longer rivals beginning inside the winning span. Values between one
+    and infinity need path scores that detection does not have; cap those paths after
+    detection instead.
     """
-    found: list[ValueDetection] = []
-    for det in detectors:
-        found.extend(det.detect(text))
+    _check_k(k)
+    mode = "1" if k == 1 else "inf"
+    with _attempt_session(mode):
+        if k == 1:
+            return _detect_one_best(
+                text,
+                detectors,
+                near_ties=os.environ.get("ICUKIT_KBEST_NEAR_TIES", "1") != "0",
+            )
+        found: list[ValueDetection] = []
+        for det in detectors:
+            with _attempt_member(id(det)):
+                found.extend(det.detect(text))
     found.sort(key=_sort_key)
     return found
 
@@ -1445,11 +1650,12 @@ class DetectorSet:
         default_factory=Lock, init=False, repr=False, compare=False, hash=False
     )
 
-    def detect(self, text: str) -> list[ValueDetection]:
+    def detect(self, text: str, *, k: int | None = None) -> list[ValueDetection]:
+        """Detect the keep-all lattice, or detection-side 1-best when ``k=1``."""
         from .cache import cache_enabled
 
         if not cache_enabled():
-            return detect(text, self.detectors)
+            return detect(text, self.detectors, k=k)
         compiled = self._compiled
         if compiled is None:
             try:
@@ -1461,13 +1667,13 @@ class DetectorSet:
                         compiled = _implicit_compile(self)
                         object.__setattr__(self, "_compiled", compiled)
             except Exception:
-                return detect(text, self.detectors)
+                return detect(text, self.detectors, k=k)
         elif not self._compiled_reuse_recorded:
             from .cache import _record_compiled_reuse
 
             _record_compiled_reuse()
             object.__setattr__(self, "_compiled_reuse_recorded", True)
-        return compiled.detect(text)  # type: ignore[union-attr]
+        return compiled.detect(text, k=k)  # type: ignore[union-attr]
 
     def compile(self, *, warm: bool = True) -> CompiledDetectorSet:
         """Compile this gang explicitly, optionally forcing lazy reader state."""

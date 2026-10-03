@@ -748,6 +748,7 @@ Examples:
 - `--flexible`: Add the flexible readers (seconds to build) (default: `False`)
 - `--guarded`: Add the readings the default readers refuse on purpose (default: `False`)
 - `--no-cache`: Disable all on-disk table-cache reads and writes for this process (default: `False`)
+- `--k`: Candidate dial: 1 keeps the leftmost-longest readings and their near ties; inf keeps every candidate (default: `inf`)
 - `--locales`: With --flexible, the other locales of the language to read, comma-separated (default: every one; "" reads the locale alone)
 - `--skeleton`: Add a date skeleton (default: `[]`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)

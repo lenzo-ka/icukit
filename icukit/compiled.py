@@ -24,10 +24,11 @@ from ._gate import (
 from ._offsets import boundary_maps
 from ._tables import TableKey, table_key
 from .detectors import (
+    _ONE_BEST_PREPARED,
     Detector,
     DetectorSet,
     ValueDetection,
-    _sort_key,
+    _prepare_one_best,
     _word_interior_offsets,
 )
 from .detectors import detect as legacy_detect
@@ -308,6 +309,7 @@ class CompiledDetectorSet:
     _scan_locales: tuple[str, ...] = field(default=(), init=False, repr=False)
     _scan_gates: frozenset[StartGate | None] = field(default=frozenset(), init=False, repr=False)
     _scan_plans: dict[int, _ScanPlan] = field(default_factory=dict, init=False, repr=False)
+    _kbest_plans: dict[int, object] = field(default_factory=dict, init=False, repr=False)
     _report_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __init__(self, detectors: DetectorSet) -> None:
@@ -323,6 +325,7 @@ class CompiledDetectorSet:
         object.__setattr__(self, "_scan_locales", scan_locales)
         object.__setattr__(self, "_scan_gates", scan_gates)
         object.__setattr__(self, "_scan_plans", {})
+        object.__setattr__(self, "_kbest_plans", {})
         object.__setattr__(self, "_report_lock", threading.Lock())
 
     @property
@@ -384,16 +387,16 @@ class CompiledDetectorSet:
         object.__setattr__(self, "_stats", None)
         return self
 
-    def detect(self, text: str) -> list[ValueDetection]:
-        """Detect with a context-local immutable scan plan, resetting it on every exit."""
+    def detect(self, text: str, *, k: int | None = None) -> list[ValueDetection]:
+        """Detect at ``k=None`` or ``k=1`` with one context-local immutable scan plan."""
         if not self._scan_locales:
-            return legacy_detect(text, self.detectors.detectors)
+            return legacy_detect(text, self.detectors.detectors, k=k)
         plan = self._scan_plans.get(id(text))
         if plan is None or plan.text is not text:
             try:
                 plan = _scan_plan(text, self._scan_locales, self._scan_gates)
             except Exception:
-                return legacy_detect(text, self.detectors.detectors)
+                return legacy_detect(text, self.detectors.detectors, k=k)
             if len(self._scan_plans) >= 16:
                 self._scan_plans.clear()
             self._scan_plans[id(text)] = plan
@@ -401,17 +404,23 @@ class CompiledDetectorSet:
         # One hit means one compiled detect made its compatible plan available to the
         # detect phase. It is deliberately not counted again at every reader lookup.
         cache._record_detect_hit()
-        found: list[ValueDetection] = []
+        prepared_token = None
         try:
-            for detector in self.detectors.detectors:
-                try:
-                    found.extend(detector.detect(text))
-                finally:
-                    if GATE_AUDIT:
-                        _audit_plan(plan)
+            if k == 1:
+                prepared = self._kbest_plans.get(id(text))
+                if prepared is None or prepared[0] is not text:
+                    prepared = _prepare_one_best(text, self.detectors.detectors)
+                    if len(self._kbest_plans) >= 16:
+                        self._kbest_plans.clear()
+                    self._kbest_plans[id(text)] = prepared
+                prepared_token = _ONE_BEST_PREPARED.set(prepared)
+            found = legacy_detect(text, self.detectors.detectors, k=k)
+            if GATE_AUDIT:
+                _audit_plan(plan)
         finally:
+            if prepared_token is not None:
+                _ONE_BEST_PREPARED.reset(prepared_token)
             _SCAN_PLAN.reset(token)
-        found.sort(key=_sort_key)
         return found
 
 

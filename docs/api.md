@@ -1976,9 +1976,9 @@ properties; implicit compilation computes them only on first access.
 
 Initialize self.  See help(type(self)) for accurate signature.
 
-#### `detect(text: 'str') -> 'list[ValueDetection]'`
+#### `detect(text: 'str', *, k: 'int | None' = None) -> 'list[ValueDetection]'`
 
-Detect with a context-local immutable scan plan, resetting it on every exit.
+Detect at ``k=None`` or ``k=1`` with one context-local immutable scan plan.
 
 #### `gate_report() -> 'tuple[LaneGate, ...]'`
 
@@ -2745,9 +2745,9 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Compile this gang explicitly, optionally forcing lazy reader state.
 
-#### `detect(text: 'str') -> 'list[ValueDetection]'`
+#### `detect(text: 'str', *, k: 'int | None' = None) -> 'list[ValueDetection]'`
 
-
+Detect the keep-all lattice, or detection-side 1-best when ``k=1``.
 
 #### `names() -> 'tuple[str, ...]'`
 
@@ -2935,18 +2935,22 @@ only a :class:`~icukit.recognize.FlexibleTextDateDetector`; it does not add the
 flexible numeric-date or other flexible date recognizers. ``locales`` chooses the
 other locales of the language that reader reads (every one by default).
 
-### `detect(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]') -> 'list[ValueDetection]'`
+### `detect(text: 'str', detectors: 'list[Detector] | tuple[Detector, ...]', *, k: 'int | None' = None) -> 'list[ValueDetection]'`
 
-Run every detector over ``text`` and return the merged detections.
+Run every detector over ``text`` and return the selected detections.
 
 Detections are returned in a fully deterministic order (start ascending, longer
 extent first, then type, then value key) independent of ``detectors`` order.
 Detections from different detectors may overlap: recognition keeps every
 candidate, and choosing among overlapping readings is left to the consumer.
 
-Each detector runs its own scan, so a gang's result equals the merge of running its
-members alone. A single shared scan would be faster; any such scan must give this
-same merge.
+``k=None`` (the default) is the keep-all lattice: each detector runs its existing
+self-cursor scan and the result equals the merge of running the members alone.
+``k=1`` scans the gang position-major, keeps every same-span reading at each
+leftmost-longest winner, skips to that winner's end, and additionally returns and
+flags equal-or-longer rivals beginning inside the winning span. Values between one
+and infinity need path scores that detection does not have; cap those paths after
+detection instead.
 
 ### `detector_key(detector: 'Detector') -> 'tuple[str, str, str | None, tuple[str, ...] | None, str | None]'`
 

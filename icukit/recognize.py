@@ -29,6 +29,7 @@ from ._gate import (
     _GatedReader,
     _install_gates,
     _record,
+    _record_member_attempt,
     _scan_plan_for,
     _ScanPlan,
     _strict_pattern_gate,
@@ -2074,6 +2075,59 @@ class FlexibleDateIntervalDetector(_GatedReader):
         # A hand-rolled limit, as DateDetector's: ICU's "y" writes a year under 1000 in
         # under four digits, which a count writes too ("3–5"); see the class docstring.
         return [item for item in found if self._short_year(item["value"]) == self.short_years]
+
+    def _prepare_readings(self, text: str):
+        """Bind offset maps and the Unicode string once for position-major detection."""
+        gate = self._start_gates["interval"]
+        plan = _scan_plan_for(text, self.locale, gate)
+        if plan is not None and plan.ustr is not None:
+            offset_maps = plan.cp_to_u16, plan.u16_to_cp
+            ustr = plan.ustr
+            interior = plan.word_interiors[self.locale]
+        else:
+            offset_maps = boundary_maps(text)
+            ustr = icu.UnicodeString(text)
+            interior = _word_interior_offsets(text, self.locale)
+        stats_key = self._lane_key("interval")
+
+        def read(start: int) -> list[ValueDetection]:
+            if start in interior:
+                return []
+            if GATE_STATS:
+                _record(stats_key, "tried")
+                _record_member_attempt(stats_key, start)
+            try:
+                results = self._match(text, start, offset_maps, ustr)
+            except Exception:
+                if GATE_STATS:
+                    _record(stats_key, "non_miss")
+                raise
+            if results and GATE_STATS:
+                _record(stats_key, "non_miss")
+            found = []
+            kept = set()
+            for result in results:
+                key = (result.end, result.value, _zone_key(result.captures))
+                if result.end in interior or key in kept:
+                    continue
+                kept.add(key)
+                item = ValueDetection(
+                    text=text[start : result.end],
+                    start=start,
+                    end=result.end,
+                    type=self.type,
+                    value=result.value,
+                    captures=result.captures,
+                    spec=result.spec,
+                )
+                if not self._year_range_holds(text, item):
+                    continue
+                if self._year_floor and self._short_year(item["value"]) != self.short_years:
+                    continue
+                found.append(item)
+            return found
+
+        return read
 
     def _year_range_holds(self, text: str, item: ValueDetection) -> bool:
         """Whether a range of years alone rises and is not one pair of a longer run.
@@ -6659,6 +6713,9 @@ class FlexibleBareHourDetector(_GatedReader):
     """
 
     group = "time"
+    # Survival depends on whole-text date and time detections, so this reader cannot
+    # honestly use the start-local hook inherited from _GatedReader.
+    _kbest_fallback = True
     type = "time:bare-hour"
 
     _OPENING = frozenset(
@@ -7653,11 +7710,55 @@ def _detect_flexible_alternatives(
         if inspect_gate
         else _candidate_starts_from_plan(text, locale, gate, plan)
     )
+    from ._gate import _READING_START
+
+    reading_start = _READING_START.get()
+    if reading_start is not None:
+        starts = (reading_start,)
     interior = (
         plan.word_interiors[locale]
         if plan is not None and locale in plan.word_interiors
         else _word_interior_offsets(text, locale)
     )
+    if reading_start is not None:
+        start = reading_start
+        if start in interior:
+            return []
+        if inspect_gate and not gate.admits(text[start]):
+            _record(stats_key, "gated_out")
+            if GATE_AUDIT:
+                _audit_probe(stats_key, lambda: match(text, start))
+            return []
+        if GATE_STATS:
+            _record(stats_key, "tried")
+            _record_member_attempt(stats_key, start)
+        try:
+            results = match(text, start)
+        except Exception:
+            if GATE_STATS:
+                _record(stats_key, "non_miss")
+            raise
+        if results and GATE_STATS:
+            _record(stats_key, "non_miss")
+        detections: list[ValueDetection] = []
+        kept: set[tuple[int, object, tuple[object, ...]]] = set()
+        for result in results:
+            key = (result.end, result.value, _zone_key(result.captures))
+            if result.end in interior or key in kept:
+                continue
+            kept.add(key)
+            detections.append(
+                ValueDetection(
+                    text=text[start : result.end],
+                    start=start,
+                    end=result.end,
+                    type=type_label,
+                    value=result.value,
+                    captures=result.captures,
+                    spec=result.spec,
+                )
+            )
+        return detections
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
@@ -7670,6 +7771,7 @@ def _detect_flexible_alternatives(
             continue
         if GATE_STATS:
             _record(stats_key, "tried")
+            _record_member_attempt(stats_key, start)
         ends: set[int] = set()
         kept: set[tuple[int, object, tuple[object, ...]]] = set()
         try:
@@ -7723,11 +7825,57 @@ def _detect_flexible(
         if inspect_gate
         else _candidate_starts_from_plan(text, locale, gate, plan)
     )
+    from ._gate import _READING_START
+
+    reading_start = _READING_START.get()
+    if reading_start is not None:
+        starts = (reading_start,)
     interior = (
         plan.word_interiors[locale]
         if plan is not None and locale in plan.word_interiors
         else _word_interior_offsets(text, locale)
     )
+    if reading_start is not None:
+        start = reading_start
+        if start in interior:
+            return []
+        if inspect_gate and not gate.admits(text[start]):
+            _record(stats_key, "gated_out")
+            if GATE_AUDIT:
+                _audit_probe(stats_key, lambda: match(text, start))
+            return []
+        if GATE_STATS:
+            _record(stats_key, "tried")
+            _record_member_attempt(stats_key, start)
+        try:
+            result = match(text, start)
+        except Exception:
+            if GATE_STATS:
+                _record(stats_key, "non_miss")
+            raise
+        if result is None:
+            return []
+        if GATE_STATS:
+            _record(stats_key, "non_miss")
+        if isinstance(result, _FlexibleMatch):
+            end, captures, value = result.end, result.captures, result.value
+            match_spec = result.spec if result.spec is not None else spec
+        else:
+            end, captures, value = result
+            match_spec = spec
+        if end in interior:
+            return []
+        return [
+            ValueDetection(
+                text=text[start:end],
+                start=start,
+                end=end,
+                type=type_label,
+                value=value,
+                captures=captures,
+                spec=match_spec,
+            )
+        ]
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
@@ -7740,6 +7888,7 @@ def _detect_flexible(
             continue
         if GATE_STATS:
             _record(stats_key, "tried")
+            _record_member_attempt(stats_key, start)
         try:
             result = match(text, start)
         except Exception:
