@@ -25,10 +25,20 @@ from icukit.detectors import (
 )
 from icukit.engine import flexible_detectors, generated_detectors
 from icukit.recognize import (
+    FlexibleCompactDetector,
     FlexibleCurrencyDetector,
+    FlexibleCurrencyNameDetector,
+    FlexibleDateDetector,
     FlexibleDateIntervalDetector,
+    FlexibleFractionDetector,
+    FlexibleMeasureDetector,
+    FlexibleMixedMeasureDetector,
     FlexibleNumberDetector,
+    FlexiblePercentDetector,
+    FlexibleRelativeDateDetector,
     FlexibleSpelloutDetector,
+    FlexibleTextDateDetector,
+    FlexibleTimeDetector,
     _date_interval_gate,
 )
 from icukit.serialize import detections_to_json
@@ -66,9 +76,10 @@ def test_every_start_lane_declares_gate():
 
 
 def test_en_US_gate_literals():
+    number = StartGate(chars=frozenset("+-.0123456789"))
     assert FlexibleNumberDetector("en_US").start_gates() == {
-        "decimal": StartGate(chars=frozenset("+-.0123456789")),
-        "other-groupings": StartGate(chars=frozenset("+-.0123456789")),
+        "decimal": number,
+        "other-groupings": number,
         "decimal-styles": StartGate(chars=frozenset("+,-0123456789")),
         "roman": StartGate(chars=frozenset("CDILMVX")),
     }
@@ -78,6 +89,41 @@ def test_en_US_gate_literals():
     assert FlexibleCurrencyDetector("en_US", "USD").start_gates()["signed"] == StartGate(
         chars=frozenset("$(+-.0123456789U")
     )
+    assert FlexibleCurrencyNameDetector("en_US", "USD").start_gates()["named"] == number
+    assert FlexiblePercentDetector("en_US").start_gates()["percent"] == StartGate(
+        chars=frozenset("%+-.0123456789")
+    )
+    assert FlexibleMeasureDetector("en_US", "meter").start_gates() == {
+        "amount": number,
+        "per-form": StartGate(chars=frozenset("/p")),
+    }
+    assert FlexibleMixedMeasureDetector("en_US", "foot-and-inch").start_gates()["mixed"] == number
+    assert FlexibleCompactDetector("en_US", "short").start_gates()["compact"] == number
+    assert FlexibleDateDetector("en_US").start_gates()["date"] == StartGate(
+        chars=frozenset("0123456789")
+    )
+    assert FlexibleTextDateDetector("en_US").start_gates() == {
+        "date": StartGate(
+            chars=frozenset("0123456789"),
+            folded=frozenset("1234adfjmnoqstw"),
+        ),
+        "day-month": StartGate(
+            chars=frozenset("0123456789"),
+            folded=frozenset("adfjmnos"),
+        ),
+        "era": StartGate(chars=frozenset("0123456789")),
+    }
+    assert FlexibleRelativeDateDetector("en_US").start_gates()["relative"] == StartGate(
+        chars=frozenset("+-.0123456789"),
+        folded=frozenset("ilnty"),
+    )
+    assert FlexibleTimeDetector("en_US").start_gates() == {
+        "plain": StartGate(chars=frozenset("0123456789")),
+        "with-units": StartGate(chars=frozenset("0123456789")),
+    }
+    assert FlexibleFractionDetector("en_US").start_gates()["fraction"] == StartGate(
+        chars=frozenset("+-0123456789¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞↉")
+    )
     strict = StartGate(
         chars=frozenset("0123456789"),
         folded=frozenset("0123456789abdefijmnopstw"),
@@ -85,6 +131,35 @@ def test_en_US_gate_literals():
     )
     assert DateDetector("en_US", "yMd").start_gates()["scan"] == strict
     assert DateDetector("en_US", "MMMd").start_gates()["scan"] == strict
+
+
+def test_composite_and_text_prefix_starts_equal_ungated():
+    cases = (
+        (FlexibleCurrencyDetector("en_US", "USD"), "$5"),
+        (FlexibleCurrencyDetector("en_US", "USD"), "USD 5"),
+        (FlexibleCurrencyNameDetector("sw_KE", "USD"), "USD 5"),
+        (FlexibleMeasureDetector("en_US", "meter"), "per meter"),
+        (FlexibleMixedMeasureDetector("en_US", "foot-and-inch"), "5'10\""),
+        (FlexibleCompactDetector("sw_KE", "short"), "M1.2"),
+        (FlexibleDateDetector("en_US"), "3/5/2024"),
+        (FlexibleDateDetector("ja_JP"), "西暦2024/3/5"),
+        (FlexibleTextDateDetector("en_US"), "March 5, 2024"),
+        (FlexibleTextDateDetector("th_TH"), "ค.ศ. 2024"),
+        (FlexibleRelativeDateDetector("en_US"), "in 5 days"),
+        (FlexiblePercentDetector("en_US"), "% 5"),
+        (FlexibleFractionDetector("en_US"), "½"),
+        (FlexibleTimeDetector("ko_KR"), "오전 5:30"),
+        (FlexibleTimeDetector("ko_KR"), " 오전 5:30"),
+        (
+            FlexibleDateIntervalDetector("en_US", "yMMMMd"),
+            "March 5\N{THIN SPACE}\N{EN DASH}\N{THIN SPACE}7, 2024",
+        ),
+    )
+    for reader, text in cases:
+        with ungated():
+            expected = detections_to_json(reader.detect(text))
+        assert expected, (type(reader).__name__, text)
+        assert detections_to_json(reader.detect(text)) == expected
 
 
 def test_strict_number_gate_admits_alphabetic_digits():
@@ -402,11 +477,16 @@ def test_scan_outcome_mapping():
     assert _scan_outcome("3/4/2020", 0, reader.locale, reader.type, reader._inv) == "reading"
 
 
-def test_mixed_date_interval_lane_is_ungated():
+def test_date_interval_gate_union_keeps_none_absorbing():
     digit = (None,) * 8 + (True,)
     text = (None,) * 8 + (False,)
+    strict = StartGate(folded=frozenset("jm"), tests=frozenset({"icu.not_isalpha"}))
     assert _date_interval_gate((digit,)) == StartGate(tests=frozenset({"icu.isdigit"}))
     assert _date_interval_gate((digit, text)) is None
+    assert _date_interval_gate((digit, text), (strict,)) == (
+        StartGate(tests=frozenset({"icu.isdigit"})) | strict
+    )
+    assert _date_interval_gate((digit, text), (None,)) is None
 
 
 def test_detectorset_detect_equals_ungated():
