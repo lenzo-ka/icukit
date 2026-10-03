@@ -49,6 +49,13 @@
 
 ### Added
 
+- A k-best dial on detection: `k=1` keeps one leftmost-longest segmentation (starts
+  inside a winning span are not tried), every same-span alternative reading, and any
+  overlapping reading of equal or greater length that leftmost order alone beat, with
+  `near_tie: True` on both. `k=None`, the default, is the unchanged keep-all lattice;
+  `1 < k < inf` is refused, since pruning to k paths needs path scores. On the
+  command line, `icukit detect --k 1` (default `--k inf`).
+
 - Sentence exception matching indexes exact punctuation-final rules by their
   candidate-terminal token, so per-candidate lookup is independent of list
   size; rules whose exact match cannot be anchored and ICU collation variants

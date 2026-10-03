@@ -27,6 +27,7 @@ __all__ = [
     "GATES_DEFAULT",
     "LaneGate",
     "StartGate",
+    "attempt_stats",
     "candidate_starts",
     "folded_heads",
     "gate_report",
@@ -144,6 +145,7 @@ class _ScanPlan:
 
 
 _SCAN_PLAN: ContextVar[_ScanPlan | None] = ContextVar("icukit_scan_plan", default=None)
+_READING_START: ContextVar[int | None] = ContextVar("icukit_reading_start", default=None)
 
 
 @lru_cache(maxsize=256)
@@ -165,6 +167,16 @@ def _candidate_starts_from_plan(
     text: str, locale: str, gate: StartGate | None, plan: _ScanPlan | None
 ) -> tuple[int, ...]:
     """Return candidate starts after the caller's single shared-plan lookup."""
+    reading_start = _READING_START.get()
+    if reading_start is not None:
+        if reading_start >= len(text):
+            return ()
+        if gate is not None and gates_enabled() and not gate.admits(text[reading_start]):
+            return ()
+        # The position-major driver obtained this offset from this reader's own
+        # candidate-start tuple, so it is already a grapheme start. A membership
+        # search here would make repeated per-start reads quadratic in text length.
+        return (reading_start,)
     # This check deliberately precedes both the plan and the gated cache.  An ungated
     # call can therefore never be served a tuple computed while gates were enabled.
     if not gates_enabled() or gate is None:
@@ -195,6 +207,14 @@ def candidate_starts(text: str, locale: str, gate: StartGate | None) -> tuple[in
 _COUNTER_NAMES = ("tried", "gated_out", "non_miss", "audit_probed", "audit_violations")
 _STATS: dict[str, dict[str, int]] = {}
 _STATS_LOCK = threading.Lock()
+_ATTEMPT_MODE: ContextVar[str | None] = ContextVar("icukit_attempt_mode", default=None)
+_ATTEMPT_MEMBER: ContextVar[list[object | None] | None] = ContextVar(
+    "icukit_attempt_member", default=None
+)
+_ATTEMPT_SEEN: ContextVar[set[tuple[object, int]] | None] = ContextVar(
+    "icukit_attempt_seen", default=None
+)
+_ATTEMPT_STATS: dict[str, int] = {"inf": 0, "1": 0}
 
 
 def _record(lane: str | None, counter: str, amount: int = 1) -> None:
@@ -215,6 +235,66 @@ def reset_lane_stats() -> None:
     """Clear all per-lane gate counters."""
     with _STATS_LOCK:
         _STATS.clear()
+        _ATTEMPT_STATS.update({"inf": 0, "1": 0})
+
+
+def attempt_stats() -> dict[str, int]:
+    """Return member/start matcher attempts for the current stats interval."""
+    with _STATS_LOCK:
+        return dict(_ATTEMPT_STATS)
+
+
+@contextmanager
+def _attempt_session(mode: str):
+    if not GATE_STATS:
+        yield
+        return
+    mode_token = _ATTEMPT_MODE.set(mode)
+    seen_token = _ATTEMPT_SEEN.set(set())
+    member_token = _ATTEMPT_MEMBER.set([None])
+    try:
+        yield
+    finally:
+        _ATTEMPT_MEMBER.reset(member_token)
+        _ATTEMPT_SEEN.reset(seen_token)
+        _ATTEMPT_MODE.reset(mode_token)
+
+
+def _record_member_attempt(lane: str | None, start: int) -> None:
+    """Count a reader/start once even when that reader has several matcher lanes."""
+    if not GATE_STATS or lane is None:
+        return
+    mode = _ATTEMPT_MODE.get()
+    seen = _ATTEMPT_SEEN.get()
+    if mode is None or seen is None:
+        return
+    member_state = _ATTEMPT_MEMBER.get()
+    member = member_state[0] if member_state is not None else None
+    if member is None:
+        member = lane.rsplit("|", 1)[0]
+    key = (member, start)
+    if key in seen:
+        return
+    seen.add(key)
+    with _STATS_LOCK:
+        _ATTEMPT_STATS[mode] += 1
+
+
+@contextmanager
+def _attempt_member(member: object):
+    if not GATE_STATS:
+        yield
+        return
+    state = _ATTEMPT_MEMBER.get()
+    if state is None:
+        yield
+        return
+    previous = state[0]
+    state[0] = member
+    try:
+        yield
+    finally:
+        state[0] = previous
 
 
 def _audit_probe(lane: str | None, probe: Callable[[], Any]) -> bool:
@@ -280,6 +360,23 @@ class _GatedReader:
             f"{type(self).__name__}|{getattr(self, 'locale', '')}|"
             f"{getattr(self, 'type', '')}|{lane}"
         )
+
+    def _readings_at(self, text: str, start: int):
+        """Return this start-driven reader's readings beginning exactly at ``start``.
+
+        The reader's normal ``detect`` method remains the keep-all self-cursor driver.
+        Its scan helpers consult this context-local start restriction, so per-text scan
+        plans, offset maps, word interiors, and gates remain shared by compiled gangs.
+        """
+        token = _READING_START.set(start)
+        try:
+            return [item for item in self.detect(text) if item["start"] == start]
+        finally:
+            _READING_START.reset(token)
+
+    def _prepare_readings(self, text: str):
+        """Prepare the default adapter, restricting only this reader's own scan."""
+        return lambda start: self._readings_at(text, start)
 
 
 @dataclass(frozen=True)
