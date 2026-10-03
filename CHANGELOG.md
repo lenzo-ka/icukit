@@ -4,6 +4,17 @@
 
 ### Changed
 
+- **Behavior change:** English sentence output now applies token integrity and
+  the locale-fallback shipped abbreviation lexicon's `break="suppress"` entries
+  to ICU sentence candidates by default, across `Breaker` sentence spans
+  (including its sentence text and tokenization methods and the module-level
+  helpers), `SentenceOverride`, and `ik break` sentence output. This applies to
+  language `en`, with any region or script except the `POSIX` variant. The
+  learned `en-tn@1` rule set and `en-tn-cart@1` model are opt-in by name and
+  apply the same list first. Pass `base="none"` to either Python API or
+  `--base none` to the CLI for raw ICU output without the list. Every other
+  locale language still defaults to raw ICU. `AbbreviationSentenceBreaker`
+  remains the separate lexicon-based alternative.
 - Building a detector gang now constructs one number reader per distinct configuration.
 - Detector gangs are cached in the process. An equal `generated_detectors` or
   `flexible_detectors` call returns the gang already built (the 32 most recent are
@@ -17,6 +28,24 @@
   reuses its compiled gang on later calls, and falls back to the legacy path if
   compilation fails. Compiled state is process-local and omitted from pickles and
   deep copies.
+- Sentence-override evaluation tokenizes once and indexes per-candidate lookups,
+  so `en-tn@1` and `en-tn-cart@1` decision time grows linearly with paragraph
+  length without changing output.
+- Whole-text sentence breaking through `decide`, `spans`, `segmentations`, and
+  `Breaker.break_sentences` now uses the same bounded streaming core as
+  `SentenceOverride.stream()`. Long and whitespace-free inputs no longer retain
+  or rescan the whole text; documented unbounded fallbacks include rules with
+  unbounded left context and oversized protected spans. Public APIs and output
+  are unchanged.
+- `detector_key` now returns five components. The fifth is the material content digest,
+  or `None` for every reader built from ICU or curated data, so readers of one type from
+  different materials coexist in a gang.
+- Generated date detectors also include fully zero-padded complete numeric-date
+  patterns where ICU's pattern generator makes them distinct from its enumerated
+  unpadded pattern, so en_US `MM/dd/y` is read from the derived `yMMdd` skeleton.
+- The TSV output of `ik unicode name --choice all` and `ik unicode info --all-names` has
+  one more column, `aliases`, after the others: the columns before it are where they
+  were, but a consumer that checks the number of columns sees six and eight.
 
 ### Added
 
@@ -98,7 +127,10 @@
 - `StartGate`, the runtime-checkable `GatedDetector` protocol, and
   `candidate_starts(text, locale, gate)` let built-in and third-party detectors declare
   sound per-lane opening sets and skip impossible grapheme starts. `ICUKIT_GATES=0`
-  disables the optimization at import for byte-identical comparison runs.
+  disables the optimization at import for byte-identical comparison runs. Start gates
+  also cover composite, time, relative and text-date, measure, currency-name, compact,
+  percent, and fraction readers, plus non-digit-first date intervals, without changing
+  detection output.
 - `icukit.availability` adds `availability` and `AvailabilityRow` for reporting the
   default selection of generated and flexible reader specifications (default locales,
   currencies, and units, plus guarded families when requested) with its ICU,
@@ -206,31 +238,6 @@
   Python string indices in flexible spell-out parsing, date year-floor discovery, and
   reflective currency-name extraction. Chakma spell-out and Adlam dates and currency
   plurals therefore retain complete surfaces and code-point capture offsets.
-
-### Changed
-
-- **Behavior change:** English sentence output now applies token integrity and
-  the locale-fallback shipped abbreviation lexicon's `break="suppress"` entries
-  to ICU sentence candidates by default, across `Breaker` sentence spans
-  (including its sentence text and tokenization methods and the module-level
-  helpers), `SentenceOverride`, and `ik break` sentence output. This applies to
-  language `en`, with any region or script except the `POSIX` variant. The
-  learned `en-tn@1` rule set and `en-tn-cart@1` model are opt-in by name and
-  apply the same list first. Pass `base="none"` to either Python API or
-  `--base none` to the CLI for raw ICU output without the list. Every other
-  locale language still defaults to raw ICU. `AbbreviationSentenceBreaker`
-  remains the separate lexicon-based alternative.
-
-- `detector_key` now returns five components. The fifth is the material content digest,
-  or `None` for every reader built from ICU or curated data, so readers of one type from
-  different materials coexist in a gang.
-
-- Generated date detectors also include fully zero-padded complete numeric-date
-  patterns where ICU's pattern generator makes them distinct from its enumerated
-  unpadded pattern, so en_US `MM/dd/y` is read from the derived `yMMdd` skeleton.
-- The TSV output of `ik unicode name --choice all` and `ik unicode info --all-names` has
-  one more column, `aliases`, after the others: the columns before it are where they
-  were, but a consumer that checks the number of columns sees six and eight.
 
 ## [0.8.0] - 2026-09-26
 
