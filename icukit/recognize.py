@@ -2297,6 +2297,7 @@ class FlexibleTextDateDetector(_GatedReader):
 
     group = "date"
     type = "date:text-flexible"
+    _kbest_fallback = True
 
     def __init__(self, locale: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale
@@ -2837,6 +2838,7 @@ class FlexibleShortYearDateDetector(FlexibleTextDateDetector):
     """
 
     type = "date:short-year"
+    _kbest_fallback = False
 
     @property
     def has_year_patterns(self) -> bool:
@@ -2882,6 +2884,7 @@ class _FlexibleDateNameDetector(_GatedReader):
     """
 
     group = "date"
+    _kbest_fallback = True
     type: str
     _field: str
     _capture: str
@@ -3086,6 +3089,7 @@ class FlexibleNumberDetector(_GatedReader):
 
     group = "number"
     type = "number:decimal"
+    _kbest_fallback = True
 
     def __init__(
         self,
@@ -4487,6 +4491,7 @@ class FlexibleMeasureDetector(_GatedReader):
     """
 
     group = "measure"
+    _kbest_fallback = True
 
     def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale

@@ -28,6 +28,7 @@ from .detectors import (
     Detector,
     DetectorSet,
     ValueDetection,
+    _one_best_key,
     _prepare_one_best,
     _word_interior_offsets,
 )
@@ -309,7 +310,9 @@ class CompiledDetectorSet:
     _scan_locales: tuple[str, ...] = field(default=(), init=False, repr=False)
     _scan_gates: frozenset[StartGate | None] = field(default=frozenset(), init=False, repr=False)
     _scan_plans: dict[int, _ScanPlan] = field(default_factory=dict, init=False, repr=False)
-    _kbest_plans: dict[int, object] = field(default_factory=dict, init=False, repr=False)
+    _kbest_plans: dict[tuple[int, tuple[int, ...], bool], object] = field(
+        default_factory=dict, init=False, repr=False
+    )
     _report_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def __init__(self, detectors: DetectorSet) -> None:
@@ -407,12 +410,14 @@ class CompiledDetectorSet:
         prepared_token = None
         try:
             if k == 1:
-                prepared = self._kbest_plans.get(id(text))
+                prepared_key = _one_best_key(text, self.detectors.detectors)
+                key = (id(text), prepared_key[1], prepared_key[2])
+                prepared = self._kbest_plans.get(key)
                 if prepared is None or prepared[0] is not text:
                     prepared = _prepare_one_best(text, self.detectors.detectors)
                     if len(self._kbest_plans) >= 16:
                         self._kbest_plans.clear()
-                    self._kbest_plans[id(text)] = prepared
+                    self._kbest_plans[key] = prepared
                 prepared_token = _ONE_BEST_PREPARED.set(prepared)
             found = legacy_detect(text, self.detectors.detectors, k=k)
             if GATE_AUDIT:

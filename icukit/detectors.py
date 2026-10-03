@@ -1466,27 +1466,24 @@ def _detect_one_best(
     near_ties: bool = True,
 ) -> list[ValueDetection]:
     """Drive start-local readers position-major, indexing whole-text fallbacks once."""
+    prepared_key = _one_best_key(text, detectors)
     prepared = _ONE_BEST_PREPARED.get()
-    if prepared is None or prepared[0] is not text:
+    if prepared is None or prepared[0] is not text or prepared[1:3] != prepared_key[1:3]:
         prepared = _prepare_one_best(text, detectors)
-    _, ordered_starts, local_by_start, fallback = prepared
+    _, _, _, ordered_starts, local_by_start, fallback = prepared
 
     def readings(start: int) -> list[ValueDetection]:
         found = list(fallback.get(start, ()))
         readers = local_by_start.get(start, ())
-        token = _READING_START.set(start)
-        try:
-            if GATE_STATS:
-                member_state = _ATTEMPT_MEMBER.get()
-                assert member_state is not None
-                for member, read_at in readers:
-                    member_state[0] = member
-                    found.extend(read_at(start))
-            else:
-                for read_at in readers:
-                    found.extend(read_at(start))
-        finally:
-            _READING_START.reset(token)
+        if GATE_STATS:
+            member_state = _ATTEMPT_MEMBER.get()
+            assert member_state is not None
+            for member, read_at in readers:
+                member_state[0] = member
+                found.extend(read_at(start))
+        else:
+            for read_at in readers:
+                found.extend(read_at(start))
         return found
 
     kept: list[ValueDetection] = []
@@ -1530,6 +1527,8 @@ def _detect_one_best(
 _PreparedOneBest = tuple[
     str,
     tuple[int, ...],
+    bool,
+    tuple[int, ...],
     dict[
         int,
         list[
@@ -1542,6 +1541,12 @@ _PreparedOneBest = tuple[
 _ONE_BEST_PREPARED: ContextVar[_PreparedOneBest | None] = ContextVar(
     "icukit_one_best_prepared", default=None
 )
+
+
+def _one_best_key(
+    text: str, detectors: tuple[Detector, ...] | list[Detector]
+) -> tuple[str, tuple[int, ...], bool]:
+    return text, tuple(id(detector) for detector in detectors), gates_enabled()
 
 
 def _prepare_one_best(
@@ -1583,7 +1588,7 @@ def _prepare_one_best(
                 fallback.setdefault(item["start"], []).append(item)
                 starts.add(item["start"])
 
-    return text, tuple(sorted(starts)), local_by_start, fallback
+    return (*_one_best_key(text, detectors), tuple(sorted(starts)), local_by_start, fallback)
 
 
 def detect(
@@ -1609,19 +1614,35 @@ def detect(
     """
     _check_k(k)
     mode = "1" if k == 1 else "inf"
-    with _attempt_session(mode):
-        if k == 1:
-            return _detect_one_best(
-                text,
-                detectors,
-                near_ties=os.environ.get("ICUKIT_KBEST_NEAR_TIES", "1") != "0",
-            )
-        found: list[ValueDetection] = []
-        for det in detectors:
-            with _attempt_member(id(det)):
-                found.extend(det.detect(text))
-    found.sort(key=_sort_key)
-    return found
+    reading_token = _READING_START.set(None)
+    try:
+        from . import _gate
+
+        if not _gate.GATE_STATS:
+            if k == 1:
+                return _detect_one_best(
+                    text,
+                    detectors,
+                    near_ties=os.environ.get("ICUKIT_KBEST_NEAR_TIES", "1") != "0",
+                )
+            found = [item for det in detectors for item in det.detect(text)]
+            found.sort(key=_sort_key)
+            return found
+        with _attempt_session(mode):
+            if k == 1:
+                return _detect_one_best(
+                    text,
+                    detectors,
+                    near_ties=os.environ.get("ICUKIT_KBEST_NEAR_TIES", "1") != "0",
+                )
+            found = []
+            for det in detectors:
+                with _attempt_member(id(det)):
+                    found.extend(det.detect(text))
+        found.sort(key=_sort_key)
+        return found
+    finally:
+        _READING_START.reset(reading_token)
 
 
 @dataclass(frozen=True)

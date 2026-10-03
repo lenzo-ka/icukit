@@ -375,8 +375,8 @@ class _GatedReader:
             _READING_START.reset(token)
 
     def _prepare_readings(self, text: str):
-        """Prepare the default adapter; the gang scopes one start for all readers."""
-        return lambda start: [item for item in self.detect(text) if item["start"] == start]
+        """Prepare the default adapter, restricting only this reader's own scan."""
+        return lambda start: self._readings_at(text, start)
 
 
 @dataclass(frozen=True)

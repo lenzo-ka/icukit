@@ -9,8 +9,15 @@ import sys
 import pytest
 
 from icukit import cache
-from icukit.detectors import NumberFormatSpec, NumberValue, ValueDetection, detect
+from icukit.detectors import (
+    DetectorSet,
+    NumberFormatSpec,
+    NumberValue,
+    ValueDetection,
+    detect,
+)
 from icukit.engine import clear_detector_caches, reader_set
+from icukit.recognize import FlexibleMonthNameDetector
 from icukit.serialize import detections_to_json
 
 
@@ -32,6 +39,58 @@ def test_one_best_is_leftmost_longest_and_keeps_same_span_alternatives():
     readings = gang.detect("1/2", k=1)
     assert {(item["start"], item["end"]) for item in readings} == {(0, 3)}
     assert {item["type"] for item in readings} >= {"date:Md", "fraction:flexible"}
+
+
+def test_one_best_preserves_whole_text_checks_inside_reader():
+    text = "5 March"
+    reader = FlexibleMonthNameDetector("en_US")
+    assert detect(text, (reader,)) == []
+    assert detect(text, (reader,), k=1) == []
+
+
+def test_compiled_one_best_nested_gang_prepares_its_own_readers():
+    text = "abc"
+    spec = NumberFormatSpec("en_US", "decimal")
+
+    class Reader:
+        group = "test"
+        locale = "en_US"
+
+        def __init__(self, label, nested=None):
+            self.type = f"test:{label}"
+            self.label = label
+            self.nested = nested
+            self.active = False
+
+        def start_gates(self):
+            return {"read": None}
+
+        def _prepare_readings(self, source):
+            return lambda start: self.detect(source) if start == 0 else []
+
+        def detect(self, source):
+            if self.nested is not None and not self.active:
+                self.active = True
+                try:
+                    return detect(source, (self.nested,), k=1)
+                finally:
+                    self.active = False
+            return [
+                ValueDetection(
+                    text=source,
+                    start=0,
+                    end=len(source),
+                    type=self.type,
+                    value=NumberValue(self.label),
+                    captures=(),
+                    spec=spec,
+                )
+            ]
+
+    inner = Reader("inner")
+    outer = Reader("outer", inner)
+    found = DetectorSet((outer,)).compile(warm=False).detect(text, k=1)
+    assert [item["value"].decimal for item in found] == ["inner"]
 
 
 def test_real_default_gang_near_tie_flags_winner_and_rival():
