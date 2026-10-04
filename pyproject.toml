@@ -51,7 +51,7 @@ classifiers = [
 # running ICU. A newer ICU reaching CI is meant to turn CI red, and that red is the
 # notice to regenerate the golden.
 dependencies = [
-    "cartlet>=0.7",
+    "cartlet>=0.8",
     "icukit-pyicu>=78.3.0",
 ]
 

@@ -192,8 +192,11 @@ class BreakRule(TypedDict):
 class BreakDecision(TypedDict):
     """The attributed decision for one ICU sentence candidate.
 
-    A cartlet model decision appends its model-global leaf id to ``id`` as
-    ``"<model>#leaf:<id>"``.
+    A cartlet model decision appends the root-relative path ID of the leaf it
+    reached as ``"<model>#leaf:<path>"`` (for example,
+    ``"en-tn-cart@1#leaf:RRRRRRRRLR"``). The path spells each branch from the
+    root: ``L``/``R`` for binary splits, ``D`` for a switch default, and
+    ``C<length>:<key>`` for a matched switch case.
     """
 
     offset: int
@@ -294,7 +297,7 @@ class CartletModelRef:
 
     Constructing a reference does not import cartlet. The dependency is
     imported only when a :class:`SentenceOverride` uses this reference. Model
-    evaluation requires cartlet 0.7 or later.
+    evaluation requires cartlet 0.8 or later.
     Models use ``icukit.features@1`` and are tied to the ICU, Unicode, and
     tokenizer identity under which those features were measured.
     """
@@ -521,7 +524,7 @@ def _load_cartlet_model(
             ]
         )
     # Keep this import lazy so locale defaults and base="none" do not pay the
-    # cartlet import cost. Packaging enforces cartlet>=0.7.
+    # cartlet import cost. Packaging enforces cartlet>=0.8.
     from cartlet import DecisionTree
 
     model = DecisionTree()
