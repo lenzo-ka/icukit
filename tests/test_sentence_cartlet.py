@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from inspect import signature
 from pathlib import Path
 
@@ -138,6 +139,16 @@ def test_cartlet_model_ref_and_named_base_are_digest_bound() -> None:
 
     with pytest.raises(BreakRuleLoadError, match="DIGEST_MISMATCH"):
         SentenceOverride(base=CartletModelRef(MODEL_PATH, "0" * 64))
+
+
+def test_cartlet_leaf_id_is_root_relative_path() -> None:
+    decisions = SentenceOverride(base="en-tn-cart@1").decide("Hello. Next.")
+
+    assert all(re.fullmatch(r"en-tn-cart@1#leaf:[LR]+", item["id"]) for item in decisions)
+    assert {item["offset"]: (item["id"], item["decision"]) for item in decisions} == {
+        7: ("en-tn-cart@1#leaf:RRRRRRRRLR", "break"),
+        12: ("en-tn-cart@1#leaf:RRRRRRRRR", "no-break"),
+    }
 
 
 def test_cartlet_model_identity_refuses_mismatch() -> None:

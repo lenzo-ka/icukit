@@ -40,7 +40,7 @@ ik locale info en_US
 
 ## Sentence-breaking bases
 
-Cartlet 0.7.0 or later is an icukit dependency and is installed from PyPI by
+Cartlet 0.8.0 or later is an icukit dependency and is installed from PyPI by
 the normal icukit installation above. For English locales other than the
 `POSIX` variant, `SentenceOverride` defaults to ICU sentence candidates with
 token integrity and the locale-fallback shipped abbreviation lexicon's

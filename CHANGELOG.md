@@ -46,6 +46,9 @@
 - The TSV output of `ik unicode name --choice all` and `ik unicode info --all-names` has
   one more column, `aliases`, after the others: the columns before it are where they
   were, but a consumer that checks the number of columns sees six and eight.
+- Raise the cartlet dependency floor to 0.8.
+- `en-tn-cart@1` sentence decision IDs now name the leaf by its root-relative cartlet
+  path (for example, `en-tn-cart@1#leaf:RRRRRRRRLR`) rather than an integer index.
 
 ### Added
 
@@ -61,7 +64,7 @@
 - `CartletModelRef` and the opt-in named `en-tn-cart@1` sentence-break base
   provide an English cartlet model path. The shipped CC BY-SA 4.0 model is
   digest- and runtime-identity-bound and uses a raising lazy feature vector for
-  incremental decisions. Cartlet 0.7 or later is now a required dependency.
+  incremental decisions. Cartlet 0.8 or later is now a required dependency.
 - The learned English sentence rule base `en-tn@1` ships as a CC BY-SA 4.0
   artifact. The ordered 200-rule artifact is derived
   from the Google TN English corpus, carries full license, attribution, and
