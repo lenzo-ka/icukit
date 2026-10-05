@@ -414,6 +414,55 @@ class CompiledDetectorSet:
         found.sort(key=_sort_key)
         return found
 
+    def _detect_window(
+        self, text: str, only: Iterable[Detector] | None = None
+    ) -> list[ValueDetection]:
+        """Detect in one transient stream window without populating ``_scan_plans``."""
+        selected = self.detectors.detectors if only is None else tuple(only)
+        if not self._scan_locales:
+            return legacy_detect(text, selected)
+        try:
+            plan = _scan_plan(text, self._scan_locales, self._scan_gates)
+        except Exception:
+            return legacy_detect(text, selected)
+        token = _SCAN_PLAN.set(plan)
+        cache._record_detect_hit()
+        found: list[ValueDetection] = []
+        try:
+            for detector in selected:
+                try:
+                    found.extend(detector.detect(text))
+                finally:
+                    if GATE_AUDIT:
+                        _audit_plan(plan)
+        finally:
+            _SCAN_PLAN.reset(token)
+        found.sort(key=_sort_key)
+        return found
+
+    def stream(
+        self,
+        *,
+        max_pending_chars: int = 4096,
+        reader_cap_chars: Mapping[str, int] | None = None,
+        detect_stride_chars: int = 32,
+    ):
+        """Return a bounded stream using transient compiled detection windows.
+
+        The behavior-schema names are ``detection.stream.max_pending_chars``,
+        ``detection.stream.reader_cap_chars``, and
+        ``detection.stream.detect_stride_chars``. Defaults are 4096, each reader's
+        declared cap, and 32 code points.
+        """
+        from .stream import DetectionStream
+
+        return DetectionStream(
+            self,
+            max_pending_chars=max_pending_chars,
+            reader_cap_chars=reader_cap_chars,
+            detect_stride_chars=detect_stride_chars,
+        )
+
 
 def _compile(
     detectors: DetectorSet | Iterable[Detector] | ReaderSpec,

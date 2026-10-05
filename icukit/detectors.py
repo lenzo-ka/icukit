@@ -42,7 +42,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from dataclasses import field as dataclass_field
 from decimal import Decimal
 from threading import Lock
-from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, runtime_checkable
 
 import icu
 
@@ -352,6 +352,7 @@ class ValueDetection(Detection):
     value: object
     captures: tuple[Capture, ...]
     spec: object
+    truncated: NotRequired[Literal[True]]
 
 
 # --------------------------------------------------------------------------- refusal
@@ -1474,6 +1475,29 @@ class DetectorSet:
         from .compiled import compile_detectors
 
         return compile_detectors(self, warm=warm)
+
+    def stream(
+        self,
+        *,
+        max_pending_chars: int = 4096,
+        reader_cap_chars: Mapping[str, int] | None = None,
+        detect_stride_chars: int = 32,
+    ):
+        """Return a bounded incremental detector over arbitrary text chunks.
+
+        The behavior-schema names are ``detection.stream.max_pending_chars``,
+        ``detection.stream.reader_cap_chars``, and
+        ``detection.stream.detect_stride_chars``. Defaults are 4096, each reader's
+        declared cap, and 32 code points.
+        """
+        from .stream import DetectionStream
+
+        return DetectionStream(
+            self,
+            max_pending_chars=max_pending_chars,
+            reader_cap_chars=reader_cap_chars,
+            detect_stride_chars=detect_stride_chars,
+        )
 
     def __getstate__(self):
         """Omit process-local compiled state and its lock from pickles and copies."""

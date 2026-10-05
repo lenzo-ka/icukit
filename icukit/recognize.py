@@ -306,6 +306,12 @@ class LetterNameDetector:
             )
         return detections
 
+    def extent(self):
+        """Declare the single-word extent of the locale's curated names."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
+
 
 @dataclass(frozen=True)
 class AlphanumericRunsValue:
@@ -379,6 +385,12 @@ class AlphanumericRunsDetector:
             )
         return detections
 
+    def extent(self):
+        """Declare the one-ICU-word run extent."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
+
 
 # Hand-rolled, as CLDR carries no plural or decade form of a numeral: the letters a
 # language writes after a numeral to make it plural ("1990s", "the 20s"), keyed by
@@ -438,6 +450,12 @@ class PluralNumeralDetector:
             if found is not None:
                 detections.append(found)
         return detections
+
+    def extent(self):
+        """Declare one word with numeric-chain left context."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
 
     def _match(self, text: str, start: int, edges: frozenset[int]) -> ValueDetection | None:
         cursor = start
@@ -517,6 +535,12 @@ class SingleLetterWordDetector:
                 )
             )
         return detections
+
+    def extent(self):
+        """Declare the single-letter ICU word extent."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
 
 
 @cache
@@ -6859,6 +6883,12 @@ class FlexibleDateTimeDetector:
             icu.Locale(locale).getLanguage(), self.locales
         )
 
+    def extent(self):
+        """Derive date, time, and CLDR-glue reach from this reader's children."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
+
     @staticmethod
     def _glue_matches(between: str, literal: str) -> bool:
         if len(between) != len(literal):
@@ -8267,6 +8297,12 @@ class FlexibleNumberRangeDetector:
         self._shared_negative_separators = frozenset().union(
             *(_range_shared_negative_separators(name) for name in self._names)
         )
+
+    def extent(self):
+        """Derive capped endpoint and ICU range-mark reach from this reader's state."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
 
     def _default_endpoints(self) -> tuple[object, ...]:
         return (self._bare_reader(), FlexiblePercentDetector(self.locale, locales=self.locales))

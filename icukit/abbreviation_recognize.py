@@ -176,6 +176,12 @@ class AbbreviationDetector:
             detections.append(self._detection(text, start, end, (), None, behavior))
         return detections
 
+    def extent(self):
+        """Derive the maximum surface width from this compiled lexicon."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
+
 
 def abbreviation_detectors(locale: str = "en") -> DetectorSet:
     """Return the locale's abbreviation detector gang, empty when unsupported."""

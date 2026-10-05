@@ -275,6 +275,12 @@ class _GatedReader:
         """Return this reader's stable lane names and sound start gates."""
         return self._start_gates
 
+    def extent(self):
+        """Derive this reader's stream extent from its installed ICU/material state."""
+        from .stream import _extent_for_reader
+
+        return _extent_for_reader(self)
+
     def _lane_key(self, lane: str) -> str:
         return (
             f"{type(self).__name__}|{getattr(self, 'locale', '')}|"

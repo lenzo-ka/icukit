@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
+  with a settled start frontier, `pending_from` on every batch, bounded pending text,
+  configurable reader caps, cut reporting, truncated detections, and detection stride.
+- Right and left `Extent` declarations, `StreamableDetector`, `extent_report()`, and
+  stream extents for every stock reader.
+- `detection_to_dict()` now includes `truncated` when a capped detection carries it.
+
 ### Changed
 
 - **Behavior change:** English sentence output now applies token integrity and

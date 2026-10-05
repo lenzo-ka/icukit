@@ -42,6 +42,16 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
 - [`CompiledDetectorSet`](#icukitcompiled) — class, `icukit.compiled`
+- [`Extent`](#icukitstream) — class, `icukit.stream`
+- [`StreamableDetector`](#icukitstream) — class, `icukit.stream`
+- [`ReaderExtent`](#icukitstream) — class, `icukit.stream`
+- [`extent_report`](#icukitstream) — function, `icukit.stream`
+- [`DetectionBatch`](#icukitstream) — class, `icukit.stream`
+- [`StreamPending`](#icukitstream) — class, `icukit.stream`
+- [`DetectionStream`](#icukitstream) — class, `icukit.stream`
+- [`DEFAULT_MAX_PENDING_CHARS`](#icukitstream) — constant, `icukit.stream`
+- [`DEFAULT_READER_CAP_CHARS`](#icukitstream) — constant, `icukit.stream`
+- [`DEFAULT_DETECT_STRIDE_CHARS`](#icukitstream) — constant, `icukit.stream`
 - [`ReaderSpec`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileKey`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileStats`](#icukitcompiled) — class, `icukit.compiled`
@@ -547,6 +557,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Scan token starts and return all co-located readings.
+
+#### `extent()`
+
+Derive the maximum surface width from this compiled lexicon.
 
 ### class `AbbreviationExpansion`
 
@@ -1984,6 +1998,15 @@ Detect with a context-local immutable scan plan, resetting it on every exit.
 
 Return one gate status row for every declared scan lane.
 
+#### `stream(*, max_pending_chars: 'int' = 4096, reader_cap_chars: 'Mapping[str, int] | None' = None, detect_stride_chars: 'int' = 32)`
+
+Return a bounded stream using transient compiled detection windows.
+
+The behavior-schema names are ``detection.stream.max_pending_chars``,
+``detection.stream.reader_cap_chars``, and
+``detection.stream.detect_stride_chars``. Defaults are 4096, each reader's
+declared cap, and 32 code points.
+
 #### `warm() -> 'CompiledDetectorSet'`
 
 Force lazy sub-readers and zone tables under the build phase.
@@ -2638,6 +2661,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -2753,6 +2780,15 @@ Compile this gang explicitly, optionally forcing lazy reader state.
 
 The members' types, in order; a type repeats once per locale it is built for.
 
+#### `stream(*, max_pending_chars: 'int' = 4096, reader_cap_chars: 'Mapping[str, int] | None' = None, detect_stride_chars: 'int' = 32)`
+
+Return a bounded incremental detector over arbitrary text chunks.
+
+The behavior-schema names are ``detection.stream.max_pending_chars``,
+``detection.stream.reader_cap_chars``, and
+``detection.stream.detect_stride_chars``. Defaults are 4096, each reader's
+declared cap, and 32 code points.
+
 #### `with_(*more: 'Detector') -> 'DetectorSet'`
 
 Return a new gang with ``more`` detectors added.
@@ -2809,6 +2845,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -5673,6 +5713,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return one runs reading per mixed letter-and-digit word, in source order.
 
+#### `extent()`
+
+Declare the one-ICU-word run extent.
+
 ### class `AlphanumericRunsValue`
 
 A token read as its runs: ``(("digits", "3"), ("letters", "D"))`` for "3D".
@@ -5697,6 +5741,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible compact numbers in source order.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -5713,6 +5761,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible currency candidates in source order.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -5728,6 +5780,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping spelled-currency candidates in source order.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -5761,6 +5817,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 Return every structure's flexible numeric dates, distinct, in source order.
 
 A date with its era is its own reading, beside the date without it.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -5800,6 +5860,10 @@ Return greedy, non-overlapping date-interval candidates in source order.
 A span whose zone text names several zones is read once per zone, the reader's
 own locale's zone first.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -5824,6 +5888,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible fractions in source order.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -5852,6 +5920,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return flexible measure candidates in source order, a bare per form beside them.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -5876,6 +5948,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping mixed-unit measures in source order.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -5906,6 +5982,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping flexible decimal candidates in source order.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -5956,6 +6036,10 @@ then names their group, which the type carries.
 
 Return every range (or approximately) reading in source order.
 
+#### `extent()`
+
+Derive capped endpoint and ICU range-mark reach from this reader's state.
+
 ### class `FlexibleOrdinalDetector`
 
 Recognize ordinal numerals (``1st``, ``第21``) using reflective CLDR affixes.
@@ -5993,6 +6077,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return flexible ordinals in source order: digit ordinals, then Roman ones.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -6012,6 +6100,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping flexible percent candidates in source order.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -6028,6 +6120,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return greedy, non-overlapping relative-date candidates in source order.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
 Return this reader's stable lane names and sound start gates.
@@ -6043,6 +6139,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping scientific numbers in source order.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -6070,6 +6170,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping spelled-out cardinals in source order.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -6107,6 +6211,10 @@ Return textual-date, day-month, and era-year candidates in source order.
 
 Each kind is its own pass, so their readings may overlap ("5 May 2000 AD" gives
 the date and "2000 AD"); none takes a start from another.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -6166,6 +6274,10 @@ without it ("10:30" and "10:30 hr"; "10 PM" and "10 PM ET"), so neither span
 replaces the other. A zone name that names several zones is read once per zone
 ("10 PM IST": Europe/Dublin and Asia/Kolkata), the locale's own zone first.
 
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
+
 #### `on_date(text: 'str', time: 'ValueDetection', fields) -> 'list[ValueDetection]'`
 
 ``time``'s readings once it is known to fall on the date ``fields`` give.
@@ -6197,6 +6309,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return isolated letter-name candidates in source order.
 
+#### `extent()`
+
+Declare the single-word extent of the locale's curated names.
+
 ### class `MaterialLoneSpelloutDetector`
 
 Recognize lone unit words with a validated material's spell-out rules.
@@ -6208,6 +6324,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return the lone unit words the default material reader refuses.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -6224,6 +6344,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping spelled-out cardinals in source order.
+
+#### `extent()`
+
+Derive this reader's stream extent from its installed ICU/material state.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -6250,6 +6374,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return plural-numeral readings in source order.
 
+#### `extent()`
+
+Declare one word with numeric-chain left context.
+
 ### class `SingleLetterWordDetector`
 
 Recognize an isolated letter that is a word in its locale.
@@ -6264,6 +6392,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return isolated one-letter word candidates in source order.
+
+#### `extent()`
+
+Declare the single-letter ICU word extent.
 
 ## icukit.regex
 
@@ -7725,6 +7857,129 @@ Example:
     'paypal'
     >>> get_skeleton("paypal")
     'paypal'
+
+## icukit.stream
+
+Bounded, incremental detection over text supplied in arbitrary chunks.
+
+Streaming never changes the whole-text :meth:`DetectorSet.detect` path.  It keeps a
+bounded suffix, re-runs the selected readers on that suffix, and publishes only starts
+whose declared right extent has closed.  Reader extents are deliberately data carried
+by each reader: they describe ICU and material that the reader already owns, rather
+than a locale table duplicated by the stream.
+
+The behavior-schema names for the three constructor options are
+``detection.stream.max_pending_chars``, ``detection.stream.reader_cap_chars``, and
+``detection.stream.detect_stride_chars``.  Their defaults are respectively 4096, each
+reader's declared cap (4096 for stock unbounded readers), and 32 code points.
+
+### Constants and type aliases
+
+#### `DEFAULT_DETECT_STRIDE_CHARS` (constant)
+
+`32`
+
+#### `DEFAULT_MAX_PENDING_CHARS` (constant)
+
+`4096`
+
+#### `DEFAULT_READER_CAP_CHARS` (constant)
+
+`4096`
+
+### class `DetectionBatch`
+
+Detections settled by one call and the stream frontier after that call.
+
+#### `DetectionBatch(detections: 'tuple[ValueDetection, ...]', pending_from: 'int', cuts: 'tuple[int, ...]' = (), reader_cuts: 'tuple[tuple[str, int], ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `DetectionStream`
+
+Incrementally detect text with bounded retention and absolute offsets.
+
+The stream cap bounds overlap chains, open Unicode chunks, and left walks that no
+individual reader owns.  Unbounded readers also retain their declared, independently
+configurable caps.  ``feed`` performs at most one ordinary detection window when the
+frontier has advanced by ``detect_stride_chars``; a cut, ``flush``, or ``close``
+always performs the required final window.
+
+#### `DetectionStream(detectors: 'DetectorSet | object | Iterable[Detector]', /, *, max_pending_chars: 'int' = 4096, reader_cap_chars: 'Mapping[str, int] | None' = None, detect_stride_chars: 'int' = 32) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `close() -> 'DetectionBatch'`
+
+Flush once and close; repeated calls return an empty final batch.
+
+#### `feed(chunk: 'str', /) -> 'DetectionBatch'`
+
+Append ``chunk`` and return every detection newly settled by this call.
+
+#### `flush() -> 'DetectionBatch'`
+
+End the current segment without marking or recording a safety cut.
+
+#### `pending() -> 'StreamPending'`
+
+Return the current absolute settlement and retention positions.
+
+### class `Extent`
+
+A reader's maximum right and left context, measured in stream chunks.
+
+``chunks=None`` denotes a reader closed by the declared ``joins``/``join_chars``
+condition and therefore requires a positive ``cap_chars``.  ``left_chunks=None``
+analogously walks left while the left join condition holds.  ``source`` records
+how the reader derived the declaration from its own ICU objects or material.
+
+#### `Extent(chunks: 'int | None', joins: 'frozenset[str] | None' = frozenset(), join_chars: 'str' = '', cap_chars: 'int | None' = None, left_chunks: 'int | None' = 0, left_joins: 'frozenset[str] | None' = frozenset(), left_join_chars: 'str' = '', source: 'str' = '') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `then(other: 'Extent') -> 'Extent'`
+
+Return a composite extent whose right side follows ``self`` with ``other``.
+
+#### `union(other: 'Extent') -> 'Extent'`
+
+Return the conservative extent accepting either declaration.
+
+### class `ReaderExtent`
+
+One detector's declared extent and effective configurable cap.
+
+#### `ReaderExtent(reader: 'str', type: 'str', locale: 'str | None', extent: 'Extent', cap_chars: 'int | None') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `StreamPending`
+
+A snapshot of retained and undecided stream state.
+
+### class `StreamableDetector`
+
+A detector with a sound static declaration of both context directions.
+
+#### `StreamableDetector(*args, **kwargs)`
+
+
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+
+
+#### `extent() -> 'Extent'`
+
+
+
+### `extent_report(detectors: 'DetectorSet | object | Iterable[Detector]', *, reader_cap_chars: 'Mapping[str, int] | None' = None) -> 'tuple[ReaderExtent, ...]'`
+
+Return every reader's declaration, refusing an unstreamable member.
+
+``reader_cap_chars`` is keyed by detection type, matching the future behavior
+schema field ``detection.stream.reader_cap_chars``.
 
 ## icukit.timezone
 
