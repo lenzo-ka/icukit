@@ -379,11 +379,13 @@ class DetectionStream:
         self._total = 0
         self._buffered_from = 0
         self._pending_from = 0
+        self._cap_pending_from = 0
+        self._left_checked_through = 0
         self._decided_through = 0
         self._last_detect_total = 0
         self._closed = False
         self._reader_origins: dict[str, int] = {}
-        self._pending_cuts: list[int] = []
+        self._reader_checked_starts: dict[str, int] = {}
         self._window_detect_count = 0
 
     @property
@@ -429,15 +431,19 @@ class DetectionStream:
             )
         return _deduplicate(found)
 
-    def _chunk_frontier(self) -> int:
+    def _chunk_frontier(self, end: int | None = None, *, pending_from: int | None = None) -> int:
+        if end is None:
+            end = self._total
+        if pending_from is None:
+            pending_from = self._pending_from
         origin = self._buffered_from
-        local = self._text
+        local = self._slice(origin, end)
         seams = _seams(local, origin=origin)
         starts = (origin, *seams)
-        ends = (*seams, self._total)
+        ends = (*seams, end)
         frontier = origin
         for index, start in enumerate(starts):
-            if start < self._pending_from:
+            if start < pending_from:
                 frontier = max(frontier, start)
                 continue
             if index >= len(seams):
@@ -462,49 +468,68 @@ class DetectionStream:
                 if cursor >= len(starts):
                     break
                 close = starts[cursor]
-                if cursor >= len(seams) and self._total < close + _RIGHT_PEEK:
+                if cursor >= len(seams) and end < close + _RIGHT_PEEK:
                     break
-            if self._total < close + _RIGHT_PEEK:
+            if end < close + _RIGHT_PEEK:
                 break
             frontier = close
-        return max(self._pending_from, frontier)
+        return max(pending_from, frontier)
 
-    def _settle(self, *, force: bool = False) -> list[ValueDetection]:
-        frontier = self._chunk_frontier()
-        self._decided_through = frontier
-        if not force and self._total - self._last_detect_total < self._stride:
-            return []
-        if frontier <= self._pending_from:
-            self._last_detect_total = self._total
-            return []
-        found = self._window_detections()
+    def _settlement_candidate(
+        self, end: int, pending_from: int
+    ) -> tuple[list[ValueDetection], int, int]:
+        frontier = self._chunk_frontier(end, pending_from=pending_from)
+        if frontier <= pending_from:
+            return [], pending_from, frontier
+        found = self._window_detections(end=end)
         seams = [
             seam
-            for seam in _seams(self._text, origin=self._buffered_from)
-            if self._pending_from < seam <= frontier
+            for seam in _seams(self._slice(self._buffered_from, end), origin=self._buffered_from)
+            if pending_from < seam <= frontier
         ]
-        new_pending = self._pending_from
+        new_pending = pending_from
         for seam in seams:
             if not any(item["start"] < seam < item["end"] for item in found):
                 new_pending = seam
-        decided = [item for item in found if self._pending_from <= item["start"] < new_pending]
+        return found, new_pending, frontier
+
+    def _settle(self, *, force: bool = False, end: int | None = None) -> list[ValueDetection]:
+        if end is None:
+            end = self._total
+        frontier = self._chunk_frontier(end)
+        self._decided_through = frontier
+        if not force and end - self._last_detect_total < self._stride:
+            return []
+        if frontier <= self._pending_from:
+            self._last_detect_total = end
+            return []
+        old_pending = self._pending_from
+        found, new_pending, _frontier = self._settlement_candidate(end, old_pending)
+        keep_from = self._left_window(new_pending, end=end)
+        if new_pending - keep_from > self._max_pending:
+            self._last_detect_total = end
+            return []
+        decided = [item for item in found if old_pending <= item["start"] < new_pending]
         self._pending_from = new_pending
-        self._last_detect_total = self._total
-        self._trim()
+        self._last_detect_total = end
+        self._trim(end=end)
         return decided
 
-    def _cut_position(self, start: int, cap: int) -> int:
-        limit = min(self._total, start + cap)
+    def _cut_position(self, start: int, cap: int, *, end: int | None = None) -> int:
+        if end is None:
+            end = self._total
+        limit = min(end, start + cap)
         seams = [
             value
             for value in _seams(
-                self._slice(self._buffered_from, limit + 1), origin=self._buffered_from
+                self._slice(self._buffered_from, min(end, limit + 1)),
+                origin=self._buffered_from,
             )
             if start < value <= limit
         ]
         if seams:
             return seams[-1]
-        local = self._slice(start, min(self._total, limit + 1))
+        local = self._slice(start, min(end, limit + 1))
         words = icu.BreakIterator.createWordInstance(icu.Locale.getRoot())
         words.setText(local)
         from ._offsets import boundary_maps
@@ -518,10 +543,10 @@ class DetectionStream:
         graphemes = [edge for edge in _grapheme_boundaries(local, start) if start < edge <= limit]
         return graphemes[-1] if graphemes else limit
 
-    def _reader_open_at_cap(self, start: int, extent: Extent, cap: int) -> bool:
+    def _reader_open_at_cap(self, start: int, extent: Extent, cap: int, *, end: int) -> bool:
         """Whether the earliest reader chunk still reaches its cap under its joins."""
         limit = start + cap
-        inspected_end = min(self._total, limit + 1)
+        inspected_end = min(end, limit + 1)
         seams = tuple(
             seam
             for seam in _seams(self._slice(start, inspected_end), origin=start)
@@ -548,22 +573,32 @@ class DetectionStream:
                 return False
         return True
 
-    def _reader_cuts(self) -> tuple[list[ValueDetection], list[tuple[str, int]]]:
-        emitted: list[ValueDetection] = []
-        cuts: list[tuple[str, int]] = []
+    def _reader_rows(self) -> dict[str, tuple[Detector, ReaderExtent]]:
         by_type: dict[str, tuple[Detector, ReaderExtent]] = {}
         for detector, row in zip(self._detectors, self._report, strict=True):
             if row.extent.chunks is None:
                 by_type.setdefault(detector.type, (detector, row))
-        for detector_type, (_detector, row) in by_type.items():
+        return by_type
+
+    def _reader_start(self, detector_type: str) -> int:
+        return max(self._pending_from, self._reader_origins.get(detector_type, self._pending_from))
+
+    def _reader_cuts_at(
+        self, end: int, detector_types: Iterable[str]
+    ) -> tuple[list[ValueDetection], list[tuple[str, int]]]:
+        emitted: list[ValueDetection] = []
+        cuts: list[tuple[str, int]] = []
+        by_type = self._reader_rows()
+        for detector_type in detector_types:
+            _detector, row = by_type[detector_type]
             cap = self._cap_overrides.get(detector_type, row.cap_chars)
             if cap is None:
                 continue
-            start = max(
-                self._pending_from, self._reader_origins.get(detector_type, self._pending_from)
-            )
-            if self._total >= start + cap + 1 and self._reader_open_at_cap(start, row.extent, cap):
-                cut = self._cut_position(start, cap)
+            start = self._reader_start(detector_type)
+            if end < start + cap + 1:
+                continue
+            if self._reader_open_at_cap(start, row.extent, cap, end=end):
+                cut = self._cut_position(start, cap, end=end)
                 selected = tuple(d for d in self._detectors if d.type == detector_type)
                 prefix = self._slice(start, cut)
                 emitted.extend(
@@ -573,31 +608,168 @@ class DetectionStream:
                 )
                 cuts.append((detector_type, cut))
                 self._reader_origins[detector_type] = cut
+                self._reader_checked_starts.pop(detector_type, None)
+            else:
+                self._reader_checked_starts[detector_type] = start
         return _deduplicate(emitted), cuts
 
-    def _stream_cuts(self) -> tuple[list[ValueDetection], list[int]]:
+    def _stream_cut_at(
+        self, end: int, *, start: int, decided_through: int
+    ) -> tuple[list[ValueDetection], int]:
+        actual_pending = self._pending_from
+        cut = self._cut_position(start, self._max_pending, end=end)
+        if not start < cut <= start + self._max_pending:
+            raise RuntimeError("stream cap cut is outside its pending interval")
+        if cut < actual_pending:
+            raise RuntimeError("stream cap cut fell behind the settlement frontier")
+        found = self._window_detections(end=end)
+        emitted = [
+            item for item in found if actual_pending <= item["start"] < min(decided_through, cut)
+        ]
+        prefix = self._window_detections(end=cut)
+        emitted.extend(
+            _truncated(item)
+            for item in prefix
+            if max(actual_pending, decided_through) <= item["start"] < cut
+        )
+        self._pending_from = cut
+        self._cap_pending_from = cut
+        self._left_checked_through = cut
+        self._decided_through = cut
+        self._drop_before(cut)
+        for detector_type in self._reader_origins:
+            self._reader_origins[detector_type] = max(cut, self._reader_origins[detector_type])
+        return _deduplicate(emitted), cut
+
+    def _left_cap_threshold(self) -> int | None:
+        """Return the first prefix whose frontier passes the current left-walk bound."""
+        start = self._cap_pending_from
+        if start >= self._total:
+            return None
+        left_from = self._left_window(start, end=self._total)
+        limit = left_from + self._max_pending
+        checked = max(self._left_checked_through, start)
+
+        def passes(end: int) -> bool:
+            return self._chunk_frontier(end, pending_from=start) > limit
+
+        if checked >= self._total or not passes(self._total):
+            return None
+        low = checked + 1
+        high = self._total
+        while low < high:
+            middle = (low + high) // 2
+            if passes(middle):
+                high = middle
+            else:
+                low = middle + 1
+        return low
+
+    def _safe_pending_at(
+        self,
+        found: Iterable[ValueDetection],
+        *,
+        end: int,
+        start: int,
+        frontier: int,
+        limit: int,
+    ) -> int:
+        safe = start
+        for seam in _seams(self._slice(self._buffered_from, end), origin=self._buffered_from):
+            if seam > min(frontier, limit):
+                break
+            if start < seam and not any(item["start"] < seam < item["end"] for item in found):
+                safe = seam
+        return safe
+
+    def _cap_events(
+        self,
+    ) -> tuple[list[ValueDetection], list[int], list[tuple[str, int]]]:
+        """Evaluate cap decisions at their text-fixed prefix thresholds."""
         emitted: list[ValueDetection] = []
         cuts: list[int] = []
-        while self._total >= self._pending_from + self._max_pending + 1:
-            emitted.extend(self._settle(force=True))
-            if self._total < self._pending_from + self._max_pending + 1:
+        reader_cuts: list[tuple[str, int]] = []
+        by_type = self._reader_rows()
+        cap_distances = [self._max_pending]
+        cap_distances.extend(
+            cap
+            for _detector_type, (_detector, row) in by_type.items()
+            if (cap := self._cap_overrides.get(row.type, row.cap_chars)) is not None
+        )
+        if (
+            self._cap_pending_from == self._buffered_from
+            and self._total <= self._cap_pending_from + min(cap_distances)
+        ):
+            return emitted, cuts, reader_cuts
+        while True:
+            stream_threshold = self._cap_pending_from + self._max_pending + 1
+            left_threshold = self._left_cap_threshold()
+            reader_thresholds: dict[str, int] = {}
+            for detector_type, (_detector, row) in by_type.items():
+                cap = self._cap_overrides.get(detector_type, row.cap_chars)
+                if cap is None:
+                    continue
+                start = self._reader_start(detector_type)
+                if self._reader_checked_starts.get(detector_type) == start:
+                    continue
+                reader_thresholds[detector_type] = start + cap + 1
+            thresholds = [stream_threshold, *reader_thresholds.values()]
+            if left_threshold is not None:
+                thresholds.append(left_threshold)
+            threshold = min(thresholds)
+            if threshold > self._total:
                 break
-            cut = self._cut_position(self._pending_from, self._max_pending)
-            prefix = self._window_detections(end=cut)
-            emitted.extend(
-                _truncated(item) for item in prefix if self._pending_from <= item["start"] < cut
+            due_readers = [
+                detector_type
+                for detector_type, reader_threshold in reader_thresholds.items()
+                if reader_threshold == threshold
+            ]
+            if due_readers:
+                reader_emitted, new_reader_cuts = self._reader_cuts_at(threshold, due_readers)
+                emitted.extend(reader_emitted)
+                reader_cuts.extend(new_reader_cuts)
+            cap_due = threshold == stream_threshold or threshold == left_threshold
+            if not cap_due:
+                emitted.extend(self._settle(end=threshold))
+                continue
+            cap_pending = self._cap_pending_from
+            found, cap_new_pending, cap_frontier = self._settlement_candidate(
+                threshold, cap_pending
             )
-            cuts.append(cut)
-            self._pending_from = cut
-            self._decided_through = cut
-            self._drop_before(cut)
-            for detector_type in self._reader_origins:
-                self._reader_origins[detector_type] = max(cut, self._reader_origins[detector_type])
-        return _deduplicate(emitted), cuts
+            self._decided_through = cap_frontier
+            keep_from = self._left_window(cap_new_pending, end=threshold)
+            left_limit = self._left_window(cap_pending, end=threshold) + self._max_pending
+            safe_pending = self._safe_pending_at(
+                found,
+                end=threshold,
+                start=cap_pending,
+                frontier=cap_frontier,
+                limit=left_limit,
+            )
+            if cap_new_pending > cap_pending and cap_new_pending - keep_from <= self._max_pending:
+                self._cap_pending_from = cap_new_pending
+                self._left_checked_through = threshold
+                emitted.extend(self._settle(force=True, end=threshold))
+            elif safe_pending > cap_pending:
+                self._cap_pending_from = safe_pending
+                self._left_checked_through = threshold
+            elif cap_new_pending == cap_pending and threshold == left_threshold:
+                self._left_checked_through = threshold
+            else:
+                cut_emitted, cut = self._stream_cut_at(
+                    threshold,
+                    start=cap_pending,
+                    decided_through=cap_new_pending,
+                )
+                emitted.extend(cut_emitted)
+                cuts.append(cut)
+        return _deduplicate(emitted), cuts, reader_cuts
 
-    def _left_window(self, position: int) -> int:
-        seams = _seams(self._text, origin=self._buffered_from)
-        edges = (self._buffered_from, *seams, self._total)
+    def _left_window(self, position: int, *, end: int | None = None) -> int:
+        if end is None:
+            end = self._total
+        seams = _seams(self._slice(self._buffered_from, end), origin=self._buffered_from)
+        edges = (self._buffered_from, *seams, end)
         cursor = max(index for index, edge in enumerate(edges) if edge <= position)
         crossed = 0
         while cursor > 0 and (
@@ -620,17 +792,13 @@ class DetectionStream:
             index -= 1
         return max(self._buffered_from, index - 1)
 
-    def _trim(self) -> None:
-        keep_from = self._left_window(self._pending_from)
+    def _trim(self, *, end: int | None = None) -> None:
+        keep_from = self._left_window(self._pending_from, end=end)
         if self._reader_origins:
             keep_from = min(keep_from, *self._reader_origins.values())
-        if self._pending_from - keep_from > self._max_pending:
-            self._pending_cuts.append(self._pending_from)
-            keep_from = self._pending_from
-            for detector_type in self._reader_origins:
-                self._reader_origins[detector_type] = max(
-                    self._pending_from, self._reader_origins[detector_type]
-                )
+        if keep_from > self._cap_pending_from:
+            self._cap_pending_from = keep_from
+            self._left_checked_through = max(self._left_checked_through, keep_from)
         self._drop_before(keep_from)
 
     def feed(self, chunk: str, /) -> DetectionBatch:
@@ -641,12 +809,8 @@ class DetectionStream:
             raise TypeError("chunk must be str")
         self._text += chunk
         self._total += len(chunk)
-        reader_detections, reader_cuts = self._reader_cuts()
-        detections = [*reader_detections, *self._settle()]
-        cut_detections, cuts = self._stream_cuts()
-        detections.extend(cut_detections)
-        cuts.extend(self._pending_cuts)
-        self._pending_cuts.clear()
+        cap_detections, cuts, reader_cuts = self._cap_events()
+        detections = [*cap_detections, *self._settle()]
         return DetectionBatch(
             tuple(_deduplicate(detections)),
             self._pending_from,
@@ -664,6 +828,8 @@ class DetectionStream:
             if self._pending_from <= item["start"] < self._total
         ]
         self._pending_from = self._total
+        self._cap_pending_from = self._total
+        self._left_checked_through = self._total
         self._decided_through = self._total
         self._drop_before(self._total)
         self._reader_origins.clear()

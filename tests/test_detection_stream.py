@@ -3,7 +3,7 @@ import random
 import pytest
 
 from icukit import DetectionBatch, Extent, number_detectors
-from icukit.detectors import DetectorSet
+from icukit.detectors import DetectorSet, NumberDetector
 from icukit.engine import reader_set
 from icukit.stream import DetectionStream, _joinable, _seams, _shift_detection, extent_report
 
@@ -318,16 +318,147 @@ def test_reader_cap():
     )
     first = stream.feed("1" * 20 + " x")
     decimal = [d for d in first.detections if d["type"] == "number:decimal"]
-    assert [(d["start"], d["end"], d.get("truncated")) for d in decimal] == [(0, 8, True)]
-    assert first.reader_cuts == (("number:decimal", 8),)
+    assert [(d["start"], d["end"], d.get("truncated")) for d in decimal] == [
+        (0, 8, True),
+        (8, 16, True),
+    ]
+    assert first.reader_cuts == (("number:decimal", 8), ("number:decimal", 16))
     final = [d for d in stream.close().detections if d["type"] == "number:decimal"]
-    assert [(d["start"], d["end"], d.get("truncated")) for d in final] == [(8, 20, None)]
+    assert [(d["start"], d["end"], d.get("truncated")) for d in final] == [(16, 20, None)]
     whole = [
         d
         for d in reader_set("en_US", flexible=True).detect("1" * 20 + " x")
         if d["type"] == "number:decimal"
     ]
     assert [(d["start"], d["end"]) for d in whole] == [(0, 20)]
+
+
+def test_reader_cap_literal_chunk_invariant():
+    text = "1" * 20 + " x"
+    detectors = reader_set("en_US", flexible=True).compile(warm=False)
+    expected = None
+    for chunks in ([len(text)], [1] * len(text), [5, 5, 5, 5, 2]):
+        found, batches = _run(
+            detectors,
+            text,
+            chunks,
+            stride=1,
+            reader_cap_chars={"number:decimal": 8},
+        )
+        result = (
+            [
+                (d["start"], d["end"], d.get("truncated"))
+                for d in found
+                if d["type"] == "number:decimal"
+            ],
+            [cut for batch in batches for cut in batch.reader_cuts],
+        )
+        if expected is None:
+            expected = result
+        assert result == expected
+    assert expected == (
+        [(0, 8, True), (8, 16, True), (16, 20, None)],
+        [("number:decimal", 8), ("number:decimal", 16)],
+    )
+
+
+def test_left_walk_cut_literal_chunk_invariant():
+    text = "1 " * 12 + "x 9"
+    detector = NumberDetector("en_US", "decimal")
+    expected = None
+    for chunks in ([len(text)], [1] * len(text), [3] * 9):
+        stream = DetectionStream((detector,), max_pending_chars=8, detect_stride_chars=1)
+        found = []
+        cuts = []
+        cursor = 0
+        for size in chunks:
+            batch = stream.feed(text[cursor : cursor + size])
+            cursor += size
+            found.extend(batch.detections)
+            cuts.extend(batch.cuts)
+        found.extend(stream.close().detections)
+        result = (found, cuts)
+        if expected is None:
+            expected = result
+        assert result == expected
+    assert expected is not None
+    assert expected[1] == [12, 24]
+
+
+class _CutTrackingStream(DetectionStream):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cut_pending_from = []
+
+    def _stream_cut_at(self, end, *, start, decided_through):
+        detections, cut = super()._stream_cut_at(end, start=start, decided_through=decided_through)
+        assert start < cut <= start + self._max_pending
+        self.cut_pending_from.append(self._pending_from)
+        return detections, cut
+
+
+def _cap_invariance_run(detectors, text, chunks, cap):
+    options = {}
+    if cap is not None:
+        options["max_pending_chars"] = cap
+        options["reader_cap_chars"] = {
+            row.type: cap for row in extent_report(detectors) if row.extent.chunks is None
+        }
+    stream = _CutTrackingStream(detectors, detect_stride_chars=32, **options)
+    detections = []
+    cuts = []
+    reader_cuts = []
+    cursor = 0
+    for size in chunks:
+        batch = stream.feed(text[cursor : cursor + size])
+        cursor += size
+        detections.extend(batch.detections)
+        cuts.extend(batch.cuts)
+        reader_cuts.extend(batch.reader_cuts)
+    batch = stream.close()
+    detections.extend(batch.detections)
+    cuts.extend(batch.cuts)
+    reader_cuts.extend(batch.reader_cuts)
+    pending_positions = [*stream.cut_pending_from, batch.pending_from]
+    return detections, cuts, reader_cuts, pending_positions
+
+
+def _random_chunks(length, randomizer):
+    chunks = []
+    while length:
+        size = randomizer.randint(1, min(64, length))
+        chunks.append(size)
+        length -= size
+    return chunks
+
+
+def test_cap_decisions_are_chunk_invariant_property():
+    gangs = {
+        locale: reader_set(locale, flexible=True, guarded=True).compile(warm=False)
+        for locale in ("en_US", "fr_FR", "ja_JP")
+    }
+    numbers = number_detectors("en_US").compile(warm=False)
+    cases = (
+        (gangs["en_US"], "1" * 20 + " x", 8),
+        (gangs["fr_FR"], "un " * 12 + "x", 16),
+        (gangs["ja_JP"], "1 " * 40 + "x", 64),
+        (numbers, "1 - " * 20 + "x", 8),
+        (numbers, "one " * 20 + "x", 16),
+        (numbers, "1" * 80 + " x", 64),
+        (numbers, "x" * 5000, None),
+        (gangs["en_US"], "a" + "\u0301" * 5000, None),
+    )
+    expected = []
+    for detectors, text, cap in cases:
+        cp1 = _cap_invariance_run(detectors, text, [1] * len(text), cap)
+        assert _cap_invariance_run(detectors, text, [len(text)], cap) == cp1
+        expected.append(cp1)
+
+    randomizer = random.Random(20261005)
+    for index in range(30):
+        detectors, text, cap = cases[index % len(cases)]
+        chunks = _random_chunks(len(text), randomizer)
+        assert _cap_invariance_run(detectors, text, chunks, cap) == expected[index % len(cases)]
 
 
 def test_left_walk_cap_cut():
