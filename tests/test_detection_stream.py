@@ -1,10 +1,11 @@
 import random
+import re
 
 import pytest
 
 from icukit import DetectionBatch, Extent, number_detectors
-from icukit.detectors import DetectorSet, NumberDetector
-from icukit.engine import reader_set
+from icukit.detectors import DetectorRefusal, DetectorSet, NumberDetector
+from icukit.engine import flexible_detectors, generated_detectors, reader_set
 from icukit.stream import DetectionStream, _joinable, _seams, _shift_detection, extent_report
 
 _STREAM_FIXTURES = (
@@ -77,16 +78,70 @@ def _run(detectors, text, chunks, stride=32, **options):
 
 def test_number_literal():
     stream = number_detectors("en_US").stream(detect_stride_chars=1)
-    assert stream.feed("I paid 1,2") == DetectionBatch((), 7)
+    assert stream.feed("I paid 1,2") == DetectionBatch((), 2)
     batch = stream.feed("34 and 56 ")
     assert [(d["text"], d["start"], d["end"]) for d in batch.detections] == [("1,234", 7, 12)]
-    assert batch.pending_from == 17
-    # ICU's signed exemplars ("-7") span two chunks, so "56 " waits for a complete,
-    # non-joinable following chunk; "more." completes only at close.
-    assert stream.feed("more.") == DetectionBatch((), 17)
+    assert batch.pending_from == 13
+    # The non-joinable "more." chunk closes the bounded number extent once the
+    # two-code-point peek is present.
+    third = stream.feed("more.")
+    assert [d["text"] for d in third.detections] == ["56"]
+    assert third.pending_from == 20
     closing = stream.close()
-    assert [d["text"] for d in closing.detections] == ["56"]
+    assert closing.detections == ()
     assert closing.pending_from == 25
+
+
+def test_report_interval_waits_for_composite_competitor():
+    text = "2024-03-05 2:07\u202fnm. New York-tyd\u2009–\u20092024-03-07 2:07\u202fnm. New York-tyd"
+    detectors = generated_detectors("af_ZA").compile(warm=False)
+    expected = detectors.detect(text)
+    assert any(item["type"] == "date-interval:hmv" for item in expected)
+
+    for chunks in ([text], re.findall(r"\S+|\s+", text), list(text)):
+        found, _batches = _run(detectors, text, [len(chunk) for chunk in chunks], stride=1)
+        assert found == expected
+
+
+def test_report_stream_whole_keeps_left_sensitive_month():
+    text = "\u200f2024 Oshù Ɛrɛ̀nà 5\u2009–\u20092025 Oshù Ìgbé 9"
+    detectors = generated_detectors("yo_NG").with_(
+        *flexible_detectors("yo_NG", guarded=True).detectors
+    )
+    expected = detectors.detect(text)
+    found, _batches = _run(detectors, text, [len(text)])
+    assert found == expected
+    months = [(item["start"], item["end"]) for item in found if item["type"] == "date:month-name"]
+    assert months == [
+        (6, 17),
+        (27, 36),
+    ]
+
+
+def test_report_default_cap_chunking_is_invariant_without_cuts():
+    text = "x 25 Desember 2024 om 9:30:00\u202fvm. GMT-5 y."
+    detectors = reader_set("af_ZA", flexible=True).compile(warm=False)
+    whole = _cap_invariance_run(detectors, text, [len(text)], None)
+    cp1 = _cap_invariance_run(detectors, text, [1] * len(text), None)
+    assert whole == cp1
+    assert whole[1:3] == ([], [])
+
+
+def test_report_codepoint_stream_keeps_signed_grouped_number():
+    text = "-1,234.56"
+    detectors = number_detectors("yo_NG").compile(warm=False)
+    found, _batches = _run(detectors, text, [1] * len(text), stride=1)
+    assert found == detectors.detect(text)
+
+
+def test_window_refusal_offsets_are_absolute():
+    text = "NaN/4/2020\u0301"
+    detectors = number_detectors("en_US").compile(warm=False)
+    with pytest.raises(DetectorRefusal) as whole:
+        detectors.detect(text)
+    with pytest.raises(DetectorRefusal) as streamed:
+        _run(detectors, text, [1] * len(text), stride=1)
+    assert streamed.value.args == whole.value.args
 
 
 @pytest.mark.parametrize("stride", [1, 32])

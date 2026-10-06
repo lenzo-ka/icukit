@@ -10,11 +10,11 @@ def test_extent_literal():
     assert NumberDetector("en_US", "decimal").extent() == Extent(
         chunks=2,
         joins=frozenset(),
-        join_chars="",
+        join_chars=r"[\p{N}\p{S}\p{Cf}]",
         cap_chars=None,
         left_chunks=None,
         left_joins=frozenset(),
-        left_join_chars=r"[\p{Nd}\p{Sm}]",
+        left_join_chars=r"[\p{Nd}\p{Sm}\p{Cf}]",
         source='ICU DecimalFormatSymbols en_US: grouping "," and affixes hold no White_Space',
     )
 
@@ -49,3 +49,20 @@ def test_signed_number_within_declared_extent():
     detectors = reader_set("en_US", flexible=True, guarded=True)
     text = "x -5 y and -1,234.5 z"
     assert _extent_violations(text, detectors.detect(text), detectors.detectors) == ()
+
+
+@pytest.mark.parametrize(
+    ("locale", "text"),
+    [
+        ("af_ZA", "-42,50 euro"),
+        ("agq_CM", "-42,50€"),
+        ("agq_CM", "-42,50 Bɔ̀ŋ è Bèletì"),
+        ("agq_CM", "tsuʔumè 7 ndzɔ̀ŋɔ̀chwaʔàkaa wo 2024"),
+        ("af_ZA", "12:05:00\u202fvm. Noord-Amerikaanse oostelike dagligtyd"),
+        ("af_ZA", "1 500e."),
+        ("yo_NG", "\u200f2024 Oshù Ɛrɛ̀nà 5\u2009–\u20092025 Oshù Ìgbé 9"),
+    ],
+)
+def test_report_extent_regressions(locale, text):
+    detectors = reader_set(locale, flexible=True, guarded=True)
+    assert _extent_violations(text, detectors.detect(text), detectors) == ()

@@ -21,14 +21,15 @@ from typing import Protocol, TypedDict, runtime_checkable
 
 import icu
 
-from .detectors import Detector, DetectorSet, ValueDetection, _sort_key
+from .detectors import Detector, DetectorRefusal, DetectorSet, ValueDetection, _sort_key
 
 DEFAULT_MAX_PENDING_CHARS: int = 4096
 DEFAULT_READER_CAP_CHARS: int = 4096
 DEFAULT_DETECT_STRIDE_CHARS: int = 32
 
 _RIGHT_PEEK = 2
-_NUMBER_LEFT_CHARS = r"[\p{Nd}\p{Sm}]"
+_NUMBER_LEFT_CHARS = r"[\p{Nd}\p{Sm}\p{Cf}]"
+_NUMERIC_JOIN_CHARS = r"[\p{N}\p{S}\p{Cf}]"
 
 _WB = icu.UProperty.WORD_BREAK
 _GCB = icu.UProperty.GRAPHEME_CLUSTER_BREAK
@@ -46,6 +47,13 @@ _GCB_RIGHT_EXCLUDED = {
 _WB_WSEGSPACE = icu.Char.getPropertyValueEnum(_WB, "WSegSpace")
 _DICT = icu.UnicodeSet(r"[\p{Line_Break=SA}\p{Ideographic}\p{Hiragana}\p{Katakana}]")
 _PUNCTUATION = icu.UnicodeSet(r"[\p{P}]")
+_LETTERS_MARKS = icu.UnicodeSet(r"[\p{L}\p{M}]")
+_REFUSAL_MESSAGES = {
+    "reversed-endpoint": "parse ended before its start",
+    "out-of-range-endpoint": "parse ended beyond the end of the text",
+    "surrogate-interior-endpoint": "parse ended inside a surrogate pair",
+    "mid-grapheme-endpoint": "parse ended inside a grapheme cluster",
+}
 
 
 def _set_union(first: str, second: str) -> str:
@@ -235,7 +243,7 @@ def extent_report(
     return tuple(rows)
 
 
-@lru_cache(maxsize=64)
+@lru_cache(maxsize=256)
 def _aggregate_extent(extents: tuple[Extent, ...]) -> Extent:
     extent = Extent(0, source="empty detector set")
     for declared in extents:
@@ -266,19 +274,35 @@ def _seams(text: str, *, origin: int = 0) -> tuple[int, ...]:
     return tuple(found)
 
 
+@lru_cache(maxsize=8192)
 def _words(text: str) -> tuple[str, ...]:
+    """Return the letter-and-mark runs inside ICU word segments.
+
+    Numeric readers commonly attach a localized suffix to digits without a word
+    boundary (``500e.``).  The suffix is the reader-owned join; the digits are covered
+    by ``join_chars``.  Keeping those two declarations separate also preserves marks
+    inside names such as ``Bɔ̀ŋ``.
+    """
     iterator = icu.BreakIterator.createWordInstance(icu.Locale.getRoot())
     iterator.setText(text)
     starts = iterator.first()
     result = []
     for end in iterator:
         part = str(icu.UnicodeString(text)[starts:end])
-        if any(icu.Char.isalpha(character) for character in part):
-            result.append(part.casefold())
+        run = []
+        for character in part:
+            if character in _LETTERS_MARKS:
+                run.append(character)
+            elif run:
+                result.append("".join(run).casefold())
+                run = []
+        if run:
+            result.append("".join(run).casefold())
         starts = end
     return tuple(result)
 
 
+@lru_cache(maxsize=8192)
 def _joinable(
     text: str, joins: frozenset[str] | None, join_chars: str, *, prefix: bool = False
 ) -> bool:
@@ -293,11 +317,17 @@ def _joinable(
     for character in text:
         if icu.Char.isUWhiteSpace(character) or character in _PUNCTUATION:
             continue
-        if icu.Char.isalpha(character):
+        if character in _LETTERS_MARKS:
             continue
         if allowed is None or character not in allowed:
             return False
     return True
+
+
+@lru_cache(maxsize=8192)
+def _gate_admits_chunk(gate: object, chunk: str) -> bool:
+    """Return whether a shared start gate admits any start in one seam chunk."""
+    return gate is None or any(gate.admits(character) for character in chunk)  # type: ignore[attr-defined]
 
 
 def _shift_detection(detection: ValueDetection, offset: int) -> ValueDetection:
@@ -372,12 +402,21 @@ class DetectionStream:
         )
         self._cap_overrides = _validate_cap_mapping(reader_cap_chars)
         self._report = extent_report(self._detectors, reader_cap_chars=self._cap_overrides)
+        self._reader_gates = tuple(self._start_gate(detector) for detector in self._detectors)
+        grouped: dict[tuple[object, bool], list[Extent]] = {}
+        for row, gate in zip(self._report, self._reader_gates, strict=True):
+            grouped.setdefault((gate, row.extent.chunks is None), []).append(row.extent)
+        self._gate_extents = tuple(
+            (gate, unbounded, _aggregate_extent(tuple(extents)))
+            for (gate, unbounded), extents in grouped.items()
+        )
         self._extent = _aggregate_extent(tuple(row.extent for row in self._report))
         self._max_pending = max_pending_chars
         self._stride = detect_stride_chars
         self._text = ""
         self._total = 0
         self._buffered_from = 0
+        self._buffered_u16_from = 0
         self._pending_from = 0
         self._cap_pending_from = 0
         self._left_checked_through = 0
@@ -388,28 +427,67 @@ class DetectionStream:
         self._reader_checked_starts: dict[str, int] = {}
         self._window_detect_count = 0
 
+    @staticmethod
+    def _start_gate(detector: Detector):
+        declaration = getattr(detector, "start_gates", None)
+        if not callable(declaration):
+            return None
+        gates = tuple(declaration().values())
+        if not gates or any(gate is None for gate in gates):
+            return None
+        combined = gates[0]
+        for gate in gates[1:]:
+            combined = combined | gate
+        return combined
+
     @property
     def window_detect_count(self) -> int:
         """Number of detection windows run, for benchmark accounting."""
         return self._window_detect_count
 
-    def _detect_raw(self, text: str, only: tuple[Detector, ...] | None = None):
+    def _detect_raw(
+        self,
+        text: str,
+        only: tuple[Detector, ...] | None = None,
+        *,
+        offset: int = 0,
+        u16_offset: int = 0,
+    ):
         self._window_detect_count += 1
-        compiled_window = getattr(self._source, "_detect_window", None)
-        if callable(compiled_window):
-            return compiled_window(text, only=only)
-        selected = self._detectors if only is None else only
-        from .detectors import detect
+        try:
+            compiled_window = getattr(self._source, "_detect_window", None)
+            if callable(compiled_window):
+                return compiled_window(text, only=only)
+            selected = self._detectors if only is None else only
+            from .detectors import detect
 
-        return detect(text, selected)
+            return detect(text, selected)
+        except DetectorRefusal as error:
+            if not offset and not u16_offset:
+                raise
+            endpoint_offset = offset if error.reason == "mid-grapheme-endpoint" else u16_offset
+            endpoint = None if error.endpoint is None else error.endpoint + endpoint_offset
+            raise DetectorRefusal(
+                error.type,
+                error.start + offset,
+                endpoint,
+                error.reason,
+                _REFUSAL_MESSAGES[error.reason],
+            ) from None
 
     def _slice(self, start: int, end: int) -> str:
         return self._text[start - self._buffered_from : end - self._buffered_from]
 
+    def _u16_offset(self, position: int) -> int:
+        prefix = self._slice(self._buffered_from, position)
+        return self._buffered_u16_from + len(prefix.encode("utf-16-le")) // 2
+
     def _drop_before(self, offset: int) -> None:
         if offset <= self._buffered_from:
             return
+        discarded = self._text[: offset - self._buffered_from]
         self._text = self._text[offset - self._buffered_from :]
+        self._buffered_u16_from += len(discarded.encode("utf-16-le")) // 2
         self._buffered_from = offset
 
     def _window_detections(self, end: int | None = None) -> list[ValueDetection]:
@@ -419,7 +497,15 @@ class DetectionStream:
         local = self._slice(begin, end)
         cut_types = set(self._reader_origins)
         ordinary = tuple(detector for detector in self._detectors if detector.type not in cut_types)
-        found = [_shift_detection(item, begin) for item in self._detect_raw(local, only=ordinary)]
+        found = [
+            _shift_detection(item, begin)
+            for item in self._detect_raw(
+                local,
+                only=ordinary,
+                offset=begin,
+                u16_offset=self._u16_offset(begin),
+            )
+        ]
         for detector_type, reader_origin in self._reader_origins.items():
             if reader_origin >= end:
                 continue
@@ -427,7 +513,12 @@ class DetectionStream:
             segment = self._slice(reader_origin, end)
             found.extend(
                 _shift_detection(item, reader_origin)
-                for item in self._detect_raw(segment, only=selected)
+                for item in self._detect_raw(
+                    segment,
+                    only=selected,
+                    offset=reader_origin,
+                    u16_offset=self._u16_offset(reader_origin),
+                )
             )
         return _deduplicate(found)
 
@@ -441,39 +532,81 @@ class DetectionStream:
         seams = _seams(local, origin=origin)
         starts = (origin, *seams)
         ends = (*seams, end)
-        frontier = origin
+        frontier = pending_from
         for index, start in enumerate(starts):
             if start < pending_from:
-                frontier = max(frontier, start)
                 continue
             if index >= len(seams):
                 break
-            if self._extent.chunks is not None:
-                closing_index = index + max(self._extent.chunks, 1) - 1
-                if closing_index >= len(seams):
-                    break
-                close = seams[closing_index]
-            else:
-                cursor = index + 1
-                while cursor < len(starts) and _joinable(
-                    self._slice(starts[cursor], ends[cursor]),
-                    self._extent.joins,
-                    self._extent.join_chars,
-                    prefix=cursor >= len(seams),
-                ):
-                    if cursor >= len(seams):
-                        cursor = len(starts)
-                        break
-                    cursor += 1
-                if cursor >= len(starts):
-                    break
-                close = starts[cursor]
-                if cursor >= len(seams) and end < close + _RIGHT_PEEK:
-                    break
-            if end < close + _RIGHT_PEEK:
+            if not self._start_is_decided(index, start, end, seams, starts, ends):
                 break
-            frontier = close
+            # ``frontier`` is the first possible start not yet proved closed, not the
+            # farthest reach of a reader at an earlier start.  Jumping to that far
+            # reach skips competitors that can begin in an intervening chunk.
+            frontier = seams[index]
         return max(pending_from, frontier)
+
+    def _start_is_decided(self, index, start, end, seams, starts, ends) -> bool:
+        """Whether every reader that can own ``start`` has closed by ``end``."""
+        chunk = self._slice(start, ends[index])
+        bounded = []
+        unbounded = []
+        if not self._reader_origins:
+            # Hundreds of locale readers share a few dozen immutable start gates.
+            # Aggregate those equal-gate extents once per stream, then test each gate
+            # once per seam instead of once per reader and character.
+            for gate, is_unbounded, extent in self._gate_extents:
+                if _gate_admits_chunk(gate, chunk):
+                    (unbounded if is_unbounded else bounded).append(extent)
+        else:
+            # A reader-specific cap changes the origin of only that detection type,
+            # so retain the individual path while any such origin is active.
+            for row, gate in zip(self._report, self._reader_gates, strict=True):
+                reader_origin = self._reader_origins.get(row.type)
+                if reader_origin is not None and start < reader_origin:
+                    continue
+                if not _gate_admits_chunk(gate, chunk):
+                    continue
+                target = unbounded if row.extent.chunks is None else bounded
+                target.append(row.extent)
+        for extents in (bounded, unbounded):
+            if extents and not self._extent_is_closed(
+                index,
+                end,
+                seams,
+                starts,
+                ends,
+                _aggregate_extent(tuple(extents)),
+            ):
+                return False
+        return True
+
+    def _extent_is_closed(self, index, end, seams, starts, ends, extent) -> bool:
+        limit = None if extent.chunks is None else index + max(extent.chunks, 1)
+        cursor = index + 1
+        while (
+            cursor < len(starts)
+            and (limit is None or cursor < limit)
+            and _joinable(
+                self._slice(starts[cursor], ends[cursor]),
+                extent.joins,
+                extent.join_chars,
+                prefix=cursor >= len(seams),
+            )
+        ):
+            if cursor >= len(seams):
+                cursor = len(starts)
+                break
+            cursor += 1
+        if limit is not None and cursor >= limit:
+            if limit >= len(starts):
+                return False
+            close = starts[limit]
+        elif cursor >= len(starts):
+            return False
+        else:
+            close = starts[cursor]
+        return end >= close + _RIGHT_PEEK
 
     def _settlement_candidate(
         self, end: int, pending_from: int
@@ -603,7 +736,12 @@ class DetectionStream:
                 prefix = self._slice(start, cut)
                 emitted.extend(
                     _truncated(_shift_detection(item, start))
-                    for item in self._detect_raw(prefix, only=selected)
+                    for item in self._detect_raw(
+                        prefix,
+                        only=selected,
+                        offset=start,
+                        u16_offset=self._u16_offset(start),
+                    )
                     if item["start"] < cut - start
                 )
                 cuts.append((detector_type, cut))
@@ -957,7 +1095,7 @@ def _stock_unbounded_extent(
     reader: object,
     joins: Iterable[str] = (),
     *,
-    join_chars: str = r"[\p{Nd}\p{Sm}]",
+    join_chars: str = _NUMERIC_JOIN_CHARS,
     numeric_left: bool = False,
     source: str,
 ) -> Extent:
@@ -966,10 +1104,19 @@ def _stock_unbounded_extent(
     qualified = source
     if locale and str(locale) not in source:
         qualified = f"{source} {locale}"
+    allowed = icu.UnicodeSet(join_chars)
+    for surface in _owned_strings(vars(reader)):
+        for character in surface:
+            if (
+                not icu.Char.isUWhiteSpace(character)
+                and character not in _PUNCTUATION
+                and character not in _LETTERS_MARKS
+            ):
+                allowed.add(character)
     return Extent(
         None,
         frozenset(word.casefold() for word in joins if word),
-        join_chars,
+        allowed.toPattern(),
         DEFAULT_READER_CAP_CHARS,
         None if numeric_left else 0,
         frozenset(),
@@ -995,6 +1142,8 @@ def _reader_words(reader: object) -> frozenset[str]:
             pending.extend(value.values())
         elif isinstance(value, (tuple, list, set, frozenset)):
             pending.extend(value)
+        elif isinstance(value, Detector):
+            pending.extend(vars(value).values())
     return frozenset(words)
 
 
@@ -1017,7 +1166,7 @@ def _owned_strings(value: object, seen: set[int] | None = None) -> tuple[str, ..
         values = (*value.keys(), *value.values())
     elif isinstance(value, (tuple, list, set, frozenset)):
         values = tuple(value)
-    elif type(value).__module__.startswith("icukit") and hasattr(value, "__dict__"):
+    elif isinstance(value, Detector):
         values = tuple(vars(value).values())
     else:
         return ()
@@ -1084,7 +1233,47 @@ def _time_samples(reader: object) -> tuple[str, ...]:
     periods += tuple(item[0] for item in getattr(reader, "_flexible_periods", ()))
     units = tuple(item[0] for item in getattr(reader, "_hour_units", ()))
     base = tuple(f"23{separator}59{separator}58" for separator in separators)
-    return (*base, *(f"{value} {period}" for value in base for period in periods), *units)
+    language = getattr(reader, "_language", "")
+    locales = getattr(reader, "locales", None)
+    zones = ()
+    if language:
+        from .recognize import _language_zone_abbreviations, _language_zone_names
+
+        zone_forms = (
+            *_language_zone_names(language, locales),
+            *_language_zone_abbreviations(language, locales),
+        )
+        longest_zone = _longest_surface(zone_forms, "")
+        zones = tuple(f"{value} {longest_zone}" for value in base if longest_zone)
+    return (
+        *base,
+        *(f"{value} {period}" for value in base for period in periods),
+        *zones,
+        *units,
+    )
+
+
+def _temporal_zone_words(reader: object) -> frozenset[str]:
+    """Return every language-level zone word a temporal reader can consume."""
+    if type(reader).__name__ not in {
+        "FlexibleDateIntervalDetector",
+        "FlexibleTimeDetector",
+        "FlexibleBareHourDetector",
+        "FlexibleDateTimeDetector",
+    }:
+        return frozenset()
+    locale = getattr(reader, "locale", "")
+    if not locale:
+        return frozenset()
+    from .recognize import _language_zone_abbreviations, _language_zone_names
+
+    language = icu.Locale(locale).getLanguage()
+    locales = getattr(reader, "locales", None)
+    forms = (
+        *_language_zone_names(language, locales),
+        *_language_zone_abbreviations(language, locales),
+    )
+    return frozenset(word for form in forms for word in _words(form))
 
 
 def _temporal_samples(reader: object) -> tuple[str, ...]:
@@ -1200,26 +1389,40 @@ def _derive_extent_for_reader(reader: object) -> Extent:
             f'ICU DecimalFormatSymbols {reader.locale}: grouping "{reader._grouping}" '
             "and affixes hold no White_Space"
         )
+        sample_words = frozenset(word for sample in samples for word in _words(sample))
         if whitespace:
             return _stock_unbounded_extent(
                 reader,
-                words | frozenset(word for sample in samples for word in _words(sample)),
+                sample_words,
                 numeric_left=True,
                 source=source,
             )
-        return _stock_bounded_extent(
-            reader, _sample_chunk_count(samples), numeric_left=True, source=source
+        return Extent(
+            _sample_chunk_count(samples),
+            sample_words,
+            _NUMERIC_JOIN_CHARS,
+            left_chunks=None,
+            left_join_chars=_NUMBER_LEFT_CHARS,
+            source=source,
         )
     if name == "DateDetector":
         calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(reader.locale))
         samples = []
         for year in (1, 2024, 99999):
-            calendar.clear()
-            calendar.set(year, 0, 2, 13, 5, 7)
-            samples.append(reader._df.format(calendar.getTime()))
+            # Exercise every month and every weekday.  A single January exemplar is
+            # unsound where a localized month or weekday itself contains a seam.
+            for month in range(12):
+                calendar.clear()
+                calendar.set(year, month, 15, 13, 5, 7)
+                samples.append(reader._df.format(calendar.getTime()))
+            for day in range(1, 8):
+                calendar.clear()
+                calendar.set(year, 0, day, 13, 5, 7)
+                samples.append(reader._df.format(calendar.getTime()))
         return Extent(
             _sample_chunk_count(samples),
             words | frozenset(word for sample in samples for word in _words(sample)),
+            _NUMERIC_JOIN_CHARS,
             left_chunks=None,
             left_join_chars=_NUMBER_LEFT_CHARS,
             source=f"ICU SimpleDateFormat exemplars {reader.locale}",
@@ -1242,7 +1445,7 @@ def _derive_extent_for_reader(reader: object) -> Extent:
         return _stock_unbounded_extent(
             reader,
             words,
-            join_chars=r"[\p{Nd}\p{Sm}]",
+            join_chars=_NUMERIC_JOIN_CHARS,
             numeric_left=numeric_left,
             source="reader-owned ICU symbols, rule text, and material surfaces",
         )
@@ -1250,10 +1453,16 @@ def _derive_extent_for_reader(reader: object) -> Extent:
     # combine them with their own ICU-derived names and glue. No locale surface is
     # typed here; the audit rejects a future ICU form that exceeds the exemplars.
     samples = _temporal_samples(reader)
+    if name in {"FlexibleMonthNameDetector", "FlexibleWeekdayNameDetector"}:
+        # These readers suppress names that overlap their child text-date reader, so
+        # their left declaration must include the child's numeric context as well.
+        numeric_left = True
     return Extent(
         _sample_chunk_count(samples),
-        words | frozenset(word for sample in samples for word in _words(sample)),
-        r"[\p{Nd}\p{Sm}]",
+        words
+        | frozenset(word for sample in samples for word in _words(sample))
+        | _temporal_zone_words(reader),
+        _NUMERIC_JOIN_CHARS,
         left_chunks=None if numeric_left else 0,
         left_join_chars=_NUMBER_LEFT_CHARS if numeric_left else "",
         source=(
