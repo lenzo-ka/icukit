@@ -16,7 +16,9 @@
 - Streaming detection now waits for every reader that can start in pending text,
   including bounded interval and composite readers, and its stock extents include
   localized currency, unit, month, weekday, time-zone, combining-mark, and format
-  context. No-cut streams therefore remain identical to whole-text detection across
+  context. Extent joins are stable for live prefixes in dictionary-segmented scripts,
+  and temporal extents cover every formatter-controlled month, weekday, era, and day
+  period. No-cut streams therefore remain identical to whole-text detection across
   arbitrary feed chunking.
 
 ### Changed

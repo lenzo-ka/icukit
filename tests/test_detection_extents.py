@@ -60,6 +60,13 @@ def test_signed_number_within_declared_extent():
         ("agq_CM", "tsuʔumè 7 ndzɔ̀ŋɔ̀chwaʔàkaa wo 2024"),
         ("af_ZA", "12:05:00\u202fvm. Noord-Amerikaanse oostelike dagligtyd"),
         ("af_ZA", "1 500e."),
+        ("af_ZA", "1\u00a0000ste"),
+        ("af_ZA", "n.C. 2024-12-25, Wo."),
+        ("af_ZA", "-9:30:00\u202fvm. GMT-5"),
+        (
+            "tg_TJ",
+            "\u041c\u0430\u0440\u0442\u0438 2024 \u2013 \u0410\u043f\u0440\u0435\u043b\u0438 2025",
+        ),
         ("yo_NG", "\u200f2024 Oshù Ɛrɛ̀nà 5\u2009–\u20092025 Oshù Ìgbé 9"),
     ],
 )

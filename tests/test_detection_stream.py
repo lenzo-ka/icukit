@@ -134,6 +134,33 @@ def test_report_codepoint_stream_keeps_signed_grouped_number():
     assert found == detectors.detect(text)
 
 
+@pytest.mark.parametrize(
+    ("locale", "text", "chunks"),
+    [
+        (
+            "tg_TJ",
+            "\u041c\u0430\u0440\u0442\u0438 2024 \u2013 \u0410\u043f\u0440\u0435\u043b\u0438 2025",
+            "tokens",
+        ),
+        ("ja_JP", "1 \u30ae\u30ac\u30d3\u30c3\u30c8", "codepoints"),
+        ("ja_JP", "1 \u30b0\u30e9\u30e0", "codepoints"),
+        ("si_LK", "\u0daf\u0dc4\u0dc3 1.2", "codepoints"),
+        (
+            "shn_MM",
+            "00:05:00 \u1076\u1062\u101d\u103a\u1038\u101a\u1062\u1019\u103a\u1038 "
+            "\u1075\u1062\u1004\u103a\u101d\u107c\u103a\u1038 "
+            "\u107a\u103d\u1010\u103a\u1038\u1022\u103d\u1075\u103a\u1087",
+            "codepoints",
+        ),
+    ],
+)
+def test_report_prefix_segmentation_does_not_settle_early(locale, text, chunks):
+    detectors = reader_set(locale, flexible=True).compile(warm=False)
+    pieces = re.findall(r"\S+|\s+", text) if chunks == "tokens" else list(text)
+    found, _batches = _run(detectors, text, [len(piece) for piece in pieces], stride=1)
+    assert found == detectors.detect(text)
+
+
 def test_window_refusal_offsets_are_absolute():
     text = "NaN/4/2020\u0301"
     detectors = number_detectors("en_US").compile(warm=False)

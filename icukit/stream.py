@@ -276,29 +276,26 @@ def _seams(text: str, *, origin: int = 0) -> tuple[int, ...]:
 
 @lru_cache(maxsize=8192)
 def _words(text: str) -> tuple[str, ...]:
-    """Return the letter-and-mark runs inside ICU word segments.
+    """Return contiguous letter-and-mark runs.
 
     Numeric readers commonly attach a localized suffix to digits without a word
     boundary (``500e.``).  The suffix is the reader-owned join; the digits are covered
-    by ``join_chars``.  Keeping those two declarations separate also preserves marks
-    inside names such as ``Bɔ̀ŋ``.
+    by ``join_chars``.  Contiguous runs, rather than ICU word segments, are intentional:
+    dictionary segmentation is not prefix-stable (a partial Japanese unit can be one
+    word before ICU later splits its completed form).  The same rule derives the join
+    vocabulary and checks live prefixes, while preserving marks in names such as
+    ``Bɔ̀ŋ``.
     """
-    iterator = icu.BreakIterator.createWordInstance(icu.Locale.getRoot())
-    iterator.setText(text)
-    starts = iterator.first()
     result = []
-    for end in iterator:
-        part = str(icu.UnicodeString(text)[starts:end])
-        run = []
-        for character in part:
-            if character in _LETTERS_MARKS:
-                run.append(character)
-            elif run:
-                result.append("".join(run).casefold())
-                run = []
-        if run:
+    run = []
+    for character in text:
+        if character in _LETTERS_MARKS:
+            run.append(character)
+        elif run:
             result.append("".join(run).casefold())
-        starts = end
+            run = []
+    if run:
+        result.append("".join(run).casefold())
     return tuple(result)
 
 
@@ -1033,6 +1030,12 @@ def _extent_violations(
                 )
             elif extent.chunks is None:
                 for index in range(start_chunk + 1, end_chunk + 1):
+                    # A reader may finish in the fixed right-peek prefix of the first
+                    # non-joinable chunk (for example ``-9:``). Settlement cannot close
+                    # that start until the same prefix is present, so this is sound and
+                    # is not a missing join declaration.
+                    if index == end_chunk and detection["end"] <= edges[index] + _RIGHT_PEEK:
+                        continue
                     if not _joinable(
                         text[edges[index] : edges[index + 1]],
                         extent.joins,
@@ -1211,20 +1214,73 @@ def _date_structure_samples(reader: object) -> tuple[str, ...]:
                 if index < len(separators):
                     parts.append(str(separators[index]))
             samples.append("".join(parts))
+    for structure in getattr(reader, "_era_structures", ()):
+        if not isinstance(structure, tuple) or len(structure) < 5:
+            continue
+        fields, separators, era_first, literal, _pattern = structure[:5]
+        if not isinstance(fields, tuple) or not isinstance(separators, tuple):
+            continue
+        date_parts = []
+        for index, field in enumerate(fields):
+            date_parts.append(field_values.get(str(field), "23"))
+            if index < len(separators):
+                date_parts.append(str(separators[index]))
+        date = "".join(date_parts)
+        for era in getattr(reader, "_eras", ()):
+            if not era or not isinstance(era[0], str):
+                continue
+            samples.append(f"{era[0]}{literal}{date}" if era_first else f"{date}{literal}{era[0]}")
     return tuple(samples)
 
 
-def _interval_samples(reader: object) -> tuple[str, ...]:
-    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(reader.locale))
+@lru_cache(maxsize=256)
+def _calendar_probe_times(locale: str) -> tuple[object, ...]:
+    """Return instants covering formatter-controlled names and numeric field widths."""
+    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
+    found = []
+
+    def add(year: int, month: int, day: int, hour: int = 13) -> None:
+        calendar.clear()
+        calendar.set(year, month, day, hour, 5, 7)
+        found.append(calendar.getTime())
+
+    for year in (1, 2024, 99999):
+        for month in range(12):
+            add(year, month, 15)
+    for day in range(1, 8):
+        add(2024, 0, day)
+    for hour in (1, 13, 23):
+        add(2024, 0, 2, hour)
     calendar.clear()
-    calendar.set(2024, 0, 2, 13, 5, 7)
-    first = calendar.getTime()
-    calendar.set(2024, 10, 28, 23, 59, 58)
-    second = calendar.getTime()
-    return tuple(
-        f"{left.format(first)}{separator}{right.format(second)}"
-        for left, separator, right, *_rest in getattr(reader, "_matchers", ())
-    )
+    calendar.set(icu.UCalendarDateFields.ERA, 0)
+    calendar.set(icu.UCalendarDateFields.YEAR, 44)
+    calendar.set(icu.UCalendarDateFields.MONTH, 2)
+    calendar.set(icu.UCalendarDateFields.DATE, 15)
+    calendar.set(icu.UCalendarDateFields.HOUR_OF_DAY, 13)
+    found.append(calendar.getTime())
+    return tuple(found)
+
+
+def _interval_samples(reader: object) -> tuple[str, ...]:
+    instants = _calendar_probe_times(reader.locale)
+    samples = []
+    for left, separator, right, *_rest in getattr(reader, "_matchers", ()):
+        left_values = tuple(str(left.format(instant)) for instant in instants)
+        right_values = tuple(str(right.format(instant)) for instant in instants)
+        if not left_values or not right_values:
+            continue
+        longest_left = max(
+            left_values, key=lambda value: (_sample_chunk_count((value,)), len(value))
+        )
+        longest_right = max(
+            right_values, key=lambda value: (_sample_chunk_count((value,)), len(value))
+        )
+        # Pair each formatter's complete ICU vocabulary with the other side's widest
+        # exemplar. This covers every month, weekday, era, and day period without a
+        # quadratic cross-product.
+        samples.extend(f"{value}{separator}{longest_right}" for value in left_values)
+        samples.extend(f"{longest_left}{separator}{value}" for value in right_values)
+    return tuple(samples)
 
 
 def _time_samples(reader: object) -> tuple[str, ...]:
@@ -1314,6 +1370,18 @@ def _temporal_samples(reader: object) -> tuple[str, ...]:
                     samples.append(date + separator + clock)
         return tuple(samples)
     return _owned_strings(vars(reader))
+
+
+def _ordinal_affix_words(reader: object) -> frozenset[str]:
+    """Return the RBNF affix vocabulary the ordinal reader probes and accepts."""
+    affixes = getattr(reader, "_affixes", None)
+    if not callable(affixes):
+        return frozenset()
+    values = (*range(1, 121), 1000, 1001, 10000, 100000)
+    surfaces = (
+        surface for value in values for pair in affixes(value) for surface in pair if surface
+    )
+    return frozenset(word for surface in surfaces for word in _words(surface))
 
 
 def _extent_for_reader(reader: object) -> Extent:
@@ -1406,19 +1474,10 @@ def _derive_extent_for_reader(reader: object) -> Extent:
             source=source,
         )
     if name == "DateDetector":
-        calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(reader.locale))
-        samples = []
-        for year in (1, 2024, 99999):
-            # Exercise every month and every weekday.  A single January exemplar is
-            # unsound where a localized month or weekday itself contains a seam.
-            for month in range(12):
-                calendar.clear()
-                calendar.set(year, month, 15, 13, 5, 7)
-                samples.append(reader._df.format(calendar.getTime()))
-            for day in range(1, 8):
-                calendar.clear()
-                calendar.set(year, 0, day, 13, 5, 7)
-                samples.append(reader._df.format(calendar.getTime()))
+        # Exercise every month and weekday, both day periods, every ruled year width,
+        # and an era change. A single January/AD exemplar is not sound for formatter
+        # patterns containing localized names.
+        samples = [reader._df.format(instant) for instant in _calendar_probe_times(reader.locale)]
         return Extent(
             _sample_chunk_count(samples),
             words | frozenset(word for sample in samples for word in _words(sample)),
@@ -1442,6 +1501,11 @@ def _derive_extent_for_reader(reader: object) -> Extent:
             source="single ICU word",
         )
     if name in unbounded:
+        if name == "FlexibleOrdinalDetector":
+            # The reader derives its maximum prefix and all ordinal plural categories
+            # from this same RBNF probe set. Reuse that accepted pattern vocabulary for
+            # streaming instead of inferring suffixes from observed corpus rows.
+            words |= _ordinal_affix_words(reader)
         return _stock_unbounded_extent(
             reader,
             words,
