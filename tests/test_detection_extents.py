@@ -63,6 +63,7 @@ def test_signed_number_within_declared_extent():
         ("af_ZA", "1\u00a0000ste"),
         ("af_ZA", "n.C. 2024-12-25, Wo."),
         ("af_ZA", "-9:30:00\u202fvm. GMT-5"),
+        ("ja_JP", "-42.50\u30e6\u30fc\u30ed"),
         (
             "tg_TJ",
             "\u041c\u0430\u0440\u0442\u0438 2024 \u2013 \u0410\u043f\u0440\u0435\u043b\u0438 2025",

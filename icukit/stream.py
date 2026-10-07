@@ -1030,16 +1030,17 @@ def _extent_violations(
                 )
             elif extent.chunks is None:
                 for index in range(start_chunk + 1, end_chunk + 1):
-                    # A reader may finish in the fixed right-peek prefix of the first
-                    # non-joinable chunk (for example ``-9:``). Settlement cannot close
-                    # that start until the same prefix is present, so this is sound and
-                    # is not a missing join declaration.
-                    if index == end_chunk and detection["end"] <= edges[index] + _RIGHT_PEEK:
-                        continue
+                    # The last seam chunk can continue with unrelated text after this
+                    # reader's endpoint (``-42.50ユーロ`` for the decimal reader). That
+                    # suffix is what closes the extent; it is not context the detection
+                    # consumes. Audit the accepted prefix, as live settlement does before
+                    # the closing suffix arrives.
+                    chunk_end = min(edges[index + 1], detection["end"])
                     if not _joinable(
-                        text[edges[index] : edges[index + 1]],
+                        text[edges[index] : chunk_end],
                         extent.joins,
                         extent.join_chars,
+                        prefix=index == end_chunk,
                     ):
                         violations.append(
                             f"{detector.type}: right join at {edges[index]} for "
