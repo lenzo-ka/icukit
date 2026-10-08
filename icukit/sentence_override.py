@@ -437,6 +437,15 @@ def _require_raw_sentence_locale(locale: str) -> None:
         )
 
 
+def _raw_sentence_locale(locale: str) -> str:
+    """Remove ICU sentence suppression while preserving every other locale keyword."""
+    parsed = icu.Locale.createCanonical(locale)
+    if parsed.getKeywordValue("ss") is None:
+        return locale
+    parsed.setKeywordValue("ss", "")
+    return parsed.getName()
+
+
 def break_rule_identity(
     locale: str = "en_US", /, *, inventories: Sequence[LoadedExceptionInventory] = ()
 ) -> BreakRuleIdentity:
@@ -3071,12 +3080,14 @@ class SentenceOverride:
     ) -> None:
         if not isinstance(locale, str) or not locale:
             raise ValueError("locale must be a nonempty string")
+        locale_default = base is None
+        if locale_default:
+            locale = _raw_sentence_locale(locale)
         _require_raw_sentence_locale(locale)
         if not isinstance(cache, bool):
             raise TypeError("cache must be bool")
         self.locale = locale
         self.cache = cache
-        locale_default = base is None
         uses_english_default = locale_default and _uses_english_default(locale)
         if locale_default and not uses_english_default:
             base = "none"

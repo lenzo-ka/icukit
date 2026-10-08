@@ -18,7 +18,7 @@ from icukit import ReaderSpec, compile_detectors, ungated
 from icukit import cache as detector_cache
 from icukit._gate import _SCAN_PLAN
 from icukit.detectors import DateDetector, DetectorRefusal, DetectorSet, detect, detector_key
-from icukit.engine import flexible_detectors, generated_detectors, reader_set
+from icukit.engine import clear_detector_caches, flexible_detectors, generated_detectors, reader_set
 from icukit.recognize import FlexibleNumberDetector
 from icukit.serialize import detections_to_json
 
@@ -119,7 +119,7 @@ def test_detectorset_detect_equals_ungated():
 def test_number_reader_built_once_per_key(monkeypatch):
     import icukit.recognize as recognize
 
-    recognize._clear_shared_number_reader_cache()
+    clear_detector_caches()
     original = FlexibleNumberDetector.__init__
     keys = []
 

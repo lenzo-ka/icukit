@@ -107,9 +107,14 @@ def test_existing_icu_and_uli_characterization():
     assert [span["end"] for span in plain] == [4, 27, 41, 51, 55, 75]
     assert [span["end"] for span in uli] == [27, 41, 51, 55, 75]
 
+    default = SentenceOverride("en_US@calendar=gregorian;ss=standard")
+    assert default.locale == "en_US@calendar=gregorian"
+    assert default.spans(text) == SentenceOverride("en_US@calendar=gregorian").spans(text)
+    assert Breaker("en_US@ss=standard").break_sentence_spans(text) == SentenceOverride(
+        "en_US"
+    ).spans(text)
+
     message = "candidates are raw ICU sentence breaks without ULI"
-    with pytest.raises(ValueError, match=message):
-        SentenceOverride("en_US@ss=standard")
     with pytest.raises(ValueError, match=message):
         break_rule_identity("en_US@ss=standard")
     with pytest.raises(ValueError, match=message):
