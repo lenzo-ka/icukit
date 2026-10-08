@@ -31,7 +31,6 @@ from icukit.sentence_override import (
     _TokenFeatureCache,
 )
 
-DEFAULT_MODEL = Path("/Users/lenzo/covgap-data/breaks/models/m1c/sweep/b-glue2-k1-r200.json")
 DEFAULT_OUTPUT = Path("icukit/data/break_rules/en/sentence-tn.json")
 DEFAULT_RECEIPT = Path("icukit/data/break_rules/en/RECEIPT.json")
 MINER_DIGEST = "ab44dc37951ebbbad6f38798af3a677081ec439e46d4246573f3f3829ecbc24c"
@@ -507,7 +506,7 @@ def build(model_path: Path, output_path: Path, receipt_path: Path = DEFAULT_RECE
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--receipt", type=Path, default=DEFAULT_RECEIPT)
     args = parser.parse_args()
