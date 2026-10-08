@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Require `icukit-pyicu>=78.3.1`. That release fixes a segfault on Python 3.14
+  when an invalid regex pattern's error is formatted, which made
+  `UnicodeRegex("[invalid")` crash instead of raising `PatternError`.
 - **Behavior change:** English sentence output now applies token integrity and
   the locale-fallback shipped abbreviation lexicon's `break="suppress"` entries
   to ICU sentence candidates by default, across `Breaker` sentence spans

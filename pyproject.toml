@@ -52,7 +52,7 @@ classifiers = [
 # notice to regenerate the golden.
 dependencies = [
     "cartlet>=0.8",
-    "icukit-pyicu>=78.3.0",
+    "icukit-pyicu>=78.3.1",
 ]
 
 [project.urls]
