@@ -4470,6 +4470,9 @@ class FlexibleMeasureDetector(_GatedReader):
     kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
     each of that locale's plural categories (see :func:`_plural_samples`), each also in
     the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+    Spacing stays flexible except for two detached forms that collide with ordinary text:
+    quote or prime marks, and one-letter abbreviations. Those do not read after a space
+    when their ICU pattern joins them to the number (``84"``, "62d").
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
     number directly. A per form written without an amount ("/s", "per second") reads as
@@ -4499,6 +4502,9 @@ class FlexibleMeasureDetector(_GatedReader):
         if not surfaces:
             raise ValueError(f"ICU exposes no supported suffix surface for unit: {unit!r}")
         self._units = tuple(sorted(surfaces + rates, key=lambda item: len(item[0]), reverse=True))
+        self._wide_unit_surfaces = {
+            (surface, target) for surface, width, _spaced, target in self._units if width == "wide"
+        }
         # Longest first, those written as the text is (spaced or attached) ahead.
         self._ordered_units = {
             has_space: tuple(sorted(self._units, key=lambda item: item[2] != has_space))
@@ -4545,7 +4551,24 @@ class FlexibleMeasureDetector(_GatedReader):
         number_end, captures, value = match
         unit_start = self._space(text, number_end)
         has_space = unit_start != number_end
-        for surface, width, _expects_space, unit in self._ordered_units[has_space]:
+        for surface, width, expects_space, unit in self._ordered_units[has_space]:
+            # A detached mark can read as punctuation, and a detached one-letter
+            # abbreviation can read as prose. Reject only when this ICU-derived row
+            # attaches it; a spaced row sorts first, and a wide name is not abbreviated.
+            detached_mark = surface in {'"', "'", "″", "′"}
+            detached_letter = (
+                width in {"short", "narrow"}
+                and (surface, unit) not in self._wide_unit_surfaces
+                and len(surface) == 1
+                and surface.isalpha()
+            )
+            if (
+                has_space
+                and not expects_space
+                and width != "curated"
+                and (detached_mark or detached_letter)
+            ):
+                continue
             # A rate's per form ("/km²") follows the number directly, not after a space.
             cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
             if not text.startswith(surface, cursor):

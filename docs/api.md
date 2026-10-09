@@ -5840,6 +5840,9 @@ The surfaces are the unit's short, narrow, and wide forms as ICU formats them
 kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
 each of that locale's plural categories (see :func:`_plural_samples`), each also in
 the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+Spacing stays flexible except for two detached forms that collide with ordinary text:
+quote or prime marks, and one-letter abbreviations. Those do not read after a space
+when their ICU pattern joins them to the number (``84"``, "62d").
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
 number directly. A per form written without an amount ("/s", "per second") reads as

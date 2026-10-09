@@ -103,6 +103,57 @@ def test_a_unit_surface_must_end_its_word():
     assert _measures("square-kilometer", "12 km2x") == []
 
 
+@pytest.mark.parametrize(
+    "unit, detached",
+    [
+        ("inch", '84 "'),
+        ("inch", "84 ″"),
+        ("foot", "6 '"),
+        ("foot", "6 ′"),
+        ("day", "62 d"),
+    ],
+)
+def test_a_detached_mark_or_one_letter_unit_needs_a_spaced_icu_pattern(unit, detached):
+    assert _measures(unit, detached) == []
+
+
+@pytest.mark.parametrize(
+    "unit, text, amount",
+    [
+        ("inch", '84"', "84"),
+        ("foot", "6'", "6"),
+        ("day", "62d", "62"),
+        ("inch", "62in", "62"),
+        ("foot", "6ft", "6"),
+        ("day", "62days", "62"),
+        ("kilogram", "5kg", "5"),
+        ("kilometer", "100km", "100"),
+        ("ounce", "12oz", "12"),
+        ("milligram", "5mg", "5"),
+        ("inch", "62 in", "62"),
+    ],
+)
+def test_other_unit_spacing_stays_flexible(unit, text, amount):
+    assert _measures(unit, text) == [(text, amount, unit)]
+
+
+def test_a_one_character_wide_unit_name_is_not_an_abbreviation():
+    assert _measures("day", "62 天", "zh_CN") == [("62 天", "62", "day")]
+
+
+@pytest.mark.parametrize(
+    "locale, unit, text",
+    [("en_US", "inch", "3.8 in"), ("en_AU", "century", "10 C")],
+)
+def test_an_ambiguous_unit_surface_that_icu_formats_still_reads(locale, unit, text):
+    assert _measures(unit, text, locale) == [(text, text.split()[0], unit)]
+
+
+def test_an_australian_english_century_surface_reaches_the_default_en_us_reader():
+    assert _measures("century", "10 C") == [("10 C", "10", "century")]
+    assert FlexibleMeasureDetector("en_US", "century", locales=()).detect("10 C") == []
+
+
 def test_unit_variants_are_nfkc_and_ascii_confusables_of_marks():
     assert set(_unit_surface_variants("km²")) == {"km²", "km2"}
     assert '"' in _unit_surface_variants("″")
