@@ -17,10 +17,12 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from functools import lru_cache
+from itertools import product
 from typing import Protocol, TypedDict, runtime_checkable
 
 import icu
 
+from ._gate import _day_period_resource_strings, _resource_descendant_strings
 from .detectors import Detector, DetectorRefusal, DetectorSet, ValueDetection, _sort_key
 
 DEFAULT_MAX_PENDING_CHARS: int = 4096
@@ -371,9 +373,13 @@ class DetectionStream:
 
     The stream cap bounds overlap chains, open Unicode chunks, and left walks that no
     individual reader owns.  Unbounded readers also retain their declared, independently
-    configurable caps.  ``feed`` performs at most one ordinary detection window when the
-    frontier has advanced by ``detect_stride_chars``; a cut, ``flush``, or ``close``
-    always performs the required final window.
+    configurable caps.  These are independent budgets: between calls, a left-sensitive
+    reader can retain up to its reader cap plus ``max_pending_chars`` (8192 characters
+    with both defaults), so a reader cap alone is not a stream-memory bound.  The chunk
+    passed to ``feed`` is appended before cuts run and can temporarily exceed that bound.
+    ``feed`` performs at most one ordinary detection window when the frontier has advanced
+    by ``detect_stride_chars``; a cut, ``flush``, or ``close`` always performs the required
+    final window.
     """
 
     def __init__(
@@ -640,8 +646,10 @@ class DetectionStream:
             # A feed boundary is not an input boundary. ICU can reject an otherwise
             # valid parse while the prefix ends inside the grapheme that completes it
             # (notably Sinhala date fields). Keep the window unsettled and retry after
-            # more text; flush() still runs the final window and therefore preserves a
-            # refusal from the complete segment.
+            # more text. feed() has already run _cap_events(), so a refusal that persists
+            # to a retention threshold is propagated by that cap-time detection instead
+            # of bypassing the budget. flush() likewise preserves a refusal from the
+            # complete segment.
             self._last_detect_total = end
             return []
         keep_from = self._left_window(new_pending, end=end)
@@ -1273,37 +1281,35 @@ def _calendar_symbol_surfaces(locale: str) -> tuple[str, ...]:
 
 
 @lru_cache(maxsize=256)
-def _calendar_vocabulary_instants(locale: str) -> tuple[object, ...]:
-    """Enumerate the finite calendar fields that can change formatted word tokens."""
-    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
-    found = []
-
-    def add(year: int, month: int, day: int, hour: int = 13, era: int | None = None) -> None:
-        calendar.clear()
-        if era is not None:
-            calendar.set(icu.UCalendarDateFields.ERA, era)
-        calendar.set(year, month, day, hour, 5, 7)
-        found.append(calendar.getTime())
-
-    # Month/quarter, weekday, day-period, and era are the only finite fields that can
-    # change word vocabulary. Years/days/times themselves are numeric and are handled by
-    # join_chars. This enumeration is used only for the closing vocabulary, never to fit
-    # a seam-count bound.
-    for month in range(12):
-        add(2024, month, 15)
-    for day in range(1, 8):
-        add(2024, 0, day)
-    for hour in range(24):
-        add(2024, 0, 2, hour)
-    for era in range(calendar.getMaximum(icu.UCalendarDateFields.ERA) + 1):
-        add(44, 2, 15, era=era)
-    return tuple(found)
+def _calendar_resource_surfaces(locale: str) -> tuple[str, ...]:
+    """Return finite textual calendar fields from ICU's CLDR resources."""
+    loc = icu.Locale(locale)
+    calendar = str(icu.Calendar.createInstance(loc).getType())
+    calendars = (calendar, "gregorian") if calendar != "gregorian" else (calendar,)
+    found = set(_calendar_symbol_surfaces(locale))
+    found.update(_day_period_resource_strings(locale))
+    for name in calendars:
+        months = _resource_descendant_strings(locale, ("calendar", name, "monthNames"))
+        found.update(months)
+        for key in ("dayNames", "quarters", "eras", "cyclicNameSets", "zodiacNames"):
+            found.update(_resource_descendant_strings(locale, ("calendar", name, key)))
+        # Leap-month names are grammar templates rather than entries in the ordinary
+        # month table. Compose every template with every month name, exhaustively.
+        patterns = _resource_descendant_strings(locale, ("calendar", name, "monthPatterns"))
+        for pattern in patterns:
+            if "{0}" in pattern:
+                found.update(pattern.replace("{0}", month) for month in months)
+            elif pattern:
+                found.add(pattern)
+    return tuple(sorted(surface for surface in found if surface))
 
 
-def _calendar_closing_surfaces(reader: object) -> tuple[str, ...]:
-    """Return complete symbol and formatter word surfaces for an unbounded reader."""
-    locale = getattr(reader, "locale", "")
-    surfaces = list(_calendar_symbol_surfaces(locale))
+def _calendar_formatter_patterns(reader: object) -> tuple[str, ...]:
+    """Return every ICU pattern owned by a calendar reader."""
+    patterns = []
+    direct = getattr(reader, "pattern", None)
+    if isinstance(direct, str):
+        patterns.append(direct)
     formatters = []
     formatter = getattr(reader, "_df", None)
     if formatter is not None:
@@ -1312,9 +1318,76 @@ def _calendar_closing_surfaces(reader: object) -> tuple[str, ...]:
         if len(matcher) >= 3:
             formatters.extend((matcher[0], matcher[2]))
     for owned in formatters:
-        surfaces.extend(
-            str(owned.format(instant)) for instant in _calendar_vocabulary_instants(locale)
-        )
+        to_pattern = getattr(owned, "toPattern", None)
+        if callable(to_pattern):
+            patterns.append(str(to_pattern()))
+    return tuple(dict.fromkeys(patterns))
+
+
+@lru_cache(maxsize=1024)
+def _calendar_pattern_surfaces(locale: str, pattern: str) -> tuple[str, ...]:
+    """Compose word surfaces from one ICU pattern and finite CLDR field tables.
+
+    This matters when an alphabetic pattern literal attaches directly to a textual
+    field: Tajik ``MMMM'i'`` accepts ``Марти``, which is neither the bare month name nor
+    a separately tokenized literal. The product is over grammar alternatives, not dates.
+    """
+    field_surfaces = _calendar_resource_surfaces(locale)
+    groups: list[list[tuple[str, ...]]] = []
+    group: list[tuple[str, ...]] = []
+
+    def flush() -> None:
+        if group:
+            groups.append(group.copy())
+            group.clear()
+
+    quoted = False
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "'":
+            if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                flush()
+                index += 2
+                continue
+            quoted = not quoted
+            index += 1
+            continue
+        if not quoted and character.isascii() and character.isalpha():
+            end = index + 1
+            while end < len(pattern) and pattern[end] == character:
+                end += 1
+            width = end - index
+            textual = (
+                character in {"G", "E", "a", "b", "B", "U"}
+                or character in {"M", "L", "e", "c", "Q", "q"}
+                and width >= 3
+            )
+            if textual:
+                group.append(field_surfaces)
+            else:
+                flush()
+            index = end
+            continue
+        if character in _LETTERS_MARKS:
+            group.append((character,))
+        else:
+            flush()
+        index += 1
+    flush()
+    return tuple("".join(parts) for group in groups for parts in product(*group))
+
+
+def _calendar_closing_surfaces(reader: object) -> tuple[str, ...]:
+    """Return complete ICU/CLDR word surfaces for an unbounded calendar reader."""
+    locale = getattr(reader, "locale", "")
+    surfaces = list(_calendar_resource_surfaces(locale))
+    # ICU's CLDR tables own every a/b/B day-period name, including exact rules such as
+    # midnight and noon, for format/stand-alone and wide/abbreviated/narrow. Pattern
+    # composition also accounts for attached literals. No vocabulary is inferred from
+    # formatted sample dates.
+    for pattern in _calendar_formatter_patterns(reader):
+        surfaces.extend(_calendar_pattern_surfaces(locale, pattern))
     return tuple(dict.fromkeys(surface for surface in surfaces if surface))
 
 

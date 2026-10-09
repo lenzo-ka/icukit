@@ -8,6 +8,7 @@ from icukit.detectors import DetectorRefusal, DetectorSet, NumberDetector
 from icukit.engine import flexible_detectors, generated_detectors, reader_set
 from icukit.stream import (
     DetectionStream,
+    _calendar_closing_surfaces,
     _extent_for_reader,
     _joinable,
     _seams,
@@ -200,6 +201,67 @@ def test_stream_retries_si_date_refusal_at_nonfinal_feed_boundary():
         reader_cap_chars={detector.type: 1_000_000 for detector in detectors.detectors},
     )
     assert found == expected
+
+
+def test_prefix_refusal_cannot_bypass_cap_threshold():
+    class RefusingDetector:
+        type = group = "demo:refusing"
+
+        def extent(self):
+            return Extent(None, frozenset({"a"}), cap_chars=4, source="test a+ reader")
+
+        def detect(self, text):
+            if not text.endswith("!"):
+                raise DetectorRefusal(
+                    self.type,
+                    0,
+                    len(text),
+                    "mid-grapheme-endpoint",
+                    "test refusal",
+                )
+            return []
+
+    stream = DetectionStream(
+        (RefusingDetector(),),
+        max_pending_chars=4,
+        reader_cap_chars={"demo:refusing": 4},
+        detect_stride_chars=1,
+    )
+    for character in "aaaa":
+        batch = stream.feed(character)
+        assert batch.cuts == ()
+        assert batch.reader_cuts == ()
+    with pytest.raises(DetectorRefusal, match="test refusal"):
+        stream.feed("a")
+    assert stream.pending()["total"] - stream.pending()["buffered_from"] == 5
+
+
+def test_calendar_closing_vocabulary_uses_all_day_period_resource_forms():
+    from icukit._gate import _day_period_resource_strings
+
+    for locale in ("en_US", "de_DE", "fr_FR", "es_MX", "ja_JP", "zh_CN"):
+        reader = next(
+            detector
+            for detector in reader_set(locale, flexible=True).detectors
+            if type(detector).__name__ == "FlexibleTimeDetector"
+        )
+        surfaces = frozenset(_calendar_closing_surfaces(reader))
+        assert frozenset(_day_period_resource_strings(locale)) <= surfaces
+
+    en_reader = next(
+        detector
+        for detector in reader_set("en_US", flexible=True).detectors
+        if type(detector).__name__ == "FlexibleTimeDetector"
+    )
+    assert {"midnight", "noon"} <= frozenset(_calendar_closing_surfaces(en_reader))
+
+
+def test_special_day_period_stream_matches_whole_detection():
+    text = "12:00 noon x"
+    detectors = reader_set("en_US", flexible=True).compile(warm=False)
+    found, _batches = _run(detectors, text, [1] * len(text), stride=1)
+    assert any(item["text"] == "12:00 noon" for item in found)
+    assert found == detectors.detect(text)
 
 
 def test_relative_number_group_count_is_not_sample_bounded():
@@ -699,6 +761,29 @@ def test_left_walk_cap_cut():
     cuts.extend(final.cuts)
     reader_cuts.extend(final.reader_cuts)
     assert cuts or reader_cuts
+
+
+def test_numeric_left_walk_has_independent_reader_and_stream_cuts():
+    text = "1 - " * 2050 + "x"
+    stream = number_detectors("en_US").stream()
+    cuts = []
+    reader_cuts = []
+    truncated = []
+    maximum_retained = 0
+    for offset in range(0, len(text), 1024):
+        batch = stream.feed(text[offset : offset + 1024])
+        cuts.extend(batch.cuts)
+        reader_cuts.extend(batch.reader_cuts)
+        truncated.extend(item for item in batch.detections if item.get("truncated"))
+        state = stream.pending()
+        maximum_retained = max(maximum_retained, state["total"] - state["buffered_from"])
+
+    assert cuts == [8192]
+    assert ("number:decimal", 4096) in reader_cuts
+    assert ("number:decimal", 8192) in reader_cuts
+    assert truncated
+    assert all(item["end"] <= 8192 for item in truncated)
+    assert maximum_retained == 8192
 
 
 def test_stream_cap_on_64k_run():

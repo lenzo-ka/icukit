@@ -7901,9 +7901,13 @@ Incrementally detect text with bounded retention and absolute offsets.
 
 The stream cap bounds overlap chains, open Unicode chunks, and left walks that no
 individual reader owns.  Unbounded readers also retain their declared, independently
-configurable caps.  ``feed`` performs at most one ordinary detection window when the
-frontier has advanced by ``detect_stride_chars``; a cut, ``flush``, or ``close``
-always performs the required final window.
+configurable caps.  These are independent budgets: between calls, a left-sensitive
+reader can retain up to its reader cap plus ``max_pending_chars`` (8192 characters
+with both defaults), so a reader cap alone is not a stream-memory bound.  The chunk
+passed to ``feed`` is appended before cuts run and can temporarily exceed that bound.
+``feed`` performs at most one ordinary detection window when the frontier has advanced
+by ``detect_stride_chars``; a cut, ``flush``, or ``close`` always performs the required
+final window.
 
 #### `DetectionStream(detectors: 'DetectorSet | object | Iterable[Detector]', /, *, max_pending_chars: 'int' = 4096, reader_cap_chars: 'Mapping[str, int] | None' = None, detect_stride_chars: 'int' = 32) -> 'None'`
 
