@@ -7629,6 +7629,13 @@ def _grapheme_starts(text: str, locale: str) -> tuple[int, ...]:
     return tuple(sorted({span["start"] for span in break_grapheme_spans(text, locale)}))
 
 
+def _grapheme_boundaries(text: str, locale: str, plan: _ScanPlan | None) -> frozenset[int]:
+    """The representable detection endpoints for ``text`` and ``locale``."""
+    if plan is not None and locale in plan.grapheme_boundaries:
+        return plan.grapheme_boundaries[locale]
+    return frozenset((*_grapheme_starts(text, locale), len(text)))
+
+
 def _detect_flexible_alternatives(
     text: str,
     locale: str,
@@ -7658,10 +7665,11 @@ def _detect_flexible_alternatives(
         if plan is not None and locale in plan.word_interiors
         else _word_interior_offsets(text, locale)
     )
+    boundaries = _grapheme_boundaries(text, locale, plan)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor or start in interior:
+        if start < cursor or start not in boundaries or start in interior:
             continue
         if inspect_gate and not gate.admits(text[start]):
             _record(stats_key, "gated_out")
@@ -7684,7 +7692,7 @@ def _detect_flexible_alternatives(
         for result in results:
             # Readings of one value in different zones stay distinct.
             key = (result.end, result.value, _zone_key(result.captures))
-            if result.end in interior or key in kept:
+            if result.end not in boundaries or result.end in interior or key in kept:
                 continue
             kept.add(key)
             ends.add(result.end)
@@ -7728,10 +7736,11 @@ def _detect_flexible(
         if plan is not None and locale in plan.word_interiors
         else _word_interior_offsets(text, locale)
     )
+    boundaries = _grapheme_boundaries(text, locale, plan)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor or start in interior:
+        if start < cursor or start not in boundaries or start in interior:
             continue
         if inspect_gate and not gate.admits(text[start]):
             _record(stats_key, "gated_out")
@@ -7756,7 +7765,7 @@ def _detect_flexible(
         else:
             end, captures, value = result
             match_spec = spec
-        if end in interior:
+        if end not in boundaries or end in interior:
             continue
         detections.append(
             ValueDetection(

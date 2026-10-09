@@ -11,14 +11,12 @@ import time
 import unicodedata
 
 import icu
-import pytest
 
 import icukit.recognize as recognize
 from icukit import StartGate, candidate_starts, ungated
 from icukit._gate import _SCAN_PLAN, _ScanPlan, gate_report
 from icukit.detectors import (
     DateDetector,
-    DetectorRefusal,
     DetectorSet,
     NumberDetector,
     _scan_outcome,
@@ -198,24 +196,23 @@ def test_gate_report_accepts_single_detector():
 
 _PINNED = {
     "yMd": {
-        "a": "Apr/4/2020\u0301",
-        "d": "Dec/4/2020\u0301",
-        "f": "Feb/4/2020\u0301",
-        "j": "Jan/4/2020\u0301",
-        "m": "Mar/4/2020\u0301",
-        "n": "NaN/4/2020\u0301",
-        "o": "Oct/4/2020\u0301",
-        "s": "Sep/4/2020\u0301",
+        "a": ("Apr/4/2020\u0301", "miss"),
+        "d": ("Dec/4/2020\u0301", "miss"),
+        "f": ("Feb/4/2020\u0301", "miss"),
+        "j": ("Jan/4/2020\u0301", "miss"),
+        "m": ("Mar/4/2020\u0301", "miss"),
+        "n": ("NaN/4/2020\u0301", "miss"),
+        "o": ("Oct/4/2020\u0301", "miss"),
+        "s": ("Sep/4/2020\u0301", "miss"),
     },
     "MMMd": {
-        "a": "Apr 4",
-        "d": "Dec 4",
-        "f": "Feb 4",
-        "j": "Jan 4",
-        "m": "Mar 4",
-        "n": "NaN 4\u0301",
-        "o": "Oct 4",
-        "s": "Sep 4",
+        "a": ("Apr 4", "reading"),
+        "d": ("Dec 4", "reading"),
+        "f": ("Feb 4", "reading"),
+        "j": ("Jan 4", "reading"),
+        "m": ("Mar 4", "reading"),
+        "o": ("Oct 4", "reading"),
+        "s": ("Sep 4", "reading"),
     },
 }
 
@@ -278,8 +275,8 @@ def test_gate_complement_reduced_en_US():
                 unicodedata.normalize("NFKC", head.upper()),
             }
             assert all(not relative or gate.admits(relative[0]) for relative in relatives)
-        for head, witness in witnesses.items():
-            assert _scan_outcome(witness, 0, reader.locale, reader.type, reader._inv) != "miss", (
+        for head, (witness, expected) in witnesses.items():
+            assert _scan_outcome(witness, 0, reader.locale, reader.type, reader._inv) == expected, (
                 head
             )
         assert (
@@ -290,7 +287,7 @@ def test_gate_complement_reduced_en_US():
                 reader.type,
                 reader._inv,
             )
-            == "raise"
+            == "miss"
         )
         tail = "/4/2020\u0301" if skeleton == "yMd" else " 4\u0301"
         for char in sample:
@@ -306,17 +303,13 @@ def test_ungated_not_served_from_gated_cache():
         assert candidate_starts(text, "en_US", gate) == (0, 1)
 
 
-def test_strict_month_fallback_refusal_kept():
+def test_strict_month_fallback_mid_grapheme_decline_kept():
     reader = DateDetector("en_US", "yMd")
     text = "Jan/4/2020\u0301"
-    with pytest.raises(DetectorRefusal) as gated:
-        reader.detect(text)
-    with ungated(), pytest.raises(DetectorRefusal) as reference:
-        reader.detect(text)
-    assert (gated.value.reason, gated.value.start) == (
-        reference.value.reason,
-        reference.value.start,
-    )
+    gated = reader.detect(text)
+    with ungated():
+        reference = reader.detect(text)
+    assert gated == reference == []
 
 
 def test_pattern_literal_heads_keep_date_readings():
@@ -409,13 +402,29 @@ def test_fulltext_nonmember_subreader_falls_back():
         _SCAN_PLAN.reset(token)
 
 
-def test_plan_reset_after_refusal():
+def test_supplied_plan_cannot_force_a_mid_grapheme_start():
+    text = "1\u20e3"
+    gate = StartGate(chars=frozenset("\u20e3"))
+    plan = _ScanPlan(
+        text,
+        {"en_US": (1,)},
+        {gate: {"en_US": (1,)}},
+        grapheme_boundaries={"en_US": frozenset({0, len(text)})},
+    )
+    token = _SCAN_PLAN.set(plan)
+    try:
+        assert candidate_starts(text, "en_US", gate) == ()
+    finally:
+        _SCAN_PLAN.reset(token)
+
+
+def test_mid_grapheme_decline_preserves_plan():
     text = "Jan/4/2020\u0301"
     plan = _ScanPlan(text, {"en_US": (0,)}, {})
     token = _SCAN_PLAN.set(plan)
     try:
-        with pytest.raises(DetectorRefusal):
-            DateDetector("en_US", "yMd").detect(text)
+        assert DateDetector("en_US", "yMd").detect(text) == []
+        assert _SCAN_PLAN.get() is plan
     finally:
         _SCAN_PLAN.reset(token)
     assert _SCAN_PLAN.get() is None
@@ -473,7 +482,7 @@ def test_fuzz_witnesses_keep_readings():
 
 def test_scan_outcome_mapping():
     reader = DateDetector("en_US", "yMd")
-    assert _scan_outcome("Jan/4/2020\u0301", 0, reader.locale, reader.type, reader._inv) == "raise"
+    assert _scan_outcome("Jan/4/2020\u0301", 0, reader.locale, reader.type, reader._inv) == "miss"
     assert _scan_outcome("3/4/2020", 0, reader.locale, reader.type, reader._inv) == "reading"
 
 

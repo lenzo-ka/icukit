@@ -234,7 +234,7 @@ def test_scan_plan_failure_falls_back_to_legacy_detection():
 
 
 def test_member_refusal_propagates_from_compiled_detection():
-    refusal = DetectorRefusal("x:refusing", 0, 1, "mid-grapheme-endpoint", "test refusal")
+    refusal = DetectorRefusal("x:refusing", 1, 0, "reversed-endpoint", "test refusal")
     compiled = compile_detectors(DetectorSet((_RefusingReader(refusal),)), warm=False)
     with pytest.raises(DetectorRefusal) as raised:
         compiled.detect("a")
@@ -293,9 +293,10 @@ def test_detectorset_slotted_subclass_pickle_after_detect():
 
 
 def test_plan_reset_after_refusal():
-    compiled = compile_detectors(DetectorSet((DateDetector("en_US", "yMd"),)), warm=False)
+    refusal = DetectorRefusal("x:refusing", 1, 0, "reversed-endpoint", "test refusal")
+    compiled = compile_detectors(DetectorSet((_RefusingReader(refusal),)), warm=False)
     with pytest.raises(DetectorRefusal):
-        compiled.detect("Jan/4/2020\u0301")
+        compiled.detect("anything")
     assert _SCAN_PLAN.get() is None
 
 

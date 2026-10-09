@@ -68,9 +68,9 @@ class BuilderRefusal(Exception):
     """A successful ICU parse or a segmentation extent violates a graph invariant.
 
     Raised only for an *ostensibly successful* result with an invalid endpoint
-    (reversed, surrogate-interior, or mid-grapheme). A parse *miss* is never a
-    refusal -- the scan simply continues. Carries the offending boundary so the CLI
-    can report it and emit no partial document.
+    (reversed or surrogate-interior), or for an invalid caller-supplied graph extent.
+    A parse *miss* is never a refusal -- the scan simply continues. Carries the
+    offending boundary so the CLI can report it and emit no partial document.
     """
 
 
@@ -133,9 +133,10 @@ def detect_dates(text: str, locale: str, pattern: str) -> list[DateSpan]:
 
     Scans every grapheme-cluster start. For each: a parse miss or no progress simply
     continues (never a refusal, C1). On a successful parse the endpoint is converted
-    back to a code point; a surrogate-interior or non-grapheme endpoint is a refusal
-    (C2/C3). An accepted span must reproduce the formatter's canonical output exactly
-    -- this rejects leading-space and short-year coercions ICU would otherwise permit.
+    back to a code point; a surrogate-interior endpoint is a refusal, while a
+    non-grapheme endpoint is an ordinary decline. An accepted span must reproduce the
+    formatter's canonical output exactly -- this rejects leading-space and short-year
+    coercions ICU would otherwise permit.
     """
     fmt = _make_formatter(locale, pattern)
     us = icu.UnicodeString(text)
@@ -167,12 +168,9 @@ def detect_dates(text: str, locale: str, pattern: str) -> list[DateSpan]:
                 f"interior to a surrogate pair (start code point {start_cp})"
             )
         end_cp = utf16_to_cp[end_u16]
-        # SUCCESS ending inside a grapheme cluster is the invariant we assert against.
+        # ICU parses code units, not graphemes; stopping before a continuation is a miss.
         if end_cp not in grapheme_boundaries:
-            raise BuilderRefusal(
-                f"date parse succeeded but ended at code point {end_cp}, "
-                f"interior to a grapheme cluster (start code point {start_cp})"
-            )
+            continue
         # Exact-reformat acceptance: consumed text must be canonical formatter output.
         if fmt.format(cal) != text[start_cp:end_cp]:
             continue  # permissive coercion -> not accepted (not fatal)

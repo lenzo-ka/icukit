@@ -107,6 +107,8 @@ RefusalReason = Literal[
     "reversed-endpoint",
     "out-of-range-endpoint",
     "surrogate-interior-endpoint",
+    # Deprecated compatibility member: built-in detectors no longer emit this reason;
+    # a parser stopping inside a grapheme is an ordinary declined candidate.
     "mid-grapheme-endpoint",
     "inconsistent-surface",
 ]
@@ -361,9 +363,11 @@ class DetectorRefusal(Exception):
     """An ostensibly-successful ICU parse produced an unrepresentable endpoint.
 
     This is *not* a parse miss (a miss is silent and returns no candidate). It signals a
-    reversed, surrogate-interior, or mid-grapheme endpoint -- an invariant violation the
-    detector refuses to represent rather than emit wrongly. It carries a stable
-    ``reason`` from :data:`RefusalReason` and the offsets involved.
+    reversed, out-of-range, or surrogate-interior endpoint -- an invariant violation the
+    detector refuses to represent rather than emit wrongly. It carries a stable ``reason``
+    from :data:`RefusalReason` and the offsets involved. The public reason
+    ``"mid-grapheme-endpoint"`` is deprecated and retained for compatibility, but
+    built-in detectors no longer emit it: such a candidate is declined as a miss.
     """
 
     def __init__(
@@ -1239,9 +1243,9 @@ def _scan_step(
     inv: _Inverter,
     ctx: _ScanContext,
 ) -> ValueDetection | None:
-    """Run the strict matcher at one start, preserving every existing refusal."""
+    """Run the strict matcher at one start, refusing only impossible endpoints."""
     del locale  # the context already embodies the locale's grapheme and word rules
-    if start_cp in ctx.interior:
+    if start_cp not in ctx.boundaries or start_cp in ctx.interior:
         return None
     result = inv.parse(ctx.ustr, ctx.cp_to_u16[start_cp])
     if result is None:
@@ -1271,13 +1275,7 @@ def _scan_step(
             "parse ended inside a surrogate pair",
         )
     if end_cp not in ctx.boundaries:
-        raise DetectorRefusal(
-            type_label,
-            start_cp,
-            end_cp,
-            "mid-grapheme-endpoint",
-            "parse ended inside a grapheme cluster",
-        )
+        return None
     if end_cp in ctx.interior:
         return None
     surface = text[start_cp:end_cp]
@@ -1333,13 +1331,13 @@ def _scan(
 ) -> list[ValueDetection]:
     """Windowed detection with reformat-equality acceptance and greedy longest-match.
 
-    Scans grapheme-cluster starts left to right. A miss or no forward progress simply
-    continues (never a refusal). A successful parse whose endpoint is reversed,
-    surrogate-interior, or mid-grapheme is a :class:`DetectorRefusal`. An accepted span
-    must reproduce the formatter's canonical output exactly (rejecting ICU's permissive
-    coercions), and may neither start nor end inside a word between two alphanumerics
-    (see :func:`_word_interior_offsets`). After a match ``[s, e)`` the scan resumes at
-    ``e`` so one detector never self-overlaps.
+    Scans grapheme-cluster starts left to right. A miss, no forward progress, or an
+    endpoint inside a grapheme simply continues. A successful parse whose endpoint is
+    reversed, out of range, or inside a surrogate pair is a :class:`DetectorRefusal`.
+    An accepted span must reproduce the formatter's canonical output exactly (rejecting
+    ICU's permissive coercions), and may neither start nor end inside a word between two
+    alphanumerics (see :func:`_word_interior_offsets`). After a match ``[s, e)`` the scan
+    resumes at ``e`` so one detector never self-overlaps.
     """
     plan = _scan_plan_for(text, locale, gate)
     ctx = _scan_context_from_plan(text, locale, plan)
