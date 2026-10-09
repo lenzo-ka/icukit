@@ -39,10 +39,10 @@ jobs:
       fail-fast: false
       # Pull requests run a slim pair (newest Python on Linux, oldest on macOS);
       # main, manual runs and pull requests labeled `full-ci` run the full matrix.
-      # 3.14 is intentionally omitted: PyICU segfaults there (see commit 3f5b034).
-      # Restore it here and re-add its classifier in pyproject.toml once fixed.
+      # Python 3.14 runs on Linux to keep the full matrix lean; icukit-pyicu 78.3.1
+      # fixed the regex error-formatting segfault that previously excluded it.
       matrix:
-        include: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')) && '[{"os":"ubuntu-24.04","python-version":"3.11"},{"os":"ubuntu-24.04","python-version":"3.12"},{"os":"ubuntu-24.04","python-version":"3.13"},{"os":"macos-14","python-version":"3.11"},{"os":"macos-14","python-version":"3.12"},{"os":"macos-14","python-version":"3.13"}]' || '[{"os":"ubuntu-24.04","python-version":"3.13"},{"os":"macos-14","python-version":"3.11"}]') }}
+        include: ${{ fromJSON((github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')) && '[{"os":"ubuntu-24.04","python-version":"3.11"},{"os":"ubuntu-24.04","python-version":"3.12"},{"os":"ubuntu-24.04","python-version":"3.13"},{"os":"ubuntu-24.04","python-version":"3.14"},{"os":"macos-14","python-version":"3.11"},{"os":"macos-14","python-version":"3.12"},{"os":"macos-14","python-version":"3.13"}]' || '[{"os":"ubuntu-24.04","python-version":"3.14"},{"os":"macos-14","python-version":"3.11"}]') }}
 
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
