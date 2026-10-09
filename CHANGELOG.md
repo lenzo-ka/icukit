@@ -23,6 +23,16 @@
 
 ### Changed
 
+- Build the tiergraph text example through `tiergraph.build`, use tiergraph's
+  current public entry points, and require tiergraph 0.8 or later for development.
+
+## [0.9.0] - 2026-10-08
+
+### Changed
+
+- Require `icukit-pyicu>=78.3.1`. That release fixes a segfault on Python 3.14
+  when an invalid regex pattern's error is formatted, which made
+  `UnicodeRegex("[invalid")` crash instead of raising `PatternError`.
 - **Behavior change:** English sentence output now applies token integrity and
   the locale-fallback shipped abbreviation lexicon's `break="suppress"` entries
   to ICU sentence candidates by default, across `Breaker` sentence spans
@@ -56,15 +66,17 @@
   or rescan the whole text; documented unbounded fallbacks include rules with
   unbounded left context and oversized protected spans. Public APIs and output
   are unchanged.
-- `detector_key` now returns five components. The fifth is the material content digest,
-  or `None` for every reader built from ICU or curated data, so readers of one type from
-  different materials coexist in a gang.
+- **Behavior change:** `detector_key` now returns five components. The fifth is the
+  material content digest, or `None` for every reader built from ICU or curated data,
+  so readers of one type from different materials coexist in a gang. Callers that
+  unpack the key must accept five components.
 - Generated date detectors also include fully zero-padded complete numeric-date
   patterns where ICU's pattern generator makes them distinct from its enumerated
   unpadded pattern, so en_US `MM/dd/y` is read from the derived `yMMdd` skeleton.
-- The TSV output of `ik unicode name --choice all` and `ik unicode info --all-names` has
-  one more column, `aliases`, after the others: the columns before it are where they
-  were, but a consumer that checks the number of columns sees six and eight.
+- **Behavior change:** The TSV output of `ik unicode name --choice all` and
+  `ik unicode info --all-names` has one more column, `aliases`, after the others: the
+  columns before it are where they were, but a consumer that checks the number of
+  columns sees six and eight. Consumers must accept the new column.
 - Raise the cartlet dependency floor to 0.8.
 - `en-tn-cart@1` sentence decision IDs now name the leaf by its root-relative cartlet
   path (for example, `en-tn-cart@1#leaf:RRRRRRRRLR`) rather than an integer index.
@@ -216,7 +228,8 @@
   pattern with an era, with a year of one to three digits, typed
   `date:short-year:<skeleton>`. "Mar 15, 44 BC" is `(("G", 0), ("y", 44), ...)`, the
   year as written, never 2044.
-- Ranges are read as ICU writes them. `FlexibleNumberRangeDetector` reads two amounts
+- **Behavior change:** Ranges are read as ICU writes them.
+  `FlexibleNumberRangeDetector` reads two amounts
   joined by a separator ICU's `NumberRangeFormatter` writes in some locale of the
   language ("3–5", ja_JP "3～5", es_ES "3-5"), read off ICU's own number spans, with or
   without spaces around it; a side may leave its unit to the other where ICU collapses
@@ -228,7 +241,9 @@
   captured as `start.sign`; approximately readings likewise carry `value.*` captures.
   A range's endpoints follow the reader set: `DEFAULT_FAMILIES`
   gains `NUMBER_RANGE_FAMILY`, the ranges of numbers and percents (`number:range`), so
-  plain `ik detect` reads them; `range_detectors(locale, detectors)` gives the range
+  plain `ik detect` reads them; callers that require the old selection must pass
+  explicit families excluding `NUMBER_RANGE_FAMILY`.
+  `range_detectors(locale, detectors)` gives the range
   readers over the currency and measure readers a set holds (`number:range`,
   `measure:range`), which `ik detect --currency` and `--measure` add, and
   `flexible_detectors` reads ranges over its own readers. Each also reads ICU's
@@ -1014,7 +1029,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/lenzo-ka/icukit/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lenzo-ka/icukit/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/lenzo-ka/icukit/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/lenzo-ka/icukit/compare/v0.6.0...v0.7.0

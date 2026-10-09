@@ -23,10 +23,10 @@ if sys.version_info < (3, 12):
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO_ROOT / "examples" / "tiergraph_text.py"
+GOLDEN = Path(__file__).parent / "data" / "tiergraph_text_golden.json"
 sys.path.insert(0, str(REPO_ROOT))
 
-from tiergraph import QualifiedName, dumps, loads  # noqa: E402
-from tiergraph.semiring import COUNTING  # noqa: E402
+from tiergraph import COUNTING, QualifiedName, dumps, loads  # noqa: E402
 
 from examples.tiergraph_text import (  # noqa: E402
     NS,
@@ -227,10 +227,10 @@ def test_wire_contract():
     # tier order is atom, sentence, word-break, formatted-date
     order = [tier.declaration.name.local_name for tier in graph.tiers]
     assert order == ["atom", "sentence", "word-break", "formatted-date"]
-    # The integration installs tiergraph main unpinned. Assert its current canonical
-    # spelling is deterministic without pinning a particular wire-format version.
+    # Both supported tiergraph environments must agree with this canonical spelling.
     assert dumps(loads(j)) == j
     assert loads(j) == graph
+    assert j == GOLDEN.read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------------ CLI behavior
