@@ -35,23 +35,8 @@ import sys
 from dataclasses import dataclass
 
 import icu
-from tiergraph import (
-    AttributeDeclaration,
-    AttributeDomain,
-    AttributeValue,
-    BipartiteRelationDeclaration,
-    Graph,
-    Item,
-    ItemRef,
-    NamespaceDeclaration,
-    QualifiedName,
-    RelationInstance,
-    SimpleRelationDeclaration,
-    Tier,
-    TierDeclaration,
-    XsdType,
-)
-from tiergraph import dumps as tiergraph_dumps
+from tiergraph import Graph, dumps
+from tiergraph.build import document, item
 
 from icukit.breaker import break_grapheme_spans, break_sentence_spans, break_word_spans
 
@@ -59,28 +44,24 @@ from icukit.breaker import break_grapheme_spans, break_sentence_spans, break_wor
 
 NS = "urn:tiergraph:profile:text:icu:v1"  # FINAL wire identity -- not a placeholder.
 
-
-def _n(local: str) -> QualifiedName:
-    return QualifiedName(NS, local)
-
-
 # Tier names double as their item-type names (one SimpleRelationDeclaration per tier).
-ATOM = _n("atom")
-SENTENCE = _n("sentence")
-WORD_BREAK = _n("word-break")
-FORMATTED_DATE = _n("formatted-date")
+ATOM = "atom"
+SENTENCE = "sentence"
+WORD_BREAK = "word-break"
+FORMATTED_DATE = "formatted-date"
 
 # Coverage relations: atom (left) is covered by a span (right). One per span tier,
 # because a bipartite declaration fixes a single left/right type pair.
-ATOM_IN_SENTENCE = _n("atom-in-sentence")
-ATOM_IN_WORD_BREAK = _n("atom-in-word-break")
-ATOM_IN_DATE = _n("atom-in-date")
+ATOM_IN_SENTENCE = "atom-in-sentence"
+ATOM_IN_WORD_BREAK = "atom-in-word-break"
+ATOM_IN_DATE = "atom-in-date"
 
 # Type declaration names (distinct from the coverage relation names above).
-TYPES_ATOM = _n("type-atom")
-TYPES_SENTENCE = _n("type-sentence")
-TYPES_WORD_BREAK = _n("type-word-break")
-TYPES_DATE = _n("type-formatted-date")
+TYPES_ATOM = "type-atom"
+TYPES_SENTENCE = "type-sentence"
+TYPES_WORD_BREAK = "type-word-break"
+TYPES_DATE = "type-formatted-date"
+SURFACE = "surface"
 
 
 class BuilderRefusal(Exception):
@@ -221,35 +202,26 @@ def _atom_index_maps(
     return start_to_atom, end_to_after
 
 
-def _coverage_edges(
-    relation: QualifiedName,
-    span_tier: QualifiedName,
+def _coverage_pairs(
+    relation: str,
     spans: list[tuple[int, int]],
     start_to_atom: dict[int, int],
     end_to_after: dict[int, int],
-) -> list[RelationInstance]:
+) -> list[tuple[int, int]]:
     """One edge per covered atom (no duplicates). Refuses a non-atom-boundary extent."""
-    edges: list[RelationInstance] = []
+    pairs: list[tuple[int, int]] = []
     for span_index, (s_cp, e_cp) in enumerate(spans):
         if s_cp not in start_to_atom or e_cp not in end_to_after:
             raise BuilderRefusal(
-                f"{relation.local_name} extent [{s_cp}, {e_cp}) does not lie on atom boundaries"
+                f"{relation} extent [{s_cp}, {e_cp}) does not lie on atom boundaries"
             )
         first = start_to_atom[s_cp]
         stop = end_to_after[e_cp]
         if stop <= first:
-            raise BuilderRefusal(
-                f"{relation.local_name} extent [{s_cp}, {e_cp}) is empty or reversed"
-            )
+            raise BuilderRefusal(f"{relation} extent [{s_cp}, {e_cp}) is empty or reversed")
         for atom_index in range(first, stop):
-            edges.append(
-                RelationInstance(
-                    relation,
-                    ItemRef(ATOM, atom_index),
-                    ItemRef(span_tier, span_index),
-                )
-            )
-    return edges
+            pairs.append((atom_index, span_index))
+    return pairs
 
 
 def build_graph(text: str, locale: str, pattern: str) -> Graph:
@@ -261,53 +233,61 @@ def build_graph(text: str, locale: str, pattern: str) -> Graph:
 
     start_to_atom, end_to_after = _atom_index_maps(graphemes)
 
-    # atom tier carries surface text as an item attribute (a namespaced pair).
-    atom_items = tuple(Item(attributes=(_surface_attr(g["text"]),)) for g in graphemes)
-    sentence_items = tuple(Item() for _ in sentences)
-    word_items = tuple(Item() for _ in words)
-    date_items = tuple(Item() for _ in dates)
+    builder = document(NS, prefix="text")
+    builder.attributes({SURFACE: "string"})
 
-    tiers = (
-        Tier(TierDeclaration(ATOM, "Grapheme-cluster atoms"), atom_items),
-        Tier(TierDeclaration(SENTENCE, "ICU sentence spans"), sentence_items),
-        Tier(TierDeclaration(WORD_BREAK, "ICU word-break spans"), word_items),
-        Tier(TierDeclaration(FORMATTED_DATE, "Detected formatted dates"), date_items),
+    # The atom tier carries surface text as an item attribute.
+    atoms = builder.tier(
+        ATOM,
+        (item(attrs={SURFACE: grapheme["text"]}) for grapheme in graphemes),
+        item_type=ATOM,
+        membership=TYPES_ATOM,
+        long_name="Grapheme-cluster atoms",
+    )
+    sentence_tier = builder.tier(
+        SENTENCE,
+        (None for _ in sentences),
+        item_type=SENTENCE,
+        membership=TYPES_SENTENCE,
+        long_name="ICU sentence spans",
+    )
+    word_tier = builder.tier(
+        WORD_BREAK,
+        (None for _ in words),
+        item_type=WORD_BREAK,
+        membership=TYPES_WORD_BREAK,
+        long_name="ICU word-break spans",
+    )
+    date_tier = builder.tier(
+        FORMATTED_DATE,
+        (None for _ in dates),
+        item_type=FORMATTED_DATE,
+        membership=TYPES_DATE,
+        long_name="Detected formatted dates",
     )
 
-    relation_declarations = (
-        SimpleRelationDeclaration(TYPES_ATOM, ATOM, ATOM),
-        SimpleRelationDeclaration(TYPES_SENTENCE, SENTENCE, SENTENCE),
-        SimpleRelationDeclaration(TYPES_WORD_BREAK, WORD_BREAK, WORD_BREAK),
-        SimpleRelationDeclaration(TYPES_DATE, FORMATTED_DATE, FORMATTED_DATE),
-        BipartiteRelationDeclaration(ATOM_IN_SENTENCE, ATOM, SENTENCE, acyclic=True),
-        BipartiteRelationDeclaration(ATOM_IN_WORD_BREAK, ATOM, WORD_BREAK, acyclic=True),
-        BipartiteRelationDeclaration(ATOM_IN_DATE, ATOM, FORMATTED_DATE, acyclic=True),
+    builder.link(
+        ATOM_IN_SENTENCE,
+        atoms,
+        sentence_tier,
+        _coverage_pairs(ATOM_IN_SENTENCE, sentences, start_to_atom, end_to_after),
+        acyclic=True,
     )
-
-    relations = (
-        *_coverage_edges(ATOM_IN_SENTENCE, SENTENCE, sentences, start_to_atom, end_to_after),
-        *_coverage_edges(ATOM_IN_WORD_BREAK, WORD_BREAK, words, start_to_atom, end_to_after),
-        *_coverage_edges(ATOM_IN_DATE, FORMATTED_DATE, dates, start_to_atom, end_to_after),
+    builder.link(
+        ATOM_IN_WORD_BREAK,
+        atoms,
+        word_tier,
+        _coverage_pairs(ATOM_IN_WORD_BREAK, words, start_to_atom, end_to_after),
+        acyclic=True,
     )
-
-    attribute_declarations = (AttributeDeclaration(_SURFACE, AttributeDomain.ITEM, XsdType.STRING),)
-
-    return Graph(
-        (NamespaceDeclaration("text", NS),),
-        tiers,
-        relation_declarations,
-        relations,
-        attribute_declarations,
+    builder.link(
+        ATOM_IN_DATE,
+        atoms,
+        date_tier,
+        _coverage_pairs(ATOM_IN_DATE, dates, start_to_atom, end_to_after),
+        acyclic=True,
     )
-
-
-# --------------------------------------------------------- surface attribute helper
-
-_SURFACE = _n("surface")
-
-
-def _surface_attr(surface: str) -> AttributeValue:
-    return AttributeValue(_SURFACE, XsdType.STRING, surface)
+    return builder.build()
 
 
 # ----------------------------------------------------------------------------- CLI
@@ -331,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"refused: {exc}", file=sys.stderr)
         return 3
 
-    sys.stdout.write(tiergraph_dumps(graph))
+    sys.stdout.write(dumps(graph))
     return 0
 
 
