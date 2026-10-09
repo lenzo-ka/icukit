@@ -1231,6 +1231,19 @@ def _date_structure_samples(reader: object) -> tuple[str, ...]:
             if not era or not isinstance(era[0], str):
                 continue
             samples.append(f"{era[0]}{literal}{date}" if era_first else f"{date}{literal}{era[0]}")
+    # FlexibleTextDateDetector has an independent era/year lane even when CLDR gives
+    # it no textual month-date structures.  Its matcher requires exactly one space
+    # and accepts one through four locale digits beside every reader-owned era form.
+    eras = getattr(reader, "_eras", ())
+    era_first = getattr(reader, "_era_first", None)
+    digits = getattr(reader, "_digits", {})
+    if eras and isinstance(era_first, bool) and isinstance(digits, Mapping):
+        inverse = {value: character for character, value in digits.items()}
+        year = "".join(inverse.get(value, str(value)) for value in (9, 9, 9, 9))
+        for era in eras:
+            if not era or not isinstance(era[0], str):
+                continue
+            samples.append(f"{era[0]} {year}" if era_first else f"{year} {era[0]}")
     return tuple(samples)
 
 
@@ -1263,6 +1276,8 @@ def _calendar_probe_times(locale: str) -> tuple[object, ...]:
 
 
 def _interval_samples(reader: object) -> tuple[str, ...]:
+    from .recognize import _SPACES
+
     instants = _calendar_probe_times(reader.locale)
     samples = []
     for left, separator, right, *_rest in getattr(reader, "_matchers", ()):
@@ -1281,7 +1296,14 @@ def _interval_samples(reader: object) -> tuple[str, ...]:
         # quadratic cross-product.
         samples.extend(f"{value}{separator}{longest_right}" for value in left_values)
         samples.extend(f"{longest_left}{separator}{value}" for value in right_values)
-    return tuple(samples)
+    # FlexibleDateIntervalDetector deliberately folds these four CLDR space variants
+    # to a plain space before comparing a candidate with ICU's rendering.  Plain spaces
+    # can introduce more stream seams than ICU's canonical narrow/no-break spaces, so
+    # exercise that accepted spelling as well as the formatter output.
+    plain_space = tuple(
+        "".join(" " if char in _SPACES else char for char in value) for value in samples
+    )
+    return (*samples, *plain_space)
 
 
 def _time_samples(reader: object) -> tuple[str, ...]:
@@ -1292,7 +1314,7 @@ def _time_samples(reader: object) -> tuple[str, ...]:
     base = tuple(f"23{separator}59{separator}58" for separator in separators)
     language = getattr(reader, "_language", "")
     locales = getattr(reader, "locales", None)
-    zones = ()
+    zone = ""
     if language:
         from .recognize import _language_zone_abbreviations, _language_zone_names
 
@@ -1300,14 +1322,38 @@ def _time_samples(reader: object) -> tuple[str, ...]:
             *_language_zone_names(language, locales),
             *_language_zone_abbreviations(language, locales),
         )
-        longest_zone = _longest_surface(zone_forms, "")
-        zones = tuple(f"{value} {longest_zone}" for value in base if longest_zone)
-    return (
-        *base,
-        *(f"{value} {period}" for value in base for period in periods),
-        *zones,
-        *units,
-    )
+        zone = _longest_surface(zone_forms, "")
+    samples = list(base)
+    for value in base:
+        marked = [f"{value} {period}" for period in periods]
+        marked += [f"{value}{unit}" for unit in units]
+        marked += [f"{value} {unit}" for unit in units]
+        samples.extend(marked)
+        if zone:
+            samples.append(f"{value} {zone}")
+            samples.extend(f"{surface} {zone}" for surface in marked)
+    return tuple(samples)
+
+
+def _number_surfaces(reader: object) -> tuple[str, ...]:
+    """Return wide positive numerals accepted by a flexible number child."""
+    formatter = getattr(reader, "_nf", None)
+    values = [str(formatter.format(1_234_567))] if formatter is not None else ["1234567"]
+    digits = getattr(reader, "_digits", {})
+    inverse = {str(value): character for character, value in digits.items()}
+    plain = "".join(inverse.get(character, character) for character in "1234567")
+    for grouping, primary, secondary, *_rest in getattr(reader, "_other_groupings", ()):
+        if not primary:
+            continue
+        groups = [plain[-primary:]]
+        cursor = len(plain) - primary
+        secondary = secondary or primary
+        while cursor > 0:
+            start = max(0, cursor - secondary)
+            groups.append(plain[start:cursor])
+            cursor = start
+        values.append(str(grouping).join(reversed(groups)))
+    return tuple(dict.fromkeys(values))
 
 
 def _temporal_zone_words(reader: object) -> frozenset[str]:
@@ -1349,8 +1395,11 @@ def _temporal_samples(reader: object) -> tuple[str, ...]:
             item[0] for item in getattr(reader, "_names", ()) if item and isinstance(item[0], str)
         )
     if name == "FlexibleRelativeDateDetector":
+        numbers = _number_surfaces(getattr(reader, "_number", None))
         numeric = tuple(
-            f"{item[0]}1234567{item[1]}" for item in getattr(reader, "_numeric_templates", ())
+            f"{item[0]}{number}{item[1]}"
+            for item in getattr(reader, "_numeric_templates", ())
+            for number in numbers
         )
         named = tuple(item[0] for item in getattr(reader, "_named_phrases", ()))
         return (*numeric, *named)
@@ -1454,9 +1503,15 @@ def _derive_extent_for_reader(reader: object) -> Extent:
         whitespace = any(
             icu.Char.isUWhiteSpace(character) for sample in samples for character in sample
         )
+        symbols = reader._nf.getDecimalFormatSymbols()
+        exponent = symbols.getSymbol(icu.DecimalFormatSymbols.kExponentialSymbol)
+        digit = chr(ord(reader._zero) + 7)
+        parser_samples = [
+            f"{digit}{exponent}{sign}{digit}" for sign in ("", reader._minus, reader._plus)
+        ]
         source = (
             f'ICU DecimalFormatSymbols {reader.locale}: grouping "{reader._grouping}" '
-            "and affixes hold no White_Space"
+            f'and exponent "{exponent}" hold no White_Space'
         )
         sample_words = frozenset(word for sample in samples for word in _words(sample))
         if whitespace:
@@ -1467,7 +1522,7 @@ def _derive_extent_for_reader(reader: object) -> Extent:
                 source=source,
             )
         return Extent(
-            _sample_chunk_count(samples),
+            _sample_chunk_count((*samples, *parser_samples)),
             sample_words,
             _NUMERIC_JOIN_CHARS,
             left_chunks=None,

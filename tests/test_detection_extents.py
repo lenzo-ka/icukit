@@ -15,7 +15,7 @@ def test_extent_literal():
         left_chunks=None,
         left_joins=frozenset(),
         left_join_chars=r"[\p{Nd}\p{Sm}\p{Cf}]",
-        source='ICU DecimalFormatSymbols en_US: grouping "," and affixes hold no White_Space',
+        source='ICU DecimalFormatSymbols en_US: grouping "," and exponent "E" hold no White_Space',
     )
 
 
@@ -69,6 +69,10 @@ def test_signed_number_within_declared_extent():
             "\u041c\u0430\u0440\u0442\u0438 2024 \u2013 \u0410\u043f\u0440\u0435\u043b\u0438 2025",
         ),
         ("yo_NG", "\u200f2024 Oshù Ɛrɛ̀nà 5\u2009–\u20092025 Oshù Ìgbé 9"),
+        ("bas_CM", "-1\u00a0500 w"),
+        ("bn_BD", "৫/৩/২০২৪, ২ PM – ৭/৩/২০২৪, ২ PM"),
+        ("bo_CN", "2:07 ཕྱི་དྲོ་ New York"),
+        ("bo_CN", "སྤྱི་ལོ་ 1999"),
     ],
 )
 def test_report_extent_regressions(locale, text):

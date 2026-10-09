@@ -49,6 +49,9 @@ _STREAM_FIXTURES = (
     ("ar_EG", "٥ مايو ٢٠٢٤"),
     ("en_US", "nothing detected here"),
     ("en_US", "42"),
+    ("ks_Arab_IN", "\u200e-\u200e۱٫۵×۱۰^\u200e-\u200e۹"),
+    ("lrc_IR", "۱٫۲×۱۰^\u200e-\u200e۴"),
+    ("mzn_IR", "۶٫۰۲×۱۰^۲۳"),
 )
 
 _LEFT_MIXED_FIXTURES = tuple(
