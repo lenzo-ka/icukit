@@ -1393,7 +1393,8 @@ def _calendar_closing_surfaces(reader: object) -> tuple[str, ...]:
 
 def _temporal_zone_surfaces(reader: object) -> tuple[str, ...]:
     """Return every language-level zone surface a temporal reader can consume."""
-    if type(reader).__name__ not in {
+    name = type(reader).__name__
+    if name not in {
         "FlexibleDateIntervalDetector",
         "FlexibleTimeDetector",
         "FlexibleBareHourDetector",
@@ -1403,15 +1404,25 @@ def _temporal_zone_surfaces(reader: object) -> tuple[str, ...]:
     locale = getattr(reader, "locale", "")
     if not locale:
         return ()
-    from .recognize import _language_zone_abbreviations, _language_zone_names
+    from .recognize import _language_zone_abbreviations, _language_zone_names, _zone_locale_tables
 
     language = icu.Locale(locale).getLanguage()
     locales = getattr(reader, "locales", None)
+    if name == "FlexibleDateIntervalDetector":
+        # Only interval skeletons with a zone field delegate zone parsing to ICU. Its
+        # formatter accepts the complete exact-locale tables, including names without
+        # spaces (Japanese ``ニューヨーク時間``); date-only interval grammars own none of
+        # this vocabulary.
+        skeleton = str(getattr(reader, "skeleton", ""))
+        if not set(skeleton) & set("zZOvVXx"):
+            return ()
+        abbreviations, names = _zone_locale_tables(locale)
+        return tuple((*names, *abbreviations))
     forms = (
         *_language_zone_names(language, locales),
         *_language_zone_abbreviations(language, locales),
     )
-    return tuple(forms)
+    return tuple(dict.fromkeys(forms))
 
 
 def _temporal_samples(reader: object) -> tuple[str, ...]:

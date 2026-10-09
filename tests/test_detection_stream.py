@@ -264,6 +264,21 @@ def test_special_day_period_stream_matches_whole_detection():
     assert found == detectors.detect(text)
 
 
+def test_no_space_zone_name_stream_matches_interval_detection():
+    text = "2024/3/5 14:07 ニューヨーク時間～2024/3/7 14:07 ニューヨーク時間"
+    detectors = reader_set("ja_JP", flexible=True).compile(warm=False)
+    expected = detectors.detect(text)
+    assert any(item["type"] == "date-interval:Hmv" for item in expected)
+    for chunks in (re.findall(r"\S+|\s+", text), list(text)):
+        found, _batches = _run(
+            detectors,
+            text,
+            [len(chunk) for chunk in chunks],
+            stride=1,
+        )
+        assert found == expected
+
+
 def test_relative_number_group_count_is_not_sample_bounded():
     detectors = reader_set("bas_CM", flexible=True, guarded=True)
     relative_extent = next(
