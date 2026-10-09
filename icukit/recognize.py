@@ -3036,6 +3036,18 @@ def _roman_alphabet(locale: str, rule_set: str) -> frozenset[str]:
     )
 
 
+@lru_cache(maxsize=16)
+def _grouping_tail_memo(
+    text: str,
+    digits: frozenset[str],
+    separator: str,
+    primary: int,
+    secondary: int,
+) -> dict[int, tuple[bool, int]]:
+    """Validity and final end of grouping tails, filled lazily by group start."""
+    return {}
+
+
 class FlexibleNumberDetector(_GatedReader):
     """Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
@@ -3077,6 +3089,7 @@ class FlexibleNumberDetector(_GatedReader):
         self._minus = symbols.getSymbol(symbol.kMinusSignSymbol)
         self._plus = symbols.getSymbol(symbol.kPlusSignSymbol)
         self._digits = {digit: str(value) for digit, value in _locale_digit_map(locale).items()}
+        self._digit_chars = frozenset(self._digits)
 
         grouping_sizes = None
         self._primary_grouping = 0
@@ -3108,7 +3121,7 @@ class FlexibleNumberDetector(_GatedReader):
         }
         self._memo_key = _number_reader_key(self)
         signs = heads((self._minus, self._plus))
-        digits = frozenset(self._digits)
+        digits = self._digit_chars
         own = StartGate(chars=signs | digits | heads((self._decimal,)))
         styles = StartGate(
             chars=signs | digits | heads(style[1] for style in self._decimal_styles if style[1])
@@ -3138,6 +3151,47 @@ class FlexibleNumberDetector(_GatedReader):
         if separator in _SPACES:
             return int(cursor < len(text) and text[cursor] in _SPACES)
         return len(separator) if text.startswith(separator, cursor) else 0
+
+    def _grouping_tail(
+        self,
+        text: str,
+        start: int,
+        separator: str,
+        primary: int,
+        secondary: int,
+    ) -> tuple[bool, int]:
+        """Return whether grouped digits from ``start`` form a valid tail and its end.
+
+        A tail starts immediately after a grouping separator. Its rightmost group has
+        the primary width and every earlier group has the secondary width. Cache every
+        suffix encountered so candidates later in the same run do not rescan it.
+        """
+        memo = _grouping_tail_memo(text, self._digit_chars, separator, primary, secondary)
+        found = memo.get(start)
+        if found is not None:
+            return found
+
+        pending: list[tuple[int, int]] = []
+        cursor = start
+        while cursor not in memo:
+            group_start = cursor
+            while cursor < len(text) and text[cursor] in self._digits:
+                cursor += 1
+            width = cursor - group_start
+            grouping_length = self._grouping_length(text, cursor, separator)
+            next_start = cursor + grouping_length
+            if grouping_length and next_start < len(text) and text[next_start] in self._digits:
+                pending.append((group_start, width))
+                cursor = next_start
+                continue
+            memo[group_start] = (width == primary, cursor)
+            break
+
+        valid, end = memo[cursor] if cursor in memo else memo[group_start]
+        for group_start, width in reversed(pending):
+            valid = width == secondary and valid
+            memo[group_start] = (valid, end)
+        return memo[start]
 
     def _match(
         self,
@@ -3180,28 +3234,19 @@ class FlexibleNumberDetector(_GatedReader):
         while cursor < len(text) and text[cursor] in self._digits:
             cursor += 1
         ungrouped_end = cursor
-        groups = [cursor - integer_start]
-        separators: list[int] = []
-        while primary_grouping and (
-            grouping_length := self._grouping_length(text, cursor, separator)
-        ):
-            grouping_start = cursor
-            cursor += grouping_length
-            group_start = cursor
-            while cursor < len(text) and text[cursor] in self._digits:
-                cursor += 1
-            if cursor == group_start:
-                cursor = grouping_start
-                break
-            separators.append(grouping_start)
-            groups.append(cursor - group_start)
-
-        if separators:
-            valid = groups[-1] == primary_grouping
-            valid = valid and all(size == secondary_grouping for size in groups[1:-1])
-            valid = valid and 1 <= groups[0] <= secondary_grouping
-            if not valid:
-                cursor = ungrouped_end
+        if primary_grouping:
+            grouping_length = self._grouping_length(text, cursor, separator)
+            group_start = cursor + grouping_length
+            if grouping_length and group_start < len(text) and text[group_start] in self._digits:
+                valid, grouped_end = self._grouping_tail(
+                    text,
+                    group_start,
+                    separator,
+                    primary_grouping,
+                    secondary_grouping,
+                )
+                if valid and 1 <= ungrouped_end - integer_start <= secondary_grouping:
+                    cursor = grouped_end
 
         integer_end = cursor
         integer_text = text[integer_start:integer_end]
@@ -7659,6 +7704,13 @@ def _grapheme_starts(text: str, locale: str) -> tuple[int, ...]:
     return tuple(sorted({span["start"] for span in break_grapheme_spans(text, locale)}))
 
 
+def _grapheme_boundaries(text: str, locale: str, plan: _ScanPlan | None) -> frozenset[int]:
+    """The representable detection endpoints for ``text`` and ``locale``."""
+    if plan is not None and locale in plan.grapheme_boundaries:
+        return plan.grapheme_boundaries[locale]
+    return frozenset((*_grapheme_starts(text, locale), len(text)))
+
+
 def _detect_flexible_alternatives(
     text: str,
     locale: str,
@@ -7688,10 +7740,11 @@ def _detect_flexible_alternatives(
         if plan is not None and locale in plan.word_interiors
         else _word_interior_offsets(text, locale)
     )
+    boundaries = _grapheme_boundaries(text, locale, plan)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor or start in interior:
+        if start < cursor or start not in boundaries or start in interior:
             continue
         if inspect_gate and not gate.admits(text[start]):
             _record(stats_key, "gated_out")
@@ -7714,7 +7767,7 @@ def _detect_flexible_alternatives(
         for result in results:
             # Readings of one value in different zones stay distinct.
             key = (result.end, result.value, _zone_key(result.captures))
-            if result.end in interior or key in kept:
+            if result.end not in boundaries or result.end in interior or key in kept:
                 continue
             kept.add(key)
             ends.add(result.end)
@@ -7758,10 +7811,11 @@ def _detect_flexible(
         if plan is not None and locale in plan.word_interiors
         else _word_interior_offsets(text, locale)
     )
+    boundaries = _grapheme_boundaries(text, locale, plan)
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor or start in interior:
+        if start < cursor or start not in boundaries or start in interior:
             continue
         if inspect_gate and not gate.admits(text[start]):
             _record(stats_key, "gated_out")
@@ -7786,7 +7840,7 @@ def _detect_flexible(
         else:
             end, captures, value = result
             match_spec = spec
-        if end in interior:
+        if end not in boundaries or end in interior:
             continue
         detections.append(
             ValueDetection(

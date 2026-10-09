@@ -172,14 +172,12 @@ def test_report_prefix_segmentation_does_not_settle_early(locale, text, chunks):
     assert found == detectors.detect(text)
 
 
-def test_window_refusal_offsets_are_absolute():
+def test_window_declines_mid_grapheme_candidate_without_refusal():
     text = "NaN/4/2020\u0301"
     detectors = number_detectors("en_US").compile(warm=False)
-    with pytest.raises(DetectorRefusal) as whole:
-        detectors.detect(text)
-    with pytest.raises(DetectorRefusal) as streamed:
-        _run(detectors, text, [1] * len(text), stride=1)
-    assert streamed.value.args == whole.value.args
+    whole = detectors.detect(text)
+    streamed, _batches = _run(detectors, text, [1] * len(text), stride=1)
+    assert streamed == whole
 
 
 def test_stream_retries_si_date_refusal_at_nonfinal_feed_boundary():

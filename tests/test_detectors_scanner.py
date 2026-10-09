@@ -122,13 +122,11 @@ def test_surrogate_interior_endpoint_refuses():
     assert caught.value.reason == "surrogate-interior-endpoint"
 
 
-def test_mid_grapheme_endpoint_refuses():
+def test_mid_grapheme_endpoint_declines():
     text = "e\u0301x"  # e + combining acute = one grapheme [0,2); x at cp2
     # match at start 0, claim endpoint cp/utf16 = 1 -> interior to the grapheme cluster
     inv = _stub(text, token="e", end_u16_of=lambda s: 1)
-    with pytest.raises(DetectorRefusal) as caught:
-        _scan(text, "en_US", "number:decimal", inv)
-    assert caught.value.reason == "mid-grapheme-endpoint"
+    assert _scan(text, "en_US", "number:decimal", inv) == []
 
 
 def test_astral_prefix_does_not_shift_offsets():
