@@ -5,22 +5,17 @@
 ### Added
 
 - `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
-  with a settled start frontier, `pending_from` on every batch, bounded pending text,
-  configurable reader caps, cut reporting, truncated detections, and detection stride.
-- Right and left `Extent` declarations, `StreamableDetector`, `extent_report()`, and
-  stream extents for every stock reader.
+  with paragraph-boundary segmentation by default, optional line or explicit
+  boundaries, absolute offsets, `pending_from` on every batch, bounded pending text,
+  deterministic cut reporting, and truncated detections at safety cuts. Paragraph
+  streams without cuts are identical to whole-text detection for stock readers; the
+  lower-latency line mode may split a wrapped number range and does not make that
+  guarantee.
 - `detection_to_dict()` now includes `truncated` when a capped detection carries it.
 
 ### Fixed
 
 - Number and measure ranges no longer cross a paragraph boundary.
-- Streaming detection now waits for every reader that can start in pending text,
-  including bounded interval and composite readers, and its stock extents include
-  localized currency, unit, month, weekday, time-zone, combining-mark, and format
-  context. Extent joins are stable for live prefixes in dictionary-segmented scripts,
-  and temporal extents cover every formatter-controlled month, weekday, era, and day
-  period. No-cut streams therefore remain identical to whole-text detection across
-  arbitrary feed chunking.
 
 ## [0.9.1] - 2026-10-09
 

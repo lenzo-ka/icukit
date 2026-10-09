@@ -9,6 +9,7 @@ import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
+from typing import Literal
 
 import icu
 
@@ -444,23 +445,15 @@ class CompiledDetectorSet:
         self,
         *,
         max_pending_chars: int = 4096,
-        reader_cap_chars: Mapping[str, int] | None = None,
-        detect_stride_chars: int = 32,
+        boundary: Literal["paragraph", "line", "explicit"] = "paragraph",
     ):
-        """Return a bounded stream using transient compiled detection windows.
-
-        The behavior-schema names are ``detection.stream.max_pending_chars``,
-        ``detection.stream.reader_cap_chars``, and
-        ``detection.stream.detect_stride_chars``. Defaults are 4096, each reader's
-        declared cap, and 32 code points.
-        """
+        """Return a boundary-segmented stream using compiled whole-text detection."""
         from .stream import DetectionStream
 
         return DetectionStream(
             self,
             max_pending_chars=max_pending_chars,
-            reader_cap_chars=reader_cap_chars,
-            detect_stride_chars=detect_stride_chars,
+            boundary=boundary,
         )
 
 
