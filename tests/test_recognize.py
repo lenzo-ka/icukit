@@ -132,6 +132,40 @@ def test_flexible_date_interval_reformat_gate_and_boundaries():
     assert detector.detect(surface + "x") == []
 
 
+def test_date_interval_without_a_separator_does_no_matcher_work(monkeypatch):
+    calls = 0
+    original = FlexibleDateIntervalDetector._read
+
+    def counted_read(self, *args):
+        nonlocal calls
+        calls += 1
+        return original(self, *args)
+
+    monkeypatch.setattr(FlexibleDateIntervalDetector, "_read", counted_read)
+    detector = FlexibleDateIntervalDetector("en_US", "yMd")
+
+    assert detector.detect("1 " * 1000 + "x! ") == []
+    assert calls == 0
+
+
+def test_spellout_token_mismatch_stops_at_the_first_different_character():
+    class CountedText(str):
+        reads = 0
+
+        def __getitem__(self, key):
+            if isinstance(key, int):
+                self.reads += 1
+            return super().__getitem__(key)
+
+    detector = FlexibleSpelloutDetector("ru_RU", ruleset="%spellout-numbering-year")
+    tokens = detector._tokens_by_first["1"]
+    text = CountedText("1 " * 1000)
+
+    assert detector._token_end(text, 0) is None
+    assert tokens
+    assert text.reads == 2
+
+
 def _reformat_value(locale, skeleton, value):
     icu_locale = icu.Locale(locale)
     order = {

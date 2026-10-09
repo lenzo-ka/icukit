@@ -1484,6 +1484,21 @@ def _date_interval_gate(
     return result
 
 
+def _interval_separator_needle(separator: str) -> str | None:
+    """Return one literal every occurrence of ``separator`` must contain.
+
+    Interval separator spaces are flexible, so the needle is one maximal non-space
+    literal run. A separator made only of flexible spaces has no safe needle.
+    """
+    cursor = 0
+    while cursor < len(separator) and separator[cursor] in _SPACES:
+        cursor += 1
+    end = cursor
+    while end < len(separator) and separator[end] not in _SPACES:
+        end += 1
+    return separator[cursor:end] or None
+
+
 class FlexibleDateIntervalDetector(_GatedReader):
     """Recognize date/time interval surfaces by inverting ICU DateIntervalFormat recipes.
 
@@ -1564,6 +1579,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
                 )
             )
         self._matchers = tuple(matchers)
+        separator_needles = tuple(
+            _interval_separator_needle(matcher[1]) for matcher in self._matchers
+        )
+        self._separator_needles = frozenset(separator_needles) if all(separator_needles) else None
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._spec = DateIntervalSpec(locale, skeleton)
         self._dif = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
@@ -2044,6 +2063,12 @@ class FlexibleDateIntervalDetector(_GatedReader):
         A span whose zone text names several zones is read once per zone, the reader's
         own locale's zone first.
         """
+        if not self._matchers:
+            return []
+        if self._separator_needles is not None and not any(
+            needle in text for needle in self._separator_needles
+        ):
+            return []
         # Compute the code-point/UTF-16 offset maps once per scan and pass them to every
         # candidate start (avoids O(n^2) scanning). They are bound to this call, never
         # stored on the detector, so one detector can serve concurrent or nested calls.
@@ -5364,10 +5389,25 @@ class FlexibleSpelloutDetector(_GatedReader):
         self._spec = self._format_spec()
         self._connectors, self._tokens, self._ambiguous_units = self._table(locale, self._ruleset)
         tokens_by_first: dict[str, list[str]] = {}
+        single_tokens_by_first: dict[str, list[str]] = {}
         for token in self._tokens:
             tokens_by_first.setdefault(token[0], []).append(token)
+            if len(token) == 1:
+                single_tokens_by_first.setdefault(token[0], []).append(token)
         self._tokens_by_first = {
             first: tuple(first_tokens) for first, first_tokens in tokens_by_first.items()
+        }
+        self._single_tokens_by_first = {
+            first: tuple(first_tokens) for first, first_tokens in single_tokens_by_first.items()
+        }
+        prefixes = {token[:2] for token in self._tokens if len(token) > 1}
+        self._tokens_by_prefix = {
+            prefix: tuple(
+                token
+                for token in tokens_by_first[prefix[0]]
+                if len(token) == 1 or token.startswith(prefix)
+            )
+            for prefix in prefixes
         }
         _install_gates(
             self,
@@ -5404,12 +5444,15 @@ class FlexibleSpelloutDetector(_GatedReader):
 
     @staticmethod
     def _casefolded_token_end(text: str, start: int, token: str) -> int | None:
-        folded = ""
+        folded_length = 0
         cursor = start
-        while cursor < len(text) and len(folded) < len(token):
-            folded += text[cursor].casefold()
+        while cursor < len(text) and folded_length < len(token):
+            piece = text[cursor].casefold()
+            if not token.startswith(piece, folded_length):
+                return None
+            folded_length += len(piece)
             cursor += 1
-        return cursor if folded == token else None
+        return cursor if folded_length == len(token) else None
 
     def _token_end(self, text: str, start: int) -> int | None:
         if start >= len(text):
@@ -5417,7 +5460,19 @@ class FlexibleSpelloutDetector(_GatedReader):
         first = text[start].casefold()
         if not first:
             return None
-        for token in self._tokens_by_first.get(first[0], ()):
+        prefix = first
+        cursor = start + 1
+        while cursor < len(text) and len(prefix) < 2:
+            prefix += text[cursor].casefold()
+            cursor += 1
+        candidates = (
+            self._tokens_by_first.get(first[0], ())
+            if len(prefix) < 2
+            else self._tokens_by_prefix.get(
+                prefix[:2], self._single_tokens_by_first.get(first[0], ())
+            )
+        )
+        for token in candidates:
             end = self._casefolded_token_end(text, start, token)
             if end is not None:
                 return end

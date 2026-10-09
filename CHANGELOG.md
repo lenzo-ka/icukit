@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Skip date-interval parsing when a text has none of the reader's required separator
+  literals, and narrow spell-out token comparisons by their folded prefix. Long runs of
+  isolated digits no longer pay those unsuccessful per-start costs; detections are
+  unchanged.
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed
