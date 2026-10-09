@@ -7748,17 +7748,21 @@ Bounded detection over boundary-delimited text supplied in arbitrary chunks.
 The default paragraph mode holds an open paragraph and runs the gang's ordinary
 whole-text :meth:`~icukit.detectors.DetectorSet.detect` exactly once when that
 paragraph closes. Stock readers do not cross paragraph boundaries, so no-cut output
-is identical to whole-text detection with only absolute-offset shifts. Line mode is a
-lower-latency option; a wrapped number range may cross one line break, so line mode is
-not guaranteed to preserve whole-text identity. Explicit mode settles only at
-:meth:`DetectionStream.flush`, :meth:`DetectionStream.boundary`, or close.
+is identical to whole-text detection with only absolute-offset shifts. A third-party
+reader has that guarantee only when its detections are context-independent across the
+selected boundary grammar: adding text beyond a boundary cannot create, remove, or
+change a detection on the other side. Line mode is a lower-latency option; a wrapped
+number range may cross one line break, so line mode is not guaranteed to preserve
+whole-text identity. Explicit mode settles only at :meth:`DetectionStream.flush`,
+:meth:`DetectionStream.boundary`, or close.
 
 An open segment is length-bounded by ``max_pending_chars`` (4096 by default). When no
-configured boundary closes it in time, the stream detects and cuts a prefix at the
-last available whitespace boundary, then a grapheme boundary, with a code-point cut
-only when one overlong grapheme leaves no positive grapheme boundary within the hard
-cap. Such cuts are deterministic functions of the text, and detections ending at a
-cut are marked ``truncated``.
+configured boundary closes it in time, the stream examines the fixed cap-length
+prefix and cuts at its last grapheme edge immediately following whitespace, then at
+its last grapheme edge, with a code-point cut only when one overlong grapheme leaves
+no positive grapheme boundary within the hard cap. Such cuts are deterministic
+functions of the text. Caller-imposed :meth:`DetectionStream.flush` boundaries are
+also cuts. Detections starting or ending at any cut are marked ``truncated``.
 
 ### Constants and type aliases
 
@@ -7774,8 +7778,9 @@ cut are marked ``truncated``.
 
 Detections settled by one call and the absolute open-segment start.
 
-``cuts`` contains safety-cut offsets. ``reader_cuts`` remains in the result shape
-for compatibility; boundary segmentation has no per-reader cuts, so it is empty.
+``cuts`` contains cap and caller-imposed boundary offsets. ``reader_cuts`` is
+deprecated and remains in the result shape for compatibility; boundary
+segmentation has no per-reader cuts, so it is always empty.
 
 #### `DetectionBatch(detections: 'tuple[ValueDetection, ...]', pending_from: 'int', cuts: 'tuple[int, ...]' = (), reader_cuts: 'tuple[tuple[str, int], ...]' = ()) -> None`
 
@@ -7801,7 +7806,7 @@ Mark an explicit boundary; equivalent to :meth:`flush`.
 
 #### `close() -> 'DetectionBatch'`
 
-Flush once and close; repeated calls return an empty final batch.
+Settle at end of input and close; repeated calls return an empty batch.
 
 #### `feed(chunk: 'str', /) -> 'DetectionBatch'`
 
@@ -7809,7 +7814,7 @@ Append ``chunk`` and return detections from newly closed segments.
 
 #### `flush() -> 'DetectionBatch'`
 
-Settle the open segment without marking or recording a safety cut.
+Settle at a caller-imposed cut and mark detections touching either side.
 
 #### `pending() -> 'StreamPending'`
 

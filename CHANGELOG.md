@@ -13,9 +13,23 @@
   guarantee.
 - `detection_to_dict()` now includes `truncated` when a capped detection carries it.
 
+### Changed
+
+- The pre-release extent-driven streaming API has been replaced by boundary
+  segmentation. `Extent`, `ReaderExtent`, `StreamableDetector`, `extent_report()`,
+  `DEFAULT_READER_CAP_CHARS`, and `DEFAULT_DETECT_STRIDE_CHARS` are removed. Replace
+  `reader_cap_chars` and `detect_stride_chars` arguments with the stream-wide
+  `max_pending_chars` and `boundary` arguments. Readers no longer need an extent
+  declaration.
+- `DetectionBatch.reader_cuts` is deprecated. It is retained to preserve the result
+  shape but is always empty; use `DetectionBatch.cuts`, which reports cap cuts and
+  caller-imposed `flush()` or `boundary()` cuts.
+
 ### Fixed
 
 - Number and measure ranges no longer cross a paragraph boundary.
+- `feed()` commits its buffered text and settlement frontier only after every newly
+  closed segment has been detected successfully.
 
 ## [0.9.1] - 2026-10-09
 

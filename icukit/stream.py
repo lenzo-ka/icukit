@@ -3,17 +3,21 @@
 The default paragraph mode holds an open paragraph and runs the gang's ordinary
 whole-text :meth:`~icukit.detectors.DetectorSet.detect` exactly once when that
 paragraph closes. Stock readers do not cross paragraph boundaries, so no-cut output
-is identical to whole-text detection with only absolute-offset shifts. Line mode is a
-lower-latency option; a wrapped number range may cross one line break, so line mode is
-not guaranteed to preserve whole-text identity. Explicit mode settles only at
-:meth:`DetectionStream.flush`, :meth:`DetectionStream.boundary`, or close.
+is identical to whole-text detection with only absolute-offset shifts. A third-party
+reader has that guarantee only when its detections are context-independent across the
+selected boundary grammar: adding text beyond a boundary cannot create, remove, or
+change a detection on the other side. Line mode is a lower-latency option; a wrapped
+number range may cross one line break, so line mode is not guaranteed to preserve
+whole-text identity. Explicit mode settles only at :meth:`DetectionStream.flush`,
+:meth:`DetectionStream.boundary`, or close.
 
 An open segment is length-bounded by ``max_pending_chars`` (4096 by default). When no
-configured boundary closes it in time, the stream detects and cuts a prefix at the
-last available whitespace boundary, then a grapheme boundary, with a code-point cut
-only when one overlong grapheme leaves no positive grapheme boundary within the hard
-cap. Such cuts are deterministic functions of the text, and detections ending at a
-cut are marked ``truncated``.
+configured boundary closes it in time, the stream examines the fixed cap-length
+prefix and cuts at its last grapheme edge immediately following whitespace, then at
+its last grapheme edge, with a code-point cut only when one overlong grapheme leaves
+no positive grapheme boundary within the hard cap. Such cuts are deterministic
+functions of the text. Caller-imposed :meth:`DetectionStream.flush` boundaries are
+also cuts. Detections starting or ending at any cut are marked ``truncated``.
 """
 
 from __future__ import annotations
@@ -45,8 +49,9 @@ _REFUSAL_MESSAGES = {
 class DetectionBatch:
     """Detections settled by one call and the absolute open-segment start.
 
-    ``cuts`` contains safety-cut offsets. ``reader_cuts`` remains in the result shape
-    for compatibility; boundary segmentation has no per-reader cuts, so it is empty.
+    ``cuts`` contains cap and caller-imposed boundary offsets. ``reader_cuts`` is
+    deprecated and remains in the result shape for compatibility; boundary
+    segmentation has no per-reader cuts, so it is always empty.
     """
 
     detections: tuple[ValueDetection, ...]
@@ -99,7 +104,7 @@ def _truncated(detection: ValueDetection) -> ValueDetection:
 def _deduplicate(detections: Iterable[ValueDetection]) -> list[ValueDetection]:
     result = []
     seen = set()
-    for detection in sorted(detections, key=_sort_key):
+    for detection in detections:
         key = repr(detection)
         if key not in seen:
             seen.add(key)
@@ -184,6 +189,7 @@ class DetectionStream:
         self._total = 0
         self._pending_from = 0
         self._pending_u16_from = 0
+        self._left_cut = False
         self._closed = False
         self._window_detect_count = 0
 
@@ -192,50 +198,54 @@ class DetectionStream:
         """Number of settled segments passed once to whole-text detection."""
         return self._window_detect_count
 
-    def _detect(self, text: str) -> list[ValueDetection]:
-        self._window_detect_count += 1
+    def _detect(
+        self,
+        text: str,
+        pending_from: int,
+        pending_u16_from: int,
+    ) -> list[ValueDetection]:
         try:
             found = self._source.detect(text)  # type: ignore[union-attr]
         except DetectorRefusal as error:
             endpoint_offset = (
-                self._pending_from
-                if error.reason == "mid-grapheme-endpoint"
-                else self._pending_u16_from
+                pending_from if error.reason == "mid-grapheme-endpoint" else pending_u16_from
             )
             endpoint = None if error.endpoint is None else error.endpoint + endpoint_offset
             raise DetectorRefusal(
                 error.type,
-                error.start + self._pending_from,
+                error.start + pending_from,
                 endpoint,
                 error.reason,
                 _REFUSAL_MESSAGES[error.reason],
             ) from None
-        return [_shift_detection(item, self._pending_from) for item in found]
+        shifted = [_shift_detection(item, pending_from) for item in found]
+        shifted.sort(key=_sort_key)
+        return shifted
 
-    def _drop(self, end: int) -> None:
-        discarded = self._text[:end]
-        self._text = self._text[end:]
-        self._pending_from += len(discarded)
-        self._pending_u16_from += len(discarded.encode("utf-16-le")) // 2
+    @staticmethod
+    def _mark_cut_edges(
+        found: list[ValueDetection],
+        start: int,
+        end: int,
+        *,
+        left_cut: bool,
+        right_cut: bool,
+    ) -> list[ValueDetection]:
+        if not left_cut and not right_cut:
+            return found
+        return [
+            _truncated(item)
+            if (left_cut and item["start"] == start) or (right_cut and item["end"] == end)
+            else item
+            for item in found
+        ]
 
-    def _settle(self, end: int, *, cut: bool) -> list[ValueDetection]:
-        found = self._detect(self._text[:end])
-        if cut:
-            absolute_end = self._pending_from + end
-            found = [_truncated(item) if item["end"] == absolute_end else item for item in found]
-        self._drop(end)
-        return found
-
-    def _safe_cut(self) -> int:
+    def _safe_cut(self, text: str, start: int) -> int:
         """Choose a deterministic positive cut no later than the hard cap."""
         limit = self._max_pending
-        probe = self._text[: limit + 1]
-        graphemes = tuple(edge for edge in _grapheme_boundaries(probe) if 0 < edge <= limit)
-        whitespace = tuple(
-            edge
-            for edge in graphemes
-            if probe[edge - 1].isspace() and (edge == len(probe) or not probe[edge].isspace())
-        )
+        probe = text[start : start + limit]
+        graphemes = tuple(edge for edge in _grapheme_boundaries(probe) if edge > 0)
+        whitespace = tuple(edge for edge in graphemes if probe[edge - 1].isspace())
         if whitespace:
             return whitespace[-1]
         if graphemes:
@@ -244,21 +254,74 @@ class DetectionStream:
         # only in that pathological case; Python indices are code-point boundaries.
         return limit
 
-    def _drain(self) -> tuple[list[ValueDetection], list[int]]:
+    def _drain(
+        self,
+        text: str,
+    ) -> tuple[list[ValueDetection], list[int], int, int, bool, int]:
+        """Detect closed prefixes without mutating stream state."""
         emitted: list[ValueDetection] = []
         cuts: list[int] = []
-        while self._text:
-            ends = _boundary_ends(self._text, self._boundary)
-            boundary_end = ends[0] if ends else None
-            if boundary_end is not None and boundary_end <= self._max_pending:
-                emitted.extend(self._settle(boundary_end, cut=False))
+        cursor = 0
+        consumed_u16 = 0
+        left_cut = self._left_cut
+        detect_count = 0
+        boundary_ends = _boundary_ends(text, self._boundary)
+        boundary_index = 0
+        while cursor < len(text):
+            boundary_end = (
+                boundary_ends[boundary_index] if boundary_index < len(boundary_ends) else None
+            )
+            if boundary_end is not None and boundary_end - cursor <= self._max_pending:
+                segment = text[cursor:boundary_end]
+                absolute_start = self._pending_from + cursor
+                absolute_end = self._pending_from + boundary_end
+                found = self._detect(
+                    segment,
+                    absolute_start,
+                    self._pending_u16_from + consumed_u16,
+                )
+                detect_count += 1
+                emitted.extend(
+                    self._mark_cut_edges(
+                        found,
+                        absolute_start,
+                        absolute_end,
+                        left_cut=left_cut,
+                        right_cut=False,
+                    )
+                )
+                consumed_u16 += len(segment.encode("utf-16-le")) // 2
+                cursor = boundary_end
+                boundary_index += 1
+                left_cut = False
                 continue
-            if len(self._text) <= self._max_pending:
+            if len(text) - cursor <= self._max_pending:
                 break
-            cut = self._safe_cut()
-            emitted.extend(self._settle(cut, cut=True))
-            cuts.append(self._pending_from)
-        return _deduplicate(emitted), cuts
+            cut = self._safe_cut(text, cursor)
+            cut_end = cursor + cut
+            segment = text[cursor:cut_end]
+            absolute_start = self._pending_from + cursor
+            absolute_end = self._pending_from + cut_end
+            found = self._detect(
+                segment,
+                absolute_start,
+                self._pending_u16_from + consumed_u16,
+            )
+            detect_count += 1
+            emitted.extend(
+                self._mark_cut_edges(
+                    found,
+                    absolute_start,
+                    absolute_end,
+                    left_cut=left_cut,
+                    right_cut=True,
+                )
+            )
+            consumed_u16 += len(segment.encode("utf-16-le")) // 2
+            cursor = cut_end
+            cuts.append(absolute_end)
+            left_cut = True
+        return _deduplicate(emitted), cuts, cursor, consumed_u16, left_cut, detect_count
 
     def feed(self, chunk: str, /) -> DetectionBatch:
         """Append ``chunk`` and return detections from newly closed segments."""
@@ -266,30 +329,70 @@ class DetectionStream:
             raise RuntimeError("detection stream is closed")
         if not isinstance(chunk, str):
             raise TypeError("chunk must be str")
-        self._text += chunk
+        text = self._text + chunk
+        detections, cuts, consumed, consumed_u16, left_cut, detect_count = self._drain(text)
+        self._text = text[consumed:]
         self._total += len(chunk)
-        detections, cuts = self._drain()
+        self._pending_from += consumed
+        self._pending_u16_from += consumed_u16
+        self._left_cut = left_cut
+        self._window_detect_count += detect_count
         return DetectionBatch(tuple(detections), self._pending_from, tuple(cuts))
 
     def flush(self) -> DetectionBatch:
-        """Settle the open segment without marking or recording a safety cut."""
+        """Settle at a caller-imposed cut and mark detections touching either side."""
         if self._closed:
             raise RuntimeError("detection stream is closed")
-        found = self._detect(self._text) if self._text else []
-        self._drop(len(self._text))
-        return DetectionBatch(tuple(found), self._pending_from)
+        end = self._pending_from + len(self._text)
+        if self._text:
+            found = self._detect(self._text, self._pending_from, self._pending_u16_from)
+            found = self._mark_cut_edges(
+                found,
+                self._pending_from,
+                end,
+                left_cut=self._left_cut,
+                right_cut=True,
+            )
+            consumed_u16 = len(self._text.encode("utf-16-le")) // 2
+            self._window_detect_count += 1
+        else:
+            found = []
+            consumed_u16 = 0
+        self._text = ""
+        self._pending_from = end
+        self._pending_u16_from += consumed_u16
+        self._left_cut = True
+        return DetectionBatch(tuple(found), self._pending_from, (end,))
 
     def boundary(self) -> DetectionBatch:
         """Mark an explicit boundary; equivalent to :meth:`flush`."""
         return self.flush()
 
     def close(self) -> DetectionBatch:
-        """Flush once and close; repeated calls return an empty final batch."""
+        """Settle at end of input and close; repeated calls return an empty batch."""
         if self._closed:
             return DetectionBatch((), self._total)
-        batch = self.flush()
+        end = self._pending_from + len(self._text)
+        if self._text:
+            found = self._detect(self._text, self._pending_from, self._pending_u16_from)
+            found = self._mark_cut_edges(
+                found,
+                self._pending_from,
+                end,
+                left_cut=self._left_cut,
+                right_cut=False,
+            )
+            consumed_u16 = len(self._text.encode("utf-16-le")) // 2
+            self._window_detect_count += 1
+        else:
+            found = []
+            consumed_u16 = 0
+        self._text = ""
+        self._pending_from = end
+        self._pending_u16_from += consumed_u16
+        self._left_cut = False
         self._closed = True
-        return batch
+        return DetectionBatch(tuple(found), self._pending_from)
 
     def pending(self) -> StreamPending:
         """Return the current absolute settlement and retention positions."""

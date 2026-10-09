@@ -125,6 +125,33 @@ def test_line_mode_is_documented_not_to_preserve_a_wrapped_range():
     assert found == []
 
 
+def test_flush_records_an_identity_cut_and_marks_both_sides_truncated():
+    detectors = number_detectors("en_US")
+    identity_stream = detectors.stream()
+
+    assert identity_stream.feed("3–\n").detections == ()
+    identity_cut = identity_stream.flush()
+    assert identity_cut.cuts == (3,)
+    after = identity_stream.feed("5")
+    assert after.detections == ()
+    identity_stream.close()
+
+    edge_stream = detectors.stream()
+    assert edge_stream.feed("12").detections == ()
+    before = edge_stream.flush()
+    assert before.cuts == (2,)
+    assert edge_stream.feed("34").detections == ()
+    final = edge_stream.close()
+
+    touching = [
+        item
+        for item in (*before.detections, *final.detections)
+        if item["end"] == 2 or item["start"] == 2
+    ]
+    assert {(item["start"], item["end"]) for item in touching} == {(0, 2), (2, 4)}
+    assert all(item.get("truncated") is True for item in touching)
+
+
 def test_explicit_mode_settles_only_at_explicit_boundaries():
     stream = number_detectors("en_US").stream(boundary="explicit")
 
@@ -187,14 +214,38 @@ def test_cap_cuts_and_output_are_chunk_invariant():
     assert [(item["start"], item["end"], item.get("truncated")) for item in detections] == [
         (0, 8, True),
         (8, 16, True),
-        (16, 20, None),
+        (16, 20, True),
     ]
     assert pending == len(text)
+
+
+def test_detection_starting_at_a_cap_cut_is_truncated():
+    stream = number_detectors("en_US").stream(max_pending_chars=8)
+
+    first = stream.feed("1" * 10)
+    final = stream.close()
+
+    assert first.cuts == (8,)
+    after_cut = [item for item in final.detections if (item["start"], item["end"]) == (8, 10)]
+    assert after_cut
+    assert all(item.get("truncated") is True for item in after_cut)
 
 
 def test_cap_prefers_the_last_complete_whitespace_boundary():
     _detections, cuts, _pending = _cap_run("abc def ghi", [11])
     assert cuts == [8]
+
+
+@pytest.mark.parametrize("feed_width", [1, 32, 1024])
+def test_cap_uses_last_whitespace_edge_in_fixed_prefix_across_feed_widths(feed_width):
+    text = "a" + " " * 40 + "b"
+    chunks = [feed_width] * (len(text) // feed_width)
+    if remainder := len(text) % feed_width:
+        chunks.append(remainder)
+
+    _detections, cuts, _pending = _cap_run(text, chunks)
+
+    assert cuts == [8, 16, 24, 32, 40]
 
 
 def test_cap_falls_back_to_a_codepoint_for_one_overlong_grapheme():
@@ -208,8 +259,34 @@ def test_cap_bounds_a_64k_single_paragraph():
     detections, cuts, pending = _cap_run(text, [1024] * 64, cap=4096)
 
     assert cuts == list(range(4096, 65_536, 4096))
-    assert len([item for item in detections if item.get("truncated")]) == len(cuts)
+    assert len([item for item in detections if item.get("truncated")]) == len(cuts) + 1
     assert pending == len(text)
+
+
+def test_large_single_feed_has_linear_character_copy_count():
+    class CountedString(str):
+        copied = 0
+
+        def __add__(self, other):
+            result = type(self)(super().__add__(other))
+            type(self).copied += len(result)
+            return result
+
+        def __getitem__(self, key):
+            result = super().__getitem__(key)
+            if isinstance(result, str):
+                type(self).copied += len(result)
+                return type(self)(result)
+            return result
+
+    size = 65_536
+    stream = DetectionStream((PrefixDetector(),), max_pending_chars=256)
+    stream._text = CountedString("")
+
+    batch = stream.feed("x" * size)
+
+    assert len(batch.cuts) == size // 256 - 1
+    assert CountedString.copied <= size * 5
 
 
 def test_cap_prefers_a_real_boundary_before_the_limit():
@@ -297,6 +374,36 @@ def test_detector_refusal_offsets_are_absolute_after_a_segment():
     with pytest.raises(DetectorRefusal) as caught:
         stream.feed("boom\n\n")
     assert (caught.value.start, caught.value.endpoint) == (5, 6)
+
+
+def test_feed_is_transactional_when_a_later_segment_raises():
+    class FailingDetector(PrefixDetector):
+        fail = True
+
+        def detect(self, text):
+            if self.fail and text == "boom\u2029":
+                raise RuntimeError("later segment failed")
+            return super().detect(text)
+
+    detector = FailingDetector()
+    stream = DetectionStream((detector,))
+    text = "ok\n\nboom\u2029"
+
+    with pytest.raises(RuntimeError, match="later segment failed"):
+        stream.feed(text)
+
+    assert stream.pending() == {
+        "pending_from": 0,
+        "decided_through": 0,
+        "buffered_from": 0,
+        "total": 0,
+        "open_chunk": None,
+    }
+    assert stream.window_detect_count == 0
+
+    detector.fail = False
+    batch = stream.feed(text)
+    assert [item["text"] for item in batch.detections] == ["ok\n\n", "boom\u2029"]
 
 
 def test_boundary_helpers_cover_the_public_modes():
