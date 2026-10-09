@@ -258,11 +258,12 @@ def test_cli_no_date_is_empty_success():
     assert date_tier.items == ()
 
 
-def test_cli_midgrapheme_refuses_without_stdout():
+def test_cli_midgrapheme_declines():
     r = _run(["1́", "--pattern", "M"])
-    assert r.returncode == 3
-    assert r.stdout == ""
-    assert "grapheme" in r.stderr
+    assert r.returncode == 0
+    graph = loads(r.stdout)
+    date_tier = next(tier for tier in graph.tiers if tier.declaration.name == qn("formatted-date"))
+    assert date_tier.items == ()
 
 
 def test_cli_invalid_locale_is_config_error():

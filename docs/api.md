@@ -2715,9 +2715,9 @@ detections in source order -- unanchored, partial, tolerant of finding nothing.
 An ostensibly-successful ICU parse produced an unrepresentable endpoint.
 
 This is *not* a parse miss (a miss is silent and returns no candidate). It signals a
-reversed, surrogate-interior, or mid-grapheme endpoint -- an invariant violation the
-detector refuses to represent rather than emit wrongly. It carries a stable
-``reason`` from :data:`RefusalReason` and the offsets involved.
+reversed, out-of-range, or surrogate-interior endpoint -- an invariant violation the
+detector refuses to represent rather than emit wrongly. It carries a stable ``reason``
+from :data:`RefusalReason` and the offsets involved.
 
 #### `DetectorRefusal(type: 'str', start: 'int', endpoint: 'int | None', reason: 'RefusalReason', message: 'str') -> 'None'`
 

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Detector candidates that stop inside a grapheme cluster are now declined instead of
+  aborting the whole detector gang or emitting a partial-grapheme reading.
+
 ### Changed
 
 - Build the tiergraph text example through `tiergraph.build`, use tiergraph's
