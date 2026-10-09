@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- Number and measure ranges no longer cross a paragraph boundary.
 - Streaming detection now waits for every reader that can start in pending text,
   including bounded interval and composite readers, and its stock extents include
   localized currency, unit, month, weekday, time-zone, combining-mark, and format

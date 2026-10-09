@@ -577,6 +577,19 @@ def test_a_spaced_chain_with_a_negative_middle_endpoint_is_not_two_ranges():
     assert FlexibleNumberRangeDetector("en_US").detect("1 – -2 – 3") == []
 
 
+@pytest.mark.parametrize("boundary", ["\n\n", "\n \t\n", "\r\n\r\n", "\r\n \t\r\n", "\u2029"])
+@pytest.mark.parametrize("template", ["3{boundary}–5", "3–{boundary}5"])
+def test_a_range_does_not_cross_a_paragraph_boundary(boundary, template):
+    text = template.format(boundary=boundary)
+
+    assert FlexibleNumberRangeDetector("en_US").detect(text) == []
+
+
+@pytest.mark.parametrize("text", ["3\n–5", "3–\n5"])
+def test_a_range_may_cross_one_line_break(text):
+    assert [found["text"] for found in FlexibleNumberRangeDetector("en_US").detect(text)] == [text]
+
+
 def test_an_unspaced_chain_with_negative_endpoints_is_not_a_range():
     assert FlexibleNumberRangeDetector("en_US").detect("-3–-1–-5") == []
 

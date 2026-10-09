@@ -8,6 +8,7 @@ those candidates unchanged.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from copy import copy
 from dataclasses import dataclass, replace
@@ -7867,6 +7868,7 @@ _RANGE_WINDOW = 48
 # A range's endpoint is not one number of a longer run joined by these ("14-3-3",
 # "2024-03-05", "2:07–4:07"), which is a code, a date, or a time, not a range.
 _RANGE_CHAIN_MARKS = frozenset({_HYPHEN_MINUS, ":", "/", "."})
+_PARAGRAPH_BOUNDARY = re.compile(r"(?:\r\n|\n)[ \t]*(?:\r\n|\n)|\u2029")
 
 
 def _range_mark(text: str) -> str:
@@ -8041,6 +8043,11 @@ def _with_unit(value: NumberValue, key: tuple[str, str]) -> NumberValue | Measur
 
 def _is_space(character: str) -> bool:
     return character in _SPACES or character.isspace()
+
+
+def _has_paragraph_boundary(text: str) -> bool:
+    """Whether ``text`` contains a blank-line or paragraph-separator boundary."""
+    return _PARAGRAPH_BOUNDARY.search(text) is not None
 
 
 def _runs_on(text: str, start: int, end: int, marks: Iterable[str]) -> bool:
@@ -8474,7 +8481,11 @@ class FlexibleNumberRangeDetector:
                 rights += self._read_sides(text, right_start, window_end, at_end=False)
         for left, right in dict.fromkeys(product(lefts, rights)):
             pair = self._pair(left, right)
-            if pair is None or _runs_on(text, left.start, right.end, self._marks):
+            if (
+                pair is None
+                or _has_paragraph_boundary(text[left.end : right.start])
+                or _runs_on(text, left.start, right.end, self._marks)
+            ):
                 continue
             start_value, end_value, collapse = pair
             if _minus_before(text, left.start):
