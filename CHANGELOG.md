@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Build the tiergraph text example through `tiergraph.build`, use tiergraph's
+  current public entry points, and require tiergraph 0.8 or later for development.
+
 ## [0.9.0] - 2026-10-08
 
 ### Changed
