@@ -480,6 +480,20 @@ def test_flexible_number_reads_nothing_from_a_malformed_grouping():
     assert FlexibleNumberDetector("en_US").detect("1,2,3") == []
 
 
+@pytest.mark.parametrize(
+    ("locale", "space"),
+    [("af_ZA", " "), ("fr_FR", "\N{NO-BREAK SPACE}")],
+)
+def test_malformed_space_grouping_keeps_a_valid_suffix(locale, space):
+    detections = FlexibleNumberDetector(locale).detect(f"1{space}1{space}1{space}234")
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == [
+        ("1", "1"),
+        ("1", "1"),
+        (f"1{space}234", "1234"),
+    ]
+
+
 def test_flexible_percent_does_not_absorb_malformed_grouping():
     detections = FlexiblePercentDetector("en_US").detect("1,2,3%")
 

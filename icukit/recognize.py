@@ -3158,6 +3158,7 @@ class FlexibleNumberDetector(_GatedReader):
         ungrouped_end = cursor
         groups = [cursor - integer_start]
         separators: list[int] = []
+        invalid_grouping = False
         while primary_grouping and (
             grouping_length := self._grouping_length(text, cursor, separator)
         ):
@@ -3172,8 +3173,26 @@ class FlexibleNumberDetector(_GatedReader):
             separators.append(grouping_start)
             groups.append(cursor - group_start)
 
+            # Once another digit group follows, this group is no longer the
+            # rightmost one and must have the secondary width. Stop at the first
+            # proof that the whole grouping is malformed instead of walking the
+            # remainder from every candidate digit in a long separator-delimited
+            # run. The first group can likewise be rejected as soon as the first
+            # separator is known to introduce a real group.
+            next_grouping_length = self._grouping_length(text, cursor, separator)
+            another_group_follows = (
+                next_grouping_length
+                and cursor + next_grouping_length < len(text)
+                and text[cursor + next_grouping_length] in self._digits
+            )
+            if not 1 <= groups[0] <= secondary_grouping or (
+                another_group_follows and groups[-1] != secondary_grouping
+            ):
+                invalid_grouping = True
+                break
+
         if separators:
-            valid = groups[-1] == primary_grouping
+            valid = not invalid_grouping and groups[-1] == primary_grouping
             valid = valid and all(size == secondary_grouping for size in groups[1:-1])
             valid = valid and 1 <= groups[0] <= secondary_grouping
             if not valid:

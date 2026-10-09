@@ -269,6 +269,29 @@ def test_reading_costs_a_small_multiple_of_the_generated_set():
     assert min(ratios) < 3, ratios
 
 
+def test_space_grouping_candidate_retries_scale_nearly_linearly():
+    gang = generated_detectors("af_ZA")
+
+    def minimum_seconds(repetitions):
+        text = "1 " * repetitions + "x! "
+        # Build lazy state and the compiled scan plan outside the measurements.
+        assert gang.detect(text) == []
+        timings = []
+        for _trial in range(3):
+            started = time.perf_counter()
+            assert gang.detect(text) == []
+            timings.append(time.perf_counter() - started)
+        return min(timings)
+
+    small = minimum_seconds(125)
+    large = minimum_seconds(500)
+
+    # Four times the input should take about four times the work. The extra 50%
+    # headroom covers noisy shared runners while rejecting per-start rescans of the
+    # remaining separator-delimited digit run.
+    assert large <= 6 * small, (small, large)
+
+
 def test_the_set_is_the_same_in_any_process():
     here = flexible_detectors("ja_JP").names()
     script = "from icukit import flexible_detectors; print(flexible_detectors('ja_JP').names())"
