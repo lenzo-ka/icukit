@@ -168,10 +168,19 @@ def _candidate_starts_from_plan(
     # This check deliberately precedes both the plan and the gated cache.  An ungated
     # call can therefore never be served a tuple computed while gates were enabled.
     if not gates_enabled() or gate is None:
-        return plan.grapheme_starts[locale] if plan is not None else _grapheme_starts(text, locale)
+        starts = (
+            plan.grapheme_starts[locale] if plan is not None else _grapheme_starts(text, locale)
+        )
+    elif plan is not None:
+        starts = plan.gated_starts[gate][locale]
+    else:
+        return _cached_candidate_starts(text, locale, gate)
     if plan is not None:
-        return plan.gated_starts[gate][locale]
-    return _cached_candidate_starts(text, locale, gate)
+        boundaries = plan.grapheme_boundaries.get(locale)
+        if boundaries is None:
+            boundaries = frozenset((*_grapheme_starts(text, locale), len(text)))
+        return tuple(start for start in starts if start < len(text) and start in boundaries)
+    return starts
 
 
 def _scan_plan_for(text: str, locale: str, gate: StartGate | None) -> _ScanPlan | None:

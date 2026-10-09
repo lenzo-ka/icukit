@@ -1,10 +1,12 @@
 """Detector candidates never split an extended grapheme cluster."""
 
+from typing import get_args
+
 import icu
 import pytest
 
 from icukit.breaker import break_grapheme_spans
-from icukit.detectors import DateDetector
+from icukit.detectors import DateDetector, RefusalReason
 from icukit.engine import flexible_detectors, generated_detectors
 
 LOCALES = ("en_US", "de_DE", "ja_JP", "ar_EG")
@@ -24,6 +26,10 @@ def _boundaries(text: str, locale: str) -> frozenset[int]:
     spans = break_grapheme_spans(text, locale)
     span_offsets = (offset for span in spans for offset in (span["start"], span["end"]))
     return frozenset({0, len(text), *span_offsets})
+
+
+def test_deprecated_mid_grapheme_refusal_reason_remains_public():
+    assert "mid-grapheme-endpoint" in get_args(RefusalReason)
 
 
 @pytest.mark.parametrize("locale", LOCALES)
@@ -54,9 +60,11 @@ def test_gangs_decline_mid_grapheme_candidates_and_keep_later_readings(locale, k
         expected = ("number:decimal", ordinary)
 
     text = " | ".join((*keycaps, *continuations, *flag_adjacent, f"plain {ordinary}"))
-    detections = gang.detect(text)
+    compiled = gang.compile(warm=False)
+    detections = compiled.detect(text)
     boundaries = _boundaries(text, locale)
 
+    assert compiled._scan_plans[id(text)].grapheme_boundaries[locale] == boundaries
     assert expected in {(detection["type"], detection["text"]) for detection in detections}
     assert all(
         detection["start"] in boundaries and detection["end"] in boundaries

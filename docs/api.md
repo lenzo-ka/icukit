@@ -2717,7 +2717,9 @@ An ostensibly-successful ICU parse produced an unrepresentable endpoint.
 This is *not* a parse miss (a miss is silent and returns no candidate). It signals a
 reversed, out-of-range, or surrogate-interior endpoint -- an invariant violation the
 detector refuses to represent rather than emit wrongly. It carries a stable ``reason``
-from :data:`RefusalReason` and the offsets involved.
+from :data:`RefusalReason` and the offsets involved. The public reason
+``"mid-grapheme-endpoint"`` is deprecated and retained for compatibility, but
+built-in detectors no longer emit it: such a candidate is declined as a miss.
 
 #### `DetectorRefusal(type: 'str', start: 'int', endpoint: 'int | None', reason: 'RefusalReason', message: 'str') -> 'None'`
 

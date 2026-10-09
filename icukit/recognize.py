@@ -7669,7 +7669,7 @@ def _detect_flexible_alternatives(
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor or start in interior:
+        if start < cursor or start not in boundaries or start in interior:
             continue
         if inspect_gate and not gate.admits(text[start]):
             _record(stats_key, "gated_out")
@@ -7740,7 +7740,7 @@ def _detect_flexible(
     detections: list[ValueDetection] = []
     cursor = 0
     for start in starts:
-        if start < cursor or start in interior:
+        if start < cursor or start not in boundaries or start in interior:
             continue
         if inspect_gate and not gate.admits(text[start]):
             _record(stats_key, "gated_out")

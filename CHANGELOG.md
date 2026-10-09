@@ -5,7 +5,9 @@
 ### Fixed
 
 - Detector candidates that stop inside a grapheme cluster are now declined instead of
-  aborting the whole detector gang or emitting a partial-grapheme reading.
+  aborting the whole detector gang or emitting a partial-grapheme reading. The public
+  ``mid-grapheme-endpoint`` refusal reason remains as a deprecated compatibility member,
+  but built-in detectors no longer emit it.
 
 ### Changed
 

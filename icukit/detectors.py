@@ -107,6 +107,9 @@ RefusalReason = Literal[
     "reversed-endpoint",
     "out-of-range-endpoint",
     "surrogate-interior-endpoint",
+    # Deprecated compatibility member: built-in detectors no longer emit this reason;
+    # a parser stopping inside a grapheme is an ordinary declined candidate.
+    "mid-grapheme-endpoint",
     "inconsistent-surface",
 ]
 
@@ -362,7 +365,9 @@ class DetectorRefusal(Exception):
     This is *not* a parse miss (a miss is silent and returns no candidate). It signals a
     reversed, out-of-range, or surrogate-interior endpoint -- an invariant violation the
     detector refuses to represent rather than emit wrongly. It carries a stable ``reason``
-    from :data:`RefusalReason` and the offsets involved.
+    from :data:`RefusalReason` and the offsets involved. The public reason
+    ``"mid-grapheme-endpoint"`` is deprecated and retained for compatibility, but
+    built-in detectors no longer emit it: such a candidate is declined as a miss.
     """
 
     def __init__(
@@ -1240,7 +1245,7 @@ def _scan_step(
 ) -> ValueDetection | None:
     """Run the strict matcher at one start, refusing only impossible endpoints."""
     del locale  # the context already embodies the locale's grapheme and word rules
-    if start_cp in ctx.interior:
+    if start_cp not in ctx.boundaries or start_cp in ctx.interior:
         return None
     result = inv.parse(ctx.ustr, ctx.cp_to_u16[start_cp])
     if result is None:
