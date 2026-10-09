@@ -1445,6 +1445,33 @@ def _interval_pattern_parts(pattern: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _interval_pattern_literal(pattern: str) -> str | None:
+    """Decode a field-free ICU pattern fragment to the literal text it writes.
+
+    ASCII pattern letters outside quotes are fields, not literals, so their presence
+    means the fragment is not proved field-free. Apostrophes quote literal pattern
+    letters and a doubled apostrophe writes one apostrophe; quote syntax itself is
+    never part of the returned surface.
+    """
+    literal = []
+    quoted = False
+    cursor = 0
+    while cursor < len(pattern):
+        character = pattern[cursor]
+        if character == "'":
+            if cursor + 1 < len(pattern) and pattern[cursor + 1] == "'":
+                literal.append("'")
+                cursor += 2
+                continue
+            quoted = not quoted
+        elif not quoted and _is_pattern_letter(character):
+            return None
+        else:
+            literal.append(character)
+        cursor += 1
+    return None if quoted else "".join(literal)
+
+
 def _continues_interval_word(text: str, cursor: int) -> bool:
     if cursor < 0 or cursor >= len(text):
         return False
@@ -1484,19 +1511,21 @@ def _date_interval_gate(
     return result
 
 
-def _interval_separator_needle(separator: str) -> str | None:
-    """Return one literal every occurrence of ``separator`` must contain.
+def _interval_separator_needle(separator_literal: str) -> str | None:
+    """Return one exact literal every matching separator surface must contain.
 
-    Interval separator spaces are flexible, so the needle is one maximal non-space
-    literal run. A separator made only of flexible spaces has no safe needle.
+    ``separator_literal`` is decoded surface text, never ICU pattern syntax. The reader
+    equates the four members of ``_SPACES`` but compares every other code point exactly,
+    so any non-space run is mandatory in the same equivalence space. A separator made
+    only of flexible spaces has no safe needle.
     """
     cursor = 0
-    while cursor < len(separator) and separator[cursor] in _SPACES:
+    while cursor < len(separator_literal) and separator_literal[cursor] in _SPACES:
         cursor += 1
     end = cursor
-    while end < len(separator) and separator[end] not in _SPACES:
+    while end < len(separator_literal) and separator_literal[end] not in _SPACES:
         end += 1
-    return separator[cursor:end] or None
+    return separator_literal[cursor:end] or None
 
 
 class FlexibleDateIntervalDetector(_GatedReader):
@@ -1540,6 +1569,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
             pattern = interval_info.getIntervalPattern(skeleton, calendar_field)
             if pattern:
                 parts = _interval_pattern_parts(pattern)
+                if parts is not None:
+                    part1, separator_pattern, part2 = parts
+                    separator = _interval_pattern_literal(separator_pattern)
+                    parts = None if separator is None else (part1, separator, part2)
             else:
                 parts = _recovered_interval_parts(locale, skeleton, calendar_field)
             if parts is None or parts in seen:

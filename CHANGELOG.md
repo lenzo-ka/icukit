@@ -4,10 +4,10 @@
 
 ### Changed
 
-- Skip date-interval parsing when a text has none of the reader's required separator
-  literals, and narrow spell-out token comparisons by their folded prefix. Long runs of
-  isolated digits no longer pay those unsuccessful per-start costs; detections are
-  unchanged.
+- Decode quoted literals in ICU date-interval separators, and skip interval parsing when
+  a text has none of the decoded mandatory literals under the reader's exact separator
+  comparison. Narrow spell-out token comparisons by their folded prefix. Long runs of
+  isolated digits no longer pay those unsuccessful per-start costs.
 
 ## [0.9.1] - 2026-10-09
 
