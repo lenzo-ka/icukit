@@ -6,7 +6,14 @@ import pytest
 from icukit import DetectionBatch, Extent, number_detectors
 from icukit.detectors import DetectorRefusal, DetectorSet, NumberDetector
 from icukit.engine import flexible_detectors, generated_detectors, reader_set
-from icukit.stream import DetectionStream, _joinable, _seams, _shift_detection, extent_report
+from icukit.stream import (
+    DetectionStream,
+    _extent_for_reader,
+    _joinable,
+    _seams,
+    _shift_detection,
+    extent_report,
+)
 
 _STREAM_FIXTURES = (
     ("en_US", "I paid 1,234 and 56 more."),
@@ -174,6 +181,137 @@ def test_window_refusal_offsets_are_absolute():
     assert streamed.value.args == whole.value.args
 
 
+def test_stream_retries_si_date_refusal_at_nonfinal_feed_boundary():
+    # Reduced from fix4's accepted 9,780-character si_LK document at feed size 1024.
+    # The first feed ends inside the grapheme consumed by date:GyMMMEd; that incomplete
+    # prefix can refuse, but it is not the end of the stream input.
+    text = (
+        "x" * 963
+        + "2024 මැදින් 5, අඟහරුවාදා දින ග්\u200dරිමවේ-5 14.07\n"
+        + "2024 ඉල් 7, බ්\u200dරහස්පතින්දා දින ග්\u200dරිමවේ-5 22.59"
+    )
+    detectors = reader_set("si_LK")
+    expected = detectors.detect(text)
+    found, _batches = _run(
+        detectors,
+        text,
+        [1024, len(text) - 1024],
+        max_pending_chars=1_000_000,
+        reader_cap_chars={detector.type: 1_000_000 for detector in detectors.detectors},
+    )
+    assert found == expected
+
+
+def test_relative_number_group_count_is_not_sample_bounded():
+    detectors = reader_set("bas_CM", flexible=True, guarded=True)
+    relative_extent = next(
+        row.extent
+        for row in extent_report(detectors)
+        if row.reader == "FlexibleRelativeDateDetector"
+    )
+    assert relative_extent.chunks is None
+    for groups in range(1, 6):
+        text = "-" + "\N{NO-BREAK SPACE}".join(("1", *(("234",) * groups))) + " w"
+        expected = detectors.detect(text)
+        assert any(item["type"] == "date:relative" for item in expected)
+        found, _batches = _run(detectors, text, [1] * len(text), stride=1)
+        assert found == expected
+
+
+def test_interval_extent_does_not_pair_sampled_longest_surfaces():
+    class FlexibleDateIntervalDetector:
+        group = "date-interval:synthetic"
+
+        def __init__(self):
+            self.type = "date-interval:synthetic"
+            self.locale = "en_US"
+            self._matchers = ()
+            self._left_surfaces = ("a b", "abcdefghij")
+            self._right_surfaces = ("c d", "klmnopqrst")
+
+        def extent(self):
+            return _extent_for_reader(self)
+
+        def detect(self, text):
+            found = []
+            for left in self._left_surfaces:
+                for right in self._right_surfaces:
+                    surface = f"{left}–{right}"
+                    start = text.find(surface)
+                    if start >= 0:
+                        found.append(
+                            {
+                                "text": surface,
+                                "start": start,
+                                "end": start + len(surface),
+                                "type": self.type,
+                                "value": surface,
+                                "captures": (),
+                                "spec": None,
+                            }
+                        )
+            return sorted(found, key=lambda item: (item["start"], item["end"]))
+
+    detector = FlexibleDateIntervalDetector()
+    assert detector.extent().chunks is None
+    detectors = DetectorSet((detector,))
+    for left in detector._left_surfaces:
+        for right in detector._right_surfaces:
+            text = f"{left}–{right} x"
+            found, _batches = _run(detectors, text, [1] * len(text), stride=1)
+            assert found == detectors.detect(text)
+
+
+def test_number_extent_reads_whitespace_exponent_symbol_itself():
+    exponent = "\N{NO-BREAK SPACE}×10^"
+
+    class Symbols:
+        def getSymbol(self, _symbol):
+            return exponent
+
+    class Formatter:
+        def getDecimalFormatSymbols(self):
+            return Symbols()
+
+    class NumberDetector:
+        type = group = "number:synthetic"
+        locale = "en_US"
+        _nf = Formatter()
+        _decimal = "."
+        _grouping = ","
+        _zero = "0"
+        _minus = "-"
+        _plus = "+"
+        _currency_symbol = "$"
+        _percent = "%"
+
+        def extent(self):
+            return _extent_for_reader(self)
+
+        def detect(self, text):
+            surface = f"1{exponent}2"
+            start = text.find(surface)
+            if start < 0:
+                return []
+            return [
+                {
+                    "text": surface,
+                    "start": start,
+                    "end": start + len(surface),
+                    "type": self.type,
+                    "value": surface,
+                    "captures": (),
+                    "spec": None,
+                }
+            ]
+
+    detector = NumberDetector()
+    assert detector.extent().chunks is None
+    text = f"1{exponent}2 x"
+    found, _batches = _run(DetectorSet((detector,)), text, [1] * len(text), stride=1)
+    assert found == detector.detect(text)
+
+
 @pytest.mark.parametrize("stride", [1, 32])
 @pytest.mark.parametrize(("locale", "text"), _STREAM_FIXTURES)
 def test_stream_every_split_point(locale, text, stride):
@@ -322,8 +460,8 @@ def test_stride_latency_bound():
 
     stream = number_detectors("en_US").stream(detect_stride_chars=32)
     seen_at = None
-    # NumberDetector's extent is two chunks (ICU's signed exemplars), so "42" is
-    # decided by T[:7] = "42 x x" (closing seam 5 plus the two-code-point peek).
+    # NumberDetector's grammar-derived closing rule rejects the first word chunk, so
+    # "42" is decided by T[:7] = "42 x x" (closing seam 5 plus the two-code-point peek).
     text = "42 " + "x " * 48
     for total, character in enumerate(text, 1):
         if any(d["text"] == "42" for d in stream.feed(character).detections):
@@ -467,7 +605,7 @@ def test_left_walk_cut_literal_chunk_invariant():
             expected = result
         assert result == expected
     assert expected is not None
-    assert expected[1] == [12, 24]
+    assert expected[1] == [8, 16, 24]
 
 
 class _CutTrackingStream(DetectionStream):
@@ -550,13 +688,17 @@ def test_left_walk_cap_cut():
     stream = number_detectors("en_US").stream()
     text = "1 - " * 2000 + "x"
     cuts = []
+    reader_cuts = []
     for offset in range(0, len(text), 1024):
         batch = stream.feed(text[offset : offset + 1024])
         cuts.extend(batch.cuts)
+        reader_cuts.extend(batch.reader_cuts)
         state = stream.pending()
         assert state["total"] - state["buffered_from"] <= 2 * 4096
-    cuts.extend(stream.close().cuts)
-    assert cuts
+    final = stream.close()
+    cuts.extend(final.cuts)
+    reader_cuts.extend(final.reader_cuts)
+    assert cuts or reader_cuts
 
 
 def test_stream_cap_on_64k_run():

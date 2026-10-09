@@ -634,7 +634,16 @@ class DetectionStream:
             self._last_detect_total = end
             return []
         old_pending = self._pending_from
-        found, new_pending, _frontier = self._settlement_candidate(end, old_pending)
+        try:
+            found, new_pending, _frontier = self._settlement_candidate(end, old_pending)
+        except DetectorRefusal:
+            # A feed boundary is not an input boundary. ICU can reject an otherwise
+            # valid parse while the prefix ends inside the grapheme that completes it
+            # (notably Sinhala date fields). Keep the window unsettled and retry after
+            # more text; flush() still runs the final window and therefore preserves a
+            # refusal from the complete segment.
+            self._last_detect_total = end
+            return []
         keep_from = self._left_window(new_pending, end=end)
         if new_pending - keep_from > self._max_pending:
             self._last_detect_total = end
@@ -1100,6 +1109,7 @@ def _stock_unbounded_extent(
     joins: Iterable[str] = (),
     *,
     join_chars: str = _NUMERIC_JOIN_CHARS,
+    surfaces: Iterable[str] = (),
     numeric_left: bool = False,
     source: str,
 ) -> Extent:
@@ -1109,7 +1119,7 @@ def _stock_unbounded_extent(
     if locale and str(locale) not in source:
         qualified = f"{source} {locale}"
     allowed = icu.UnicodeSet(join_chars)
-    for surface in _owned_strings(vars(reader)):
+    for surface in (*_owned_strings(vars(reader)), *surfaces):
         for character in surface:
             if (
                 not icu.Char.isUWhiteSpace(character)
@@ -1248,126 +1258,78 @@ def _date_structure_samples(reader: object) -> tuple[str, ...]:
 
 
 @lru_cache(maxsize=256)
-def _calendar_probe_times(locale: str) -> tuple[object, ...]:
-    """Return instants covering formatter-controlled names and numeric field widths."""
+def _calendar_symbol_surfaces(locale: str) -> tuple[str, ...]:
+    """Return the complete ICU name tables used by canonical calendar patterns."""
+    symbols = icu.DateFormatSymbols(icu.Locale(locale))
+    surfaces = [*symbols.getEras(), *symbols.getEraNames(), *symbols.getAmPmStrings()]
+    # Date/time pattern fields choose one of these context/width tables. Reading the
+    # tables themselves is exhaustive for the grammar; unlike formatting sample dates,
+    # it does not guess a maximum from a finite selection of calendar values.
+    for context in (symbols.FORMAT, symbols.STANDALONE):
+        for width in (symbols.WIDE, symbols.ABBREVIATED, symbols.NARROW):
+            surfaces.extend(symbols.getMonths(context, width))
+            surfaces.extend(symbols.getWeekdays(context, width))
+    return tuple(dict.fromkeys(str(surface) for surface in surfaces if surface))
+
+
+@lru_cache(maxsize=256)
+def _calendar_vocabulary_instants(locale: str) -> tuple[object, ...]:
+    """Enumerate the finite calendar fields that can change formatted word tokens."""
     calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
     found = []
 
-    def add(year: int, month: int, day: int, hour: int = 13) -> None:
+    def add(year: int, month: int, day: int, hour: int = 13, era: int | None = None) -> None:
         calendar.clear()
+        if era is not None:
+            calendar.set(icu.UCalendarDateFields.ERA, era)
         calendar.set(year, month, day, hour, 5, 7)
         found.append(calendar.getTime())
 
-    for year in (1, 2024, 99999):
-        for month in range(12):
-            add(year, month, 15)
+    # Month/quarter, weekday, day-period, and era are the only finite fields that can
+    # change word vocabulary. Years/days/times themselves are numeric and are handled by
+    # join_chars. This enumeration is used only for the closing vocabulary, never to fit
+    # a seam-count bound.
+    for month in range(12):
+        add(2024, month, 15)
     for day in range(1, 8):
         add(2024, 0, day)
-    for hour in (1, 13, 23):
+    for hour in range(24):
         add(2024, 0, 2, hour)
-    calendar.clear()
-    calendar.set(icu.UCalendarDateFields.ERA, 0)
-    calendar.set(icu.UCalendarDateFields.YEAR, 44)
-    calendar.set(icu.UCalendarDateFields.MONTH, 2)
-    calendar.set(icu.UCalendarDateFields.DATE, 15)
-    calendar.set(icu.UCalendarDateFields.HOUR_OF_DAY, 13)
-    found.append(calendar.getTime())
+    for era in range(calendar.getMaximum(icu.UCalendarDateFields.ERA) + 1):
+        add(44, 2, 15, era=era)
     return tuple(found)
 
 
-def _interval_samples(reader: object) -> tuple[str, ...]:
-    from .recognize import _SPACES
-
-    instants = _calendar_probe_times(reader.locale)
-    samples = []
-    for left, separator, right, *_rest in getattr(reader, "_matchers", ()):
-        left_values = tuple(str(left.format(instant)) for instant in instants)
-        right_values = tuple(str(right.format(instant)) for instant in instants)
-        if not left_values or not right_values:
-            continue
-        longest_left = max(
-            left_values, key=lambda value: (_sample_chunk_count((value,)), len(value))
+def _calendar_closing_surfaces(reader: object) -> tuple[str, ...]:
+    """Return complete symbol and formatter word surfaces for an unbounded reader."""
+    locale = getattr(reader, "locale", "")
+    surfaces = list(_calendar_symbol_surfaces(locale))
+    formatters = []
+    formatter = getattr(reader, "_df", None)
+    if formatter is not None:
+        formatters.append(formatter)
+    for matcher in getattr(reader, "_matchers", ()):
+        if len(matcher) >= 3:
+            formatters.extend((matcher[0], matcher[2]))
+    for owned in formatters:
+        surfaces.extend(
+            str(owned.format(instant)) for instant in _calendar_vocabulary_instants(locale)
         )
-        longest_right = max(
-            right_values, key=lambda value: (_sample_chunk_count((value,)), len(value))
-        )
-        # Pair each formatter's complete ICU vocabulary with the other side's widest
-        # exemplar. This covers every month, weekday, era, and day period without a
-        # quadratic cross-product.
-        samples.extend(f"{value}{separator}{longest_right}" for value in left_values)
-        samples.extend(f"{longest_left}{separator}{value}" for value in right_values)
-    # FlexibleDateIntervalDetector deliberately folds these four CLDR space variants
-    # to a plain space before comparing a candidate with ICU's rendering.  Plain spaces
-    # can introduce more stream seams than ICU's canonical narrow/no-break spaces, so
-    # exercise that accepted spelling as well as the formatter output.
-    plain_space = tuple(
-        "".join(" " if char in _SPACES else char for char in value) for value in samples
-    )
-    return (*samples, *plain_space)
+    return tuple(dict.fromkeys(surface for surface in surfaces if surface))
 
 
-def _time_samples(reader: object) -> tuple[str, ...]:
-    separators = getattr(reader, "_separators", ()) or (":",)
-    periods = tuple(item[0] for item in getattr(reader, "_periods", ()))
-    periods += tuple(item[0] for item in getattr(reader, "_flexible_periods", ()))
-    units = tuple(item[0] for item in getattr(reader, "_hour_units", ()))
-    base = tuple(f"23{separator}59{separator}58" for separator in separators)
-    language = getattr(reader, "_language", "")
-    locales = getattr(reader, "locales", None)
-    zone = ""
-    if language:
-        from .recognize import _language_zone_abbreviations, _language_zone_names
-
-        zone_forms = (
-            *_language_zone_names(language, locales),
-            *_language_zone_abbreviations(language, locales),
-        )
-        zone = _longest_surface(zone_forms, "")
-    samples = list(base)
-    for value in base:
-        marked = [f"{value} {period}" for period in periods]
-        marked += [f"{value}{unit}" for unit in units]
-        marked += [f"{value} {unit}" for unit in units]
-        samples.extend(marked)
-        if zone:
-            samples.append(f"{value} {zone}")
-            samples.extend(f"{surface} {zone}" for surface in marked)
-    return tuple(samples)
-
-
-def _number_surfaces(reader: object) -> tuple[str, ...]:
-    """Return wide positive numerals accepted by a flexible number child."""
-    formatter = getattr(reader, "_nf", None)
-    values = [str(formatter.format(1_234_567))] if formatter is not None else ["1234567"]
-    digits = getattr(reader, "_digits", {})
-    inverse = {str(value): character for character, value in digits.items()}
-    plain = "".join(inverse.get(character, character) for character in "1234567")
-    for grouping, primary, secondary, *_rest in getattr(reader, "_other_groupings", ()):
-        if not primary:
-            continue
-        groups = [plain[-primary:]]
-        cursor = len(plain) - primary
-        secondary = secondary or primary
-        while cursor > 0:
-            start = max(0, cursor - secondary)
-            groups.append(plain[start:cursor])
-            cursor = start
-        values.append(str(grouping).join(reversed(groups)))
-    return tuple(dict.fromkeys(values))
-
-
-def _temporal_zone_words(reader: object) -> frozenset[str]:
-    """Return every language-level zone word a temporal reader can consume."""
+def _temporal_zone_surfaces(reader: object) -> tuple[str, ...]:
+    """Return every language-level zone surface a temporal reader can consume."""
     if type(reader).__name__ not in {
         "FlexibleDateIntervalDetector",
         "FlexibleTimeDetector",
         "FlexibleBareHourDetector",
         "FlexibleDateTimeDetector",
     }:
-        return frozenset()
+        return ()
     locale = getattr(reader, "locale", "")
     if not locale:
-        return frozenset()
+        return ()
     from .recognize import _language_zone_abbreviations, _language_zone_names
 
     language = icu.Locale(locale).getLanguage()
@@ -1376,14 +1338,12 @@ def _temporal_zone_words(reader: object) -> frozenset[str]:
         *_language_zone_names(language, locales),
         *_language_zone_abbreviations(language, locales),
     )
-    return frozenset(word for form in forms for word in _words(form))
+    return tuple(forms)
 
 
 def _temporal_samples(reader: object) -> tuple[str, ...]:
-    """Build formatter/name exemplars from an instantiated reader."""
+    """Build exhaustive surfaces for the remaining statically bounded readers."""
     name = type(reader).__name__
-    if name == "FlexibleDateIntervalDetector":
-        return _interval_samples(reader)
     if name in {
         "FlexibleDateDetector",
         "FlexibleTextDateDetector",
@@ -1394,31 +1354,6 @@ def _temporal_samples(reader: object) -> tuple[str, ...]:
         return tuple(
             item[0] for item in getattr(reader, "_names", ()) if item and isinstance(item[0], str)
         )
-    if name == "FlexibleRelativeDateDetector":
-        numbers = _number_surfaces(getattr(reader, "_number", None))
-        numeric = tuple(
-            f"{item[0]}{number}{item[1]}"
-            for item in getattr(reader, "_numeric_templates", ())
-            for number in numbers
-        )
-        named = tuple(item[0] for item in getattr(reader, "_named_phrases", ()))
-        return (*numeric, *named)
-    if name == "FlexibleTimeDetector":
-        return _time_samples(reader)
-    if name == "FlexibleBareHourDetector":
-        return ("23", *_time_samples(reader._time))
-    if name == "FlexibleDateTimeDetector":
-        dates = []
-        for child in getattr(reader, "_dates", ()):
-            dates.extend(_temporal_samples(child))
-        times = _time_samples(reader._time)
-        glue = tuple(item[1] for item in getattr(reader, "_glue", ()))
-        samples = []
-        for date in dates:
-            for clock in times:
-                for separator in glue:
-                    samples.append(date + separator + clock)
-        return tuple(samples)
     return _owned_strings(vars(reader))
 
 
@@ -1493,54 +1428,53 @@ def _derive_extent_for_reader(reader: object) -> Extent:
         "FlexibleOrdinalDetector",
         "FlexibleNumberRangeDetector",
     }
+    # These grammars have no sound fixed seam count: strict numbers admit arbitrary
+    # digit/group runs; relative dates embed that number grammar; intervals compose two
+    # independent sides; and time/date-time readers may append any accepted zone form.
+    # DateDetector delegates to ICU parsing, whose accepted canonical field widths are
+    # not bounded by a finite set of formatted calendar probes. They therefore use a
+    # reader-data closing condition and the configurable reader cap.
+    grammar_unbounded = {
+        "FlexibleDateIntervalDetector",
+        "FlexibleRelativeDateDetector",
+        "FlexibleTimeDetector",
+        "FlexibleBareHourDetector",
+        "FlexibleDateTimeDetector",
+    }
     if name == "NumberDetector":
-        # Signed exemplars too: ICU's minus sign is Word_Break=Other, so "-5" spans two
-        # seam-delimited chunks; the chunk count is taken from ICU's own output.
-        samples = [
-            reader._nf.format(value)
-            for value in (0, 7, 1234567.89, 10**15, -7, -1234567.89, -(10**15))
-        ]
-        whitespace = any(
-            icu.Char.isUWhiteSpace(character) for sample in samples for character in sample
-        )
         symbols = reader._nf.getDecimalFormatSymbols()
         exponent = symbols.getSymbol(icu.DecimalFormatSymbols.kExponentialSymbol)
-        digit = chr(ord(reader._zero) + 7)
-        parser_samples = [
-            f"{digit}{exponent}{sign}{digit}" for sign in ("", reader._minus, reader._plus)
-        ]
-        source = (
-            f'ICU DecimalFormatSymbols {reader.locale}: grouping "{reader._grouping}" '
-            f'and exponent "{exponent}" hold no White_Space'
+        number_surfaces = (
+            reader._decimal,
+            reader._grouping,
+            reader._zero,
+            reader._minus,
+            reader._plus,
+            reader._currency_symbol,
+            reader._percent,
+            exponent,
         )
-        sample_words = frozenset(word for sample in samples for word in _words(sample))
-        if whitespace:
-            return _stock_unbounded_extent(
-                reader,
-                sample_words,
-                numeric_left=True,
-                source=source,
-            )
-        return Extent(
-            _sample_chunk_count((*samples, *parser_samples)),
-            sample_words,
-            _NUMERIC_JOIN_CHARS,
-            left_chunks=None,
-            left_join_chars=_NUMBER_LEFT_CHARS,
-            source=source,
+        return _stock_unbounded_extent(
+            reader,
+            frozenset(word for surface in number_surfaces for word in _words(surface)),
+            surfaces=number_surfaces,
+            numeric_left=True,
+            source=(
+                f"NumberDetector grammar with ICU DecimalFormatSymbols {reader.locale}; "
+                "closes at the first non-number/symbol chunk"
+            ),
         )
     if name == "DateDetector":
-        # Exercise every month and weekday, both day periods, every ruled year width,
-        # and an era change. A single January/AD exemplar is not sound for formatter
-        # patterns containing localized names.
-        samples = [reader._df.format(instant) for instant in _calendar_probe_times(reader.locale)]
-        return Extent(
-            _sample_chunk_count(samples),
-            words | frozenset(word for sample in samples for word in _words(sample)),
-            _NUMERIC_JOIN_CHARS,
-            left_chunks=None,
-            left_join_chars=_NUMBER_LEFT_CHARS,
-            source=f"ICU SimpleDateFormat exemplars {reader.locale}",
+        surfaces = _calendar_closing_surfaces(reader)
+        return _stock_unbounded_extent(
+            reader,
+            words | frozenset(word for surface in surfaces for word in _words(surface)),
+            surfaces=surfaces,
+            numeric_left=True,
+            source=(
+                f"ICU SimpleDateFormat pattern and complete DateFormatSymbols {reader.locale}; "
+                "closes outside the pattern vocabulary"
+            ),
         )
     if name == "AbbreviationDetector":
         surfaces = tuple(getattr(reader, "_surfaces", ()))
@@ -1569,9 +1503,24 @@ def _derive_extent_for_reader(reader: object) -> Extent:
             numeric_left=numeric_left,
             source="reader-owned ICU symbols, rule text, and material surfaces",
         )
-    # Date, interval, time, and name readers format the ruled number/year values and
-    # combine them with their own ICU-derived names and glue. No locale surface is
-    # typed here; the audit rejects a future ICU form that exceeds the exemplars.
+    if name in grammar_unbounded:
+        calendar_surfaces = _calendar_closing_surfaces(reader)
+        zone_surfaces = _temporal_zone_surfaces(reader)
+        surfaces = (*calendar_surfaces, *zone_surfaces)
+        return _stock_unbounded_extent(
+            reader,
+            words | frozenset(word for surface in surfaces for word in _words(surface)),
+            surfaces=surfaces,
+            numeric_left=numeric_left,
+            source=(
+                "reader grammar plus complete ICU calendar and reader-owned zone vocabulary; "
+                "closes at the first chunk outside that vocabulary"
+            ),
+        )
+    # The remaining date/name readers have fixed field sequences, fixed numeric widths,
+    # and finite reader-owned name tables. Selecting each field's maximum seam count is
+    # compositional: fields are independent and literal separators are fixed, so the sum
+    # bounds every spelling accepted by the matcher rather than a sampled corpus.
     samples = _temporal_samples(reader)
     if name in {"FlexibleMonthNameDetector", "FlexibleWeekdayNameDetector"}:
         # These readers suppress names that overlap their child text-date reader, so
@@ -1581,7 +1530,9 @@ def _derive_extent_for_reader(reader: object) -> Extent:
         _sample_chunk_count(samples),
         words
         | frozenset(word for sample in samples for word in _words(sample))
-        | _temporal_zone_words(reader),
+        | frozenset(
+            word for surface in _temporal_zone_surfaces(reader) for word in _words(surface)
+        ),
         _NUMERIC_JOIN_CHARS,
         left_chunks=None if numeric_left else 0,
         left_join_chars=_NUMBER_LEFT_CHARS if numeric_left else "",

@@ -8,14 +8,17 @@ from icukit.stream import _extent_violations
 
 def test_extent_literal():
     assert NumberDetector("en_US", "decimal").extent() == Extent(
-        chunks=2,
-        joins=frozenset(),
+        chunks=None,
+        joins=frozenset({"e"}),
         join_chars=r"[\p{N}\p{S}\p{Cf}]",
-        cap_chars=None,
+        cap_chars=DEFAULT_READER_CAP_CHARS,
         left_chunks=None,
         left_joins=frozenset(),
         left_join_chars=r"[\p{Nd}\p{Sm}\p{Cf}]",
-        source='ICU DecimalFormatSymbols en_US: grouping "," and exponent "E" hold no White_Space',
+        source=(
+            "NumberDetector grammar with ICU DecimalFormatSymbols en_US; "
+            "closes at the first non-number/symbol chunk"
+        ),
     )
 
 
