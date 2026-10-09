@@ -1,6 +1,8 @@
 """Tests for flexible, recall-oriented recognizers."""
 
+import json
 import time
+from pathlib import Path
 
 import icu
 import pytest
@@ -42,6 +44,7 @@ from icukit.recognize import (
     _normalize_interval_surface,
 )
 from icukit.resolve import resolve
+from icukit.serialize import detections_to_json
 
 
 def _interval_surface(locale, skeleton, start_fields, end_fields):
@@ -473,6 +476,23 @@ def test_flexible_number_validates_locale_grouping(locale, surface, expected):
     detection = FlexibleNumberDetector(locale).detect(surface)[0]
 
     assert detection["text"] == expected
+
+
+def test_valid_grouping_detections_match_origin_main_bytes():
+    # Captured from origin/main at 383936c before grouping-run retry optimization.
+    fixture_path = Path(__file__).with_name("data") / "flexible_number_grouping_origin_main.json"
+    cases = json.loads(fixture_path.read_text())
+
+    for case in cases:
+        actual = json.dumps(
+            detections_to_json(FlexibleNumberDetector(case["locale"]).detect(case["text"])),
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode()
+        expected = json.dumps(
+            case["detections"], ensure_ascii=False, separators=(",", ":")
+        ).encode()
+        assert actual == expected, (case["locale"], case["text"])
 
 
 def test_flexible_number_reads_nothing_from_a_malformed_grouping():

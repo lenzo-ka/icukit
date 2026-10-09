@@ -1,0 +1,234 @@
+[
+  {
+    "locale": "hi_IN",
+    "text": "1,23,45,678",
+    "detections": [{
+      "text": "1,23,45,678",
+      "start": 0,
+      "end": 11,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "12345678", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 11,
+        "text": "1,23,45,678",
+        "value": "12345678",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "hi_IN",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [2, 3]
+      }
+    }]
+  },
+  {
+    "locale": "fr_FR",
+    "text": "1\u00a0234",
+    "detections": [{
+      "text": "1\u00a0234",
+      "start": 0,
+      "end": 5,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "1234", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 5,
+        "text": "1\u00a0234",
+        "value": "1234",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "fr_FR",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [3]
+      }
+    }]
+  },
+  {
+    "locale": "fr_FR",
+    "text": "1\u202f234",
+    "detections": [{
+      "text": "1\u202f234",
+      "start": 0,
+      "end": 5,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "1234", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 5,
+        "text": "1\u202f234",
+        "value": "1234",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "fr_FR",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [3]
+      }
+    }]
+  },
+  {
+    "locale": "fr_FR",
+    "text": "1\u00a0234\u202f567",
+    "detections": [{
+      "text": "1\u00a0234\u202f567",
+      "start": 0,
+      "end": 9,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "1234567", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 9,
+        "text": "1\u00a0234\u202f567",
+        "value": "1234567",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "fr_FR",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [3]
+      }
+    }]
+  },
+  {
+    "locale": "de_DE",
+    "text": "1.234.567",
+    "detections": [{
+      "text": "1.234.567",
+      "start": 0,
+      "end": 9,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "1234567", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 9,
+        "text": "1.234.567",
+        "value": "1234567",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "de_DE",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [3]
+      }
+    }]
+  },
+  {
+    "locale": "af_ZA",
+    "text": "1 234 567",
+    "detections": [{
+      "text": "1 234 567",
+      "start": 0,
+      "end": 9,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "1234567", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 9,
+        "text": "1 234 567",
+        "value": "1234567",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "af_ZA",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [3]
+      }
+    }]
+  },
+  {
+    "locale": "ru_RU",
+    "text": "1\u00a0234\u00a0567",
+    "detections": [{
+      "text": "1\u00a0234\u00a0567",
+      "start": 0,
+      "end": 9,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "1234567", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 9,
+        "text": "1\u00a0234\u00a0567",
+        "value": "1234567",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "ru_RU",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [3]
+      }
+    }]
+  },
+  {
+    "locale": "pl_PL",
+    "text": "1\u00a0234\u00a0567",
+    "detections": [{
+      "text": "1\u00a0234\u00a0567",
+      "start": 0,
+      "end": 9,
+      "type": "number:decimal",
+      "value": {"kind": "number", "decimal": "1234567", "currency": null},
+      "captures": [{
+        "kind": "capture",
+        "name": "integer",
+        "start": 0,
+        "end": 9,
+        "text": "1\u00a0234\u00a0567",
+        "value": "1234567",
+        "form": "numeric"
+      }],
+      "spec": {
+        "kind": "number_format_spec",
+        "locale": "pl_PL",
+        "format_kind": "decimal",
+        "currency": null,
+        "min_fraction": null,
+        "max_fraction": null,
+        "grouping_sizes": [3]
+      }
+    }]
+  }
+]

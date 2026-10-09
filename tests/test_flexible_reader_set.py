@@ -269,27 +269,33 @@ def test_reading_costs_a_small_multiple_of_the_generated_set():
     assert min(ratios) < 3, ratios
 
 
-def test_space_grouping_candidate_retries_scale_nearly_linearly():
-    gang = generated_detectors("af_ZA")
+def test_space_grouping_candidate_retries_scale_nearly_linearly(monkeypatch):
+    original = recognize.FlexibleNumberDetector._grouping_length
+    probes = 0
 
-    def minimum_seconds(repetitions):
-        text = "1 " * repetitions + "x! "
-        # Build lazy state and the compiled scan plan outside the measurements.
-        assert gang.detect(text) == []
-        timings = []
-        for _trial in range(3):
-            started = time.perf_counter()
-            assert gang.detect(text) == []
-            timings.append(time.perf_counter() - started)
-        return min(timings)
+    def counted_grouping_length(self, text, cursor, separator=None):
+        nonlocal probes
+        probes += 1
+        return original(self, text, cursor, separator)
 
-    small = minimum_seconds(125)
-    large = minimum_seconds(500)
+    monkeypatch.setattr(
+        recognize.FlexibleNumberDetector, "_grouping_length", counted_grouping_length
+    )
 
-    # Four times the input should take about four times the work. The extra 50%
-    # headroom covers noisy shared runners while rejecting per-start rescans of the
-    # remaining separator-delimited digit run.
-    assert large <= 6 * small, (small, large)
+    def grouping_probes(repetitions):
+        recognize._grouping_tail_memo.cache_clear()
+        detector = recognize.FlexibleNumberDetector("af_ZA")
+        text = "1 " + "234 " * repetitions + "56x! "
+        before = probes
+        assert len(detector.detect(text)) == repetitions + 1
+        return probes - before
+
+    small = grouping_probes(125)
+    large = grouping_probes(500)
+
+    # The input grows fourfold. One probe per candidate plus one per previously unseen
+    # grouping tail keeps work linear; rescanning each tail would grow about sixteenfold.
+    assert large <= 5 * small, (small, large)
 
 
 def test_the_set_is_the_same_in_any_process():
