@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-09
+
 ### Fixed
 
 - Detector candidates that stop inside a grapheme cluster are now declined instead of
@@ -11,6 +13,8 @@
 
 ### Changed
 
+- Support and test Python 3.14.
+- Keep scans of space-grouped numbers linear in the input length.
 - Build the tiergraph text example through `tiergraph.build`, use tiergraph's
   current public entry points, and require tiergraph 0.8 or later for development.
 
@@ -1017,7 +1021,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/lenzo-ka/icukit/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/lenzo-ka/icukit/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/lenzo-ka/icukit/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/lenzo-ka/icukit/compare/v0.7.0...v0.7.1
