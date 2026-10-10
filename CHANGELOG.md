@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Flexible English measure readers accept periods after known abbreviated unit words
+  of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
+  curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
+  boundary produces readings both with and without the period; internal periods belong
+  to the punctuated reading. Periods after full unit words and one-letter symbols remain
+  sentence punctuation.
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed

@@ -110,6 +110,60 @@ def test_unit_variants_are_nfkc_and_ascii_confusables_of_marks():
 
 
 @pytest.mark.parametrize(
+    "unit, text",
+    [
+        ("square-foot", "100 sq. ft."),
+        ("square-foot", "100 sq ft."),
+        ("cubic-foot", "5 cu. ft."),
+        ("pound", "5 lbs."),
+        ("ounce", "5 oz."),
+        ("foot", "5 ft."),
+        ("inch", "5 in."),
+        ("mile", "5 mi."),
+        ("yard", "5 yds."),
+    ],
+)
+def test_an_english_unit_abbreviation_takes_periods_as_part_of_its_surface(unit, text):
+    value = text.split(" ", 1)[0]
+    assert _measures(unit, text) == [(text, value, unit), (text[:-1], value, unit)]
+
+
+@pytest.mark.parametrize(
+    "unit, text, readings",
+    [
+        ("foot", "He is 5 ft.", ["5 ft.", "5 ft"]),
+        ("inch", "It is 3.8 in.", ["3.8 in.", "3.8 in"]),
+        ("square-foot", "100 sq. ft.", ["100 sq. ft.", "100 sq. ft"]),
+    ],
+)
+def test_a_sentence_final_abbreviation_period_keeps_both_readings(unit, text, readings):
+    assert [surface for surface, _value, _unit in _measures(unit, text)] == readings
+
+
+@pytest.mark.parametrize(
+    "unit, text, reading",
+    [("pound", "5 lbs. of flour", "5 lbs."), ("foot", "5 ft. tall", "5 ft.")],
+)
+def test_an_internal_abbreviation_period_has_only_the_punctuated_reading(unit, text, reading):
+    assert [surface for surface, _value, _unit in _measures(unit, text)] == [reading]
+
+
+@pytest.mark.parametrize("text", ["5 feet.", "5 day."])
+def test_a_period_after_a_full_unit_word_remains_sentence_punctuation(text):
+    unit = "foot" if "feet" in text else "day"
+    assert _measures(unit, text) == [(text[:-1], "5", unit)]
+
+
+def test_the_inch_abbreviation_still_requires_a_number():
+    assert _measures("inch", "He walked in. Then stopped.") == []
+    assert _measures("inch", "The board is 3.8 in. long.") == [("3.8 in.", "3.8", "inch")]
+
+
+def test_a_one_letter_unit_symbol_does_not_absorb_sentence_punctuation():
+    assert _measures("second", "the 1880s.") == [("1880s", "1880", "second")]
+
+
+@pytest.mark.parametrize(
     "text, ratio", [("5 percent", "0.05"), ("2.5 percent of", "0.025"), ("5%", "0.05")]
 )
 def test_percent_reads_as_the_symbol_or_icus_wide_word(text, ratio):

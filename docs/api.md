@@ -5840,6 +5840,11 @@ The surfaces are the unit's short, narrow, and wide forms as ICU formats them
 kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
 each of that locale's plural categories (see :func:`_plural_samples`), each also in
 the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+English abbreviations of two or more ASCII letters additionally accept a period
+after each abbreviated word ("5 ft.", "100 sq. ft."). When the final abbreviation
+period is also sentence-final, both the span with it and the span without it are
+readings; an internal period belongs only to the punctuated reading. A period on a
+wide unit word or one-letter symbol remains outside the unit.
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
 number directly. A per form written without an amount ("/s", "per second") reads as
@@ -5852,7 +5857,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return flexible measure candidates in source order, a bare per form beside them.
+Return flexible measure readings in source order, a bare per form beside them.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
