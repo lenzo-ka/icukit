@@ -1,0 +1,40 @@
+{
+  "files": {
+    "invalid/bare-version.json": {
+      "sha256": "sha256:45424871e24c9c98586f913bbb5949692a5a92b4c4123b64d4f273ad45c6deac",
+      "expected": "INVALID_SCHEMA_VERSION"
+    },
+    "invalid/detection-value.json": {
+      "sha256": "sha256:f8bac000357b662caa955754f9645a6115ed30ec8e5b1c4cbaeeaa4c3b23f2d7",
+      "expected": "INVALID_VALUE"
+    },
+    "invalid/process-setting.json": {
+      "sha256": "sha256:99d61c00e0e536ebbeef94ed09851714c117ed6f5953ca218d285e4c921a52c5",
+      "expected": "INVALID_KEY"
+    },
+    "invalid/section-key.json": {
+      "sha256": "sha256:30b54508560af14c72e697d093cfffaf67c0f9d018247687435c352e4f720e86",
+      "expected": "INVALID_KEY"
+    },
+    "invalid/sentence-path.json": {
+      "sha256": "sha256:57ecab1b525e6b15397a5a0988ed4e8ecf574dc7bdc4cb522ea6793897bdf294",
+      "expected": "INVALID_VALUE"
+    },
+    "invalid/stream-boundary.json": {
+      "sha256": "sha256:0d2b0737e997a1de2390f1ebc0e5eefc9730ba9585dc01838eecb0073fe6f779",
+      "expected": "INVALID_VALUE"
+    },
+    "valid/bare-current.json": {
+      "sha256": "sha256:9e88d739897d6204355ab8e60daf49a989e114ced0d53af9a2d4700d5f689743",
+      "expected": "valid"
+    },
+    "valid/bare-empty.json": {
+      "sha256": "sha256:cba2e027925c2a8c9b0ccbe58ab575a62b3651db29d639598ca1aeedd639ad8a",
+      "expected": "valid"
+    },
+    "valid/envelope-current.json": {
+      "sha256": "sha256:2a316b00ece0b63c9499a4caf7b2184020b2ee59270a565eed22a8d65b8f1552",
+      "expected": "valid"
+    }
+  }
+}

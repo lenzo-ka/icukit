@@ -69,6 +69,15 @@ from .alpha_index import (
     get_bucket_labels,
 )
 from .availability import AvailabilityRow, availability, available_languages
+from .behavior import (
+    BEHAVIOR_KIND,
+    BEHAVIOR_OPTION_NAMES,
+    BEHAVIOR_SCHEMA_VERSION,
+    BehaviorLoadError,
+    BehaviorRefusal,
+    BehaviorSchema,
+    load_behavior_schema,
+)
 from .bidi import (
     DIRECTION_LTR,
     DIRECTION_MIXED,
@@ -500,6 +509,13 @@ from .unicode import (
 
 __all__ = [
     "__version__",
+    "BEHAVIOR_KIND",
+    "BEHAVIOR_OPTION_NAMES",
+    "BEHAVIOR_SCHEMA_VERSION",
+    "BehaviorLoadError",
+    "BehaviorRefusal",
+    "BehaviorSchema",
+    "load_behavior_schema",
     "AvailabilityRow",
     "availability",
     "available_languages",

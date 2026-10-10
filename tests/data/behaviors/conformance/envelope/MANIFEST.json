@@ -1,0 +1,64 @@
+{
+  "files": {
+    "invalid/depth.json": {
+      "sha256": "sha256:5475c432422cca207707f564a764bf917b540c9985a29fa5b247a800dbc794a0",
+      "expected": "INVALID_JSON"
+    },
+    "invalid/duplicate-key.json": {
+      "sha256": "sha256:1412916ca4912e44da6f142f3846a802204308eccb4f49957435340e399e1759",
+      "expected": "INVALID_JSON"
+    },
+    "invalid/kind.json": {
+      "sha256": "sha256:63feb661e7265aaaf037d3e204da53bcfe1e9f785d2e85ef3bd806e97dba62f8",
+      "expected": "INVALID_KIND"
+    },
+    "invalid/nan.json": {
+      "sha256": "sha256:d3c6bcd9bc9210a4fdf0d908d8de66959357818c8d1ea56bfe7a01a4b4490221",
+      "expected": "INVALID_JSON"
+    },
+    "invalid/provenance.json": {
+      "sha256": "sha256:d96df9c68ac6d272a68643fa055a3ac90c1b7eb5b7781da2cee5fe2607bc77b7",
+      "expected": "INVALID_PROVENANCE"
+    },
+    "invalid/repeated-extends.json": {
+      "sha256": "sha256:66aebf2585d69cb145744239dcb1b52341d77c5f9f8336cfe1daff93d3742b6e",
+      "expected": "INVALID_EXTENDS"
+    },
+    "invalid/schema-version.json": {
+      "sha256": "sha256:8bd458021705e763810f07d04a70572f259373ceed3f91f345345fd8d260939e",
+      "expected": "INVALID_SCHEMA_VERSION"
+    },
+    "invalid/section-name.json": {
+      "sha256": "sha256:cd3fdbc41ff7a0ac7245bb6473230c32cc5e5983e244c8e5e4d45c9597a1cc8e",
+      "expected": "INVALID_KEY"
+    },
+    "invalid/string.json": {
+      "sha256": "sha256:e1dce31d5060497afbcf56179cb65423987856905b55843a1a2b23f1b80eb0e7",
+      "expected": "INVALID_JSON"
+    },
+    "invalid/too-large.json": {
+      "sha256": "sha256:f2e8c96d739bbe9f598e1a85edf74e348bf11db42ac3384329dcd6c4b9252c1e",
+      "expected": "TOO_LARGE"
+    },
+    "invalid/top-key.json": {
+      "sha256": "sha256:0ad37a545c57aea09d45997a6e056fb6db59ef4e5003f7bce23860671bd4b957",
+      "expected": "INVALID_KEY"
+    },
+    "invalid/values.json": {
+      "sha256": "sha256:d0c0be8d7436b05204be0c56d1d8c1ed2c8f7dbefe81017f4873a8510c77fead",
+      "expected": "INVALID_JSON"
+    },
+    "valid/empty.json": {
+      "sha256": "sha256:5509990e379c36a96eeff251fa48f2ebe98f38c1a8b3067c25f9f8d434a0e73a",
+      "expected": "valid"
+    },
+    "valid/frend.json": {
+      "sha256": "sha256:b8ded99c37643ae25581ef92b993719a0653c5412a016b47ee5d843a98c35bbb",
+      "expected": "valid"
+    },
+    "valid/icukit.json": {
+      "sha256": "sha256:56610f5392d6a425aa5917f593414c0efaf661ab5f09475d60e0cf356519da15",
+      "expected": "valid"
+    }
+  }
+}

@@ -4,6 +4,11 @@
 
 ### Added
 
+- `load_behavior_schema()` loads either the shared behavior-schema envelope or a bare
+  icukit section with bounded strict JSON validation, an immutable grouped option
+  mapping, and a canonical whole-input digest. The section exposes the current
+  sentence, detection, and streaming options while excluding paths, regex patterns,
+  exception policies, and process settings.
 - Flexible English measure readers accept periods after known abbreviated unit words
   of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
   curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
@@ -42,6 +47,8 @@
 
 ### Fixed
 
+- Locale-material files now receive the same depth and one-million-value checks as
+  mapping input and are capped at 64 MiB before decoding.
 - Number and measure ranges in the flexible readers no longer read across a paragraph
   boundary (for example `3,5 °C` and `-5 °C` in Catalan, separated by a blank line).
 - Flexible readers add a whole reading for valid space-grouped numbers accepted by the

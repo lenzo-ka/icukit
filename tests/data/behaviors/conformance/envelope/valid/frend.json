@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "behavior-schema",
+  "name": "frend",
+  "version": 1,
+  "extends": [],
+  "provenance": {
+    "source": "frend tests"
+  },
+  "sections": {
+    "frend": {
+      "schema_version": 1,
+      "groups": {
+        "tts-sanity": {
+          "order": [
+            "described",
+            "named",
+            "silent"
+          ]
+        }
+      }
+    }
+  }
+}

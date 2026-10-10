@@ -251,7 +251,8 @@ altered with `dataclasses.replace`, or of a subclass of `LocaleMaterial` is refu
 Pickling a loaded material is not supported; to use material in another process, load
 the file again there (a process forked after loading keeps it). A mapping passed to the loader is
 read as JSON (every value the loader keeps is a plain JSON type), within limits of 64
-levels of nesting and a million values. icukit does not defend against callers that
+levels of nesting and a million values. File input has the same depth and value limits
+and is capped at 64 MiB before decoding. icukit does not defend against callers that
 call its private functions or overwrite a field of the frozen dataclass.
 
 ## Experimental character material

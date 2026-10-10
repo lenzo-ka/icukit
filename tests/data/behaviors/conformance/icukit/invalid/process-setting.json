@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "detection": {
+    "cache_dir": ".cache/icukit"
+  }
+}

@@ -197,6 +197,7 @@ def _constant(value: str) -> object:
 
 _MAX_DEPTH = 64
 _MAX_NODES = 1_000_000
+_MAX_FILE_BYTES = 64 * 1024 * 1024
 
 
 def _plain_json(
@@ -1349,8 +1350,18 @@ def load_locale_material(
     try:
         if isinstance(material, (str, os.PathLike)):
             try:
-                with open(material, encoding="utf-8") as stream:
-                    parsed = json.load(stream, object_pairs_hook=_object, parse_constant=_constant)
+                with open(material, "rb") as stream:
+                    raw = stream.read(_MAX_FILE_BYTES + 1)
+                if len(raw) > _MAX_FILE_BYTES:
+                    raise _InvalidJSON(
+                        f"file exceeds the {_MAX_FILE_BYTES}-byte locale-material limit"
+                    )
+                parsed = json.loads(
+                    raw.decode("utf-8"),
+                    object_pairs_hook=_object,
+                    parse_constant=_constant,
+                )
+                parsed = _plain_json(parsed, _budget=[_MAX_NODES])
             except RecursionError as error:
                 # The decoder recurses once per nesting level of the file's JSON.
                 raise _InvalidJSON("JSON nested too deeply") from error

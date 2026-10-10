@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "kind": "behavior-schema",
+  "name": "duplicate",
+  "version": 1,
+  "version": 1,
+  "extends": [],
+  "provenance": {
+    "source": "frend tests"
+  },
+  "sections": {}
+}

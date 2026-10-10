@@ -7,6 +7,13 @@ Version: 0.9.1
 Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 
 - [`__version__`](#root-api-index) — constant, `icukit`
+- [`BEHAVIOR_KIND`](#icukitbehavior) — constant, `icukit.behavior`
+- [`BEHAVIOR_OPTION_NAMES`](#icukitbehavior) — constant, `icukit.behavior`
+- [`BEHAVIOR_SCHEMA_VERSION`](#icukitbehavior) — constant, `icukit.behavior`
+- [`BehaviorLoadError`](#icukitbehavior) — class, `icukit.behavior`
+- [`BehaviorRefusal`](#icukitbehavior) — class, `icukit.behavior`
+- [`BehaviorSchema`](#icukitbehavior) — class, `icukit.behavior`
+- [`load_behavior_schema`](#icukitbehavior) — function, `icukit.behavior`
 - [`AvailabilityRow`](#icukitavailability) — class, `icukit.availability`
 - [`availability`](#icukitavailability) — function, `icukit.availability`
 - [`available_languages`](#icukitavailability) — function, `icukit.availability`
@@ -921,6 +928,77 @@ usable reader: it was not built, or it was built with nothing to read.
 ### `available_languages() -> 'tuple[str, ...]'`
 
 Return the distinct ICU language identifiers covered by availability reports.
+
+## icukit.behavior
+
+Load bounded behavior options owned by icukit.
+
+A behavior schema is either the shared ``behavior-schema`` envelope or a bare
+``sections.icukit`` object. The four option groups map directly to public icukit
+keyword arguments: sentence breaking, detector selection, detector streaming, and
+regular-expression resource limits.
+
+### Constants and type aliases
+
+#### `BEHAVIOR_KIND` (constant)
+
+`'behavior-schema'`
+
+#### `BEHAVIOR_OPTION_NAMES` (constant)
+
+`<builtins.mappingproxy>`
+
+Schema-settable public keyword names, grouped by their receiving API.
+
+The main-branch names are ``sentence.base``; ``detection.currencies``,
+``detection.flexible``, ``detection.guarded``, ``detection.locales``,
+``detection.skeletons``, and ``detection.units``; and ``stream.boundary`` and
+``stream.max_pending_chars``. Regex resource-limit and sentence-length names appear
+when their receiving public APIs provide them.
+
+
+#### `BEHAVIOR_SCHEMA_VERSION` (constant)
+
+`1`
+
+### class `BehaviorLoadError`
+
+Every refusal found in one transactional behavior-schema phase.
+
+#### `BehaviorLoadError(refusals: 'Sequence[BehaviorRefusal]') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `BehaviorRefusal`
+
+One reason a behavior schema was refused.
+
+### class `BehaviorSchema`
+
+One immutable, validated icukit behavior section.
+
+``name``, ``version``, ``extends``, and ``provenance`` describe a full envelope;
+they are neutral values for a bare section. ``digest`` always identifies the
+complete loader input: the whole envelope when present, otherwise the bare section.
+
+Each option-group mapping can be spread into the corresponding public API. For
+example, pass ``detection`` to :func:`icukit.reader_set`, then pass ``stream`` to
+:meth:`icukit.DetectorSet.stream`.
+
+#### `BehaviorSchema(digest: 'str', name: 'str | None', version: 'int | None', extends: 'tuple[str, ...]', provenance: 'Mapping[str, str]', section: 'Mapping[str, object]') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### `load_behavior_schema(source: 'Mapping[str, object] | str | os.PathLike[str]', /) -> 'BehaviorSchema'`
+
+Load one full behavior envelope or bare icukit section.
+
+File and mapping inputs share the same 64 KiB, 16-level, 4,096-value, and
+256-code-point string caps. A full envelope is digested in full even though icukit
+interprets only ``sections.icukit``. An absent icukit section is neutral.
+
+Unknown options are refused. This excludes file paths, regular-expression patterns,
+exception policies, and process settings; sentence bases must use a published name.
 
 ## icukit.bidi
 
