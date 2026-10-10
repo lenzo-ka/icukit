@@ -1124,6 +1124,66 @@ def test_wheel_and_sdist_match_and_hash_manifest_data(tmp_path: Path) -> None:
             )
             _assert_notice_hash(archive.read(member), record["sha256"])
 
+    venv = tmp_path / "wheel-venv"
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--system-site-packages", str(venv)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    installed_python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    installed_site = Path(
+        subprocess.run(
+            [
+                str(installed_python),
+                "-c",
+                "import sysconfig; print(sysconfig.get_paths()['purelib'])",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
+    dependency_site = Path(importlib.util.find_spec("icu").origin).parent.parent
+    (installed_site / "test-dependencies.pth").write_text(
+        str(dependency_site) + "\n", encoding="utf-8"
+    )
+    subprocess.run(
+        [str(installed_python), "-m", "pip", "install", "--no-deps", str(wheels[0])],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    resource_probe = """
+from importlib import resources
+from pathlib import Path
+
+import icukit
+from icukit import Breaker
+
+root = resources.files("icukit")
+assert "wheel-venv" in str(Path(icukit.__file__).resolve())
+english = root.joinpath("data", "break_rules", "en")
+assert english.joinpath("sentence-real-cart.json.gz").read_bytes()
+assert english.joinpath("REAL_TEXT_RECEIPT.json").read_text(encoding="utf-8")
+assert english.joinpath("NOTICE").read_text(encoding="utf-8")
+assert english.joinpath("LICENSE").read_text(encoding="utf-8")
+assert root.joinpath("data", "cldr_symbols", "LICENSE").read_text(encoding="utf-8")
+assert root.joinpath("data", "ucd_name_aliases", "LICENSE").read_text(encoding="utf-8")
+assert Breaker("en_US", base="en-real-cart@1").break_sentences("Hello. Next.")
+"""
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    subprocess.run(
+        [str(installed_python), "-I", "-c", resource_probe],
+        cwd=tmp_path,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
     with tarfile.open(sdists[0]) as archive:
         members = set(archive.getnames())
         top = next(iter(members)).split("/", 1)[0]

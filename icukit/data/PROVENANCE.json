@@ -19,7 +19,7 @@
     },
     "icukit/data/break_rules/en/NOTICE": {
       "spdx": "CC-BY-SA-4.0",
-      "sha256": "c0d1b835bca0dae886c2b76ce4aabae3af934902b14b6619544edb1676e8ddf6"
+      "sha256": "338ee404e8cddc5264a09398d9535329f78aeb55fcf2b154fcab380fbdec21de"
     }
   },
   "files": [
@@ -57,7 +57,7 @@
     },
     {
       "path": "break_rules/en/NOTICE",
-      "sha256": "c0d1b835bca0dae886c2b76ce4aabae3af934902b14b6619544edb1676e8ddf6",
+      "sha256": "338ee404e8cddc5264a09398d9535329f78aeb55fcf2b154fcab380fbdec21de",
       "source": "attribution for google/tn-en_with_types and Wikipedia contributors",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
@@ -65,6 +65,18 @@
       "corpus_reference": {
         "kind": "mention",
         "note": "the notice names the source corpus to provide attribution"
+      }
+    },
+    {
+      "path": "break_rules/en/REAL_TEXT_RECEIPT.json",
+      "sha256": "db7907bb430b23a6df573d94a199108071418e9cde2a6f8d630b9c8f19c77b33",
+      "source": "training-source, held-out selection, production-latency, and select-shard measurement receipt for the English real-text model",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the receipt identifies the GUM and UK House of Commons Hansard sources, licenses, selection policy, and measurements"
       }
     },
     {
@@ -77,6 +89,19 @@
       "corpus_reference": {
         "kind": "derived",
         "note": "the receipt records measurements for the derived rule artifact"
+      }
+    },
+    {
+      "path": "break_rules/en/sentence-real-cart.json.gz",
+      "sha256": "be9fa4df8bee3f1fe886f28a40f706a28732091ee9975675aa52ba7c03de3366",
+      "source": "commercial-compatible GUM documents and UK House of Commons Hansard sentence-boundary labels",
+      "spdx": "CC-BY-SA-4.0",
+      "class": "shippable-share-alike",
+      "notice": "icukit/data/break_rules/en/NOTICE",
+      "encoding": "gzip",
+      "corpus_reference": {
+        "kind": "derived",
+        "note": "the opt-in en-real-cart@1 artifact is derived from the sources identified in REAL_TEXT_RECEIPT.json"
       }
     },
     {

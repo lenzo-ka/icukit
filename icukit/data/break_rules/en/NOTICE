@@ -23,7 +23,44 @@ The cartlet model file `sentence-tn-cart.json.gz` is a second artifact derived
 the same way: a CART model trained on the same corpus's sentence-boundary labels;
 no corpus text is included.
 
-The rule artifact, this notice, and the accompanying receipt are distributed
-under the Creative Commons Attribution-ShareAlike 4.0 International license.
-The full license text is in LICENSE beside this file, and the canonical license
-URL is https://creativecommons.org/licenses/by-sa/4.0/.
+English real-text sentence-break model
+
+The opt-in cartlet model file `sentence-real-cart.json.gz` was trained on
+sentence-boundary labels from commercially compatible documents in the
+Georgetown University Multilayer Corpus (GUM) and on candidate-restricted
+labels from the UK House of Commons Hansard. No corpus sentence or source
+record is included in the model.
+
+GUM source repository and licensing information:
+https://github.com/amir-zeldes/gum
+
+GUM annotation repository:
+https://github.com/UniversalDependencies/UD_English-GUM
+
+The included GUM documents have source-specific CC BY 2.5, CC BY 4.0, or
+CC BY-SA 3.0 terms. `REAL_TEXT_RECEIPT.json` identifies every training and
+development document, its source URL, and its verified license. Documents with
+noncommercial or unverified terms were excluded.
+
+Hansard source:
+https://hansard-api.parliament.uk
+
+Contains Parliamentary information licensed under the Open Parliament Licence
+v3.0:
+https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/
+
+Modifications: the source documents were converted to candidate-boundary
+feature rows; a depth-10 CART was fitted on training documents; its eight
+features were selected by held-out permutation importance; and the model was
+compiled for icukit's flat equality evaluator. Test data was not used for
+training or selection.
+
+The real-text model is distributed under CC BY-SA 4.0 because part of its
+training text is CC BY-SA; ShareAlike is applied to the model, with attribution
+as listed above and in `REAL_TEXT_RECEIPT.json`.
+
+The rule artifacts, model artifacts, this notice, and the accompanying receipts
+are distributed under the Creative Commons Attribution-ShareAlike 4.0
+International license. The full license text is in LICENSE beside this file,
+and the canonical license URL is
+https://creativecommons.org/licenses/by-sa/4.0/.

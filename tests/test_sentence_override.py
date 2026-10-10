@@ -871,6 +871,38 @@ def test_anchored_sentence_claims_match_legacy_on_repo_text_and_shipped_lists():
         )
 
 
+def test_sentence_claims_reuse_token_run_boundaries_and_text():
+    from icukit.abbreviation_compile import _load_break_exception_inventory
+    from icukit.tokens import tokens
+
+    inventory = _load_break_exception_inventory("en_US")
+    assert inventory is not None
+    text = "He met Mr. Smith. She said “go.” Then left."
+    base = sentence_override_module._raw_break_sentence_spans(text, "en_US")
+    toks = tokens(text, "en_US")
+    cache = sentence_override_module._TokenFeatureCache(True)
+    run_starts = cache.prime_candidates(toks, base)
+    candidate_runs = {}
+
+    expected = sentence_override_module._inventory_claims(inventory, text, "en_US", base)
+    actual = sentence_override_module._inventory_claims(
+        inventory,
+        text,
+        "en_US",
+        base,
+        run_starts=run_starts,
+        candidate_runs=candidate_runs,
+    )
+
+    assert actual == expected
+    assert candidate_runs == {
+        base[0]["end"]: "Mr.",
+        base[1]["end"]: "Smith.",
+        base[2]["end"]: "“go.”",
+        base[3]["end"]: "left.",
+    }
+
+
 def test_internal_candidate_exact_rule_routes_to_legacy_matcher():
     from icukit.breaker import _raw_break_sentence_spans
     from icukit.exceptions import (
