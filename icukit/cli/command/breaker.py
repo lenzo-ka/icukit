@@ -111,11 +111,12 @@ class BreakerCommand(SubcommandBase):
     def _add_sentence_base_option(cls, parser):
         parser.add_argument(
             "--base",
-            choices=["none", "en-tn@1", "en-tn-cart@1"],
+            choices=["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"],
             default=None,
             help=(
                 "Sentence base (default: ICU + token integrity + shipped list for English except "
-                "POSIX; raw ICU otherwise; en-tn@1 and en-tn-cart@1 are opt-in)"
+                "POSIX; raw ICU otherwise; en-tn@1, en-tn-cart@1, and "
+                "en-real-cart@1 are opt-in)"
             ),
         )
 

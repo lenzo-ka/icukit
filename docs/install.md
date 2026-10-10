@@ -50,14 +50,15 @@ token integrity and the locale-fallback shipped abbreviation lexicon's
 python -c 'from icukit import SentenceOverride; SentenceOverride()'
 ```
 
-The learned `en-tn@1` rule base and `en-tn-cart@1` Cartlet model are opt-in by
-name and apply the same shipped list first. Pass `base="none"` for raw ICU
-sentence boundaries without the list. Non-English locales and the English
-`POSIX` variant also default to raw ICU.
+The learned `en-tn@1` rule base, `en-tn-cart@1` synthetic-text Cartlet model,
+and `en-real-cart@1` real-text Cartlet model are opt-in by name and apply the
+same shipped list first. Pass `base="none"` for raw ICU sentence boundaries
+without the list. Non-English locales and the English `POSIX` variant also
+default to raw ICU.
 
-Cartlet is imported lazily only when `en-tn-cart@1` or an explicit
-`CartletModelRef` is selected. The default, `base="none"`, and `en-tn@1` do not
-pay its import cost.
+Cartlet is imported lazily only when `en-tn-cart@1`, `en-real-cart@1`, or an
+explicit `CartletModelRef` is selected. The default, `base="none"`, and
+`en-tn@1` do not pay its import cost.
 
 ## Advanced: using a system PyICU
 

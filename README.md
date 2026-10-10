@@ -39,14 +39,16 @@ integrity and the locale-fallback `break="suppress"` entries from the shipped
 abbreviation lexicon. This applies to English locales with any region or script
 except the `POSIX` variant. Candidate decisions follow ICU, token integrity,
 caller-before rules, exceptions, an optional base, then caller-after rules.
-The learned `en-tn@1` rule set and `en-tn-cart@1` model remain available as
-opt-in bases. Pass `base="none"` to either Python API or `--base none` to the CLI
-for raw ICU sentence boundaries without the shipped list. Other locale
-languages keep raw ICU as their default. `AbbreviationSentenceBreaker` remains
-the explicit alternative that also deposits ambiguous lexicon boundaries. The
-learned bases are derived from CC BY-SA 4.0 data; their measured results are
-agreement with the corpus splitter on synthetic text, not running-text
-accuracy.
+The learned `en-tn@1` rule set, `en-tn-cart@1` synthetic-text model, and
+`en-real-cart@1` real-text model remain available as opt-in bases. Pass
+`base="none"` to either Python API or `--base none` to the CLI for raw ICU
+sentence boundaries without the shipped list. Other locale languages keep raw
+ICU as their default. `AbbreviationSentenceBreaker` remains the explicit
+alternative that also deposits ambiguous lexicon boundaries. The TN bases'
+measurements are agreement with a corpus splitter on synthetic text. The
+real-text model's receipt reports source-record seam-break measurements and its
+GUM and Hansard training sources; neither claim is a general sentence-breaking
+accuracy result.
 
 ### Recognition
 
@@ -214,6 +216,7 @@ Run `ik help` or `ik <command> --help` for detailed usage information.
 - [CLI Reference](https://github.com/lenzo-ka/icukit/blob/main/docs/cli.md)
 - [Language Availability](https://github.com/lenzo-ka/icukit/blob/main/docs/languages.md)
 - [Locale Material](https://github.com/lenzo-ka/icukit/blob/main/docs/locale-material.md)
+- [English Real-Text Sentence Model](https://github.com/lenzo-ka/icukit/blob/main/docs/real-text-sentence-model.md)
 
 ## License
 
@@ -223,11 +226,12 @@ The CLDR data bundled in `icukit/data/cldr_symbols` is Unicode, Inc.'s, under th
 
 The UCD data bundled in `icukit/data/ucd_name_aliases` is Unicode, Inc.'s, under the [Unicode License v3](https://github.com/lenzo-ka/icukit/blob/main/icukit/data/ucd_name_aliases/LICENSE).
 
-The opt-in `en-tn@1` sentence rules and `en-tn-cart@1` cartlet model in
-`icukit/data/break_rules/en` are derived from the Google Text
-Normalization English corpus and are distributed under
+The opt-in `en-tn@1` sentence rules, `en-tn-cart@1` synthetic-text model, and
+`en-real-cart@1` real-text model in `icukit/data/break_rules/en` are distributed under
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); their bundled
-`NOTICE` gives attribution and describes the modifications. Validation witnesses
-are synthesized from each rule's predicates, which include lexical values mined
-from the corpus (e.g. `lower` token values); no corpus sentence or row was read
-or copied.
+`NOTICE` gives attribution and describes the modifications. The TN artifacts
+derive from the Google Text Normalization English corpus. The real-text model
+derives from commercially compatible GUM documents and UK House of Commons
+Hansard; `REAL_TEXT_RECEIPT.json` lists the documents, source URLs, licenses,
+measurements, and the release-review question about whether ShareAlike legally
+applies to the model. No corpus sentence or row is bundled in these artifacts.

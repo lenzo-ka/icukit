@@ -258,7 +258,7 @@ Show ICU's standard root rule source as a tailoring base. Locale dictionary and 
 **Options:**
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
-- `--base`: Sentence base (default: ICU + token integrity + shipped list for English except POSIX; raw ICU otherwise; en-tn@1 and en-tn-cart@1 are opt-in)
+- `--base`: Sentence base (default: ICU + token integrity + shipped list for English except POSIX; raw ICU otherwise; en-tn@1, en-tn-cart@1, and en-real-cart@1 are opt-in)
 - `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
@@ -273,7 +273,7 @@ Show ICU's standard root rule source as a tailoring base. Locale dictionary and 
 **Options:**
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
-- `--base`: Sentence base (default: ICU + token integrity + shipped list for English except POSIX; raw ICU otherwise; en-tn@1 and en-tn-cart@1 are opt-in)
+- `--base`: Sentence base (default: ICU + token integrity + shipped list for English except POSIX; raw ICU otherwise; en-tn@1, en-tn-cart@1, and en-real-cart@1 are opt-in)
 - `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `--skip-punctuation, -p`: Skip punctuation tokens (default: `False`)
 - `-t, --text`: Process TEXT directly

@@ -1102,8 +1102,8 @@ words, lines, or grapheme clusters based on locale-specific rules. English
 sentence breaking applies token integrity and shipped abbreviation
 suppressions to ICU candidates by default; ``base="none"`` keeps raw ICU
 sentence boundaries without the list. The learned ``"en-tn@1"`` rules and
-``"en-tn-cart@1"`` model are opt-in. Other levels and non-English defaults
-remain ICU behavior.
+``"en-tn-cart@1"`` and ``"en-real-cart@1"`` models are opt-in. Other
+levels and non-English defaults remain ICU behavior.
 
 Example:
     >>> breaker = Breaker('en')
@@ -1112,7 +1112,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None)`
+#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None)`
 
 Initialize a Breaker instance.
 
@@ -1121,7 +1121,8 @@ Args:
     base: Sentence base only. ``None`` selects ICU plus token integrity
         and the shipped list for English except POSIX, and raw ICU
         otherwise. ``"none"`` selects raw ICU without the list;
-        ``"en-tn@1"`` and ``"en-tn-cart@1"`` are opt-in English bases.
+        ``"en-tn@1"``, ``"en-tn-cart@1"``, and ``"en-real-cart@1"``
+        are opt-in English bases.
 
 Raises:
     BreakerError: If the locale is invalid.
@@ -1358,14 +1359,14 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[BreakSpan]'`
+### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None) -> 'list[BreakSpan]'`
 
 Return sentence spans from the locale default or selected base.
 
 The English default is ICU plus token integrity and the shipped list;
 non-English and POSIX defaults are raw ICU.
 
-### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1'] | None" = None) -> 'list[str]'`
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -7212,9 +7213,9 @@ integrity and the locale's shipped abbreviation suppressions to ICU candidates.
 With no caller inventories or rules, other locale defaults and explicit
 ``base="none"`` are exactly ICU's current sentence output, without that list.
 Caller layers still apply over ``base="none"``. The English named bases
-``"en-tn@1"`` and ``"en-tn-cart@1"`` apply the same list before their rules or
-model. Whole-text and incremental operation share the same prefix-aware
-candidate evaluator.
+``"en-tn@1"``, ``"en-tn-cart@1"``, and ``"en-real-cart@1"`` apply the same
+list before their rules or model. Whole-text and incremental operation share
+the same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -7368,23 +7369,24 @@ every other      raw ICU
 ================ =========================================================
 
 Region and script do not change the English default. The ``POSIX`` variant
-uses raw ICU. The English default and the two named English bases load the
+uses raw ICU. The English default and the named English bases load the
 locale-fallback abbreviation lexicon's ``break="suppress"`` entries as
 sentence exceptions. Decisions are ordered as ICU candidates, token
 integrity, caller-before rules, exceptions, the optional base, and
 caller-after rules. With no caller inventories or rules, pass
 ``base="none"`` explicitly for raw ICU sentence boundaries without the
 shipped list; caller layers still apply over it. Cartlet is an icukit
-dependency and is imported lazily only when ``"en-tn-cart@1"`` or a
-:class:`CartletModelRef` is selected.
+dependency and is imported lazily only when ``"en-tn-cart@1"``,
+``"en-real-cart@1"``, or a :class:`CartletModelRef` is selected.
 
 Args:
     locale: ICU locale used for both sentence and word boundaries.
     base: ``None`` selects the locale default in the table above. Otherwise,
         ``"none"`` selects raw ICU, ``"en-tn@1"`` selects the learned rule
-        base, ``"en-tn-cart@1"`` selects the learned model, and callers may
-        supply a loaded rule set, a :class:`CartletModelRef`, or a path to a
-        ``break-rules`` JSON file. Unknown names are refused.
+        base, ``"en-tn-cart@1"`` selects the synthetic-text model,
+        ``"en-real-cart@1"`` selects the real-text model, and callers may
+        supply a loaded rule set, a :class:`CartletModelRef`, or a path to
+        a ``break-rules`` JSON file. Unknown names are refused.
     before: Ordered caller rules that force a decision before inventories
         and the base.
     after: Ordered caller rules that may override the base decision.

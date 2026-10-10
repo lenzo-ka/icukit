@@ -19,7 +19,7 @@ def _random_chunks(text: str, seed: int) -> list[str]:
     return [text[start:end] for start, end in zip(boundaries, boundaries[1:], strict=False)]
 
 
-@pytest.mark.parametrize("base", ["none", "en-tn@1", "en-tn-cart@1"])
+@pytest.mark.parametrize("base", ["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"])
 def test_repo_text_random_chunkings_equal_whole_text(base):
     source = Path(__file__).with_name("test_sentence_override_incremental.py").read_text()
     text = source[:8192]
@@ -115,7 +115,7 @@ def test_unbroken_run_is_the_documented_safe_retention_fallback():
     assert emitted + stream.close() == override.decide(text)
 
 
-@pytest.mark.parametrize("base", ["none", "en-tn@1", "en-tn-cart@1"])
+@pytest.mark.parametrize("base", ["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"])
 @pytest.mark.parametrize("unit", ["Hello!World!", "你好。世界！"])
 def test_whitespace_free_runs_have_bounded_retention_and_linear_icu_work(monkeypatch, base, unit):
     tokens_module = importlib.import_module("icukit.tokens")

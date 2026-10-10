@@ -16,6 +16,8 @@ MODEL_PATH = (
     / "sentence-tn-cart.json.gz"
 )
 MODEL_DIGEST = "sha256:a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d"
+REAL_MODEL_PATH = MODEL_PATH.with_name("sentence-real-cart.json.gz")
+REAL_MODEL_DIGEST = "sha256:be9fa4df8bee3f1fe886f28a40f706a28732091ee9975675aa52ba7c03de3366"
 
 
 def _bare_cartlet() -> SentenceOverride:
@@ -40,7 +42,7 @@ def test_english_locale_default_uses_shipped_exceptions_without_cartlet(locale: 
     assert all(item["layer"] != "model" for item in decisions)
 
 
-@pytest.mark.parametrize("base", ["en-tn@1", "en-tn-cart@1"])
+@pytest.mark.parametrize("base", ["en-tn@1", "en-tn-cart@1", "en-real-cart@1"])
 def test_named_english_bases_still_load_shipped_exceptions(base: str) -> None:
     named = SentenceOverride("en_US", base=base)
     decisions = named.decide("Mr. Smith arrived. Next.")
@@ -64,7 +66,7 @@ def test_english_posix_variant_default_is_plain_icu_and_learned_bases_refuse(
     assert default.base is None
     assert default.identity == plain.identity
     assert default.decide("Mr. Smith arrived. Next.") == plain.decide("Mr. Smith arrived. Next.")
-    for base in ("en-tn-cart@1", "en-tn@1"):
+    for base in ("en-tn-cart@1", "en-real-cart@1", "en-tn@1"):
         with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
             SentenceOverride(locale, base=base)
 
@@ -74,6 +76,57 @@ def test_named_model_refuses_runtime_icu_mismatch(monkeypatch) -> None:
 
     with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
         SentenceOverride("en_GB", base="en-tn-cart@1")
+
+    with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
+        SentenceOverride("en_GB", base="en-real-cart@1")
+
+
+def test_real_text_model_is_version_bound_and_uses_reduced_flat_schema(monkeypatch) -> None:
+    override = SentenceOverride("en_US", base="en-real-cart@1")
+
+    assert override.base.ref.path == REAL_MODEL_PATH
+    assert override.base.ref.digest == REAL_MODEL_DIGEST
+    assert override.base.feature_names == (
+        "ws.before@-3",
+        "text@run-1",
+        "shape.cased@1",
+        "sentence_break.first@1",
+        "script@c-6",
+        "sentence_break@c-4",
+        "general_category@c-4",
+        "general_category@c-3",
+    )
+
+    def refuse_cartlet_path(*args, **kwargs):
+        raise AssertionError("the compiled real-text tree must use the flat evaluator")
+
+    monkeypatch.setattr(override.base.model, "predict_path", refuse_cartlet_path)
+    decisions = override.decide("Hon. Alice spoke. Next item.")
+    assert [(item["offset"], item["layer"]) for item in decisions] == [
+        (5, "exceptions"),
+        (18, "model"),
+        (28, "model"),
+    ]
+    assert all(
+        item["id"].startswith("en-real-cart@1#leaf:")
+        for item in decisions
+        if item["layer"] == "model"
+    )
+
+
+def test_real_text_model_refuses_unknown_deployment_version(monkeypatch) -> None:
+    from cartlet import DecisionTree
+
+    original = DecisionTree.load_model
+
+    def stale(self, *args, **kwargs):
+        document = original(self, *args, **kwargs)
+        document["metadata"]["deployment"]["version"] = 0
+        return document
+
+    monkeypatch.setattr(DecisionTree, "load_model", stale)
+    with pytest.raises(BreakRuleLoadError, match="MODEL_VERSION_MISMATCH"):
+        SentenceOverride("en_US", base="en-real-cart@1")
 
 
 def test_default_never_loads_or_consults_cartlet_in_whole_text_or_stream(monkeypatch) -> None:

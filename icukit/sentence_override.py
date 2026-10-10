@@ -7,9 +7,9 @@ integrity and the locale's shipped abbreviation suppressions to ICU candidates.
 With no caller inventories or rules, other locale defaults and explicit
 ``base="none"`` are exactly ICU's current sentence output, without that list.
 Caller layers still apply over ``base="none"``. The English named bases
-``"en-tn@1"`` and ``"en-tn-cart@1"`` apply the same list before their rules or
-model. Whole-text and incremental operation share the same prefix-aware
-candidate evaluator.
+``"en-tn@1"``, ``"en-tn-cart@1"``, and ``"en-real-cart@1"`` apply the same
+list before their rules or model. Whole-text and incremental operation share
+the same prefix-aware candidate evaluator.
 
 Example:
     >>> override = SentenceOverride()
@@ -89,6 +89,11 @@ _EN_TN_CART_PATH = (
     Path(__file__).with_name("data") / "break_rules" / "en" / "sentence-tn-cart.json.gz"
 )
 _EN_TN_CART_DIGEST = "sha256:a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d"
+_EN_REAL_CART_PATH = (
+    Path(__file__).with_name("data") / "break_rules" / "en" / "sentence-real-cart.json.gz"
+)
+_EN_REAL_CART_DIGEST = "sha256:be9fa4df8bee3f1fe886f28a40f706a28732091ee9975675aa52ba7c03de3366"
+_EN_REAL_CART_VERSION = 1
 _CARTLET_IDENTITY = {
     "icu": "78.3",
     "unicode": "17.0",
@@ -327,6 +332,7 @@ class _LoadedCartletModel:
     predicates: tuple[_CompiledPredicate, ...]
     used_predicates: tuple[_CompiledPredicate, ...]
     lookahead: int
+    flat_tree: object | None = None
 
 
 def _freeze(value: object) -> object:
@@ -539,6 +545,18 @@ def _load_cartlet_model(
     model = DecisionTree()
     document = model.load_model(str(ref.path), format="json")
     metadata = document.get("metadata", {})
+    if actual_digest == _EN_REAL_CART_DIGEST:
+        deployment = metadata.get("deployment")
+        if deployment != {"name": "en-real-cart", "version": _EN_REAL_CART_VERSION}:
+            raise BreakRuleLoadError(
+                [
+                    _refuse(
+                        ref.name,
+                        "MODEL_VERSION_MISMATCH",
+                        "real-text model deployment version is not supported",
+                    )
+                ]
+            )
     raw_lookahead = metadata.get("k")
     if isinstance(raw_lookahead, bool) or not isinstance(raw_lookahead, int):
         raise ValueError("cartlet sentence-break model metadata must declare integer k")
@@ -546,7 +564,12 @@ def _load_cartlet_model(
         raise ValueError("cartlet sentence-break model k must be between 0 and 8")
     feature_names = tuple(model.feature_names)
     expected_names = _cartlet_feature_names(raw_lookahead)
-    if feature_names != expected_names:
+    expected_name_set = frozenset(expected_names)
+    if (
+        not feature_names
+        or len(feature_names) != len(set(feature_names))
+        or any(name not in expected_name_set for name in feature_names)
+    ):
         raise ValueError("cartlet sentence-break model feature schema is not icukit.features@1")
     predicates: list[_CompiledPredicate] = []
     for name in feature_names:
@@ -572,6 +595,29 @@ def _load_cartlet_model(
             collect_used(node[4])
 
     collect_used(document.get("model"))
+
+    def compile_flat(node: object) -> object:
+        if not isinstance(node, list):
+            return node
+        if (
+            len(node) != 5
+            or not isinstance(node[0], str)
+            or node[0] not in feature_names
+            or node[1] != "="
+        ):
+            raise ValueError("unsupported flat cartlet node")
+        return (
+            feature_names.index(node[0]),
+            node[2],
+            compile_flat(node[3]),
+            compile_flat(node[4]),
+        )
+
+    flat_tree = (
+        compile_flat(document.get("model"))
+        if metadata.get("runtime") == "icukit.flat-equality@1"
+        else None
+    )
     return _LoadedCartletModel(
         ref,
         model,
@@ -579,6 +625,7 @@ def _load_cartlet_model(
         tuple(predicates),
         tuple(used_predicates),
         raw_lookahead,
+        flat_tree,
     )
 
 
@@ -1958,13 +2005,27 @@ def _observed_model_decision(
         cache,
     )
     try:
-        path = loaded.model.predict_path(vector)
+        if loaded.flat_tree is None:
+            path = loaded.model.predict_path(vector)
+            label = _cartlet_label(path["prediction"])
+            leaf = path["trees"][0]["leaf"]
+        else:
+            node = loaded.flat_tree
+            branches: list[str] = []
+            while isinstance(node, tuple):
+                feature_index, operand, left, right = node
+                if vector[feature_index] == operand:
+                    branches.append("L")
+                    node = left
+                else:
+                    branches.append("R")
+                    node = right
+            label = _cartlet_label(node)
+            leaf = "".join(branches)
     except _FeatureNotYet:
         return _ObservedResult(None, "model", vector.tokens_read, vector.horizon)
-    label = _cartlet_label(path["prediction"])
     if label not in {"0", "1"}:
         raise ValueError(f"cartlet sentence-break model returned unknown label {label!r}")
-    leaf = path["trees"][0]["leaf"]
     effect: Effect = "break" if label == "1" else "no-break"
     return _ObservedResult(
         _decision(
@@ -3037,23 +3098,24 @@ class SentenceOverride:
     ================ =========================================================
 
     Region and script do not change the English default. The ``POSIX`` variant
-    uses raw ICU. The English default and the two named English bases load the
+    uses raw ICU. The English default and the named English bases load the
     locale-fallback abbreviation lexicon's ``break="suppress"`` entries as
     sentence exceptions. Decisions are ordered as ICU candidates, token
     integrity, caller-before rules, exceptions, the optional base, and
     caller-after rules. With no caller inventories or rules, pass
     ``base="none"`` explicitly for raw ICU sentence boundaries without the
     shipped list; caller layers still apply over it. Cartlet is an icukit
-    dependency and is imported lazily only when ``"en-tn-cart@1"`` or a
-    :class:`CartletModelRef` is selected.
+    dependency and is imported lazily only when ``"en-tn-cart@1"``,
+    ``"en-real-cart@1"``, or a :class:`CartletModelRef` is selected.
 
     Args:
         locale: ICU locale used for both sentence and word boundaries.
         base: ``None`` selects the locale default in the table above. Otherwise,
             ``"none"`` selects raw ICU, ``"en-tn@1"`` selects the learned rule
-            base, ``"en-tn-cart@1"`` selects the learned model, and callers may
-            supply a loaded rule set, a :class:`CartletModelRef`, or a path to a
-            ``break-rules`` JSON file. Unknown names are refused.
+            base, ``"en-tn-cart@1"`` selects the synthetic-text model,
+            ``"en-real-cart@1"`` selects the real-text model, and callers may
+            supply a loaded rule set, a :class:`CartletModelRef`, or a path to
+            a ``break-rules`` JSON file. Unknown names are refused.
         before: Ordered caller rules that force a decision before inventories
             and the base.
         after: Ordered caller rules that may override the base decision.
@@ -3094,7 +3156,7 @@ class SentenceOverride:
         selected_inventories = tuple(inventories)
         if uses_english_default or (
             isinstance(base, str)
-            and base in {"en-tn@1", "en-tn-cart@1"}
+            and base in {"en-tn@1", "en-tn-cart@1", "en-real-cart@1"}
             and _uses_english_default(locale)
         ):
             shipped = _load_break_exception_inventory(locale)
@@ -3134,6 +3196,17 @@ class SentenceOverride:
                     _EN_TN_CART_DIGEST,
                     identity=_CARTLET_IDENTITY,
                     name="en-tn-cart@1",
+                ),
+                locale,
+                self.inventories,
+            )
+        elif base == "en-real-cart@1":
+            loaded_base = _load_cartlet_model(
+                CartletModelRef(
+                    _EN_REAL_CART_PATH,
+                    _EN_REAL_CART_DIGEST,
+                    identity=_CARTLET_IDENTITY,
+                    name="en-real-cart@1",
                 ),
                 locale,
                 self.inventories,

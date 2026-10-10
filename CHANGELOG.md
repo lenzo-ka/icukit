@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Add the opt-in `en-real-cart@1` English sentence-break model. It composes
+  after the shipped exception list, uses eight held-out-selected features and
+  a flat equality evaluator, and remains non-default. The digest-, runtime-,
+  and deployment-version-bound artifact includes GUM and UK House of Commons
+  Hansard attribution, a source and measurement receipt, and an explicit
+  pre-release legal-review flag for the CC BY-SA characterization.
+
+### Changed
+
+- Accept reduced `icukit.features@1` schemas in explicit Cartlet models when
+  every feature name is unique and belongs to the runtime schema.
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed
