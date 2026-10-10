@@ -5892,11 +5892,13 @@ locale of the language ("250 000" as en_ZA formats it, "1'234'567" as en_CH,
 "12,34,567" as en_IN). A valid space-grouped span is read once as a whole where the
 locale's own lenient ICU parser accepts it or the language has that convention, never
 also as separate integers; otherwise its integer fragments are declined. A grouping
-whose separator is the locale's decimal separator is not read that way, since it would
-reread every decimal number; instead the language's other decimal styles (en_DE's
-"1.234,56", en_ZA's "1 234,56") are read only where the locale's own styles do not
-already read the text: "1,5" reads 1.5 and "1.234,56" 1234.56, while "1,234" stays
-1234 alone.
+shape is necessarily ambiguous: "5 300" and "75 008" read as one number, while a
+list whose widths do not fit the grouping ("1 2 3", "1999 2000") stays separate.
+A grouping whose separator is the locale's decimal separator is not read that way,
+since it would reread every decimal number; instead the language's other decimal
+styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the locale's own
+styles do not already read the text: "1,5" reads 1.5 and "1.234,56" 1234.56, while
+"1,234" stays 1234 alone.
 
 ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
 cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with

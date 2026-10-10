@@ -453,6 +453,56 @@ def test_lenient_space_grouping_is_read_once_as_a_whole(locale, surface):
     ]
 
 
+@pytest.mark.parametrize(
+    ("locale", "surface", "expected"),
+    (
+        ("en_US", "10 000 20 000", [("10 000", "10000"), ("20 000", "20000")]),
+        ("en_US", "1 000 2", [("1 000", "1000"), ("2", "2")]),
+        ("hi_IN", "1 00 000", [("1 00 000", "100000")]),
+        (
+            "hi_IN",
+            "1 00 000–2 00 000",
+            [("1 00 000", "100000"), ("2 00 000", "200000")],
+        ),
+        ("en_US", "021 555 1234", [("021 555", "021555"), ("1234", "1234")]),
+    ),
+)
+def test_each_valid_grouping_in_a_digit_space_run_is_read_whole(locale, surface, expected):
+    detections = FlexibleNumberDetector(locale).detect(surface)
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == expected
+
+
+@pytest.mark.parametrize("locale", ("fr_FR", "en_US"))
+def test_space_grouping_with_comma_decimal_reads_whole_in_both_decimal_styles(locale):
+    detections = FlexibleNumberDetector(locale).detect("1 000,5")
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == [("1 000,5", "1000.5")]
+
+
+@pytest.mark.parametrize(
+    ("surface", "expected"),
+    (
+        ("5 300", [("5 300", "5300")]),
+        ("75 008", [("75 008", "75008")]),
+        ("1 2 3", [("1", "1"), ("2", "2"), ("3", "3")]),
+        ("1999 2000", [("1999", "1999"), ("2000", "2000")]),
+    ),
+)
+def test_space_grouping_ambiguity_follows_the_documented_shape_policy(surface, expected):
+    detections = FlexibleNumberDetector("en_US").detect(surface)
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == expected
+
+
+def test_signed_and_currency_prefixed_space_groupings_read_whole():
+    signed = FlexibleNumberDetector("en_US").detect("-1 000")
+    currency = FlexibleCurrencyDetector("en_US", "USD").detect("$1 000")
+
+    assert [(item["text"], item["value"].decimal) for item in signed] == [("-1 000", "-1000")]
+    assert [(item["text"], item["value"].decimal) for item in currency] == [("$1 000", "1000")]
+
+
 @pytest.mark.parametrize("locale", ("en_US", "it_IT", "fr_FR", "de_DE", "de_CH", "it_CH"))
 def test_language_relative_apostrophe_grouping_is_read(locale):
     detections = FlexibleNumberDetector(locale).detect("1'000")

@@ -829,14 +829,24 @@ _GROUPING_SPACES = frozenset(
 
 
 @functools.lru_cache(maxsize=16)
-def _space_grouping_bounds(text: str, digits: frozenset[str]) -> dict[int, tuple[int, int]]:
-    """Map characters in well-formed three-digit space groupings to their whole span.
+def _space_grouping_bounds(
+    text: str,
+    digits: frozenset[str],
+    primary: int,
+    secondary: int,
+) -> dict[int, tuple[int, int]]:
+    """Map characters in every maximal well-formed space grouping to its span.
 
-    A candidate has one to three leading digits and one or more groups of exactly three,
-    with one space-class character between groups. The single pass and bounded memo keep
-    the protection linear when a detector gang asks about the same running text.
+    The rightmost group has ICU's primary width, earlier non-leading groups have its
+    secondary width, and the leading group has one through ``secondary`` digits. One
+    digit/space run may contain several valid spans (``10 000 20 000``); keeping only
+    its valid suffix would leave fragments of earlier spans unprotected. The single
+    pass and bounded memo keep the protection linear when a detector gang asks about
+    the same running text.
     """
     bounds: dict[int, tuple[int, int]] = {}
+    if primary <= 0 or secondary <= 0:
+        return bounds
     cursor = 0
     while cursor < len(text):
         if text[cursor] not in digits:
@@ -858,20 +868,39 @@ def _space_grouping_bounds(text: str, digits: frozenset[str]) -> dict[int, tuple
             while cursor < len(text) and text[cursor] in digits:
                 cursor += 1
             groups.append((group_start, cursor))
-        valid_start = None
-        trailing_groups_are_three = len(groups) > 1 and groups[-1][1] - groups[-1][0] == 3
-        for index in range(len(groups) - 2, -1, -1):
-            width = groups[index][1] - groups[index][0]
-            if trailing_groups_are_three and 1 <= width <= 3:
-                valid_start = groups[index][0]
-            trailing_groups_are_three = trailing_groups_are_three and width == 3
-        if valid_start is not None:
-            span = (valid_start, cursor)
-            bounds.update((offset, span) for offset in range(valid_start, cursor))
+
+        spans: list[tuple[int, int]] = []
+        chain_start: int | None = None
+        for index, (start, end) in enumerate(groups):
+            width = end - start
+            if index and width == primary and chain_start is not None:
+                span = (groups[chain_start][0], end)
+                if spans and spans[-1][0] == span[0]:
+                    spans[-1] = span
+                else:
+                    spans.append(span)
+
+            if width == secondary:
+                if chain_start is None:
+                    chain_start = index
+            elif 1 <= width <= secondary:
+                chain_start = index
+            else:
+                chain_start = None
+
+        for span in spans:
+            bounds.update((offset, span) for offset in range(*span))
     return bounds
 
 
-def _is_space_grouping_fragment(text: str, start: int, end: int, digits: frozenset[str]) -> bool:
+def _is_space_grouping_fragment(
+    text: str,
+    start: int,
+    end: int,
+    digits: frozenset[str],
+    primary: int,
+    secondary: int,
+) -> bool:
     """Whether ``[start, end)`` cuts through a well-formed space-grouped integer."""
     if not (
         end < len(text)
@@ -880,7 +909,7 @@ def _is_space_grouping_fragment(text: str, start: int, end: int, digits: frozens
         and text[start - 1] in _GROUPING_SPACES
     ):
         return False
-    bounds = _space_grouping_bounds(text, digits)
+    bounds = _space_grouping_bounds(text, digits, primary, secondary)
     for offset in (start, end - 1):
         grouped = bounds.get(offset)
         if grouped is not None and not (start <= grouped[0] and end >= grouped[1]):
@@ -1119,6 +1148,8 @@ class NumberDetector(_GatedReader):
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:
+        primary = self._nf.getGroupingSize() if self._nf.isGroupingUsed() else 0
+        secondary = self._nf.getSecondaryGroupingSize() or primary
         return [
             detection
             for detection in _scan(
@@ -1134,6 +1165,8 @@ class NumberDetector(_GatedReader):
                 detection["start"],
                 detection["end"],
                 self._digit_chars,
+                primary,
+                secondary,
             )
         ]
 

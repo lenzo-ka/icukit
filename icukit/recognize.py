@@ -66,6 +66,7 @@ from .detectors import (
     _is_pattern_letter,
     _is_space_grouping_fragment,
     _pattern_runs,
+    _space_grouping_bounds,
     _widen_years,
     _word_edges,
     _word_interior_offsets,
@@ -3029,11 +3030,13 @@ class FlexibleNumberDetector(_GatedReader):
     "12,34,567" as en_IN). A valid space-grouped span is read once as a whole where the
     locale's own lenient ICU parser accepts it or the language has that convention, never
     also as separate integers; otherwise its integer fragments are declined. A grouping
-    whose separator is the locale's decimal separator is not read that way, since it would
-    reread every decimal number; instead the language's other decimal styles (en_DE's
-    "1.234,56", en_ZA's "1 234,56") are read only where the locale's own styles do not
-    already read the text: "1,5" reads 1.5 and "1.234,56" 1234.56, while "1,234" stays
-    1234 alone.
+    shape is necessarily ambiguous: "5 300" and "75 008" read as one number, while a
+    list whose widths do not fit the grouping ("1 2 3", "1999 2000") stays separate.
+    A grouping whose separator is the locale's decimal separator is not read that way,
+    since it would reread every decimal number; instead the language's other decimal
+    styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the locale's own
+    styles do not already read the text: "1,5" reads 1.5 and "1.234,56" 1234.56, while
+    "1,234" stays 1234 alone.
 
     ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
     cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
@@ -3134,7 +3137,7 @@ class FlexibleNumberDetector(_GatedReader):
         )
 
     def _leniently_accepts_space_grouping(self, locale: icu.Locale) -> bool:
-        """Whether ICU's lenient parser licenses a three-digit space grouping.
+        """Whether ICU's lenient parser licenses the locale's space-grouping shape.
 
         ICU supplies the acceptance policy reflectively. Its parsed ``Formattable`` has
         neither an exact decimal accessor nor source field spans, so the existing surface
@@ -3242,23 +3245,35 @@ class FlexibleNumberDetector(_GatedReader):
             cursor += 1
         ungrouped_end = cursor
         if primary_grouping:
-            if space_fallback and cursor < len(text) and text[cursor] in _SPACES:
-                grouping_length = 1
-                active_separator = " "
-            else:
-                grouping_length = self._grouping_length(text, cursor, separator)
-                active_separator = separator
-            group_start = cursor + grouping_length
-            if grouping_length and group_start < len(text) and text[group_start] in self._digits:
-                valid, grouped_end = self._grouping_tail(
+            space_grouping = separator in _SPACES or (
+                space_fallback and cursor < len(text) and text[cursor] in _SPACES
+            )
+            if space_grouping:
+                grouped = _space_grouping_bounds(
                     text,
-                    group_start,
-                    active_separator,
+                    self._digit_chars,
                     primary_grouping,
                     secondary_grouping,
-                )
-                if valid and 1 <= ungrouped_end - integer_start <= secondary_grouping:
-                    cursor = grouped_end
+                ).get(integer_start)
+                if grouped is not None and grouped[0] == integer_start:
+                    cursor = grouped[1]
+            else:
+                grouping_length = self._grouping_length(text, cursor, separator)
+                group_start = cursor + grouping_length
+                if (
+                    grouping_length
+                    and group_start < len(text)
+                    and text[group_start] in self._digits
+                ):
+                    valid, grouped_end = self._grouping_tail(
+                        text,
+                        group_start,
+                        separator,
+                        primary_grouping,
+                        secondary_grouping,
+                    )
+                    if valid and 1 <= ungrouped_end - integer_start <= secondary_grouping:
+                        cursor = grouped_end
 
         integer_end = cursor
         integer_text = text[integer_start:integer_end]
@@ -3323,7 +3338,12 @@ class FlexibleNumberDetector(_GatedReader):
     ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         match = self._match_style(text, start, grouping, decimal)
         if match is not None and _is_space_grouping_fragment(
-            text, start, match[0], self._digit_chars
+            text,
+            start,
+            match[0],
+            self._digit_chars,
+            self._primary_grouping,
+            self._secondary_grouping,
         ):
             return None
         return match
