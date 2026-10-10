@@ -81,26 +81,26 @@
       "space_one_sided_95_lower": 0.37577735220914904
     },
     "latency": {
-      "method": "median of seven fresh-process paired runs; alternating order; warm runs have one untimed paired production call",
+      "method": "median of seven fresh-process paired runs after shared token/run-state optimization; alternating order; warm runs have one untimed paired production call",
       "long_document_cold": {
-        "default_us_per_token": 4.032198233886276,
-        "model_multiple": 2.260563837195132,
-        "model_us_per_token": 9.115041511925394
+        "default_us_per_token": 3.9246667904596846,
+        "model_multiple": 1.6159273791108488,
+        "model_us_per_token": 6.341976520590905
       },
       "long_document_warm": {
-        "default_us_per_token": 4.032119130147726,
-        "model_multiple": 2.161330326269804,
-        "model_us_per_token": 8.714741355120903
+        "default_us_per_token": 17.04396199554345,
+        "model_multiple": 1.15346723573523,
+        "model_us_per_token": 19.65965172897582
       },
       "select_sample_cold": {
-        "default_us_per_token": 2.3793037993820256,
-        "model_multiple": 2.2811237451924966,
-        "model_us_per_token": 5.4274863937970625
+        "default_us_per_token": 2.36738447981643,
+        "model_multiple": 1.308309307188269,
+        "model_us_per_token": 3.0972711486368945
       },
       "select_sample_warm": {
-        "default_us_per_token": 2.6776958195614537,
-        "model_multiple": 2.2866138317399938,
-        "model_us_per_token": 6.122856298201579
+        "default_us_per_token": 2.2751859721497385,
+        "model_multiple": 1.3283177356570481,
+        "model_us_per_token": 3.0221698787246205
       },
       "scope": "first 2,000 glue2 chunks from select shard 90 and a 100-chunk joined document; exploratory because shard 90 selected the variant"
     },

@@ -88,33 +88,41 @@ visible by the system-grouped harness, not warm caches. Each whole-text call
 creates fresh token and feature caches; grouping all trials by system also
 could not control order or host load.
 
-The authoritative rerun used a fresh process for each paired measurement,
+The authoritative optimization rerun used a fresh process for each paired measurement,
 alternated default-first and model-first order, and reports the median of seven
 runs. “Cold” means fresh objects with no untimed production call. “Warm” adds
 one untimed paired call before measurement. The sample is the same 2,000
 shard-90 `glue2` chunks; the long document joins its first 100 chunks. These
 latency measurements remain exploratory because shard 90 selected the variant.
-The run began at a 7.15 one-minute load average on a 12-logical-CPU host; paired
-ordering was used because unrelated host work could not be stopped or inspected.
+The run began at a 28.18 one-minute load average on a 12-logical-CPU host, and
+the last four warm long-document pairs encountered another visible slowdown.
+Paired ordering was used because unrelated host work could not be stopped or
+inspected.
 
 | Workload | State | Default µs/token | `en-real-cart@1` µs/token | Multiple |
 |---|---|---:|---:|---:|
-| Select sample | Cold | 2.379 | 5.427 | 2.28x |
-| Select sample | Warm | 2.678 | 6.123 | 2.29x |
-| Long document | Cold | 4.032 | 9.115 | 2.26x |
-| Long document | Warm | 4.032 | 8.715 | 2.16x |
+| Select sample | Cold | 2.367 | 3.097 | 1.31x |
+| Select sample | Warm | 2.275 | 3.022 | 1.33x |
+| Long document | Cold | 3.925 | 6.342 | 1.62x |
+| Long document | Warm | 17.044 | 19.660 | 1.15x |
 
-The model is plainly at least twice as slow as the default on all four
-authoritative comparisons. The cheapest measured optimization now caches a
-feature after its first read on a candidate path and reads only the requested
-character property instead of constructing a full class window. Compared with
-the licensing rerun, the median multiple fell from 2.71x to 2.28x on the cold
-sample and from 2.39x to 2.26x on the cold long document, but it remains above
-2x. Getting below 2x requires further per-feature work, led by the remaining
-`shape.cased@1`, `text@run-1`, and `sentence_break.first@1` costs (8.33, 7.55,
-and 6.97 µs per instrumented read on 500 chunks), or sharing their token/run
-state with the exception-list pass instead of deriving it again for model
-candidates.
+All four authoritative medians are below 2x. The implementation now indexes
+candidate-to-token pivots once, passes the token run starts into the exception
+scan, and reuses the exact run strings that scan already allocated. Complete
+text evaluation reads token features by token index and avoids incremental
+horizon work. Built-in shape extraction skips material-refinement work when no
+material exists, and bounded caches reuse ICU character-property names. The
+artifact, feature schema, tree, and decision IDs are unchanged.
+
+Per-feature profiling used the same production path over the first 500 sample
+chunks and reports the median of seven fresh-process instrumented runs. The
+before column is commit `29652ac`; the after column is the optimized evaluator.
+
+| Feature | Reads | Before µs/read | After µs/read |
+|---|---:|---:|---:|
+| `shape.cased@1` | 18,624 | 8.98 | 2.03 |
+| `text@run-1` | 11,419 | 8.64 | 0.83 |
+| `sentence_break.first@1` | 10,167 | 8.39 | 1.60 |
 
 ## Confirmatory D1
 
@@ -127,6 +135,9 @@ bound resamples those four shards. Test shards 95--99 stayed closed.
 | `glue2` | 303,630 (173,350/130,280) | 216,261 (55,419/160,842) | 28.775% | 28.634% |
 | `space` | 349,680 (244,934/104,746) | 217,694 (90,984/126,710) | 37.745% | 37.659% |
 
+The optimized evaluator replayed all eight shard/detokenizer jobs with the
+same per-shard TP, FP, and FN totals as the prior evaluator.
+
 For continuity, the earlier production-path totals over shards 90--94 were
 28.834% (`glue2`) and 37.693% (`space`), with one-sided lower bounds of
 28.699% and 37.578%. They include the selection shard and are exploratory.
@@ -138,10 +149,9 @@ general sentence-break error.
 ## Decision and licensing
 
 The model is material as an opt-in: it produces a large and consistent seam
-error reduction and adds only 11,091 bytes. It is at least twice as slow as the
-shipped default in the authoritative latency rerun. That judgment is separate
-from the positive numeric D1 bound and does not justify making the model a
-default.
+error reduction, remains below 2x the shipped default in all four authoritative
+latency medians, and adds only 11,091 bytes. That judgment is separate from the
+positive numeric D1 bound and does not justify making the model a default.
 
 The bundled `NOTICE` and `REAL_TEXT_RECEIPT.json` identify the GUM documents,
 source URLs, source-specific CC BY or CC BY-SA terms, and Hansard's Open

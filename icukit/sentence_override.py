@@ -27,6 +27,7 @@ from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
 from typing import Literal, NotRequired, TypedDict, cast
@@ -36,7 +37,7 @@ import icu
 from ._offsets import _offset_map_scope
 from .abbreviation_compile import _load_break_exception_inventory
 from .breaker import BreakSpan, _raw_break_sentence_spans, break_word_spans
-from .classes import char_classes
+from .classes import Prop, _value_name, char_classes
 from .errors import BreakRuleLoadError, LateProtectedSpan, OverlappingProtectedSpans, RuleRefusal
 from .exceptions import (
     ExceptionContextBounds,
@@ -47,7 +48,7 @@ from .exceptions import (
     _sentence_boundary_claims,
     _sentence_rule_index,
 )
-from .shape import shape, shape_scheme
+from .shape import _shape_with_selections, shape, shape_scheme
 from .tokens import (
     TOKEN_PROFILE,
     ProtectedSpan,
@@ -138,6 +139,7 @@ _CHAR_FEATURES = {
     "script",
     "extension_classes",
 }
+_MISSING_FEATURE = object()
 
 
 class BreakRuleIdentity(TypedDict):
@@ -984,8 +986,14 @@ def _character_feature(text: str, index: int, feature: str) -> object:
     if feature == "extension_classes":
         return ()
     if feature in {"word_break", "sentence_break", "general_category", "script"}:
-        return char_classes(text[index], feature)[0]
+        return _cached_value_name(text[index], cast(Prop, feature))
     return "<UNKNOWN>"
+
+
+@lru_cache(maxsize=4096)
+def _cached_value_name(char: str, feature: Prop) -> str:
+    """Return a model property value without repeated alias or ICU lookup."""
+    return _value_name(char, feature)
 
 
 class _FeatureNotYet(Exception):
@@ -1174,7 +1182,7 @@ class _ShapePrefix:
 
     def _consume_normalized(self, text: str) -> None:
         for char in text:
-            category = char_classes(char, "general_category")[0]
+            category = _cached_value_name(char, "general_category")
             if self.first_category is None:
                 self.first_category = category
             self.normalized_length += 1
@@ -1350,11 +1358,16 @@ class _TokenFeatureCache:
         self._toks: Sequence[Token] | None = None
         self._starts: tuple[int, ...] = ()
         self._ends: tuple[int, ...] = ()
+        self._bound_values: list[dict[str, str | int | bool] | None] = []
+        self._closed_values: dict[str, list[object]] = {}
         self._run_tokens: dict[int, tuple[Token, ...]] = {}
         self._run_ends: dict[int, tuple[int, ...]] = {}
+        self._run_starts: dict[int, int] = {}
         self._run_positions: dict[int, int] = {}
         self._run_texts: dict[int, str] = {}
         self._run_shapes: dict[int, str] = {}
+        self._candidate_pivots: dict[int, int] = {}
+        self._candidate_run_texts: dict[int, str] = {}
         self._run_completion_horizons: dict[
             tuple[int, str, tuple[int, ...], bool], list[int | None]
         ] = {}
@@ -1384,6 +1397,8 @@ class _TokenFeatureCache:
         count = bisect_right(self._run_ends[run], offset)
         if not count:
             return None
+        if feature == "text" and offset in self._candidate_run_texts:
+            return self._candidate_run_texts[offset]
         end = self._run_ends[run][count - 1]
         run_start = self._run_tokens[run][0]["start"]
         observed = self._observed_runs.get(run)
@@ -1422,6 +1437,8 @@ class _TokenFeatureCache:
         self._toks = toks
         self._starts = tuple(token["start"] for token in toks)
         self._ends = tuple(token["end"] for token in toks)
+        self._bound_values = [None] * len(toks)
+        self._closed_values.clear()
         self._run_positions.clear()
         grouped: dict[int, list[Token]] = {}
         for index, token in enumerate(toks):
@@ -1432,14 +1449,48 @@ class _TokenFeatureCache:
         self._run_ends = {
             run: tuple(item["end"] for item in items) for run, items in self._run_tokens.items()
         }
+        self._run_starts = {run: items[0]["start"] for run, items in self._run_tokens.items()}
         self._run_texts.clear()
         self._run_shapes.clear()
+        self._candidate_pivots.clear()
+        self._candidate_run_texts.clear()
         self._run_completion_horizons.clear()
         self._observed_runs.clear()
 
     def index_after(self, toks: Sequence[Token], offset: int) -> int:
         self._bind(toks)
-        return bisect_left(self._starts, offset)
+        pivot = self._candidate_pivots.get(offset)
+        return bisect_left(self._starts, offset) if pivot is None else pivot
+
+    def prime_candidates(
+        self, toks: Sequence[Token], candidates: Sequence[BreakSpan]
+    ) -> dict[int, int]:
+        """Index candidate pivots once and return their preceding run starts."""
+        self._bind(toks)
+        run_starts: dict[int, int] = {}
+        token_index = 0
+        for candidate in candidates:
+            offset = candidate["end"]
+            while token_index < len(toks) and toks[token_index]["start"] < offset:
+                token_index += 1
+            self._candidate_pivots[offset] = token_index
+            if token_index:
+                run = toks[token_index - 1]["run"]
+                run_starts[offset] = self._run_starts[run]
+        return run_starts
+
+    def prime_run_texts(
+        self,
+        toks: Sequence[Token],
+        candidate_runs: Mapping[int, str],
+    ) -> None:
+        """Reuse strings already allocated by the sentence-exception scan."""
+        self._bind(toks)
+        self._candidate_run_texts.update(candidate_runs)
+
+    def candidate_run_text(self, offset: int) -> str | None:
+        """Return the exception scan's already allocated preceding run."""
+        return self._candidate_run_texts.get(offset)
 
     def logical_end(self, toks: Sequence[Token], offset: int) -> int:
         self._bind(toks)
@@ -1505,21 +1556,36 @@ class _TokenFeatureCache:
             prefix.append(horizon)
         return prefix[count - 1] if count else offset
 
-    def _key(self, toks: Sequence[Token], index: int, text: str) -> tuple[object, ...]:
+    def _key(self, toks: Sequence[Token], index: int, _text: str) -> tuple[object, ...]:
+        self._bind(toks)
+        token = toks[index]
+        run = token["run"]
+        return (
+            token["start"],
+            token["end"],
+            token["text"],
+            run,
+            token.get("protected_types", ()),
+        )
+
+    def _complete_key(self, toks: Sequence[Token], index: int, text: str) -> tuple[object, ...]:
+        """Bind complete mappings to run text, whose features may extend."""
         self._bind(toks)
         token = toks[index]
         run = token["run"]
         run_tokens = self._run_tokens[run]
         run_start = run_tokens[0]["start"]
         run_end = run_tokens[-1]["end"]
-        if run not in self._run_texts:
-            self._run_texts[run] = text[run_start:run_end]
+        run_text = self._run_texts.get(run)
+        if run_text is None:
+            run_text = text[run_start:run_end]
+            self._run_texts[run] = run_text
         return (
             token["start"],
             token["end"],
             token["text"],
             run,
-            self._run_texts[run],
+            run_text,
             token.get("protected_types", ()),
         )
 
@@ -1537,13 +1603,13 @@ class _TokenFeatureCache:
         if feature == "shape.coarse":
             return shape(surface, "coarse@1")
         if feature == "shape.cased":
-            return shape(surface, "cased@1")
+            return _shape_with_selections(surface, "cased@1", ())[0]
         if feature == "general_category.first":
             return char_classes(surface[0], "general_category")[0]
         if feature == "general_category.last":
             return char_classes(surface[-1], "general_category")[0]
         if feature == "sentence_break.first":
-            return char_classes(surface[0], "sentence_break")[0]
+            return _cached_value_name(surface[0], "sentence_break")
         if feature == "word_break.first":
             return char_classes(surface[0], "word_break")[0]
         if feature == "script.first":
@@ -1560,24 +1626,53 @@ class _TokenFeatureCache:
         return "<UNKNOWN>"
 
     def get_value(self, toks: Sequence[Token], index: int, text: str, feature: str) -> object:
+        if feature == "run.shape.cased":
+            self._bind(toks)
+            run = toks[index]["run"]
+            if run not in self._run_shapes:
+                self._run_shapes[run] = self._run_shape(run, text)
+            return self._run_shapes[run]
         if not self.enabled:
             return self._compute_feature(toks, index, text, feature)
-        key = self._key(toks, index, text)
-        values = self.values.get(key)
+        self._bind(toks)
+        values = self._bound_values[index]
+        if values is None:
+            key = self._key(toks, index, text)
+            values = self.values.get(key)
         if values is None:
             values = {}
             self.values[key] = values
             _token_features_base(toks, index, text, _features=frozenset())
+        self._bound_values[index] = values
         if feature not in values:
             values[feature] = self._compute_feature(toks, index, text, feature)
         return values.get(feature, "<UNKNOWN>")
+
+    def get_closed_value(
+        self, toks: Sequence[Token], index: int, text: str, feature: str
+    ) -> object:
+        """Cache one complete-text feature by token index without allocating a key."""
+        if not self.enabled or feature == "run.shape.cased":
+            return self.get_value(toks, index, text, feature)
+        self._bind(toks)
+        slots = self._closed_values.get(feature)
+        if slots is None:
+            slots = [_MISSING_FEATURE] * len(toks)
+            self._closed_values[feature] = slots
+        value = slots[index]
+        if value is _MISSING_FEATURE:
+            value = self._compute_feature(toks, index, text, feature)
+            slots[index] = value
+        return value
 
     def get(self, toks: Sequence[Token], index: int, text: str) -> dict[str, str | int | bool]:
         """Return the complete feature mapping for compatibility with internal callers."""
         if not self.enabled:
             return _token_features_base(toks, index, text)
-        key = self._key(toks, index, text)
+        self._bind(toks)
+        key = self._complete_key(toks, index, text)
         values = self.values.setdefault(key, {})
+        self._bound_values[index] = values
         if set(values) != _TOKEN_FEATURES:
             run = toks[index]["run"]
             if run not in self._run_shapes:
@@ -1596,17 +1691,25 @@ class _TokenFeatureCache:
         self.values = {
             key: value for key, value in self.values.items() if cast(int, key[1]) >= offset
         }
+        for index, end in enumerate(self._ends):
+            if end < offset:
+                self._bound_values[index] = None
 
     def clear(self) -> None:
         self.values.clear()
         self._toks = None
         self._starts = ()
         self._ends = ()
+        self._bound_values.clear()
+        self._closed_values.clear()
         self._run_tokens.clear()
         self._run_ends.clear()
+        self._run_starts.clear()
         self._run_positions.clear()
         self._run_texts.clear()
         self._run_shapes.clear()
+        self._candidate_pivots.clear()
+        self._candidate_run_texts.clear()
         self._run_completion_horizons.clear()
         self._observed_runs.clear()
 
@@ -1942,6 +2045,7 @@ class _CartletFeatureVector(Sequence[object]):
         self.locality_index = locality_index
         self.closed = closed
         self.cache = cache
+        self.pivot = cache.index_after(toks, offset)
         self.tokens_read = 0
         self.horizon = offset
         self.indices_read: list[int] = []
@@ -1951,6 +2055,37 @@ class _CartletFeatureVector(Sequence[object]):
     def __len__(self) -> int:
         return len(self.loaded.feature_names)
 
+    def _closed_value(self, predicate: _CompiledPredicate) -> tuple[object, int, int] | None:
+        """Read a complete-text model feature without streaming horizon work."""
+        at = predicate.at
+        if at == "run-1":
+            if self.pivot == 0:
+                value = _sentinel_features("<BOS>").get(predicate.feature, "<BOS>")
+                return value, 0, self.offset
+            if predicate.feature == "text":
+                value = self.cache.candidate_run_text(self.offset)
+                if value is not None:
+                    return value, 0, len(self.text)
+            return None
+        if isinstance(at, int):
+            index = self.pivot + at - 1 if at > 0 else self.pivot + at
+            if index < 0:
+                value = _sentinel_features("<BOS>").get(predicate.feature, "<BOS>")
+                return value, 0, self.offset
+            if index >= len(self.toks):
+                reached = min(max(at, 0), max(len(self.toks) - self.pivot, 0))
+                value = _sentinel_features("<EOS>").get(predicate.feature, "<EOS>")
+                return value, reached, len(self.text)
+            value = self.cache.get_closed_value(self.toks, index, self.text, predicate.feature)
+            return value, max(at, 0), len(self.text)
+        if isinstance(at, str) and at.startswith("c-"):
+            index = self.offset - int(at[2:])
+            if index < 0:
+                return "<BOS>", 0, self.offset
+            value = _character_feature(self.text, index, predicate.feature)
+            return value, 0, len(self.text)
+        return None
+
     def __getitem__(self, index: int | slice) -> object:
         if isinstance(index, slice):
             return [self[item] for item in range(*index.indices(len(self)))]
@@ -1959,19 +2094,22 @@ class _CartletFeatureVector(Sequence[object]):
             raise IndexError(index)
         observed = self._values.get(normalized)
         if observed is None:
-            observed = _observed_feature_value(
-                self.loaded.predicates[normalized],
-                self._rule,
-                self.text,
-                self.offset,
-                self.toks,
-                self.protected_types,
-                self.locale,
-                self.localities,
-                self.closed,
-                self.cache,
-                self.locality_index,
-            )
+            predicate = self.loaded.predicates[normalized]
+            observed = self._closed_value(predicate) if self.closed else None
+            if observed is None:
+                observed = _observed_feature_value(
+                    predicate,
+                    self._rule,
+                    self.text,
+                    self.offset,
+                    self.toks,
+                    self.protected_types,
+                    self.locale,
+                    self.localities,
+                    self.closed,
+                    self.cache,
+                    self.locality_index,
+                )
             self._values[normalized] = observed
         value, reached, horizon = observed
         self.tokens_read = max(self.tokens_read, reached)
@@ -2215,6 +2353,8 @@ def _inventory_claims(
     base: list[BreakSpan] | None = None,
     *,
     selected: bool = False,
+    run_starts: Mapping[int, int] | None = None,
+    candidate_runs: dict[int, str] | None = None,
 ) -> dict[int, list[str]]:
     base = base if base is not None else _raw_break_sentence_spans(text, locale)
     rules = (
@@ -2235,6 +2375,8 @@ def _inventory_claims(
         locale,
         ExceptionPolicy(),
         _mandatory_info_supplier(text, locale),
+        run_starts=run_starts,
+        candidate_runs=candidate_runs,
     )
 
 
@@ -2423,6 +2565,8 @@ def _candidate_observed(
     cache: _TokenFeatureCache,
     locality_index: _TextLocalityIndex | None,
     inventory_claims: dict[int, dict[int, list[str]]],
+    run_starts: Mapping[int, int] | None,
+    candidate_runs: dict[int, str] | None,
     candidates: list[BreakSpan],
 ) -> _ObservedResult:
     pivot = cache.index_after(toks, offset)
@@ -2506,8 +2650,16 @@ def _candidate_observed(
         key = id(locality.source)
         if key not in inventory_claims:
             inventory_claims[key] = _inventory_claims(
-                locality.local, text, owner.locale, candidates, selected=True
+                locality.local,
+                text,
+                owner.locale,
+                candidates,
+                selected=True,
+                run_starts=run_starts,
+                candidate_runs=candidate_runs,
             )
+            if candidate_runs is not None:
+                cache.prime_run_texts(toks, candidate_runs)
         rule_ids = inventory_claims[key].get(offset)
         if rule_ids:
             return _ObservedResult(
@@ -2850,6 +3002,16 @@ class IncrementalSentenceBreaker:
             protected, tuple(span["end"] for span in candidates)
         )
         inventory_claims: dict[int, dict[int, list[str]]] = {}
+        run_starts = self._cache.prime_candidates(toks, candidates)
+        candidate_runs = (
+            {}
+            if isinstance(self._owner.base, _LoadedCartletModel)
+            and any(
+                predicate.at == "run-1" and predicate.feature == "text"
+                for predicate in self._owner.base.used_predicates
+            )
+            else None
+        )
         localities = (*self._owner._word_localities, *self._owner._sentence_localities)
         locality_index = None
         if not closed and localities:
@@ -2900,6 +3062,8 @@ class IncrementalSentenceBreaker:
                     self._cache,
                     locality_index,
                     inventory_claims,
+                    run_starts if combined is None and not protected else None,
+                    candidate_runs,
                     candidates,
                 )
             if observed.decision is None:

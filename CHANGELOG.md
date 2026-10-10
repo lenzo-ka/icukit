@@ -13,6 +13,8 @@
 
 ### Changed
 
+- Keep `en-real-cart@1` below twice the default sentence-break latency by
+  sharing exception/model token-run state and caching complete-text features.
 - Accept reduced `icukit.features@1` schemas in explicit Cartlet models when
   every feature name is unique and belongs to the runtime schema.
 

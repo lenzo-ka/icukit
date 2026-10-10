@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from bisect import bisect_left
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib.resources import files
@@ -923,10 +923,11 @@ def _last_token(value: str) -> str:
     return value[start:end]
 
 
-def _candidate_keys(text: str, end: int) -> tuple[str, ...]:
-    start = end
-    while start and not text[start - 1].isspace():
-        start -= 1
+def _candidate_keys(text: str, end: int, start: int | None = None) -> tuple[str, ...]:
+    if start is None:
+        start = end
+        while start and not text[start - 1].isspace():
+            start -= 1
     return tuple(
         text[index:end]
         for index in range(start, end)
@@ -1061,6 +1062,8 @@ def _sentence_boundary_claims(
     mandatory_info: Callable[[], _MandatoryLineInfo],
     *,
     stats: dict[str, int] | None = None,
+    run_starts: Mapping[int, int] | None = None,
+    candidate_runs: dict[int, str] | None = None,
 ) -> dict[int, list[str]]:
     """Claim sentence candidates by terminal-token lookup, preserving legacy results."""
     claimable = tuple(sorted(span["end"] for span in base[:-1]))
@@ -1075,7 +1078,21 @@ def _sentence_boundary_claims(
         end = anchor
         while end and text[end - 1].isspace():
             end -= 1
-        for token in _candidate_keys(text, end):
+        start = run_starts.get(anchor) if run_starts is not None else None
+        if start is not None and not 0 <= start <= end:
+            start = None
+        if start is None:
+            start = end
+            while start and not text[start - 1].isspace():
+                start -= 1
+        keys = _candidate_keys(text, end, start)
+        if candidate_runs is not None:
+            candidate_runs[anchor] = (
+                keys[0]
+                if keys and (text[start].isalnum() or text[start] == "_")
+                else text[start:end]
+            )
+        for token in keys:
             if stats is not None:
                 stats["lookups"] = stats.get("lookups", 0) + 1
             for indexed in index.exact.get(token, ()):
