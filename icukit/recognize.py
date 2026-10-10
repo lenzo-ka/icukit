@@ -4471,9 +4471,8 @@ class FlexibleMeasureDetector(_GatedReader):
     kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
     each of that locale's plural categories (see :func:`_plural_samples`), each also in
     the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
-    Spacing stays flexible except for two detached forms that collide with ordinary text:
-    quote or prime marks, and one-letter abbreviations. Those do not read after a space
-    when their ICU pattern joins them to the number (``84"``, "62d");
+    Spacing stays flexible except for detached quote or prime marks. Those do not read
+    after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
     :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
     a separate type.
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
@@ -4506,9 +4505,6 @@ class FlexibleMeasureDetector(_GatedReader):
         if not surfaces:
             raise ValueError(f"ICU exposes no supported suffix surface for unit: {unit!r}")
         self._units = tuple(sorted(surfaces + rates, key=lambda item: len(item[0]), reverse=True))
-        self._wide_unit_surfaces = {
-            (surface, target) for surface, width, _spaced, target in self._units if width == "wide"
-        }
         self._spaced_unit_surfaces = {
             (surface, target) for surface, _width, spaced, target in self._units if spaced
         }
@@ -4553,18 +4549,11 @@ class FlexibleMeasureDetector(_GatedReader):
         self, surface: str, width: str, expects_space: bool, unit: str
     ) -> bool:
         """Whether a spaced surface is guarded because ICU writes it attached."""
-        detached_mark = surface in {'"', "'", "″", "′"}
-        detached_letter = (
-            width in {"short", "narrow"}
-            and (surface, unit) not in self._wide_unit_surfaces
-            and len(surface) == 1
-            and surface.isalpha()
-        )
         return (
             not expects_space
             and (surface, unit) not in self._spaced_unit_surfaces
             and width != "curated"
-            and (detached_mark or detached_letter)
+            and surface in {'"', "'", "″", "′"}
         )
 
     def _match(
@@ -4577,9 +4566,8 @@ class FlexibleMeasureDetector(_GatedReader):
         unit_start = self._space(text, number_end)
         has_space = unit_start != number_end
         for surface, width, expects_space, unit in self._ordered_units[has_space]:
-            # A detached mark can read as punctuation, and a detached one-letter
-            # abbreviation can read as prose. Reject only when this ICU-derived row
-            # attaches it; a spaced row sorts first, and a wide name is not abbreviated.
+            # A detached mark can read as punctuation. Reject only when this
+            # ICU-derived row attaches it; a spaced row sorts first.
             guarded_detached = has_space and self._is_guarded_detached(
                 surface, width, expects_space, unit
             )
@@ -4654,12 +4642,12 @@ class FlexibleMeasureDetector(_GatedReader):
 class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):
     """Recognize only a deliberately guarded detached unit surface.
 
-    A quote or prime mark, or a one-letter short or narrow abbreviation, is guarded
-    where ICU joins it to its number: ``84\"``, "62d". The ordinary measure reader
-    declines the detached spelling (``84 \"``, "62 d"); this reader deposits exactly
-    that spelling under ``measure:detached-unit:<unit>`` for lattice consumers that opt
-    in. A surface that ICU spaces, a wide one-letter unit name, and a curated surface
-    remain ordinary measure readings.
+    A quote or prime mark is guarded where ICU joins it to its number: ``84\"``, ``6'``.
+    The ordinary measure reader declines the detached spelling (``84 \"``, ``6 '``);
+    this reader deposits exactly that spelling under ``measure:detached-unit:<unit>``
+    for lattice consumers that opt in. A mark that ICU spaces and a curated surface
+    remain ordinary measure readings. Letter unit symbols retain the default measure
+    reader's flexible spacing.
     """
 
     _detached_only = True
@@ -4670,7 +4658,9 @@ class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):
             self._is_guarded_detached(surface, width, expects_space, target)
             for surface, width, expects_space, target in self._units
         ):
-            raise ValueError(f"ICU exposes no guarded detached surface for unit: {unit!r}")
+            raise ValueError(
+                f"ICU exposes no guarded detached quote or prime surface for unit: {unit!r}"
+            )
         self.type = f"measure:detached-unit:{unit}"
 
     def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:

@@ -6,6 +6,7 @@ from icukit.recognize import (
     FlexibleDetachedUnitDetector,
     FlexibleMeasureDetector,
     FlexibleMixedMeasureDetector,
+    FlexibleNumberDetector,
     FlexiblePercentDetector,
     FlexibleTextDateDetector,
     _language_era_orders,
@@ -111,10 +112,9 @@ def test_a_unit_surface_must_end_its_word():
         ("inch", "84 ″"),
         ("foot", "6 '"),
         ("foot", "6 ′"),
-        ("day", "62 d"),
     ],
 )
-def test_a_detached_mark_or_one_letter_unit_needs_a_spaced_icu_pattern(unit, detached):
+def test_a_detached_quote_or_prime_needs_a_spaced_icu_pattern(unit, detached):
     assert _measures(unit, detached) == []
 
 
@@ -123,9 +123,8 @@ def test_a_detached_mark_or_one_letter_unit_needs_a_spaced_icu_pattern(unit, det
     [
         ("en_US", "inch", '84 "', "84"),
         ("en_US", "inch", "62 ″", "62"),
+        ("en_US", "foot", "6 '", "6"),
         ("en_US", "foot", "6 ′", "6"),
-        ("en_US", "day", "62 d", "62"),
-        ("es_ES", "century", "62 s", "62"),
     ],
 )
 def test_the_guarded_detached_unit_reader_restores_the_reading(locale, unit, detached, amount):
@@ -147,6 +146,34 @@ def test_the_guarded_detached_unit_reader_emits_only_its_guarded_spelling():
     assert detector.detect('84"') == []
     assert detector.detect("84 in") == []
     assert detector.detect("/in") == []
+
+
+@pytest.mark.parametrize(
+    "locale, unit, text, amount",
+    [
+        ("en_US", "hour", "24 h", "24"),
+        ("de_DE", "hour", "3 h", "3"),
+        ("de_DE", "hour", "1 h", "1"),
+        ("en_US", "day", "62 d", "62"),
+        ("en_US", "second", "5 s", "5"),
+        ("es_ES", "century", "62 s", "62"),
+    ],
+)
+def test_one_letter_unit_symbols_keep_the_default_measure_reading(locale, unit, text, amount):
+    assert _measures(unit, text, locale) == [(text, amount, unit)]
+
+
+def test_a_number_before_a_detached_prime_remains_one_digit_run():
+    text = "45° 30 ′ N"
+    readings = FlexibleNumberDetector("en_US").detect(text)
+    thirty = [reading for reading in readings if reading["start"] == 4]
+
+    assert [(reading["text"], reading["start"], reading["end"]) for reading in thirty] == [
+        ("30", 4, 6)
+    ]
+    assert [(capture.name, capture.start, capture.end) for capture in thirty[0]["captures"]] == [
+        ("integer", 4, 6)
+    ]
 
 
 @pytest.mark.parametrize(

@@ -10,8 +10,8 @@ expansion is intentionally not an invertible formatter operation.
 readers of the readings the default readers refuse on purpose -- a lone "one" or
 "first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
 with a two- or three-digit year, a year range ICU never writes ("1914-1918",
-"1893–94"), or a detached unit mark or one-letter abbreviation that ICU writes attached
-(``84 \"`` beside ``84\"``, "62 d" beside "62d") -- each under its own type, so a
+"1893–94"), or a detached quote or prime mark that ICU writes attached (``84 \"``
+beside ``84\"``) -- each under its own type, so a
 consumer that wants every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
@@ -1061,7 +1061,7 @@ def _every_region_units() -> tuple[str, ...]:
 def _single_units(
     locale: str, locales: tuple[str, ...] | None, units: tuple[str, ...] | None
 ) -> tuple[str, ...]:
-    """The selected non-mixed units for one flexible or detached-unit family."""
+    """The selected non-mixed units for one flexible or detached-mark family."""
     if units is not None:
         return tuple(unit for unit in units if "-and-" not in unit)
     language = icu.Locale(locale).getLanguage()
