@@ -18,7 +18,6 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleFractionDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumberDetector`](#icukitrecognize) — class, `icukit.recognize`
-- [`FlexibleSpaceGroupingFragmentDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleOrdinalDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexiblePercentDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleRelativeDateDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -91,7 +90,6 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`MONTH_NAME_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`RELATIVE_DATE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SCIENTIFIC_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
-- [`SPACE_GROUPING_FRAGMENT_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`NUMBER_RANGE_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_ERA_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`SHORT_YEAR_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -3431,10 +3429,9 @@ expansion is intentionally not an invertible formatter operation.
 
 :data:`DEFAULT_FAMILIES` is the default gang. :data:`GUARDED_FAMILIES` generates the
 readers of the readings the default readers refuse on purpose -- a lone "one" or
-"first", a lowercase Roman numeral, a standalone fragment of a valid space grouping, a
-month or weekday name alone, a bare hour, a date with a two- or three-digit year, a year
-range ICU never writes ("1914-1918", "1893–94") -- each under its own type, so a
-consumer that wants
+"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
+with a two- or three-digit year, a year range ICU never writes ("1914-1918",
+"1893–94") -- each under its own type, so a consumer that wants
 every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
@@ -3474,7 +3471,7 @@ inverter. Abbreviations use their typed lexicon.
 
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -3522,10 +3519,6 @@ date:short-year:<skeleton>, one reader per skeleton as in the default family.
 The interval skeletons whose patterns write a "y" year, each read with a year of one to
 three digits, which the default interval readers refuse ("3–5" is not years 3 to 5);
 the type is date-interval:short-year:<skeleton>.
-
-#### `SPACE_GROUPING_FRAGMENT_FAMILY` (constant)
-
-`<icukit.engine.Family>`
 
 #### `SPELLOUT_NUMBER_FAMILY` (constant)
 
@@ -5896,11 +5889,11 @@ Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
 Beside the locale's own grouping, a number reads in each other grouping ICU gives a
 locale of the language ("250 000" as en_ZA formats it, "1'234'567" as en_CH,
-"12,34,567" as en_IN). A valid space-grouped span is read once as a whole where the
-locale's own lenient ICU parser accepts it or the language has that convention, never
-also as separate integers; otherwise its integer fragments are declined. A grouping
-shape is necessarily ambiguous: "5 300" and "75 008" read as one number, while a
-list whose widths do not fit the grouping ("1 2 3", "1999 2000") stays separate.
+"12,34,567" as en_IN), as an extra reading. A valid space-grouped span also reads
+whole where the locale's own lenient ICU parser accepts it. Existing fragment
+readings remain beside the whole reading so a downstream ranker can resolve the
+ambiguity: "5 300" reads as 5, 300, and 5300, while a list whose widths do not fit
+the grouping ("1 2 3", "1999 2000") stays separate.
 A grouping whose separator is the locale's decimal separator is not read that way,
 since it would reread every decimal number; instead the language's other decimal
 styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the locale's own
@@ -6056,31 +6049,6 @@ Initialize self.  See help(type(self)) for accurate signature.
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
 Return greedy, non-overlapping scientific numbers in source order.
-
-#### `start_gates() -> 'Mapping[str, StartGate | None]'`
-
-Return this reader's stable lane names and sound start gates.
-
-### class `FlexibleSpaceGroupingFragmentDetector`
-
-Recognize standalone number fragments inside valid space groupings.
-
-:class:`FlexibleNumberDetector` reads a valid space grouping as a whole and withholds
-its separate integer readings. This guarded reader deposits those deliberately
-withheld paths under ``number:decimal:space-grouping-fragment``. It emits a fragment
-only inside a span the flexible number reader actually reads whole, and only when the
-locale's own number style read that fragment on its own before the whole-span policy.
-Thus English ``"5 300"`` contributes 5 and 300 on request, while a French grouping
-that was already read whole by the locale's own space-grouping style contributes no
-invented fragments.
-
-#### `FlexibleSpaceGroupingFragmentDetector(locale: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
-
-Initialize self.  See help(type(self)) for accurate signature.
-
-#### `detect(text: 'str') -> 'list[ValueDetection]'`
-
-Return only standalone readings withheld inside whole space groupings.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 

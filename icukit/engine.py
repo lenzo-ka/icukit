@@ -8,10 +8,9 @@ expansion is intentionally not an invertible formatter operation.
 
 :data:`DEFAULT_FAMILIES` is the default gang. :data:`GUARDED_FAMILIES` generates the
 readers of the readings the default readers refuse on purpose -- a lone "one" or
-"first", a lowercase Roman numeral, a standalone fragment of a valid space grouping, a
-month or weekday name alone, a bare hour, a date with a two- or three-digit year, a year
-range ICU never writes ("1914-1918", "1893–94") -- each under its own type, so a
-consumer that wants
+"first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
+with a two- or three-digit year, a year range ICU never writes ("1914-1918",
+"1893–94") -- each under its own type, so a consumer that wants
 every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
@@ -65,7 +64,6 @@ from .recognize import (
     FlexibleRelativeDateDetector,
     FlexibleScientificDetector,
     FlexibleShortYearDateDetector,
-    FlexibleSpaceGroupingFragmentDetector,
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
@@ -107,7 +105,6 @@ __all__ = [
     "SHORT_YEAR_ERA_FAMILY",
     "SHORT_YEAR_FAMILY",
     "SHORT_YEAR_INTERVAL_FAMILY",
-    "SPACE_GROUPING_FRAGMENT_FAMILY",
     "SPELLOUT_NUMBER_FAMILY",
     "WEEKDAY_NAME_FAMILY",
     "SkippedSpec",
@@ -613,13 +610,6 @@ LOWERCASE_ROMAN_FAMILY = _guarded_family(
     "ICU gives the locale no lowercase Roman rule set",
 )
 
-SPACE_GROUPING_FRAGMENT_FAMILY = _guarded_family(
-    "space-grouping-fragment",
-    FlexibleSpaceGroupingFragmentDetector,
-    lambda detector: True,
-    "space-grouping fragment reader was not built",
-)
-
 MONTH_NAME_FAMILY = _guarded_family(
     "month-name",
     FlexibleMonthNameDetector,
@@ -747,7 +737,6 @@ DEFAULT_FAMILIES = (
 GUARDED_FAMILIES = (
     LONE_SPELLOUT_NUMBER_FAMILY,
     LOWERCASE_ROMAN_FAMILY,
-    SPACE_GROUPING_FRAGMENT_FAMILY,
     MONTH_NAME_FAMILY,
     WEEKDAY_NAME_FAMILY,
     SHORT_YEAR_FAMILY,
@@ -1161,12 +1150,6 @@ def _flexible_families(
         families += [
             LONE_SPELLOUT_NUMBER_FAMILY,
             LOWERCASE_ROMAN_FAMILY,
-            _guarded_family(
-                "space-grouping-fragment",
-                lambda locale: FlexibleSpaceGroupingFragmentDetector(locale, locales=locales),
-                lambda detector: True,
-                "space-grouping fragment reader was not built",
-            ),
             _guarded_family(
                 "month-name",
                 lambda locale: FlexibleMonthNameDetector(locale, locales=locales),

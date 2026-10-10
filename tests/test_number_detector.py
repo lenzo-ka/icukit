@@ -111,36 +111,15 @@ def test_invalid_number_detector_arguments_are_rejected():
         NumberDetector("en_US", "decimal", "USD")
 
 
-@pytest.mark.parametrize("locale", ("en_US", "it_IT", "es_ES", "zh_CN", "de_DE", "de_CH"))
-@pytest.mark.parametrize(
-    "surface",
-    (
-        "1 000",
-        "1\N{NO-BREAK SPACE}000",
-        "1\N{NARROW NO-BREAK SPACE}000",
-        "1\N{THIN SPACE}000",
-        "12 345 678",
-    ),
-)
-def test_noncanonical_space_grouping_is_declined_without_number_fragments(locale, surface):
-    assert NumberDetector(locale, "decimal").detect(surface) == []
-
-
-def test_grouping_protection_keeps_an_independent_number_before_a_grouped_shape():
-    detections = NumberDetector("en_US", "decimal").detect("5 1 000")
-
-    assert [(item["text"], item["value"].decimal) for item in detections] == [("5", "5")]
-
-
 @pytest.mark.parametrize(
     ("locale", "surface", "expected"),
     (
-        ("en_US", "10 000 20 000", []),
-        ("en_US", "1 000 2", [("2", "2")]),
-        ("hi_IN", "1 00 000", []),
+        ("en_US", "10 000 20 000", [("10", "10"), ("20", "20")]),
+        ("en_US", "1 000 2", [("1", "1"), ("2", "2")]),
+        ("hi_IN", "1 00 000", [("1", "1")]),
     ),
 )
-def test_every_locale_shaped_grouping_is_protected_from_strict_fragments(locale, surface, expected):
+def test_strict_space_grouping_fragments_remain_as_on_main(locale, surface, expected):
     detections = NumberDetector(locale, "decimal").detect(surface)
 
     assert [(item["text"], item["value"].decimal) for item in detections] == expected

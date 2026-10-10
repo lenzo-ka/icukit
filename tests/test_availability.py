@@ -109,25 +109,6 @@ def test_inline_curated_families_are_unavailable_without_a_language_table():
         ]
 
 
-def test_space_grouping_fragment_availability_is_guarded():
-    family = "space-grouping-fragment"
-
-    assert not any(row.family == family for row in availability("en_US"))
-    assert [row for row in availability("en_US", guarded=True) if row.family == family] == [
-        availability_module.AvailabilityRow(
-            "en_US",
-            family,
-            family,
-            "number:decimal:space-grouping-fragment",
-            "icu",
-            None,
-            None,
-            None,
-            None,
-        )
-    ]
-
-
 # The ordered flexible gangs and their ordered readings of one text, recorded before
 # availability reporting was added: (member count, sha256 of the ordered first four
 # detector_key components, sha256 of the ordered detections_to_json output).
@@ -139,8 +120,8 @@ _GANGS_BEFORE = {
         "823c4241f43fe0e73e7c7c6f15f9780e5301cbd33a96f393ba7857b1cd05aa58",
     ),
     ("en_US", True): (
-        416,
-        "05d9f28d5aa670469fba91a3aefc9d36d9f73bfbe41b46539871f91ea2aff352",
+        415,
+        "828b43ca44fee37fd8ef49a5baec2121281c7292ddd96e7ddd282322c30a5d3b",
         "2d14df990633d737cfa578a6db989d8c30c8c9a890122042836ad393df932e1d",
     ),
     ("de", False): (
@@ -149,8 +130,8 @@ _GANGS_BEFORE = {
         "8b0e7b6cbfe7f449406bf79b1eb2a0f98674f7c83675b4ce9eebb25d266da78e",
     ),
     ("de", True): (
-        287,
-        "7df7f6b8743e4e857540405b1d8fb5ec41000b0f73cac903fdd2a0f5765dc390",
+        286,
+        "02d4245422dd1193f68a2fab44242abd93a54e3bc05f01523a13679da1e7a2ab",
         "0c131cc9d1dd95331487a9a97ef5b6a7e9e8b7acf6a11b2de0492888358651f9",
     ),
     ("ja_JP", False): (
@@ -159,8 +140,8 @@ _GANGS_BEFORE = {
         "32eb8f4e413a32659b3e7f7721cd2525ef57ff02f07e8374f5ff85a9d6dafc7f",
     ),
     ("ja_JP", True): (
-        262,
-        "29e8bf0ed0225a77cbef59a484d2935483e6d33164535f15ac74a2c5c84e5feb",
+        261,
+        "f04836f9531d46d6fcbe3998a6f91b48f6c0e440a656b89bc7a238781fc7e96f",
         "870c7f6008e3d09cd73d12505bfa9e119062af7789c67cc7a6008618ab0f3087",
     ),
     ("yo", False): (
@@ -169,8 +150,8 @@ _GANGS_BEFORE = {
         "c1b899734e4fb802a42bd8dc7fcc41a5caf8eddfed633948ce09a35e5d293577",
     ),
     ("yo", True): (
-        252,
-        "8fbff9ceceb79c4f46108beee67fb429f28348a36aaf317a395a6a04ac535543",
+        251,
+        "9c241f5b052a71f75281326db82834103648ce04bc3e24f925a0f38b2695c2e0",
         "8cbedd85266bbce9b50e09dd7c91d3b6f45c7c3f613ae49533384e0ef837baf0",
     ),
 }

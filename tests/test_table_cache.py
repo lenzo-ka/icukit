@@ -218,31 +218,6 @@ def test_table_store_shared_across_gangs():
     assert info["detect_hits"] == 0
 
 
-def test_space_grouping_locale_selection_survives_disk_cache_reload(isolated_cache):
-    clear_detector_caches()
-
-    def fragments(locales):
-        gang = flexible_detectors(
-            "en_US_POSIX", locales=locales, currencies=(), units=(), guarded=True
-        )
-        return next(
-            detector
-            for detector in gang.detectors
-            if detector.type == "number:decimal:space-grouping-fragment"
-        )
-
-    text = "12\N{NO-BREAK SPACE}345"
-    assert fragments(("en_AU",)).detect(text) == []
-    assert [item["text"] for item in fragments(("en_CZ",)).detect(text)] == ["12", "345"]
-    cache.flush()
-
-    clear_detector_caches()
-    cache.configure(enabled=True, directory=isolated_cache)
-    assert [item["text"] for item in fragments(("en_CZ",)).detect(text)] == ["12", "345"]
-    assert fragments(("en_AU",)).detect(text) == []
-    assert cache.cache_info()["tables_loaded"]["build"] > 0
-
-
 def test_table_key_fields_from_sources():
     key = _tables.table_key()
     expected_tz = hashlib.sha256(

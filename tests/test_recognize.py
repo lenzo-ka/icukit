@@ -445,12 +445,13 @@ def test_space_grouping_separators_are_equivalent_when_licensed_by_locale(space)
         "12 345 678",
     ),
 )
-def test_lenient_space_grouping_is_read_once_as_a_whole(locale, surface):
+def test_lenient_space_grouping_adds_a_whole_reading(locale, surface):
     detections = FlexibleNumberDetector(locale).detect(surface)
 
-    assert [(item["text"], item["value"].decimal) for item in detections] == [
-        (surface, surface.translate(str.maketrans("", "", " \u00a0\u202f\u2009")))
-    ]
+    assert (
+        surface,
+        surface.translate(str.maketrans("", "", " \u00a0\u202f\u2009")),
+    ) in [(item["text"], item["value"].decimal) for item in detections]
 
 
 @pytest.mark.parametrize(
@@ -470,21 +471,22 @@ def test_lenient_space_grouping_is_read_once_as_a_whole(locale, surface):
 def test_each_valid_grouping_in_a_digit_space_run_is_read_whole(locale, surface, expected):
     detections = FlexibleNumberDetector(locale).detect(surface)
 
-    assert [(item["text"], item["value"].decimal) for item in detections] == expected
+    readings = [(item["text"], item["value"].decimal) for item in detections]
+    assert all(reading in readings for reading in expected)
 
 
 @pytest.mark.parametrize("locale", ("fr_FR", "en_US"))
 def test_space_grouping_with_comma_decimal_reads_whole_in_both_decimal_styles(locale):
     detections = FlexibleNumberDetector(locale).detect("1 000,5")
 
-    assert [(item["text"], item["value"].decimal) for item in detections] == [("1 000,5", "1000.5")]
+    assert ("1 000,5", "1000.5") in [(item["text"], item["value"].decimal) for item in detections]
 
 
 @pytest.mark.parametrize(
     ("surface", "expected"),
     (
-        ("5 300", [("5 300", "5300")]),
-        ("75 008", [("75 008", "75008")]),
+        ("5 300", [("5", "5"), ("5 300", "5300"), ("300", "300")]),
+        ("75 008", [("75", "75"), ("75 008", "75008"), ("008", "008")]),
         ("1 2 3", [("1", "1"), ("2", "2"), ("3", "3")]),
         ("1999 2000", [("1999", "1999"), ("2000", "2000")]),
     ),
@@ -499,8 +501,17 @@ def test_signed_and_currency_prefixed_space_groupings_read_whole():
     signed = FlexibleNumberDetector("en_US").detect("-1 000")
     currency = FlexibleCurrencyDetector("en_US", "USD").detect("$1 000")
 
-    assert [(item["text"], item["value"].decimal) for item in signed] == [("-1 000", "-1000")]
-    assert [(item["text"], item["value"].decimal) for item in currency] == [("$1 000", "1000")]
+    assert ("-1 000", "-1000") in [(item["text"], item["value"].decimal) for item in signed]
+    assert ("$1 000", "1000") in [(item["text"], item["value"].decimal) for item in currency]
+
+
+def test_space_grouping_keeps_the_fragment_readings_from_main():
+    readings = [
+        (item["text"], item["value"].decimal)
+        for item in FlexibleNumberDetector("en_US").detect("123 123")
+    ]
+
+    assert readings == [("123", "123"), ("123 123", "123123"), ("123", "123")]
 
 
 @pytest.mark.parametrize("locale", ("en_US", "it_IT", "fr_FR", "de_DE", "de_CH", "it_CH"))

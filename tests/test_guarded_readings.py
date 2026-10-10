@@ -1,22 +1,17 @@
 """Readings the default readers refuse on purpose are read under their own types.
 
-A lone "one" or "first", a lowercase Roman numeral, a fragment of a space-grouped
-number, a month or weekday name alone, a bare hour, and a date with a two- or three-digit
-year are refused by the readers of the default types; each is deposited by an opt-in
-reader under a type of its own, so a consumer that wants every path (forced alignment
-reads "May" as a month and as a verb) includes it by type.
+A lone "one" or "first", a lowercase Roman numeral, a month or weekday name alone, a bare
+hour, and a date with a two- or three-digit year are refused by the readers of the
+default types; each is deposited by an opt-in reader under a type of its own, so a
+consumer that wants every path (forced alignment reads "May" as a month and as a verb)
+includes it by type.
 """
 
 import pytest
 
 from icukit import DetectorSet
-from icukit.detectors import DateTimeValue, NumberValue, detector_key
-from icukit.engine import (
-    DEFAULT_FAMILIES,
-    GUARDED_FAMILIES,
-    flexible_detectors,
-    generated_detectors,
-)
+from icukit.detectors import DateTimeValue, NumberValue
+from icukit.engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, generated_detectors
 from icukit.recognize import (
     FlexibleBareHourDetector,
     FlexibleDateTimeDetector,
@@ -25,7 +20,6 @@ from icukit.recognize import (
     FlexibleMonthNameDetector,
     FlexibleNumberDetector,
     FlexibleShortYearDateDetector,
-    FlexibleSpaceGroupingFragmentDetector,
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
@@ -37,7 +31,6 @@ GUARDED_TYPES = {
     "number:spellout-lone",
     "number:spellout-lone:ordinal",
     "number:cardinal:roman-lower",
-    "number:decimal:space-grouping-fragment",
     "date:month-name",
     "date:weekday-name",
     "date:short-year",
@@ -125,89 +118,6 @@ def test_lowercase_roman_is_exactly_what_the_option_adds():
         for d in FlexibleLowercaseRomanDetector("en_US").detect(text)
     }
     assert lower and lower == widened - default
-
-
-# ------------------------------------------------------ space-grouping fragments
-
-
-@pytest.mark.parametrize(
-    ("locale", "text", "whole", "expected"),
-    (
-        ("en_US", "5 300", ["5 300"], [("5", "5"), ("300", "300")]),
-        (
-            "en_US",
-            "10 000 20 000",
-            ["10 000", "20 000"],
-            [("10", "10"), ("000", "000"), ("20", "20"), ("000", "000")],
-        ),
-        (
-            "hi_IN",
-            "1 00 000",
-            ["1 00 000"],
-            [("1", "1"), ("00", "00"), ("000", "000")],
-        ),
-    ),
-)
-def test_space_grouping_fragments_are_guarded_paths(locale, text, whole, expected):
-    default = FlexibleNumberDetector(locale).detect(text)
-    fragments = FlexibleSpaceGroupingFragmentDetector(locale).detect(text)
-
-    assert [item["text"] for item in default] == whole
-    assert [(item["text"], item["value"].decimal) for item in fragments] == expected
-    assert {item["type"] for item in fragments} == {"number:decimal:space-grouping-fragment"}
-
-
-def test_space_grouping_fragments_are_not_invented_for_a_locale_own_whole_reading():
-    assert FlexibleSpaceGroupingFragmentDetector("fr_FR").detect("5 300") == []
-
-
-def test_space_grouping_locale_selections_coexist_without_leaking_readings():
-    united_states = FlexibleSpaceGroupingFragmentDetector("en_US", locales=())
-    australia = FlexibleSpaceGroupingFragmentDetector("en_AU", locales=())
-    assert detector_key(united_states) != detector_key(australia)
-    assert DetectorSet(()).with_(united_states, australia).detectors == (
-        united_states,
-        australia,
-    )
-
-    excluded = flexible_detectors(
-        "en_US_POSIX", locales=("en_AU",), currencies=(), units=(), guarded=True
-    )
-    selected = flexible_detectors(
-        "en_US_POSIX", locales=("en_CZ",), currencies=(), units=(), guarded=True
-    )
-    type_ = "number:decimal:space-grouping-fragment"
-    (excluded_reader,) = [detector for detector in excluded.detectors if detector.type == type_]
-    (selected_reader,) = [detector for detector in selected.detectors if detector.type == type_]
-
-    assert excluded is flexible_detectors(
-        "en_US_POSIX", locales=("en_AU",), currencies=(), units=(), guarded=True
-    )
-    assert selected is flexible_detectors(
-        "en_US_POSIX", locales=("en_CZ",), currencies=(), units=(), guarded=True
-    )
-    assert excluded is not selected
-    assert detector_key(excluded_reader) != detector_key(selected_reader)
-    assert DetectorSet(()).with_(excluded_reader, selected_reader).detectors == (
-        excluded_reader,
-        selected_reader,
-    )
-
-    text = "12\N{NO-BREAK SPACE}345"
-    assert excluded_reader.detect(text) == []
-    assert [item["text"] for item in selected_reader.detect(text)] == ["12", "345"]
-    assert excluded_reader.detect(text) == []
-
-    excluded_compiled = DetectorSet((excluded_reader,)).compile(warm=False)
-    selected_compiled = DetectorSet((selected_reader,)).compile(warm=False)
-    assert excluded_compiled.key.readers != selected_compiled.key.readers
-    assert excluded_compiled.detect(text) == []
-    assert [item["text"] for item in selected_compiled.detect(text)] == ["12", "345"]
-
-
-@pytest.mark.parametrize("text", ("1 2 3", "1999 2000", "12 34"))
-def test_space_grouping_fragments_require_a_whole_grouping_reading(text):
-    assert FlexibleSpaceGroupingFragmentDetector("en_US").detect(text) == []
 
 
 # ---------------------------------------------------------------- month and weekday

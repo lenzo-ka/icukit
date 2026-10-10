@@ -65,9 +65,11 @@ def test_a_number_reads_in_another_locales_grouping(text, reading):
     assert reading in _numbers(FlexibleNumberDetector("en_US"), text)
 
 
-def test_a_space_grouped_reading_replaces_the_fragmentary_numbers():
+def test_a_space_grouped_reading_is_added_beside_the_fragmentary_numbers():
     assert _numbers(FlexibleNumberDetector("en_US"), "12 100") == [
+        ("12", "12"),
         ("12 100", "12100"),
+        ("100", "100"),
     ]
 
 
@@ -85,7 +87,7 @@ def test_numbers_that_do_not_have_grouping_shape_stay_separate():
 def test_a_measure_uses_a_whole_flexible_grouping(locale, surface):
     detections = FlexibleMeasureDetector(locale, "kilogram").detect(surface)
 
-    assert [(item["text"], item["value"].decimal) for item in detections] == [(surface, "1000")]
+    assert (surface, "1000") in [(item["text"], item["value"].decimal) for item in detections]
 
 
 def test_a_grouping_that_writes_the_decimal_separator_gives_no_rival_reading():
