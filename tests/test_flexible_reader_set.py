@@ -270,6 +270,27 @@ def test_reading_costs_a_small_multiple_of_the_generated_set():
     assert min(ratios) < 3, ratios
 
 
+def test_composites_retry_prior_numbers_only_when_a_whole_reading_widens(monkeypatch):
+    original = recognize._plain_number_match
+    prior_probes = 0
+
+    def counted(number, text, start, *, whole=True):
+        nonlocal prior_probes
+        if not whole:
+            prior_probes += 1
+        return original(number, text, start, whole=whole)
+
+    monkeypatch.setattr(recognize, "_plain_number_match", counted)
+    detector = recognize.FlexibleMeasureDetector("en_US", "kilometer")
+
+    assert [item["text"] for item in detector.detect("7 km")] == ["7 km"]
+    assert prior_probes == 0
+
+    grouped = detector.detect("7 654 km")
+    assert [item["text"] for item in grouped] == ["7 654 km", "654 km"]
+    assert prior_probes > 0
+
+
 @pytest.mark.parametrize("locale", ("zh_CN", "it_IT"))
 def test_space_grouping_candidate_retries_do_not_grow_with_the_run(monkeypatch, locale):
     original = recognize.FlexibleNumberDetector._match_style
