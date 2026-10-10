@@ -452,6 +452,13 @@ from .spoof import (
     get_confusable_type,
     get_skeleton,
 )
+from .stream import (
+    DEFAULT_MAX_PENDING_CHARS,
+    BoundaryMode,
+    DetectionBatch,
+    DetectionStream,
+    StreamPending,
+)
 from .timezone import (
     get_equivalent_timezones,
     get_timezone_info,
@@ -526,6 +533,11 @@ __all__ = [
     "SingleLetterWordDetector",
     "DetectorSet",
     "CompiledDetectorSet",
+    "BoundaryMode",
+    "DetectionBatch",
+    "StreamPending",
+    "DetectionStream",
+    "DEFAULT_MAX_PENDING_CHARS",
     "ReaderSpec",
     "CompileKey",
     "CompileStats",

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
+  with paragraph-boundary segmentation by default, optional line or explicit
+  boundaries, absolute offsets, `pending_from` on every batch, bounded pending text,
+  transactional feed updates, deterministic cut reporting, and truncated detections
+  at safety cuts. Paragraph streams without cuts are identical to whole-text detection
+  for stock readers; the lower-latency line mode may split a wrapped number range and
+  does not make that guarantee.
+- `detection_to_dict()` now includes `truncated` when a capped detection carries it.
+
+### Fixed
+
+- Number and measure ranges in the flexible readers no longer read across a paragraph
+  boundary (for example `3,5 °C` and `-5 °C` in Catalan, separated by a blank line).
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed

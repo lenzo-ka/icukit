@@ -42,6 +42,11 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
 - [`CompiledDetectorSet`](#icukitcompiled) — class, `icukit.compiled`
+- [`BoundaryMode`](#icukitstream) — alias, `icukit.stream`
+- [`DetectionBatch`](#icukitstream) — class, `icukit.stream`
+- [`StreamPending`](#icukitstream) — class, `icukit.stream`
+- [`DetectionStream`](#icukitstream) — class, `icukit.stream`
+- [`DEFAULT_MAX_PENDING_CHARS`](#icukitstream) — constant, `icukit.stream`
 - [`ReaderSpec`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileKey`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileStats`](#icukitcompiled) — class, `icukit.compiled`
@@ -1984,6 +1989,10 @@ Detect with a context-local immutable scan plan, resetting it on every exit.
 
 Return one gate status row for every declared scan lane.
 
+#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph')`
+
+Return a boundary-segmented stream using compiled whole-text detection.
+
 #### `warm() -> 'CompiledDetectorSet'`
 
 Force lazy sub-readers and zone tables under the build phase.
@@ -2754,6 +2763,10 @@ Compile this gang explicitly, optionally forcing lazy reader state.
 #### `names() -> 'tuple[str, ...]'`
 
 The members' types, in order; a type repeats once per locale it is built for.
+
+#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph')`
+
+Return a boundary-segmented detector over arbitrary text chunks.
 
 #### `with_(*more: 'Detector') -> 'DetectorSet'`
 
@@ -7727,6 +7740,87 @@ Example:
     'paypal'
     >>> get_skeleton("paypal")
     'paypal'
+
+## icukit.stream
+
+Bounded detection over boundary-delimited text supplied in arbitrary chunks.
+
+The default paragraph mode holds an open paragraph and runs the gang's ordinary
+whole-text :meth:`~icukit.detectors.DetectorSet.detect` exactly once when that
+paragraph closes. Stock readers do not cross paragraph boundaries, so no-cut output
+is identical to whole-text detection with only absolute-offset shifts. A third-party
+reader has that guarantee only when its detections are context-independent across the
+selected boundary grammar: adding text beyond a boundary cannot create, remove, or
+change a detection on the other side. Line mode is a lower-latency option; a wrapped
+number range may cross one line break, so line mode is not guaranteed to preserve
+whole-text identity. Explicit mode settles only at :meth:`DetectionStream.flush`,
+:meth:`DetectionStream.boundary`, or close.
+
+An open segment is length-bounded by ``max_pending_chars`` (4096 by default). When no
+configured boundary closes it in time, the stream examines the fixed cap-length
+prefix and cuts at its last grapheme edge immediately following whitespace, then at
+its last grapheme edge, with a code-point cut only when one overlong grapheme leaves
+no positive grapheme boundary within the hard cap. Such cuts are deterministic
+functions of the text. Caller-imposed :meth:`DetectionStream.flush` boundaries are
+also cuts. Detections starting or ending at any cut are marked ``truncated``.
+
+### Constants and type aliases
+
+#### `BoundaryMode` (type alias)
+
+`Literal['paragraph', 'line', 'explicit']`
+
+#### `DEFAULT_MAX_PENDING_CHARS` (constant)
+
+`4096`
+
+### class `DetectionBatch`
+
+Detections settled by one call and the absolute open-segment start.
+
+``cuts`` contains cap and caller-imposed boundary offsets.
+
+#### `DetectionBatch(detections: 'tuple[ValueDetection, ...]', pending_from: 'int', cuts: 'tuple[int, ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `DetectionStream`
+
+Incrementally detect closed segments with bounded retention and absolute offsets.
+
+``boundary`` selects ``"paragraph"`` (the identity-preserving default for stock
+readers), ``"line"`` (lower latency without an identity guarantee), or
+``"explicit"`` (only :meth:`flush`, :meth:`boundary`, and :meth:`close` settle).
+The chunk passed to :meth:`feed` is appended before boundaries and cap cuts are
+drained, so it can transiently exceed the configured cap during that call.
+
+#### `DetectionStream(detectors: 'DetectorSet | object | Iterable[Detector]', /, *, max_pending_chars: 'int' = 4096, boundary: 'BoundaryMode' = 'paragraph') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `boundary() -> 'DetectionBatch'`
+
+Mark an explicit boundary; equivalent to :meth:`flush`.
+
+#### `close() -> 'DetectionBatch'`
+
+Settle at end of input and close; repeated calls return an empty batch.
+
+#### `feed(chunk: 'str', /) -> 'DetectionBatch'`
+
+Append ``chunk`` and return detections from newly closed segments.
+
+#### `flush() -> 'DetectionBatch'`
+
+Settle at a caller-imposed cut and mark detections touching either side.
+
+#### `pending() -> 'StreamPending'`
+
+Return the current absolute settlement and retention positions.
+
+### class `StreamPending`
+
+A snapshot of retained and undecided stream state.
 
 ## icukit.timezone
 

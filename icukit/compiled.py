@@ -9,6 +9,7 @@ import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
+from typing import Literal
 
 import icu
 
@@ -413,6 +414,47 @@ class CompiledDetectorSet:
             _SCAN_PLAN.reset(token)
         found.sort(key=_sort_key)
         return found
+
+    def _detect_window(
+        self, text: str, only: Iterable[Detector] | None = None
+    ) -> list[ValueDetection]:
+        """Detect in one transient stream window without populating ``_scan_plans``."""
+        selected = self.detectors.detectors if only is None else tuple(only)
+        if not self._scan_locales:
+            return legacy_detect(text, selected)
+        try:
+            plan = _scan_plan(text, self._scan_locales, self._scan_gates)
+        except Exception:
+            return legacy_detect(text, selected)
+        token = _SCAN_PLAN.set(plan)
+        cache._record_detect_hit()
+        found: list[ValueDetection] = []
+        try:
+            for detector in selected:
+                try:
+                    found.extend(detector.detect(text))
+                finally:
+                    if GATE_AUDIT:
+                        _audit_plan(plan)
+        finally:
+            _SCAN_PLAN.reset(token)
+        found.sort(key=_sort_key)
+        return found
+
+    def stream(
+        self,
+        *,
+        max_pending_chars: int = 4096,
+        boundary: Literal["paragraph", "line", "explicit"] = "paragraph",
+    ):
+        """Return a boundary-segmented stream using compiled whole-text detection."""
+        from .stream import DetectionStream
+
+        return DetectionStream(
+            self,
+            max_pending_chars=max_pending_chars,
+            boundary=boundary,
+        )
 
 
 def _compile(
