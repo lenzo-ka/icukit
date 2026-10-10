@@ -222,11 +222,12 @@ def _raw_break_word_extents(text: str, locale: str = "en_US") -> list[tuple[int,
 def _sentence_override(
     locale: str,
     base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None,
+    max_sentence_chars: int | None,
 ):
     """Return the shared immutable sentence override for one selection."""
     from .sentence_override import SentenceOverride
 
-    return SentenceOverride(locale, base=base)
+    return SentenceOverride(locale, base=base, max_sentence_chars=max_sentence_chars)
 
 
 class Breaker:
@@ -253,6 +254,7 @@ class Breaker:
         locale: str = "en_US",
         *,
         base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
+        max_sentence_chars: int | None = 1024,
     ):
         """Initialize a Breaker instance.
 
@@ -263,14 +265,23 @@ class Breaker:
                 otherwise. ``"none"`` selects raw ICU without the list;
                 ``"en-tn@1"``, ``"en-tn-cart@1"``, and ``"en-real-cart@1"``
                 are opt-in English bases.
+            max_sentence_chars: Hard maximum sentence length in code points;
+                ``None`` disables forced boundaries.
 
         Raises:
             BreakerError: If the locale is invalid.
         """
         if base is not None and base not in _SENTENCE_BASES:
             raise ValueError(f"unknown sentence base {base!r}")
+        if max_sentence_chars is not None and (
+            not isinstance(max_sentence_chars, int)
+            or isinstance(max_sentence_chars, bool)
+            or max_sentence_chars <= 0
+        ):
+            raise ValueError("max_sentence_chars must be a positive int or None")
         self.locale = locale
         self.base = base
+        self.max_sentence_chars = max_sentence_chars
         try:
             self._locale_obj = icu.Locale(locale)
         except icu.ICUError as e:
@@ -316,9 +327,39 @@ class Breaker:
         non-English and POSIX defaults are raw ICU.
         """
         if self.base == "none" and self._locale_obj.getKeywordValue("ss") is not None:
-            yield from _raw_break_sentence_spans(text, self.locale)
+            from .sentence_override import (
+                _decision,
+                _decision_spans,
+                _force_closed_decisions,
+            )
+
+            raw = _raw_break_sentence_spans(text, self.locale)
+            decisions = [
+                _decision(
+                    span["end"],
+                    span["start"] + len(span["text"].rstrip()),
+                    "break",
+                    "icu",
+                    None,
+                    0,
+                )
+                for span in raw
+            ]
+            yield from _decision_spans(
+                text,
+                _force_closed_decisions(
+                    text,
+                    decisions,
+                    self.max_sentence_chars,
+                    self.locale,
+                ),
+            )
             return
-        yield from _sentence_override(self.locale, self.base).spans(text)
+        yield from _sentence_override(
+            self.locale,
+            self.base,
+            self.max_sentence_chars,
+        ).spans(text)
 
     def break_sentence_spans(self, text: str) -> list[BreakSpan]:
         """Return sentence spans from the selected locale-default or named base."""
@@ -654,6 +695,7 @@ def break_sentences(
     skip_empty: bool = True,
     *,
     base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
+    max_sentence_chars: int | None = 1024,
 ) -> list[str]:
     """Break text into sentences.
 
@@ -666,6 +708,8 @@ def break_sentences(
         base: Sentence base; ``None`` selects ICU plus token integrity and the
             shipped list for English except POSIX, and raw ICU otherwise.
             ``"none"`` selects raw ICU without the list.
+        max_sentence_chars: Hard maximum sentence length in code points;
+            ``None`` disables forced boundaries.
 
     Returns:
         List of sentence strings.
@@ -674,7 +718,11 @@ def break_sentences(
         >>> break_sentences('Hello. World.', 'en')
         ['Hello. ', 'World.']
     """
-    return Breaker(locale, base=base).break_sentences(text, skip_empty)
+    return Breaker(
+        locale,
+        base=base,
+        max_sentence_chars=max_sentence_chars,
+    ).break_sentences(text, skip_empty)
 
 
 def break_words(
@@ -748,13 +796,20 @@ def break_sentence_spans(
     locale: str = "en_US",
     *,
     base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
+    max_sentence_chars: int | None = 1024,
 ) -> list[BreakSpan]:
     """Return sentence spans from the locale default or selected base.
 
     The English default is ICU plus token integrity and the shipped list;
     non-English and POSIX defaults are raw ICU.
+
+    ``max_sentence_chars`` is a hard code-point bound; ``None`` disables it.
     """
-    return Breaker(locale, base=base).break_sentence_spans(text)
+    return Breaker(
+        locale,
+        base=base,
+        max_sentence_chars=max_sentence_chars,
+    ).break_sentence_spans(text)
 
 
 def break_line_spans(text: str, locale: str = "en_US") -> list[BreakSpan]:

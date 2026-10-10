@@ -507,7 +507,9 @@ def test_emitted_immutable_close_and_earlier_rule_exclusion():
         match="Mr. Smith Jones never.",
     )
     later = _next_upper("later-one")
-    override = SentenceOverride(base="none", before=[_loaded(earlier, later)])
+    override = SentenceOverride(
+        base="none", before=[_loaded(earlier, later)], max_sentence_chars=None
+    )
     breaker = override.stream()
     assert breaker.feed("Mr. Smith J") == []
     assert breaker.pending()[0]["waiting_on"] == "earlier-three"
@@ -847,7 +849,9 @@ def test_early_decision_does_not_wait_for_maximum_lookahead():
         when=[{"at": 3, "f": "shape.cased", "in": ["Xxxxx"]}],
         match="Hello. A B Zebra.",
     )
-    breaker = SentenceOverride(base="none", before=[_loaded(first, later)]).stream()
+    breaker = SentenceOverride(
+        base="none", before=[_loaded(first, later)], max_sentence_chars=None
+    ).stream()
     # The feed completes token +1 by observing its whitespace terminator.
     decisions = breaker.feed("Mr. Smith J ")
     assert [(item["offset"], item["id"]) for item in decisions] == [(4, "one-token")]
@@ -861,7 +865,7 @@ def test_other_punctuation_edge_releases_zero_lookahead_rule_without_whitespace(
         when=[{"at": -1, "f": "text", "in": ["!"]}],
         match="A! B",
     )
-    override = SentenceOverride(base="none", before=[_loaded(rule)])
+    override = SentenceOverride(base="none", before=[_loaded(rule)], max_sentence_chars=None)
     text = "A!B!C!D"
     expected = override.decide(text)
     breaker = override.stream()
@@ -880,6 +884,7 @@ def test_decided_before_rule_does_not_wait_for_sentence_inventory_locality():
         base="none",
         before=[_loaded(_next_upper(), inventories=(inventory,))],
         inventories=[inventory],
+        max_sentence_chars=None,
     )
     text = "Mr. Smith J "
     expected = override.decide(text)
@@ -970,7 +975,9 @@ def test_cache_retains_future_lookbehind_tokens_after_pending_empties(monkeypatc
     )
     loaded = _loaded(rule)
     monkeypatch.setattr(sentence_override_module, "_token_features_base", counted)
-    breaker = SentenceOverride(base="none", before=[loaded], cache=True).stream()
+    breaker = SentenceOverride(
+        base="none", before=[loaded], cache=True, max_sentence_chars=None
+    ).stream()
     breaker.feed("A. B.\n\nC ")
     assert [item["offset"] for item in breaker.pending()] == [9]
     assert any(key[2] == "B" for key in breaker._cache.values)
@@ -1010,7 +1017,7 @@ def test_gap_character_horizon_is_identical_under_every_chunking():
         ],
         match="Mr. A B",
     )
-    override = SentenceOverride(base="none", before=[_loaded(gap)])
+    override = SentenceOverride(base="none", before=[_loaded(gap)], max_sentence_chars=None)
     text = "Mr. A B"
     expected = override.decide(text)
     assert (expected[0]["id"], expected[0]["tokens_read"]) == ("gap", 1)
@@ -1032,7 +1039,7 @@ def test_beyond_at_next_token_start_is_identical_under_every_chunking():
         ],
         match="Mr. A B continues.",
     )
-    override = SentenceOverride(base="none", before=[_loaded(beyond)])
+    override = SentenceOverride(base="none", before=[_loaded(beyond)], max_sentence_chars=None)
     text = "Mr. A B continues."
     expected = override.decide(text)
     assert (expected[0]["id"], expected[0]["tokens_read"]) == ("beyond-at-start", 1)
@@ -1064,18 +1071,22 @@ def test_unavailable_predicate_short_circuits_before_later_falsifier():
 
 def test_streaming_protection_timing_and_watermark_seal():
     span = {"start": 0, "end": 9, "type": "name", "scope": "token"}
-    watermark = SentenceOverride(base="none").stream(protection="watermark")
+    watermark = SentenceOverride(base="none", max_sentence_chars=None).stream(
+        protection="watermark"
+    )
     assert watermark.feed("Mr. S") == []
     protected_decisions = watermark.feed("mith", protected=[span], protected_through=9)
     assert protected_decisions[0]["layer"] == "token"
     assert all(item["offset"] != 4 for item in watermark.close())
 
-    unprotected = SentenceOverride(base="none").stream()
+    unprotected = SentenceOverride(base="none", max_sentence_chars=None).stream()
     assert unprotected.feed("Mr. S")[0]["offset"] == 4
     with pytest.raises(LateProtectedSpan):
         unprotected.feed("mith", protected=[span])
 
-    override = SentenceOverride(base="none", before=[_loaded(_next_upper())])
+    override = SentenceOverride(
+        base="none", before=[_loaded(_next_upper())], max_sentence_chars=None
+    )
     none = override.stream()
     assert none.feed("Mr. Smith J")[0]["offset"] == 4
     with pytest.raises(LateProtectedSpan):
@@ -1087,12 +1098,14 @@ def test_streaming_protection_timing_and_watermark_seal():
     got = marked.feed("ones", protected=[protected], protected_through=15) + marked.close()
     assert got == override.decide("Mr. Smith Jones", protected=[protected])
 
-    sealed = SentenceOverride(base="none").stream(protection="watermark")
+    sealed = SentenceOverride(base="none", max_sentence_chars=None).stream(protection="watermark")
     assert sealed.feed("Mr. Smith", protected_through=0) == []
-    assert sealed.close() == SentenceOverride(base="none").decide("Mr. Smith")
+    assert sealed.close() == SentenceOverride(base="none", max_sentence_chars=None).decide(
+        "Mr. Smith"
+    )
     assert sealed.pending() == []
 
-    flushed = SentenceOverride(base="none").stream(protection="watermark")
+    flushed = SentenceOverride(base="none", max_sentence_chars=None).stream(protection="watermark")
     flushed.feed("Mr. Smith", protected_through=0)
     flushed.flush()
     with pytest.raises(LateProtectedSpan):
@@ -1101,7 +1114,7 @@ def test_streaming_protection_timing_and_watermark_seal():
 
 def test_protected_token_read_horizon_obeys_watermark():
     span = {"start": 0, "end": 9, "type": "name", "scope": "token"}
-    breaker = SentenceOverride(base="none").stream(protection="watermark")
+    breaker = SentenceOverride(base="none", max_sentence_chars=None).stream(protection="watermark")
     assert breaker.feed("Mr. Smith N", protected=[span], protected_through=4) == []
     assert breaker.pending()[0] == {
         "offset": 4,
@@ -1116,7 +1129,9 @@ def test_protected_token_read_horizon_obeys_watermark():
 
 def test_inventory_locality_read_horizon_obeys_watermark():
     override = SentenceOverride(
-        base="none", inventories=[_cross_candidate_inventory(level="sentence")]
+        base="none",
+        inventories=[_cross_candidate_inventory(level="sentence")],
+        max_sentence_chars=None,
     )
     text = "Mr. Smith " + "context " * 20
     breaker = override.stream(protection="watermark")
