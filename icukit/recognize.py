@@ -8,6 +8,7 @@ those candidates unchanged.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from copy import copy
 from dataclasses import dataclass, replace
@@ -1446,6 +1447,33 @@ def _interval_pattern_parts(pattern: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _interval_pattern_literal(pattern: str) -> str | None:
+    """Decode a field-free ICU pattern fragment to the literal text it writes.
+
+    ASCII pattern letters outside quotes are fields, not literals, so their presence
+    means the fragment is not proved field-free. Apostrophes quote literal pattern
+    letters and a doubled apostrophe writes one apostrophe; quote syntax itself is
+    never part of the returned surface.
+    """
+    literal = []
+    quoted = False
+    cursor = 0
+    while cursor < len(pattern):
+        character = pattern[cursor]
+        if character == "'":
+            if cursor + 1 < len(pattern) and pattern[cursor + 1] == "'":
+                literal.append("'")
+                cursor += 2
+                continue
+            quoted = not quoted
+        elif not quoted and _is_pattern_letter(character):
+            return None
+        else:
+            literal.append(character)
+        cursor += 1
+    return None if quoted else "".join(literal)
+
+
 def _continues_interval_word(text: str, cursor: int) -> bool:
     if cursor < 0 or cursor >= len(text):
         return False
@@ -1483,6 +1511,23 @@ def _date_interval_gate(
         if result is not None:
             result = result | matcher_gate
     return result
+
+
+def _interval_separator_needle(separator_literal: str) -> str | None:
+    """Return one exact literal every matching separator surface must contain.
+
+    ``separator_literal`` is decoded surface text, never ICU pattern syntax. The reader
+    equates the four members of ``_SPACES`` but compares every other code point exactly,
+    so any non-space run is mandatory in the same equivalence space. A separator made
+    only of flexible spaces has no safe needle.
+    """
+    cursor = 0
+    while cursor < len(separator_literal) and separator_literal[cursor] in _SPACES:
+        cursor += 1
+    end = cursor
+    while end < len(separator_literal) and separator_literal[end] not in _SPACES:
+        end += 1
+    return separator_literal[cursor:end] or None
 
 
 class FlexibleDateIntervalDetector(_GatedReader):
@@ -1526,6 +1571,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
             pattern = interval_info.getIntervalPattern(skeleton, calendar_field)
             if pattern:
                 parts = _interval_pattern_parts(pattern)
+                if parts is not None:
+                    part1, separator_pattern, part2 = parts
+                    separator = _interval_pattern_literal(separator_pattern)
+                    parts = None if separator is None else (part1, separator, part2)
             else:
                 parts = _recovered_interval_parts(locale, skeleton, calendar_field)
             if parts is None or parts in seen:
@@ -1565,6 +1614,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
                 )
             )
         self._matchers = tuple(matchers)
+        separator_needles = tuple(
+            _interval_separator_needle(matcher[1]) for matcher in self._matchers
+        )
+        self._separator_needles = frozenset(separator_needles) if all(separator_needles) else None
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._spec = DateIntervalSpec(locale, skeleton)
         self._dif = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
@@ -2045,6 +2098,12 @@ class FlexibleDateIntervalDetector(_GatedReader):
         A span whose zone text names several zones is read once per zone, the reader's
         own locale's zone first.
         """
+        if not self._matchers:
+            return []
+        if self._separator_needles is not None and not any(
+            needle in text for needle in self._separator_needles
+        ):
+            return []
         # Compute the code-point/UTF-16 offset maps once per scan and pass them to every
         # candidate start (avoids O(n^2) scanning). They are bound to this call, never
         # stored on the detector, so one detector can serve concurrent or nested calls.
@@ -5420,10 +5479,25 @@ class FlexibleSpelloutDetector(_GatedReader):
         self._spec = self._format_spec()
         self._connectors, self._tokens, self._ambiguous_units = self._table(locale, self._ruleset)
         tokens_by_first: dict[str, list[str]] = {}
+        single_tokens_by_first: dict[str, list[str]] = {}
         for token in self._tokens:
             tokens_by_first.setdefault(token[0], []).append(token)
+            if len(token) == 1:
+                single_tokens_by_first.setdefault(token[0], []).append(token)
         self._tokens_by_first = {
             first: tuple(first_tokens) for first, first_tokens in tokens_by_first.items()
+        }
+        self._single_tokens_by_first = {
+            first: tuple(first_tokens) for first, first_tokens in single_tokens_by_first.items()
+        }
+        prefixes = {token[:2] for token in self._tokens if len(token) > 1}
+        self._tokens_by_prefix = {
+            prefix: tuple(
+                token
+                for token in tokens_by_first[prefix[0]]
+                if len(token) == 1 or token.startswith(prefix)
+            )
+            for prefix in prefixes
         }
         _install_gates(
             self,
@@ -5460,12 +5534,15 @@ class FlexibleSpelloutDetector(_GatedReader):
 
     @staticmethod
     def _casefolded_token_end(text: str, start: int, token: str) -> int | None:
-        folded = ""
+        folded_length = 0
         cursor = start
-        while cursor < len(text) and len(folded) < len(token):
-            folded += text[cursor].casefold()
+        while cursor < len(text) and folded_length < len(token):
+            piece = text[cursor].casefold()
+            if not token.startswith(piece, folded_length):
+                return None
+            folded_length += len(piece)
             cursor += 1
-        return cursor if folded == token else None
+        return cursor if folded_length == len(token) else None
 
     def _token_end(self, text: str, start: int) -> int | None:
         if start >= len(text):
@@ -5473,7 +5550,19 @@ class FlexibleSpelloutDetector(_GatedReader):
         first = text[start].casefold()
         if not first:
             return None
-        for token in self._tokens_by_first.get(first[0], ()):
+        prefix = first
+        cursor = start + 1
+        while cursor < len(text) and len(prefix) < 2:
+            prefix += text[cursor].casefold()
+            cursor += 1
+        candidates = (
+            self._tokens_by_first.get(first[0], ())
+            if len(prefix) < 2
+            else self._tokens_by_prefix.get(
+                prefix[:2], self._single_tokens_by_first.get(first[0], ())
+            )
+        )
+        for token in candidates:
             end = self._casefolded_token_end(text, start, token)
             if end is not None:
                 return end
@@ -7893,6 +7982,7 @@ _RANGE_WINDOW = 48
 # A range's endpoint is not one number of a longer run joined by these ("14-3-3",
 # "2024-03-05", "2:07–4:07"), which is a code, a date, or a time, not a range.
 _RANGE_CHAIN_MARKS = frozenset({_HYPHEN_MINUS, ":", "/", "."})
+_PARAGRAPH_BOUNDARY = re.compile(r"(?:\r\n|\n)[ \t]*(?:\r\n|\n)|\u2029")
 
 
 def _range_mark(text: str) -> str:
@@ -8067,6 +8157,11 @@ def _with_unit(value: NumberValue, key: tuple[str, str]) -> NumberValue | Measur
 
 def _is_space(character: str) -> bool:
     return character in _SPACES or character.isspace()
+
+
+def _has_paragraph_boundary(text: str) -> bool:
+    """Whether ``text`` contains a blank-line or paragraph-separator boundary."""
+    return _PARAGRAPH_BOUNDARY.search(text) is not None
 
 
 def _runs_on(text: str, start: int, end: int, marks: Iterable[str]) -> bool:
@@ -8494,7 +8589,11 @@ class FlexibleNumberRangeDetector:
                 rights += self._read_sides(text, right_start, window_end, at_end=False)
         for left, right in dict.fromkeys(product(lefts, rights)):
             pair = self._pair(left, right)
-            if pair is None or _runs_on(text, left.start, right.end, self._marks):
+            if (
+                pair is None
+                or _has_paragraph_boundary(text[left.end : right.start])
+                or _runs_on(text, left.start, right.end, self._marks)
+            ):
                 continue
             start_value, end_value, collapse = pair
             if _minus_before(text, left.start):

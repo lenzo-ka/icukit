@@ -7,6 +7,7 @@ from pathlib import Path
 import icu
 import pytest
 
+from icukit import flexible_detectors
 from icukit.detectors import (
     DateDetector,
     DateIntervalSpec,
@@ -22,6 +23,7 @@ from icukit.detectors import (
     RelativeDateValue,
     detect,
 )
+from icukit.engine import generated_detectors
 from icukit.locale import COMPACT_LONG, COMPACT_SHORT, format_compact
 from icukit.recognize import _SPACES as _RECOGNIZE_SPACES
 from icukit.recognize import (
@@ -40,6 +42,7 @@ from icukit.recognize import (
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
+    _interval_pattern_literal,
     _language_time_separators,
     _normalize_interval_surface,
 )
@@ -130,6 +133,133 @@ def test_flexible_date_interval_reformat_gate_and_boundaries():
     assert detector.detect(surface.replace("2024", "oops")) == []
     assert detector.detect("x" + surface) == []
     assert detector.detect(surface + "x") == []
+
+
+def test_date_interval_without_a_separator_does_no_matcher_work(monkeypatch):
+    calls = 0
+    original = FlexibleDateIntervalDetector._read
+
+    def counted_read(self, *args):
+        nonlocal calls
+        calls += 1
+        return original(self, *args)
+
+    monkeypatch.setattr(FlexibleDateIntervalDetector, "_read", counted_read)
+    detector = FlexibleDateIntervalDetector("en_US", "yMd")
+
+    assert detector.detect("1 " * 1000 + "x! ") == []
+    assert calls == 0
+
+
+def _interval_detections(gang, text):
+    return detections_to_json(
+        item for item in gang.detect(text) if item["type"].startswith("date-interval:")
+    )
+
+
+def _interval_witnesses():
+    en_year = _interval_surface("en_US", "y", {"YEAR": 2020}, {"YEAR": 2024})
+    ko_years = _interval_surface("ko_KR", "y", {"YEAR": 2020}, {"YEAR": 2024})
+    es_years = _interval_surface("es_CO", "y", {"YEAR": 2020}, {"YEAR": 2024})
+    equal = _interval_surface(
+        "en_US",
+        "yMMMd",
+        {"YEAR": 2026, "MONTH": 4, "DATE": 1},
+        {"YEAR": 2026, "MONTH": 4, "DATE": 1},
+    )
+
+    def separator_space(surface, space):
+        return "".join(
+            space if character in _RECOGNIZE_SPACES else character for character in surface
+        )
+
+    return (
+        ("case-upper", "en_US", "1 May 2026 TO 3 May 2026"),
+        ("case-title", "en_US", "Jan 1 To Jan 3"),
+        ("nfc-literal", "ko_KR", ko_years),
+        ("nfd-literal", "ko_KR", ko_years.replace("년", "년", 1)),
+        ("full-width-hyphen", "en_US", en_year.replace("–", "－")),
+        ("quoted-pattern-literal", "es_CO", es_years),
+        ("separator-nnbsp", "en_US", separator_space(en_year, "\N{NARROW NO-BREAK SPACE}")),
+        ("separator-nbsp", "en_US", separator_space(en_year, "\N{NO-BREAK SPACE}")),
+        ("separator-thin", "en_US", separator_space(en_year, "\N{THIN SPACE}")),
+        ("equal-endpoint", "en_US", equal),
+    )
+
+
+@pytest.mark.parametrize("gang_factory", [generated_detectors, flexible_detectors])
+@pytest.mark.parametrize(("_name", "locale", "text"), _interval_witnesses())
+def test_interval_separator_prefilter_matches_ungated_real_gangs(gang_factory, _name, locale, text):
+    gang = gang_factory(locale)
+    gated = _interval_detections(gang, text)
+    readers = [
+        detector
+        for detector in gang.detectors
+        if isinstance(detector, FlexibleDateIntervalDetector)
+    ]
+    needles = [detector._separator_needles for detector in readers]
+    try:
+        for detector in readers:
+            detector._separator_needles = None
+        ungated = _interval_detections(gang, text)
+    finally:
+        for detector, separator_needles in zip(readers, needles, strict=True):
+            detector._separator_needles = separator_needles
+
+    assert gated == ungated
+
+
+def test_interval_separator_needles_are_decoded_mandatory_literals():
+    assert _interval_pattern_literal(" 'al' ") == " al "
+    assert _interval_pattern_literal("\N{NARROW NO-BREAK SPACE}'г'. – ") == (
+        "\N{NARROW NO-BREAK SPACE}г. – "
+    )
+    assert _interval_pattern_literal(" 'unterminated") is None
+    assert _interval_pattern_literal(" field ") is None
+
+    detector = FlexibleDateIntervalDetector("es_CO", "y")
+    assert {matcher[1] for matcher in detector._matchers} == {" a "}
+    assert detector._separator_needles == frozenset({"a"})
+    assert all("'" not in matcher[1] for matcher in detector._matchers)
+    assert detector.detect("2020 a 2024")
+
+
+def test_spellout_token_mismatch_stops_at_the_first_different_character():
+    class CountedText(str):
+        reads = 0
+
+        def __getitem__(self, key):
+            if isinstance(key, int):
+                self.reads += 1
+            return super().__getitem__(key)
+
+    detector = FlexibleSpelloutDetector("ru_RU", ruleset="%spellout-numbering-year")
+    tokens = detector._tokens_by_first["1"]
+    text = CountedText("1 " * 1000)
+
+    assert detector._token_end(text, 0) is None
+    assert tokens
+    assert text.reads == 2
+
+
+@pytest.mark.parametrize(
+    ("text", "token"),
+    [("ß", "ss"), ("İ", "i\u0307"), ("ςα", "σα")],
+)
+def test_spellout_prefix_index_matches_the_old_casefold_scan(text, token):
+    detector = object.__new__(FlexibleSpelloutDetector)
+    detector._tokens_by_first = {token[0]: (token,)}
+    detector._single_tokens_by_first = {}
+    detector._tokens_by_prefix = {token[:2]: (token,)}
+
+    folded = ""
+    cursor = 0
+    while cursor < len(text) and len(folded) < len(token):
+        folded += text[cursor].casefold()
+        cursor += 1
+    old_end = cursor if folded == token else None
+
+    assert detector._token_end(text, 0) == old_end == len(text)
 
 
 def _reformat_value(locale, skeleton, value):
