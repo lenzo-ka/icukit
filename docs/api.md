@@ -5844,7 +5844,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return flexible measure candidates in source order, a bare per form beside them.
+Return flexible measure readings in source order, a bare per form beside them.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -5884,6 +5884,13 @@ The surfaces are the unit's short, narrow, and wide forms as ICU formats them
 kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
 each of that locale's plural categories (see :func:`_plural_samples`), each also in
 the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+English abbreviations of two or more ASCII letters additionally accept a period
+after each abbreviated word ("5 ft.", "100 sq. ft."). When the final abbreviation
+period is also sentence-final, both the span with it and the span without it are
+readings; an internal period belongs only to the punctuated reading. A period on a
+wide unit word or one-letter symbol remains outside the unit. Before a following
+numeric token, the period also remains outside the unit: numbered references such
+as "Ch. 5 sec. 2" do not present "5 sec." as a seconds reading.
 Spacing stays flexible except for detached quote or prime marks. Those do not read
 after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
 :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
@@ -5900,7 +5907,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return flexible measure candidates in source order, a bare per form beside them.
+Return flexible measure readings in source order, a bare per form beside them.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 

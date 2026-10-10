@@ -4,6 +4,12 @@
 
 ### Added
 
+- Flexible English measure readers accept periods after known abbreviated unit words
+  of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
+  curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
+  boundary produces readings both with and without the period; internal periods belong
+  to the punctuated reading. Periods before a following number, after full unit words,
+  and after one-letter symbols remain punctuation.
 - `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
   with paragraph-boundary segmentation by default, optional line or explicit
   boundaries, absolute offsets, `pending_from` on every batch, bounded pending text,
