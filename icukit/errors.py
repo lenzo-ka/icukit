@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 class ICUKitError(Exception):
@@ -33,6 +34,22 @@ class PatternError(ICUKitError):
     """Error related to patterns (regex, date format, etc.)."""
 
     pass
+
+
+class RegexLimitError(PatternError):
+    """An ICU regex operation exceeded its configured resource limit."""
+
+    def __init__(
+        self,
+        limit: Literal["time", "stack"],
+        value: int,
+        pattern: str,
+    ) -> None:
+        self.limit = limit
+        self.value = value
+        self.pattern = pattern
+        unit = "steps" if limit == "time" else "bytes"
+        super().__init__(f"regex exceeded its {limit} limit of {value} {unit}: {pattern!r}")
 
 
 class TransliteratorError(ICUKitError):
