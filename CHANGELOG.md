@@ -23,6 +23,13 @@
   space where ICU writes them attached (`84 "`, `6 ′`); `guarded=True` or an explicit
   guarded-family selection includes those readings for lattice consumers. Letter unit
   symbols such as `24 h`, `62 d`, and `62 s` retain the default measure reading.
+- Add the opt-in `en-real-cart@1` English sentence-break model, selected with
+  `base="en-real-cart@1"` and never the default. It is consulted only where the
+  English exception list leaves a candidate undecided, uses eight features chosen by
+  permutation importance with a flat evaluator, and costs well under twice the default
+  sentence-break latency. The model file is distributed under CC BY-SA 4.0 because
+  part of its training text is CC BY-SA, with GUM and UK House of Commons Hansard
+  attribution and a per-document source receipt.
 
 ### Changed
 
@@ -30,6 +37,8 @@
   a text has none of the decoded mandatory literals under the reader's exact separator
   comparison. Narrow spell-out token comparisons by their folded prefix. Long runs of
   isolated digits no longer pay those unsuccessful per-start costs.
+- Explicit Cartlet models may use a reduced `icukit.features@1` schema when every
+  feature name is unique and belongs to the runtime schema.
 
 ### Fixed
 

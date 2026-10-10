@@ -1,0 +1,979 @@
+{
+  "license": {
+    "artifact_spdx": "CC-BY-SA-4.0",
+    "legal_code": "LICENSE",
+    "notice": "NOTICE",
+    "review_note": "The model is distributed under CC-BY-SA-4.0 because part of its training text is CC-BY-SA. ShareAlike is applied to the model; attribution is provided in NOTICE and the source entries in this receipt. The license decision was recorded on 2026-10-10, and no release review is pending.",
+    "release_review_required": false,
+    "share_alike_characterization": "applies"
+  },
+  "measurements": {
+    "d1": {
+      "glue2": {
+        "default": {
+          "errors": 303630,
+          "f1": 0.9548706225782143,
+          "fn": 130280,
+          "fp": 173350,
+          "precision": 0.9487967910489643,
+          "recall": 0.9610227197932062,
+          "tp": 3212180
+        },
+        "model": {
+          "errors": 216261,
+          "f1": 0.9671310740015535,
+          "fn": 160842,
+          "fp": 55419,
+          "precision": 0.9828797137629258,
+          "recall": 0.9518791548739551,
+          "tp": 3181618
+        },
+        "relative_error_cut": 0.2877482462207292,
+        "shard_blocked_bootstrap": {
+          "paired_error_reduction_one_sided_95_lower": 86728,
+          "relative_error_cut_interval95_two_sided": [
+            0.28607107978990154,
+            0.28914894735458774
+          ],
+          "relative_error_cut_one_sided_95_lower": 0.28634064526353326,
+          "replicates": 10000,
+          "seed": 27183418
+        }
+      },
+      "space": {
+        "default": {
+          "errors": 349680,
+          "f1": 0.9487656459062626,
+          "fn": 104746,
+          "fp": 244934,
+          "precision": 0.9296701819994441,
+          "recall": 0.9686620034345961,
+          "tp": 3237714
+        },
+        "model": {
+          "errors": 217694,
+          "f1": 0.9672600919750575,
+          "fn": 126710,
+          "fp": 90984,
+          "precision": 0.9724852376997969,
+          "recall": 0.9620907954021888,
+          "tp": 3215750
+        },
+        "relative_error_cut": 0.3774479524136353,
+        "shard_blocked_bootstrap": {
+          "paired_error_reduction_one_sided_95_lower": 131428,
+          "relative_error_cut_interval95_two_sided": [
+            0.3762504827428375,
+            0.3787635825061593
+          ],
+          "relative_error_cut_one_sided_95_lower": 0.3765883800097262,
+          "replicates": 10000,
+          "seed": 27183419
+        }
+      },
+      "scope": "Google TN select shards 91-94 only; shard 90 excluded; test shards 95-99 unopened"
+    },
+    "exploratory_d1_including_selection_shard": {
+      "glue2_relative_error_cut": 0.2883429940774296,
+      "glue2_one_sided_95_lower": 0.28698891016603184,
+      "scope": "Google TN select shards 90-94; shard 90 selected the packaged variant",
+      "space_relative_error_cut": 0.3769324324632681,
+      "space_one_sided_95_lower": 0.37577735220914904
+    },
+    "latency": {
+      "method": "median of seven fresh-process paired runs after shared token/run-state optimization; alternating order; warm runs have one untimed paired production call",
+      "long_document_cold": {
+        "default_us_per_token": 3.9246667904596846,
+        "model_multiple": 1.6159273791108488,
+        "model_us_per_token": 6.341976520590905
+      },
+      "long_document_warm": {
+        "default_us_per_token": 17.04396199554345,
+        "model_multiple": 1.15346723573523,
+        "model_us_per_token": 19.65965172897582
+      },
+      "select_sample_cold": {
+        "default_us_per_token": 2.36738447981643,
+        "model_multiple": 1.308309307188269,
+        "model_us_per_token": 3.0972711486368945
+      },
+      "select_sample_warm": {
+        "default_us_per_token": 2.2751859721497385,
+        "model_multiple": 1.3283177356570481,
+        "model_us_per_token": 3.0221698787246205
+      },
+      "scope": "first 2,000 glue2 chunks from select shard 90 and a 100-chunk joined document; exploratory because shard 90 selected the variant"
+    },
+    "metric": "source-record seam-break error",
+    "model_bytes": 11091,
+    "scope": "confirmatory D1 uses Google TN select shards 91-94 only; test shards 95-99 unopened"
+  },
+  "model": {
+    "bytes": 11091,
+    "deployment": {
+      "name": "en-real-cart",
+      "version": 1
+    },
+    "feature_names": [
+      "ws.before@-3",
+      "text@run-1",
+      "shape.cased@1",
+      "sentence_break.first@1",
+      "script@c-6",
+      "sentence_break@c-4",
+      "general_category@c-4",
+      "general_category@c-3"
+    ],
+    "features": "icukit.features@1",
+    "format": "cartlet JSON gzip",
+    "identity": {
+      "icu": "78.3",
+      "token_profile": "sha256:d181cf8c122b6fe98ef6ccdaa5139b35d3a1b24185a023845898a4941fd9e2d5",
+      "unicode": "17.0"
+    },
+    "parameters": {
+      "depth": 10,
+      "lookahead": 1,
+      "minimum_leaf": 10,
+      "trainer": "sklearn through cartlet 0.8.0"
+    },
+    "sha256": "sha256:be9fa4df8bee3f1fe886f28a40f706a28732091ee9975675aa52ba7c03de3366",
+    "shipped_as": "sentence-real-cart.json.gz"
+  },
+  "schema_version": 1,
+  "selection": {
+    "development_candidates": 740,
+    "english_ewt": "excluded because its text descends from LDC2012T13",
+    "feature_reduction": "top eight features by 20-repeat held-out permutation error increase for the previously selected full tree",
+    "policy": "fit on train only; choose pruning and features on held-out development; use the first 2,000 chunks of select shard 90 to select the packaged variant; confirm on select shards 91-94 only; test shards 95-99 unopened",
+    "train_candidates": 4464
+  },
+  "sources": {
+    "gum": {
+      "annotation_commit": "1fe635509c649e376dfb449d528424ab78f4eaee",
+      "annotation_license": "CC-BY-4.0",
+      "document_count": 101,
+      "documents": [
+        {
+          "document": "GUM_academic_art",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:6acec609b495d67101afb3d9a77386f6e37c1bfb01cad1b36686e7736c643278",
+          "source_url": "https://dh2017.adho.org/abstracts/333/333.pdf",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_census",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:3f4eadabae1f181791dfb6d6981a1323342b8e577d43528b9dc0f8a97af5d6ec",
+          "source_url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0202223",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_economics",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:39f7d147649d32647fea7dc5233aef596df89f44d6186578cdb868794ab2c217",
+          "source_url": "https://www.mdpi.com/2071-1050/11/21/6012/htm",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_enjambment",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:931c79144756456fac31c0a8258458a61c8dd13ce286b8023538f84b061440fe",
+          "source_url": "https://dh2017.adho.org/abstracts/485/485.pdf",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_epistemic",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:a249ce7c32c42f55faa3f1a7e60ded0141d60e0bfc9a95e9a41c44cb766c1054",
+          "source_url": "https://doi.org/10.1007/s11017-018-9444-1",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_exposure",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:f6a90366bcd4dcf7d627b2f909a7bf450785209f3b68157781d37ee07f03cc36",
+          "source_url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0032974",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_academic_games",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:6211532edca663ae44347b7daf92942b5770c0338e6f70fe683eb5f416ad4266",
+          "source_url": "https://dh2017.adho.org/abstracts/260/260.pdf",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_huh",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:cbf76cabd1dda87e84edbc088d578088b09d7eb3a451a64939843de0e1c82c8e",
+          "source_url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0078273",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_implicature",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:56baaf0cf069d041a3f616ef28266df2c2d42023f53c9f0f017c2360f63c52c6",
+          "source_url": "https://journals.linguisticsociety.org/proceedings/index.php/PLSA/article/view/4112/3810",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_librarians",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:d8f32e1ec83e90c64ff086f0b02488342f68f1d76b49443ba792306461aa59a5",
+          "source_url": "https://dh2017.adho.org/abstracts/455/455.pdf",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_academic_lighting",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:da886fbb142bce73f2766d0640f8442acb346ad03049a906212c45ce50751296",
+          "source_url": "http://iopscience.iop.org/article/10.1088/1755-1315/114/1/012003/pdf",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_mutation",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:3a2e0fef44e8c20ab310409446436093cf6185702c50df29be23a80fdb847742",
+          "source_url": "https://www.mdpi.com/2504-3900/21/1/43",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_replication",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:a973dfd9abfcc8b8c455d16babaf28f9d3eadc527f243d6b962c3395567f2816",
+          "source_url": "https://onlinelibrary.wiley.com/doi/abs/10.1111/lang.12286",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_salinity",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:55a4271d3fa560d93adb2776b525fdbf30eb6793ef2e54577e0cde31cfc203d9",
+          "source_url": "https://www.mdpi.com/2072-4292/11/21/2486/htm",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_theropod",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:afa1e7faba54bc30dfa2d5cd59e28e31675641cfc6c028ec8c07e5ba5ed79b8f",
+          "source_url": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0088458",
+          "split": "train"
+        },
+        {
+          "document": "GUM_academic_thrones",
+          "genre": "academic",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:dbac57b54b6526986b7956d03aa62fb59e6bb2549935f352d1fcaf4d942c28f7",
+          "source_url": "https://dh2017.adho.org/abstracts/046/046.pdf",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_bernoulli",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:e99b6f5406e6cac217d650d74f77db664338a910fe4b58cad9d03a8739a39bf3",
+          "source_url": "https://en.wikipedia.org/wiki/Daniel_Bernoulli",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_byron",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:df5a01e3674867574af0ee96afc38ce18f49b8c6990c0da7e23091d2508ebfb5",
+          "source_url": "https://en.wikipedia.org/wiki/Lord_Byron",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_bio_chao",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:193bf1cf010bdab35afb6e5a7b4932e80d62971919f47106763d1bb373db96d7",
+          "source_url": "https://en.wikipedia.org/wiki/Yuen_Ren_Chao",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_emperor",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:8a1d19e4201e5b0c82651c30c6eee27cefdcc0d610e7fb10eb601e0fbb9447d2",
+          "source_url": "https://en.wikipedia.org/wiki/Emperor_Norton",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_bio_enfant",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:f589c85b78b229156fa67519291310ecf188901683c072a17bba845f9b4b80cb",
+          "source_url": "https://en.wikipedia.org/wiki/Pierre_Charles_L%27Enfant",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_fillmore",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:f210a4ba7f29bc719731c654e1deef5ebb91f83433b43b335a1ce46ae0da35e8",
+          "source_url": "https://en.wikipedia.org/wiki/Charles_J._Fillmore",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_galois",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:94708a814d81336831bddb6cd35d23e372bd450edfd01b27623e61c65361d718",
+          "source_url": "https://en.wikipedia.org/w/index.php?title=%C3%89variste_Galois&action=history",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_goode",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:d6e0eaf61b1a32dc7fa03a3f17cecfdc144cac949fa8d8720cad0286bfb7c79a",
+          "source_url": "https://en.wikipedia.org/wiki/Matthew_Goode",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_gordon",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:53d9bc688385827677796b87f7298f570f87d417b12445d765681214b2281338",
+          "source_url": "https://en.wikipedia.org/wiki/Patrick_Gordon",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_hadid",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:ccfee2c69c19ba5c9def766ec9b4b667e551999d99f9c3129e4feefc305d9c5b",
+          "source_url": "https://en.wikipedia.org/wiki/Zaha_Hadid",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_higuchi",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:bff0df4e11a25091f2bb88f7f204f79de47c52d49c03dc5f5a616cbe2d27dac3",
+          "source_url": "https://en.wikipedia.org/wiki/Ichiy%C5%8D_Higuchi",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_holt",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:d1c258ad844b0649374c560807a18850c12b551cff2c46d90dca29e530e8d6e3",
+          "source_url": "https://en.wikipedia.org/wiki/Brock_Holt",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_jerome",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:9450c73e1ddd19e948cc52dcf395b38fbc98d7cdaeb837f2d87eea999c2e3729",
+          "source_url": "https://en.wikipedia.org/wiki/Jerome",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_marbles",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:39e36446bdf0aa666643a7c0e63b7984c18c533805985694a909115b62959a77",
+          "source_url": "https://en.wikipedia.org/wiki/Jenna_Marbles",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_moreau",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:a100f9369af61cc39efb5dc5ff0070b30464cb32463a1bca904d5ff4b35ad3ab",
+          "source_url": "https://en.wikipedia.org/wiki/Jeanne_Moreau",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_nida",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:06311376f2ce6055d261047e12c049b563e9578aab46b2dab944482559f20cc2",
+          "source_url": "https://en.wikipedia.org/wiki/Eugene_Nida",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_padalecki",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:6764444edcc35ebcae4694aae7e16cb1cc5f6bf23e890c70d08b9ce820051298",
+          "source_url": "https://en.wikipedia.org/wiki/Jared_Padalecki",
+          "split": "train"
+        },
+        {
+          "document": "GUM_bio_theodorus",
+          "genre": "bio",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:8625a7c111b6e074d2bcdd0931f565be76753b0509576ea14da7ef8e29d0112f",
+          "source_url": "https://en.wikipedia.org/wiki/Theodorus_of_Tabennese",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_carpet",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:f25c7f96d29dfc561558ee60e895934b1b8ece61d033bcf51d9642f538c3bbaa",
+          "source_url": "https://www.linguistics.ucsb.edu/research/santa-barbara-corpus#SBC053",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_crash",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:c419d1f5708a1fb0b5c6d086891a00ce6ba35689ef1ac81200efc4c06954bd8b",
+          "source_url": "https://www.youtube.com/watch?v=TyWE562qrV4",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_equality",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:490eec9423abe4877f6ce61a1df0650a748a4de67e42ef416ad215dbf5c30392",
+          "source_url": "https://www.youtube.com/watch?v=P37ps_mLqDg&t=3164s&ab_channel=SupremeCourtofIndia",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_fire",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:cc24c3b0cb61d88ec06bd77017f20ab79253074e50e3a6b90fb1a3ea309f279f",
+          "source_url": "https://www.azcourts.gov/coa1/OralArguments/OralArgumentRecordings",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_loan",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:0d92bc58a1b539b713c7f0ae3e4b2633d7379765201a53957d57202757b9805f",
+          "source_url": "https://www.supremecourt.gov/oral_arguments/argument_transcripts/2022/22-506_5426.pdf",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_court_mental",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:c1f2f78f2f2c6f311ea47202ec6e6df85064e50f36493b07e03eb5c01b4e3c6f",
+          "source_url": "https://www.youtube.com/watch?v=AK2ty3tk--s",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_mountain",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:cabcd5542cc83158998321153bc49ee689590ea33dace3627aa67c434ad7a076",
+          "source_url": "https://www.youtube.com/watch?v=deoO6eOqMRM",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_negligence",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:c71be3f1d4b138268134f00e977ae04723987c5fe8cea87260828e5401f3911a",
+          "source_url": "https://www.scc-csc.ca/case-dossier/info/webcastview-webdiffusionvue-eng.aspx?cas=38521&id=2019/2019-12-03--38521&date=2019-12-03",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_court_nullification",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:f07a6dfe59ddc6de13ed0f54138a6de32f7dc73aab88b129b8c3659de9888e52",
+          "source_url": "https://www.youtube.com/watch?v=Zoy_Js_hyQA",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_prince",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:c8a55bf30969367228e091999aed64c3a71b388883ecac70e4d85d08713126ac",
+          "source_url": "https://www.supremecourt.gov/oral_arguments/argument_transcripts/2022/21-869_g314.pdf",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_property",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:e882af17ab2acfc88a50ea8bd01be1f33c4f54a19f8653d8d8f92914c68a0029",
+          "source_url": "https://www.courts.state.hi.us/oral-argument-before-the-hawaii-supreme-court-scap-22-0000368",
+          "split": "train"
+        },
+        {
+          "document": "GUM_court_way",
+          "genre": "court",
+          "license": "CC-BY-4.0",
+          "metadata_sha256": "sha256:ded18f03b3520d8cb1a6b8463e9420faa088d35d0a08e6c7cd67ae41149fdc16",
+          "source_url": "https://www.youtube.com/watch?v=2GsL6NBeWiE",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_ants",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:1fb2e090edfe61325df9140ccfcdab55298e97de97f70826ccdbf2a55d5d1b1e",
+          "source_url": "https://en.wikinews.org/wiki/Biologist_Nick_Bos_tells_Wikinews_about_%27self-medicating%27_ants",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_brotherhood",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:063ae09e218f3f69fdf3f2ddc656f44c3fd5572a3726520273353d9ffabca114",
+          "source_url": "https://en.wikinews.org/wiki/Wikinews_interviews_President_of_the_International_Brotherhood_of_Magicians",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_chomsky",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:1162e9ff7d7f80a5b53e08154bd85a42b9dfd5ac6e80587afba71518565a7dfb",
+          "source_url": "https://en.wikinews.org/wiki/Interview_with_US_political_activist_and_philosopher_Noam_Chomsky",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_cocktail",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:4b03b31a72e6cf4983055ba58d61db92212982866eaf9a9fb3f9679442454092",
+          "source_url": "https://en.wikinews.org/wiki/Wikinews_interviews_New_York_bar_owner_on_Santorum_cocktail",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_cyclone",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:5199c4e458619100c5176e8f752129292672d547d4a119b4bca7041a1deb7c1b",
+          "source_url": "https://en.wikinews.org/wiki/Wikinews_interviews_meteorological_experts_on_Cyclone_Phalin",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_interview_daly",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:06e5b85a2223d3c8d2e2de55ad6e2aa72c396a02bb9e56bcc234d60218129bbc",
+          "source_url": "https://en.wikinews.org/wiki/Cold_as_ice:_Wikinews_interviews_Marymegan_Daly_on_unusual_new_sea_anemone",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_dungeon",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:ded85c84987d337bfd30e05f38b806ff10ac0f67c0acdcdad52d418dfec7c138",
+          "source_url": "https://en.wikinews.org/wiki/BDSM_as_business:_An_interview_with_the_owners_of_a_dungeon",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_gaming",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:e51f1d1df6230e2a93fa70159b0704ba9ec1112ed927d2c9120423e19ae273f5",
+          "source_url": "https://en.wikinews.org/wiki/Wikinews_interviews_Mario_J._Lucero_and_Isabel_Ruiz_of_Heaven_Sent_Gaming",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_interview_herrick",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:86368e03e89567576f523cca8a7292d42d1f116051b39f23733c08ad77955ebd",
+          "source_url": "https://en.wikinews.org/wiki/Jack_Herrick,_wikiHow_founder_interviewed_by_Wikinews",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_licen",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:accbc1822d3892b5cb8423b70070bca6e1f48c89a7bfd751108855bbe2c87299",
+          "source_url": "https://en.wikinews.org/wiki/Wikinews_interviews_academic_Simon_Li%C4%8Den_about_attitudes_towards_US_Paralympics",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_mcguire",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:d29b18397f583ba15b878ede3efa7e3c0bd791065c1c41c93d7f4551b5b5a5a1",
+          "source_url": "https://en.wikinews.org/wiki/Interview_with_LibriVox_founder_Hugh_McGuire",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_mckenzie",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:937182e556d804bd46bfdfc49acd654832ee8e017efa2190b68da9c0677854bf",
+          "source_url": "https://en.wikinews.org/wiki/Wikinews_interviews_Australian_wheelchair_basketball_player_Tina_McKenzie",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_messina",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:03cd391146ac6c90b57cb3b17eab8c7f31fb8fe898b4747908caf5eaa1281671",
+          "source_url": "https://en.wikinews.org/wiki/Frank_Messina:_An_interview_with_the_%27Mets_Poet%27",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_onion",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:c78c15ad4e36bda2004da80589542eb3e4ddc837f1bd03779a4644789f82c83e",
+          "source_url": "https://en.wikinews.org/wiki/The_Onion:_An_interview_with_%27America%27s_Finest_News_Source%27",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_peres",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:ae56f31ea970a057f55794e660c81e173d1eee3b59cc4a071918d90b9630634a",
+          "source_url": "https://en.wikinews.org/wiki/Shimon_Peres_discusses_the_future_of_Israel#The_future_of_the_peace_process_in_Israel",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_shalev",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:8271f17e032ccec0b7659faa6e5087a3f31e64ade32deebfff7ec19423c1e16a",
+          "source_url": "https://en.wikinews.org/wiki/Wikinews_interviews_Israeli_mathematician_and_writer_Aner_Shalev",
+          "split": "train"
+        },
+        {
+          "document": "GUM_interview_stardust",
+          "genre": "interview",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:a353d91d66fb10ed548b241f7a7a705ce0642db5190e6dda077ed275c2312e6d",
+          "source_url": "https://en.wikinews.org/wiki/Keep_your_eyes_peeled_for_cosmic_debris:_Andrew_Westphal_about_Stardust@home",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_afghan",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:5b40a3ec38d00a0718b95dd818f3662f57f66d974314ef3960ad583145fe8b29",
+          "source_url": "https://en.wikinews.org/wiki/After_visa_snags%2C_all-girl_Afghan_team_honored_for_%27courageous_achievement%27_at_international_robotics_competition",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_asylum",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:a2832c9c7d3ddc1fe045c4e3db66a41ef16fc410c8782278ebd2f98e15b6425a",
+          "source_url": "https://en.wikinews.org/wiki/Over_900_asylum_seekers_rescued_off_Indonesian_coast",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_clock",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:c343e8351651da2c3e1df39d8a5143639168684cfbd1fc65439a086d643f94dc",
+          "source_url": "https://en.wikinews.org/wiki/Texas_student_Ahmed_Mohamed_inspires_social_movement",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_crane",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:56d7a52e5de6d104f63492fc845a30aed6f93ecab148790e4d94a66675865d94",
+          "source_url": "https://en.wikinews.org/wiki/At_least_107_killed_in_Mecca_crane_collapse",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_defector",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:8cfe4e7638172da664ab96081a2df7c0678f8da9b2f6543c363aae93b16ad64a",
+          "source_url": "https://en.wikinews.org/wiki/Scientology_defector_arrested_after_attempting_to_leave_organization",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_election",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:1da4f10e184f308c2b1f95e41d81056c70f59f05b50616d07c36a283cc49532f",
+          "source_url": "https://en.wikinews.org/wiki/New_faces_emerge_as_veteran_politicians_step_down_in_Hong_Kong_legislative_election",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_expo",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:5f333ad5eeec1997d39bc3f120b46cf1cc07b01abdcee38b9fa6584e86066fd9",
+          "source_url": "https://en.wikinews.org/wiki/Pop_culture_celebrated_at_Fan_Expo_Canada_2016_in_Toronto",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_flag",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:d6b05d2e04c7e366527f3564d618ca6219046be863906f9106b4dd8586d8fece",
+          "source_url": "https://en.wikinews.org/wiki/New_Zealand_begins_process_to_consider_changing_national_flag_design",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_hackers",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:d47679ed500cc0e9fcf0d3e0adbc546f50fca6569fc1f54a7a912c2e2e077090",
+          "source_url": "https://en.wikinews.org/wiki/Hackers_attack_Church_of_Scientology_website",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_homeopathic",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:43fb3127729c2bbc8558fe208e86af6ae07ab07a75d2c7a158f9036679b020b7",
+          "source_url": "https://en.wikinews.org/wiki/Parents_prosecuted_after_homeopathic_treatment_leads_to_daughter%27s_death",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_news_ie9",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:4b61a4475f95023e000bd822bc9aeacadb7f942fec24ed83fe917c8cd0f36c23",
+          "source_url": "https://en.wikinews.org/wiki/Microsoft_waits_for_death_of_Internet_Explorer_6",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_imprisoned",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:bfab4c91639d22b9f9e40d19f51fb25e677eecb9f7e1311122a5af1db342b286",
+          "source_url": "https://en.wikinews.org/wiki/Australian_woman_claims_Church_of_Scientology_imprisoned_her_for_twelve_years",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_iodine",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:514d3b9c3cc5f1fd8c42b3040199a670087ef1187d94fe9d0b485a1faa12009d",
+          "source_url": "https://en.wikinews.org/wiki/Australian_children_suffering_from_iodine_deficiency",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_news_korea",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:c70974cc82396e776aa33af6eea044d5bc21a2837bde21594950417b3e1f667b",
+          "source_url": "https://en.wikinews.org/wiki/North_Korea_puts_military_in_%27quasi-state_of_war%27",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_lanterns",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:34e1ae24d21107cce82d2ce0bbe02bd56067075a15a5a70c7d911932819d79f2",
+          "source_url": "https://en.wikinews.org/wiki/Lantern_Festival_in_Taipei_lights_up_the_night",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_questionnaire",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:08b9f09100890a2ce8645bc53751bcc34caa0d3000516b3b193da4390e88c319",
+          "source_url": "https://en.wikinews.org/wiki/Reports:_%27streamlined%27_UK_asylum_process_to_replace_interview_with_questionnaire_for_five_nationalities",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_soccer",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:7b5f05b0823cc3c99b787f7d81c9010ca69e8a7c540d079b97ff2e478cf19dc6",
+          "source_url": "https://en.wikinews.org/wiki/FIFA_World_Cup_2018_day_five%3A_Sweden%2C_Belgium%2C_England_win_three_points",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_stampede",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:d37563dd8be3d39830d91121d19036a83c401d82b8f29c04e47c10391bbd993b",
+          "source_url": "https://en.wikinews.org/wiki/Hundreds_dead_in_Hajj_stampede",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_taxes",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:d0e0c0a34473618ca7652934115edfd8603c2741a7565d6f81d135ffecb92210",
+          "source_url": "https://en.wikinews.org/wiki/Local_municipalities_in_Italy_ask_taxes_from_religious_schools",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_warhol",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:8429154ce01ea1029d087e9a95e48e2fdb7e18787ac81e4bfe537ec75547a7f6",
+          "source_url": "https://en.wikinews.org/wiki/Warhol%27s_photo_legacy_spread_by_university_exhibits",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_warming",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:8d3ebf1a58f459074755ab8cae3e92a8ff6af0bef5476fb453fe10b77e39697b",
+          "source_url": "https://en.wikinews.org/wiki/Scientists_analyse_effects_of_global_warming,_atmospheric_ozone_on_crops",
+          "split": "train"
+        },
+        {
+          "document": "GUM_news_worship",
+          "genre": "news",
+          "license": "CC-BY-2.5",
+          "metadata_sha256": "sha256:15bef76b715924c74a23164e3b3f25de50bbc55e737a553db6de45db2726f4c7",
+          "source_url": "https://en.wikinews.org/wiki/Greek_court_rules_worship_of_ancient_Greek_deities_is_legal",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_athens",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:4feea6b255572956f3d21d96d6021345149e76a48c067813d55a9959c7230b2a",
+          "source_url": "https://en.wikivoyage.org/wiki/Athens",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_voyage_chatham",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:8971933875f55dc23e04d7a67f10b1bb41b86d31be18a30b283d121fbb9a9742",
+          "source_url": "https://en.wikivoyage.org/wiki/Chatham_Islands",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_cleveland",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:cba6d3e00cb03f87080bb587693ecb0b65593d38b1444c82f97248da78c50ce8",
+          "source_url": "https://en.wikivoyage.org/wiki/Cleveland",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_coron",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:bfbc495556883f0912943ab1b31f225ecfdf65e509c136912f8772e881b5ba02",
+          "source_url": "https://en.wikivoyage.org/wiki/Coron",
+          "split": "dev"
+        },
+        {
+          "document": "GUM_voyage_cuba",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:0b1015a2161c6f21b796c3e2db30e7669318bb3b29b086344d7d568d3021bb35",
+          "source_url": "https://en.wikivoyage.org/wiki/Cuba",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_fortlee",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:965bfa1601250cc2cd6c8d11aa478648bfc1761dbb9c606567ee5877a7e7ea69",
+          "source_url": "https://en.wikivoyage.org/wiki/Fort_Lee",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_guadeloupe",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:ae1278c94cfeeb4cec5244e9b1c0f9d1669723e8395385961933066c226c0e1a",
+          "source_url": "https://en.wikivoyage.org/wiki/Guadeloupe",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_isfahan",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:2969216a9b5c88126af3faf8009a7f343e9278a6ba8e840b5fe5aa58053cc134",
+          "source_url": "https://en.wikivoyage.org/wiki/Isfahan",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_lodz",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:9266984b7cd96f51bd06c192fdf00cf6c082ff94e0c3534dd2a51aaa3a76e36a",
+          "source_url": "https://en.wikivoyage.org/wiki/%C5%81%C3%B3d%C5%BA",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_merida",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:2e948115372e70345507a130d888d05a666cda9e6d763c696dc3d447a315ef06",
+          "source_url": "https://en.wikivoyage.org/wiki/M%C3%A9rida_(Mexico)",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_phoenix",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:59a2dcdccb98d9b6477252394fa254cfee492ab862d2bbf80bbde5eb3b76df6a",
+          "source_url": "https://en.wikivoyage.org/wiki/Phoenix",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_socotra",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:221ddb72a5983d1ee3c666fb610daa1ad6d913bfd4d7bd5a50aaef87f9b39788",
+          "source_url": "https://en.wikivoyage.org/wiki/Socotra",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_sydfynske",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:fbb4c876c373b76456d565e7152fb0811df54a081657a07c7958d35ecb6ec98d",
+          "source_url": "https://en.wikivoyage.org/wiki?curid=34838",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_thailand",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:3d798e8896a3eea34b5926c527ca0f11fd1987367966198e051eed65ac2f1d33",
+          "source_url": "https://en.wikivoyage.org/wiki/Thailand",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_tulsa",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:cf21aa226923975f593c21e6d3d3a37ced40d4ba8828d4d87ce63b8c1794b806",
+          "source_url": "https://en.wikivoyage.org/wiki/Tulsa",
+          "split": "train"
+        },
+        {
+          "document": "GUM_voyage_york",
+          "genre": "voyage",
+          "license": "CC-BY-SA-3.0",
+          "metadata_sha256": "sha256:e233c10b4260bf70577fecd7e459c6af7673c5449251133accc2d7eaf30a603f",
+          "source_url": "https://en.wikivoyage.org/wiki/York",
+          "split": "train"
+        }
+      ],
+      "name": "Georgetown University Multilayer Corpus (GUM)",
+      "repository": "https://github.com/amir-zeldes/gum",
+      "source_commit": "22fdf87f9c71c96bcc771461d06e689b1f90020d",
+      "ud_repository": "https://github.com/UniversalDependencies/UD_English-GUM"
+    },
+    "hansard": {
+      "license": "Open Parliament Licence 3.0",
+      "license_url": "https://www.parliament.uk/site-information/copyright-parliament/open-parliament-licence/",
+      "name": "UK House of Commons Hansard",
+      "snapshot": "2024-05-15",
+      "source": "https://hansard-api.parliament.uk"
+    }
+  }
+}

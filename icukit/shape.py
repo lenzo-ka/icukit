@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable
+from functools import lru_cache
 from typing import TypedDict
 
 import icu
@@ -170,6 +171,7 @@ def _resolve_scheme(scheme: str, materials: tuple[LocaleMaterial, ...]) -> str:
     raise ValueError(f"unknown shape scheme or material mismatch: {scheme!r}")
 
 
+@lru_cache(maxsize=4096)
 def _category(char: str) -> str:
     value = icu.Char.getIntPropertyValue(ord(char), _GC)
     return icu.Char.getPropertyValueName(_GC, value, _LONG)
@@ -374,7 +376,7 @@ def _shape_with_selections(
         scheme == "coarse@1"
         and len(normalized) == 1
         and _category(normalized) == "Uppercase_Letter"
-        and _selected_refinement(normalized, scheme, materials) is None
+        and (not materials or _selected_refinement(normalized, scheme, materials) is None)
     ):
         return "<Lu>", frozenset()
 
@@ -384,7 +386,7 @@ def _shape_with_selections(
     absorbable = False
     for char in normalized:
         category = _category(char)
-        refinement = _selected_refinement(char, scheme, materials)
+        refinement = _selected_refinement(char, scheme, materials) if materials else None
         if refinement is not None:
             selected.add(refinement.name)
         if category.endswith("_Mark") and absorbable and refinement is None:

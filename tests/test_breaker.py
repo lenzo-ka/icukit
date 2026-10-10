@@ -168,6 +168,7 @@ class TestBreakerClass:
         assert [item["text"] for item in break_sentence_spans(text, "en")] == expected
         assert [item["text"] for item in SentenceOverride("en").spans(text)] == expected
         assert Breaker("en", base="en-tn-cart@1").break_sentences(text) == expected
+        assert Breaker("en", base="en-real-cart@1").break_sentences(text) == expected
         assert Breaker("en", base="none").break_sentences(text) == [
             "He met Mr. ",
             "Smith today. ",
@@ -192,7 +193,7 @@ class TestBreakerClass:
             assert Breaker(locale).break_sentence_spans(text) == Breaker(
                 locale, base="none"
             ).break_sentence_spans(text)
-            for base in ("en-tn-cart@1", "en-tn@1"):
+            for base in ("en-tn-cart@1", "en-real-cart@1", "en-tn@1"):
                 with pytest.raises(BreakRuleLoadError, match="IDENTITY_MISMATCH"):
                     Breaker(locale, base=base).break_sentence_spans(text)
 
@@ -307,7 +308,7 @@ class TestBreakerCLI:
         assert (code, err) == (0, "")
         help_text = " ".join(out.split())
         assert "ICU + token integrity + shipped list" in help_text
-        assert "en-tn@1 and en-tn-cart@1 are opt-in" in help_text
+        assert "en-tn@1, en-tn-cart@1, and en-real-cart@1 are opt-in" in help_text
 
     def test_words(self):
         """Test words subcommand."""

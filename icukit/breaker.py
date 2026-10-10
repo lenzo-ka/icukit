@@ -60,7 +60,7 @@ BREAK_WORD = "word"
 BREAK_LINE = "line"
 BREAK_CHARACTER = "character"
 
-_SENTENCE_BASES = {"none", "en-tn@1", "en-tn-cart@1"}
+_SENTENCE_BASES = {"none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"}
 _ACTIVE_OFFSET_MAPS: ContextVar[tuple[str, OffsetMaps] | None] = ContextVar(
     "icukit_breaker_offset_maps", default=None
 )
@@ -219,7 +219,10 @@ def _raw_break_word_extents(text: str, locale: str = "en_US") -> list[tuple[int,
 
 
 @cache
-def _sentence_override(locale: str, base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None):
+def _sentence_override(
+    locale: str,
+    base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None,
+):
     """Return the shared immutable sentence override for one selection."""
     from .sentence_override import SentenceOverride
 
@@ -234,8 +237,8 @@ class Breaker:
     sentence breaking applies token integrity and shipped abbreviation
     suppressions to ICU candidates by default; ``base="none"`` keeps raw ICU
     sentence boundaries without the list. The learned ``"en-tn@1"`` rules and
-    ``"en-tn-cart@1"`` model are opt-in. Other levels and non-English defaults
-    remain ICU behavior.
+    ``"en-tn-cart@1"`` and ``"en-real-cart@1"`` models are opt-in. Other
+    levels and non-English defaults remain ICU behavior.
 
     Example:
         >>> breaker = Breaker('en')
@@ -249,7 +252,7 @@ class Breaker:
         self,
         locale: str = "en_US",
         *,
-        base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None = None,
+        base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
     ):
         """Initialize a Breaker instance.
 
@@ -258,7 +261,8 @@ class Breaker:
             base: Sentence base only. ``None`` selects ICU plus token integrity
                 and the shipped list for English except POSIX, and raw ICU
                 otherwise. ``"none"`` selects raw ICU without the list;
-                ``"en-tn@1"`` and ``"en-tn-cart@1"`` are opt-in English bases.
+                ``"en-tn@1"``, ``"en-tn-cart@1"``, and ``"en-real-cart@1"``
+                are opt-in English bases.
 
         Raises:
             BreakerError: If the locale is invalid.
@@ -649,7 +653,7 @@ def break_sentences(
     locale: str = "en_US",
     skip_empty: bool = True,
     *,
-    base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None = None,
+    base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
 ) -> list[str]:
     """Break text into sentences.
 
@@ -743,7 +747,7 @@ def break_sentence_spans(
     text: str,
     locale: str = "en_US",
     *,
-    base: Literal["none", "en-tn@1", "en-tn-cart@1"] | None = None,
+    base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
 ) -> list[BreakSpan]:
     """Return sentence spans from the locale default or selected base.
 
