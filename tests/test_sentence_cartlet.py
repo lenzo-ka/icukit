@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+import shutil
 from inspect import signature
 from pathlib import Path
 
@@ -8,6 +11,7 @@ import pytest
 
 import icukit.sentence_override as sentence_override_module
 from icukit import BreakRuleLoadError, CartletModelRef, SentenceOverride
+from icukit.tokens import tokens
 
 MODEL_PATH = (
     Path(sentence_override_module.__file__).with_name("data")
@@ -18,6 +22,8 @@ MODEL_PATH = (
 MODEL_DIGEST = "sha256:a390141818133a9fe7cbaa2b18a409d367c50996b93f9167851395a90e4eef6d"
 REAL_MODEL_PATH = MODEL_PATH.with_name("sentence-real-cart.json.gz")
 REAL_MODEL_DIGEST = "sha256:be9fa4df8bee3f1fe886f28a40f706a28732091ee9975675aa52ba7c03de3366"
+FEATURE_GOLDENS = Path(__file__).with_name("data") / "sentence-cartlet-feature-vectors.json"
+FEATURES_V1_SEMANTICS = "d8e7d02576c13401236a5bb401ca7ae2212bbb88e68435dd684469fdc922f1c9"
 
 
 def _bare_cartlet() -> SentenceOverride:
@@ -129,6 +135,107 @@ def test_real_text_model_refuses_unknown_deployment_version(monkeypatch) -> None
         SentenceOverride("en_US", base="en-real-cart@1")
 
 
+def test_cartlet_digest_binds_the_exact_bytes_parsed(tmp_path: Path, monkeypatch) -> None:
+    from cartlet import DecisionTree
+
+    path = tmp_path / "model.json.gz"
+    shutil.copy2(REAL_MODEL_PATH, path)
+    digest = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    replacement = MODEL_PATH.read_bytes()
+    original = DecisionTree.load_model
+    parsed_paths = []
+
+    def swap_source_before_parse(self, parsed_path, *args, **kwargs):
+        parsed_paths.append(Path(parsed_path))
+        path.write_bytes(replacement)
+        return original(self, parsed_path, *args, **kwargs)
+
+    monkeypatch.setattr(DecisionTree, "load_model", swap_source_before_parse)
+    loaded = SentenceOverride(
+        "en_US",
+        base=CartletModelRef(path, digest, name="race-fixture"),
+    )
+
+    assert len(parsed_paths) == 1
+    assert parsed_paths[0] != path
+    assert hashlib.sha256(path.read_bytes()).hexdigest() != digest.removeprefix("sha256:")
+    assert loaded.base.feature_names == (
+        "ws.before@-3",
+        "text@run-1",
+        "shape.cased@1",
+        "sentence_break.first@1",
+        "script@c-6",
+        "sentence_break@c-4",
+        "general_category@c-4",
+        "general_category@c-3",
+    )
+
+
+def _fixture_vector(loaded, fixture):
+    cache = sentence_override_module._TokenFeatureCache(True)
+    vector = sentence_override_module._CartletFeatureVector(
+        loaded,
+        fixture["text"],
+        fixture["offset"],
+        tokens(fixture["text"], "en_US"),
+        (),
+        "en_US",
+        (),
+        None,
+        True,
+        cache,
+    )
+    return [vector[index] for index in range(len(vector))]
+
+
+def _flat_prediction(loaded, vector):
+    node = loaded.flat_tree
+    branches = []
+    while isinstance(node, tuple):
+        feature_index, operand, left, right = node
+        if vector[feature_index] == operand:
+            branches.append("L")
+            node = left
+        else:
+            branches.append("R")
+            node = right
+    return sentence_override_module._cartlet_label(node), "".join(branches)
+
+
+def test_training_extractor_goldens_bind_feature_schema_and_evaluators() -> None:
+    fixture_set = json.loads(FEATURE_GOLDENS.read_text(encoding="utf-8"))
+    loaded = SentenceOverride("en_US", base="en-real-cart@1").base
+
+    # These vectors were recorded from the training extractor. A semantic
+    # extractor change must introduce a new feature-schema version and new
+    # fixtures; icukit.features@1 remains an immutable compatibility contract.
+    assert fixture_set["feature_schema"] == sentence_override_module._FEATURES
+    assert fixture_set["feature_names"] == list(loaded.feature_names)
+    semantics = {
+        "feature_names": fixture_set["feature_names"],
+        "candidates": [
+            {"id": fixture["id"], "features": fixture["features"]}
+            for fixture in fixture_set["candidates"]
+        ],
+    }
+    canonical = json.dumps(
+        semantics, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    assert hashlib.sha256(canonical).hexdigest() == FEATURES_V1_SEMANTICS
+    for fixture in fixture_set["candidates"]:
+        vector = _fixture_vector(loaded, fixture)
+        assert vector == fixture["features"], fixture["id"]
+
+        cartlet = loaded.model.predict_path(vector)
+        cartlet_prediction = sentence_override_module._cartlet_label(cartlet["prediction"])
+        cartlet_leaf = cartlet["trees"][0]["leaf"]
+        flat_prediction, flat_leaf = _flat_prediction(loaded, vector)
+
+        assert (flat_prediction, flat_leaf) == (cartlet_prediction, cartlet_leaf)
+        assert flat_prediction == fixture["prediction"]
+        assert f"en-real-cart@1#leaf:{flat_leaf}" == fixture["decision_id"]
+
+
 def test_default_never_loads_or_consults_cartlet_in_whole_text_or_stream(monkeypatch) -> None:
     def refused(*args, **kwargs):
         raise AssertionError("the English locale default must not load cartlet")
@@ -149,6 +256,24 @@ def test_default_never_loads_or_consults_cartlet_in_whole_text_or_stream(monkeyp
     )
     assert all(item["layer"] != "model" for item in decisions)
     assert streamed == decisions
+
+
+def test_default_real_model_default_interleaving_has_no_selection_leak() -> None:
+    text = "He met Mr. Smith today. He left."
+
+    def whole(base):
+        return SentenceOverride("en_US", base=base).decide(text)
+
+    def streamed(base):
+        stream = SentenceOverride("en_US", base=base).stream()
+        return stream.feed("He met Mr. S") + stream.feed("mith today. He left.") + stream.close()
+
+    first_whole = whole(None)
+    first_stream = streamed(None)
+    assert whole("en-real-cart@1")
+    assert streamed("en-real-cart@1")
+    assert whole(None) == first_whole
+    assert streamed(None) == first_stream == first_whole
 
 
 def test_non_english_locale_default_is_plain_icu() -> None:

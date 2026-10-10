@@ -1,0 +1,72 @@
+{
+  "feature_schema": "icukit.features@1",
+  "source": "breaks-real training extractor snapshot",
+  "feature_names": [
+    "ws.before@-3",
+    "text@run-1",
+    "shape.cased@1",
+    "sentence_break.first@1",
+    "script@c-6",
+    "sentence_break@c-4",
+    "general_category@c-4",
+    "general_category@c-3"
+  ],
+  "candidates": [
+    {
+      "id": "question",
+      "text": "How do people experience art? Which elements matter?",
+      "offset": 30,
+      "features": [true, "art?", "Xxxxx", "Upper", "Common", "Lower", "Lowercase_Letter", "Lowercase_Letter"],
+      "prediction": "1",
+      "decision_id": "en-real-cart@1#leaf:RLLLRL"
+    },
+    {
+      "id": "title",
+      "text": "He met Mr. Smith today. He left.",
+      "offset": 11,
+      "features": [true, "Mr.", "Xxxxx", "Upper", "Latin", "Upper", "Uppercase_Letter", "Lowercase_Letter"],
+      "prediction": "0",
+      "decision_id": "en-real-cart@1#leaf:RLRRRRL"
+    },
+    {
+      "id": "period",
+      "text": "Version three works. Next release.",
+      "offset": 21,
+      "features": [true, "works.", "Xxxx", "Upper", "Latin", "Lower", "Lowercase_Letter", "Lowercase_Letter"],
+      "prediction": "1",
+      "decision_id": "en-real-cart@1#leaf:RLLLL"
+    },
+    {
+      "id": "newline",
+      "text": "First item.\nSecond item follows.",
+      "offset": 12,
+      "features": [false, "item.", "Xxxxx", "Upper", "Latin", "Lower", "Lowercase_Letter", "Lowercase_Letter"],
+      "prediction": "1",
+      "decision_id": "en-real-cart@1#leaf:RLLRLR"
+    },
+    {
+      "id": "cjk",
+      "text": "报告结束。Next item starts.",
+      "offset": 5,
+      "features": [false, "报告结束。", "Xxxx", "Upper", "<BOS>", "OLetter", "Other_Letter", "Other_Letter"],
+      "prediction": "1",
+      "decision_id": "en-real-cart@1#leaf:RLRRRRRRRL"
+    },
+    {
+      "id": "quote",
+      "text": "She said “go.” Then left.",
+      "offset": 15,
+      "features": [false, "“go.”", "Xxxx", "Upper", "Common", "Lower", "Lowercase_Letter", "Other_Punctuation"],
+      "prediction": "1",
+      "decision_id": "en-real-cart@1#leaf:RLLRR"
+    },
+    {
+      "id": "initials",
+      "text": "The author was A. B. Carter. Work continued.",
+      "offset": 18,
+      "features": [true, "A.", "X", "Upper", "Latin", "Sp", "Space_Separator", "Uppercase_Letter"],
+      "prediction": "0",
+      "decision_id": "en-real-cart@1#leaf:RLRRRRRRLR"
+    }
+  ]
+}

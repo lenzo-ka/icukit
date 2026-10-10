@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import tempfile
 from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
@@ -35,7 +36,7 @@ import icu
 from ._offsets import _offset_map_scope
 from .abbreviation_compile import _load_break_exception_inventory
 from .breaker import BreakSpan, _raw_break_sentence_spans, break_word_spans
-from .classes import ClassPoint, char_classes, class_window
+from .classes import char_classes
 from .errors import BreakRuleLoadError, LateProtectedSpan, OverlappingProtectedSpans, RuleRefusal
 from .exceptions import (
     ExceptionContextBounds,
@@ -522,7 +523,10 @@ def _load_cartlet_model(
     locale: str,
     inventories: Sequence[LoadedExceptionInventory],
 ) -> _LoadedCartletModel:
-    actual_digest = "sha256:" + hashlib.sha256(ref.path.read_bytes()).hexdigest()
+    # Read once: the digest and parser must see the same bytes even when a
+    # caller-supplied path is writable or replaced concurrently.
+    model_bytes = ref.path.read_bytes()
+    actual_digest = "sha256:" + hashlib.sha256(model_bytes).hexdigest()
     if actual_digest != ref.digest:
         raise BreakRuleLoadError(
             [_refuse(ref.name, "DIGEST_MISMATCH", "cartlet model bytes differ from digest")]
@@ -543,7 +547,10 @@ def _load_cartlet_model(
     from cartlet import DecisionTree
 
     model = DecisionTree()
-    document = model.load_model(str(ref.path), format="json")
+    with tempfile.NamedTemporaryFile(suffix=".json.gz") as snapshot:
+        snapshot.write(model_bytes)
+        snapshot.flush()
+        document = model.load_model(snapshot.name, format="json")
     metadata = document.get("metadata", {})
     if actual_digest == _EN_REAL_CART_DIGEST:
         deployment = metadata.get("deployment")
@@ -970,18 +977,15 @@ def _sentinel_features(value: str) -> dict[str, object]:
     }
 
 
-def _point_feature(point: ClassPoint, feature: str) -> object:
-    values: dict[str, object] = {
-        "text": point.text,
-        "word_break": point.word_break,
-        "sentence_break": point.sentence_break,
-        "general_category": point.general_category,
-        "script": point.script,
-        "extension_classes": point.extension_classes,
-    }
-    if point.text == "":
-        return point.word_break
-    return values.get(feature, "<UNKNOWN>")
+def _character_feature(text: str, index: int, feature: str) -> object:
+    """Read one character property without constructing a full class window."""
+    if feature == "text":
+        return text[index]
+    if feature == "extension_classes":
+        return ()
+    if feature in {"word_break", "sentence_break", "general_category", "script"}:
+        return char_classes(text[index], feature)[0]
+    return "<UNKNOWN>"
 
 
 class _FeatureNotYet(Exception):
@@ -1836,8 +1840,7 @@ def _observed_feature_value(
     if index >= len(text):
         return "<EOS>", horizon, read_horizon
     if distance > 0:
-        window = class_window(text, index, before=0, after=1)
-        return _point_feature(window.after[0], predicate.feature), horizon, read_horizon
+        return _character_feature(text, index, predicate.feature), horizon, read_horizon
     containing = cache.containing(toks, index)
     completion_horizon = None
     if containing is not None:
@@ -1846,12 +1849,11 @@ def _observed_feature_value(
         )
         if completion_horizon is None:
             raise _FeatureNotYet
-    window = class_window(text, index, before=0, after=1)
     tokens_read = 0
     if distance > 0:
         tokens_read = min(cache.count_starting_by(toks, pivot, index), rule.lookahead)
     horizon = completion_horizon if completion_horizon is not None else index + 1
-    return _point_feature(window.after[0], predicate.feature), tokens_read, max(offset, horizon)
+    return _character_feature(text, index, predicate.feature), tokens_read, max(offset, horizon)
 
 
 def _predicate_matches(value: object, predicate: _CompiledPredicate) -> bool:
@@ -1943,6 +1945,7 @@ class _CartletFeatureVector(Sequence[object]):
         self.tokens_read = 0
         self.horizon = offset
         self.indices_read: list[int] = []
+        self._values: dict[int, tuple[object, int, int]] = {}
         self._rule = _CompiledBreakRule(loaded.ref.name, "break", loaded.lookahead, ())
 
     def __len__(self) -> int:
@@ -1954,19 +1957,23 @@ class _CartletFeatureVector(Sequence[object]):
         normalized = index + len(self) if index < 0 else index
         if not 0 <= normalized < len(self):
             raise IndexError(index)
-        value, reached, horizon = _observed_feature_value(
-            self.loaded.predicates[normalized],
-            self._rule,
-            self.text,
-            self.offset,
-            self.toks,
-            self.protected_types,
-            self.locale,
-            self.localities,
-            self.closed,
-            self.cache,
-            self.locality_index,
-        )
+        observed = self._values.get(normalized)
+        if observed is None:
+            observed = _observed_feature_value(
+                self.loaded.predicates[normalized],
+                self._rule,
+                self.text,
+                self.offset,
+                self.toks,
+                self.protected_types,
+                self.locale,
+                self.localities,
+                self.closed,
+                self.cache,
+                self.locality_index,
+            )
+            self._values[normalized] = observed
+        value, reached, horizon = observed
         self.tokens_read = max(self.tokens_read, reached)
         self.horizon = max(self.horizon, horizon)
         self.indices_read.append(normalized)

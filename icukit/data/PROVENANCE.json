@@ -69,7 +69,7 @@
     },
     {
       "path": "break_rules/en/REAL_TEXT_RECEIPT.json",
-      "sha256": "42af6d9d4522a10e3778dadec188ec1b26595ac1b705bc7eb87ba1ef4ee3fb75",
+      "sha256": "68dea5b4498c6349e0f4507eb93c3e2586ca96dae986d515b1b7a4b44339fb56",
       "source": "training-source, held-out selection, production-latency, and select-shard measurement receipt for the English real-text model",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",

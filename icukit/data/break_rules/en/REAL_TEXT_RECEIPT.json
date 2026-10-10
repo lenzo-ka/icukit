@@ -11,83 +11,102 @@
     "d1": {
       "glue2": {
         "default": {
-          "errors": 380578,
-          "f1": 0.9547754147510068,
-          "fn": 163194,
-          "fp": 217384,
-          "precision": 0.9486665060901024,
-          "recall": 0.9609635095860593,
-          "tp": 4017356
+          "errors": 303630,
+          "f1": 0.9548706225782143,
+          "fn": 130280,
+          "fp": 173350,
+          "precision": 0.9487967910489643,
+          "recall": 0.9610227197932062,
+          "tp": 3212180
         },
         "model": {
-          "errors": 270841,
-          "f1": 0.9670883971717319,
-          "fn": 201297,
-          "fp": 69544,
-          "precision": 0.9828235399305029,
-          "recall": 0.951849158603533,
-          "tp": 3979253
+          "errors": 216261,
+          "f1": 0.9671310740015535,
+          "fn": 160842,
+          "fp": 55419,
+          "precision": 0.9828797137629258,
+          "recall": 0.9518791548739551,
+          "tp": 3181618
         },
-        "relative_error_cut": 0.2883429940774296,
+        "relative_error_cut": 0.2877482462207292,
         "shard_blocked_bootstrap": {
-          "paired_error_reduction_one_sided_95_lower": 108739,
+          "paired_error_reduction_one_sided_95_lower": 86728,
           "relative_error_cut_interval95_two_sided": [
-            0.2865883272097639,
-            0.2898662497647083
+            0.28607107978990154,
+            0.28914894735458774
           ],
-          "relative_error_cut_one_sided_95_lower": 0.28698891016603184,
+          "relative_error_cut_one_sided_95_lower": 0.28634064526353326,
           "replicates": 10000,
           "seed": 27183418
         }
       },
       "space": {
         "default": {
-          "errors": 438243,
-          "f1": 0.9486636101356815,
-          "fn": 131325,
-          "fp": 306918,
-          "precision": 0.9295436352755179,
-          "recall": 0.968586669218165,
-          "tp": 4049225
+          "errors": 349680,
+          "f1": 0.9487656459062626,
+          "fn": 104746,
+          "fp": 244934,
+          "precision": 0.9296701819994441,
+          "recall": 0.9686620034345961,
+          "tp": 3237714
         },
         "model": {
-          "errors": 273055,
-          "f1": 0.9671673499011432,
-          "fn": 158793,
-          "fp": 114262,
-          "precision": 0.9723739180114985,
-          "recall": 0.962016241882049,
-          "tp": 4021757
+          "errors": 217694,
+          "f1": 0.9672600919750575,
+          "fn": 126710,
+          "fp": 90984,
+          "precision": 0.9724852376997969,
+          "recall": 0.9620907954021888,
+          "tp": 3215750
         },
-        "relative_error_cut": 0.3769324324632681,
+        "relative_error_cut": 0.3774479524136353,
         "shard_blocked_bootstrap": {
-          "paired_error_reduction_one_sided_95_lower": 164453,
+          "paired_error_reduction_one_sided_95_lower": 131428,
           "relative_error_cut_interval95_two_sided": [
-            0.3755787484040402,
-            0.3781891549921917
+            0.3762504827428375,
+            0.3787635825061593
           ],
-          "relative_error_cut_one_sided_95_lower": 0.37577735220914904,
+          "relative_error_cut_one_sided_95_lower": 0.3765883800097262,
           "replicates": 10000,
           "seed": 27183419
         }
-      }
+      },
+      "scope": "Google TN select shards 91-94 only; shard 90 excluded; test shards 95-99 unopened"
+    },
+    "exploratory_d1_including_selection_shard": {
+      "glue2_relative_error_cut": 0.2883429940774296,
+      "glue2_one_sided_95_lower": 0.28698891016603184,
+      "scope": "Google TN select shards 90-94; shard 90 selected the packaged variant",
+      "space_relative_error_cut": 0.3769324324632681,
+      "space_one_sided_95_lower": 0.37577735220914904
     },
     "latency": {
-      "long_document": {
-        "characters": 126823,
-        "default_us_per_token": 12.702334529999174,
-        "model_us_per_token": 14.393605059008005,
-        "tokens": 24234
+      "method": "median of seven fresh-process paired runs; alternating order; warm runs have one untimed paired production call",
+      "long_document_cold": {
+        "default_us_per_token": 4.032198233886276,
+        "model_multiple": 2.260563837195132,
+        "model_us_per_token": 9.115041511925394
       },
-      "select_sample": {
-        "default_us_per_token": 8.361937165022326,
-        "model_us_per_token": 11.501937295492763,
-        "scope": "first 2,000 glue2 chunks from select shard 90; test shards unopened"
-      }
+      "long_document_warm": {
+        "default_us_per_token": 4.032119130147726,
+        "model_multiple": 2.161330326269804,
+        "model_us_per_token": 8.714741355120903
+      },
+      "select_sample_cold": {
+        "default_us_per_token": 2.3793037993820256,
+        "model_multiple": 2.2811237451924966,
+        "model_us_per_token": 5.4274863937970625
+      },
+      "select_sample_warm": {
+        "default_us_per_token": 2.6776958195614537,
+        "model_multiple": 2.2866138317399938,
+        "model_us_per_token": 6.122856298201579
+      },
+      "scope": "first 2,000 glue2 chunks from select shard 90 and a 100-chunk joined document; exploratory because shard 90 selected the variant"
     },
     "metric": "source-record seam-break error",
     "model_bytes": 11091,
-    "scope": "Google TN select shards 90-94 only; test shards 95-99 unopened"
+    "scope": "confirmatory D1 uses Google TN select shards 91-94 only; test shards 95-99 unopened"
   },
   "model": {
     "bytes": 11091,
@@ -126,7 +145,7 @@
     "development_candidates": 740,
     "english_ewt": "excluded because its text descends from LDC2012T13",
     "feature_reduction": "top eight features by 20-repeat held-out permutation error increase for the previously selected full tree",
-    "policy": "fit on train only; choose pruning and features on held-out development only; Google TN select shards used only after selection; test shards 95-99 unopened",
+    "policy": "fit on train only; choose pruning and features on held-out development; use the first 2,000 chunks of select shard 90 to select the packaged variant; confirm on select shards 91-94 only; test shards 95-99 unopened",
     "train_candidates": 4464
   },
   "sources": {
