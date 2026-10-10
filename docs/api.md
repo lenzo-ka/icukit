@@ -5844,7 +5844,9 @@ English abbreviations of two or more ASCII letters additionally accept a period
 after each abbreviated word ("5 ft.", "100 sq. ft."). When the final abbreviation
 period is also sentence-final, both the span with it and the span without it are
 readings; an internal period belongs only to the punctuated reading. A period on a
-wide unit word or one-letter symbol remains outside the unit.
+wide unit word or one-letter symbol remains outside the unit. Before a following
+numeric token, the period also remains outside the unit: numbered references such
+as "Ch. 5 sec. 2" do not present "5 sec." as a seconds reading.
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
 number directly. A per form written without an amount ("/s", "per second") reads as

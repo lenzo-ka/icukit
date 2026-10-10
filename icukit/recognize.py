@@ -179,6 +179,7 @@ class _FlexibleMatch:
     captures: tuple[Capture, ...]
     value: object
     spec: object | None = None
+    added_final_period: bool = False
 
 
 def _is_word_character(character: str) -> bool:
@@ -4456,9 +4457,14 @@ def _english_internal_abbreviation_period_variants(surface: str) -> tuple[str, .
     return tuple(sorted(variants, key=lambda variant: (-len(variant), variant)))
 
 
-@lru_cache(maxsize=16)
-def _sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
-    """Ends just after a period that ICU places at a sentence boundary."""
+_SENTENCE_PERIOD_CACHE_TEXT_LIMIT = 65_536
+_SENTENCE_CLOSERS = frozenset(
+    {'"', "'", ")", "]", "}", "\N{RIGHT SINGLE QUOTATION MARK}", "\N{RIGHT DOUBLE QUOTATION MARK}"}
+)
+
+
+def _uncached_sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
+    """Ends just after each boundary period, before any closing punctuation."""
     if "." not in text:
         return frozenset()
     ends = set()
@@ -4466,9 +4472,24 @@ def _sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
         end = span["end"]
         while end > span["start"] and text[end - 1].isspace():
             end -= 1
+        while end > span["start"] and text[end - 1] in _SENTENCE_CLOSERS:
+            end -= 1
         if text[end - 1 : end] == ".":
             ends.add(end)
     return frozenset(ends)
+
+
+@lru_cache(maxsize=8)
+def _cached_sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
+    """Cache sentence boundaries only for texts small enough to bound retained input."""
+    return _uncached_sentence_final_period_ends(text, locale)
+
+
+def _sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
+    """Ends after boundary periods, caching at most 524,288 source characters."""
+    if len(text) > _SENTENCE_PERIOD_CACHE_TEXT_LIMIT:
+        return _uncached_sentence_final_period_ends(text, locale)
+    return _cached_sentence_final_period_ends(text, locale)
 
 
 @cache
@@ -4513,7 +4534,9 @@ class FlexibleMeasureDetector(_GatedReader):
     after each abbreviated word ("5 ft.", "100 sq. ft."). When the final abbreviation
     period is also sentence-final, both the span with it and the span without it are
     readings; an internal period belongs only to the punctuated reading. A period on a
-    wide unit word or one-letter symbol remains outside the unit.
+    wide unit word or one-letter symbol remains outside the unit. Before a following
+    numeric token, the period also remains outside the unit: numbered references such
+    as "Ch. 5 sec. 2" do not present "5 sec." as a seconds reading.
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
     number directly. A per form written without an amount ("/s", "per second") reads as
@@ -4689,8 +4712,19 @@ class FlexibleMeasureDetector(_GatedReader):
     ) -> _FlexibleMatch | None:
         """Finish one already-matched base or internally punctuated unit surface."""
         end = cursor + len(surface)
-        if periodizable and text[end : end + 1] == "." and not self._continues_word(text, end + 1):
+        added_final_period = False
+        period_end = end + 1
+        has_final_period = periodizable and text[end:period_end] == "."
+        next_cursor = period_end
+        if has_final_period:
+            while next_cursor < len(text) and text[next_cursor].isspace():
+                next_cursor += 1
+        number_follows = (
+            has_final_period and next_cursor < len(text) and icu.Char.isdigit(text[next_cursor])
+        )
+        if has_final_period and not self._continues_word(text, period_end) and not number_follows:
             end += 1
+            added_final_period = True
         # A mixed unit's first component may run straight into the next number
         # ("5'10\""): a mark ends the unit even with a digit after it.
         open_mark = (
@@ -4706,6 +4740,7 @@ class FlexibleMeasureDetector(_GatedReader):
             (*captures, unit_capture),
             MeasureValue(value.decimal, unit),
             spec,
+            added_final_period,
         )
 
     def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:
@@ -4724,14 +4759,17 @@ class FlexibleMeasureDetector(_GatedReader):
         return None
 
     def _matches(
-        self, text: str, start: int, sentence_period_ends: frozenset[int]
+        self,
+        text: str,
+        start: int,
+        sentence_period_ends: Callable[[], frozenset[int]],
     ) -> list[_FlexibleMatch]:
         """The measure reading, plus its period-less sentence-final alternative."""
         found = self._match(text, start)
         if found is None:
             return []
         readings = [found]
-        if found.end not in sentence_period_ends:
+        if not found.added_final_period or found.end not in sentence_period_ends():
             return readings
         captures = tuple(
             replace(capture, end=capture.end - 1, text=capture.text[:-1])
@@ -4744,10 +4782,16 @@ class FlexibleMeasureDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return flexible measure readings in source order, a bare per form beside them."""
-        sentence_period_ends = _sentence_final_period_ends(text, self.locale)
+        sentence_period_ends: frozenset[int] | None = None
+
+        def boundaries() -> frozenset[int]:
+            nonlocal sentence_period_ends
+            if sentence_period_ends is None:
+                sentence_period_ends = _sentence_final_period_ends(text, self.locale)
+            return sentence_period_ends
 
         def match(source: str, start: int) -> list[_FlexibleMatch]:
-            return self._matches(source, start, sentence_period_ends)
+            return self._matches(source, start, boundaries)
 
         measures = _detect_flexible_alternatives(
             text,

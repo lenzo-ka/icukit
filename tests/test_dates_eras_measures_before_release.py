@@ -2,6 +2,8 @@
 
 import pytest
 
+import icukit.recognize as recognize_module
+from icukit import flexible_detectors
 from icukit.recognize import (
     FlexibleMeasureDetector,
     FlexibleMixedMeasureDetector,
@@ -146,6 +148,94 @@ def test_a_sentence_final_abbreviation_period_keeps_both_readings(unit, text, re
 )
 def test_an_internal_abbreviation_period_has_only_the_punctuated_reading(unit, text, reading):
     assert [surface for surface, _value, _unit in _measures(unit, text)] == [reading]
+
+
+@pytest.mark.parametrize("text", ["5 ft. Then", "5 ft.\n"])
+def test_a_boundary_abbreviation_period_keeps_both_readings(text):
+    assert [surface for surface, _value, _unit in _measures("foot", text)] == [
+        "5 ft.",
+        "5 ft",
+    ]
+
+
+@pytest.mark.parametrize(
+    "opening, closing",
+    [('"', '"'), ("“", "”"), ("‘", "’"), ("'", "'"), ("(", ")"), ("[", "]"), ("{", "}")],
+)
+def test_a_boundary_period_before_closing_punctuation_keeps_both_readings(opening, closing):
+    text = f"{opening}5 lbs.{closing}"
+    assert [surface for surface, _value, _unit in _measures("pound", text)] == [
+        "5 lbs.",
+        "5 lbs",
+    ]
+
+
+def test_parenthesized_sentence_final_abbreviation_keeps_both_readings():
+    assert [surface for surface, _value, _unit in _measures("foot", "He is (5 ft.)")] == [
+        "5 ft.",
+        "5 ft",
+    ]
+
+
+def test_a_locale_native_dotted_surface_has_no_synthetic_periodless_reading():
+    assert _measures("hour", "5 Std.", "de_DE") == [("5 Std.", "5", "hour")]
+
+
+@pytest.mark.parametrize(
+    "unit, text, reading",
+    [
+        ("second", "Ch. 5 sec. 2", "5 sec"),
+        ("inch", "Fig. 5 in. 2", "5 in"),
+        ("minute", "Vol. 5 min. 2", "5 min"),
+        ("hour", "Vol. 5 hr. 2", "5 hr"),
+        ("month", "Vol. 5 mo. 2", "5 mo"),
+        ("year", "Vol. 5 yr. 2", "5 yr"),
+    ],
+)
+def test_an_abbreviation_period_before_a_number_remains_punctuation(unit, text, reading):
+    assert [surface for surface, _value, _unit in _measures(unit, text)] == [reading]
+
+
+def test_number_is_not_a_supported_unit_abbreviation():
+    measures = [
+        detection
+        for detection in flexible_detectors("en_US").detect("Vol. 5 no. 2")
+        if detection["type"].startswith("measure:")
+    ]
+    assert measures == []
+
+
+def test_sentence_breaking_is_lazy_and_english_periodized_only(monkeypatch):
+    calls = []
+    original = recognize_module._raw_break_sentence_spans
+
+    def counted(text, locale):
+        calls.append((text, locale))
+        return original(text, locale)
+
+    monkeypatch.setattr(recognize_module, "_raw_break_sentence_spans", counted)
+    recognize_module._cached_sentence_final_period_ends.cache_clear()
+
+    assert _measures("hour", "5 Std.", "de_DE") == [("5 Std.", "5", "hour")]
+    assert _measures("foot", "There are no measures. Another sentence.") == []
+    assert _measures("pound", "5 lbs") == [("5 lbs", "5", "pound")]
+    assert calls == []
+
+    assert [surface for surface, _value, _unit in _measures("foot", "5 ft. Then")] == [
+        "5 ft.",
+        "5 ft",
+    ]
+    assert calls == [("5 ft. Then", "en_US")]
+
+
+def test_sentence_boundary_cache_does_not_retain_large_inputs():
+    recognize_module._cached_sentence_final_period_ends.cache_clear()
+    text = f"{'word ' * 13_108}5 ft."
+
+    assert [surface for surface, _value, _unit in _measures("foot", text)] == ["5 ft.", "5 ft"]
+    info = recognize_module._cached_sentence_final_period_ends.cache_info()
+    assert info.maxsize == 8
+    assert info.currsize == 0
 
 
 @pytest.mark.parametrize("text", ["5 feet.", "5 day."])

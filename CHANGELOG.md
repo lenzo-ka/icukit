@@ -8,8 +8,8 @@
   of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
   curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
   boundary produces readings both with and without the period; internal periods belong
-  to the punctuated reading. Periods after full unit words and one-letter symbols remain
-  sentence punctuation.
+  to the punctuated reading. Periods before a following number, after full unit words,
+  and after one-letter symbols remain punctuation.
 
 ## [0.9.1] - 2026-10-09
 
