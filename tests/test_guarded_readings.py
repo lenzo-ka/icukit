@@ -10,11 +10,18 @@ includes it by type.
 import pytest
 
 from icukit import DetectorSet
-from icukit.detectors import DateTimeValue, NumberValue
-from icukit.engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, generated_detectors
+from icukit.detectors import DateTimeValue, NumberValue, detector_key
+from icukit.engine import (
+    DEFAULT_FAMILIES,
+    DETACHED_UNIT_FAMILY,
+    GUARDED_FAMILIES,
+    flexible_detectors,
+    generated_detectors,
+)
 from icukit.recognize import (
     FlexibleBareHourDetector,
     FlexibleDateTimeDetector,
+    FlexibleDetachedUnitDetector,
     FlexibleLoneSpelloutDetector,
     FlexibleLowercaseRomanDetector,
     FlexibleMonthNameDetector,
@@ -36,6 +43,7 @@ GUARDED_TYPES = {
     "date:short-year",
     "time:bare-hour",
     "date-interval:short-year:y",
+    "measure:detached-unit:inch",
 }
 
 
@@ -384,6 +392,51 @@ def test_guarded_types_are_generated_when_a_consumer_opts_in():
     names = set(generated_detectors("en_US", (*DEFAULT_FAMILIES, *GUARDED_FAMILIES)).names())
     assert GUARDED_TYPES <= names
     assert "number:spellout" in names
+
+
+def test_the_detached_unit_family_is_independently_selectable():
+    assert DETACHED_UNIT_FAMILY in GUARDED_FAMILIES
+    gang = generated_detectors("en_US", (DETACHED_UNIT_FAMILY,))
+    found = [
+        (reading["type"], reading["text"], reading["value"])
+        for reading in gang.detect("62 ″")
+        if reading["start"] == 0 and reading["end"] == 4
+    ]
+    direct = FlexibleDetachedUnitDetector("en_US", "inch").detect("62 ″")
+    assert found == [("measure:detached-unit:inch", "62 ″", direct[0]["value"])]
+
+
+def test_detached_unit_locale_selections_coexist_without_leaking_readings():
+    italy = FlexibleDetachedUnitDetector("it_IT", "inch", locales=())
+    switzerland = FlexibleDetachedUnitDetector("it_CH", "inch", locales=())
+    assert detector_key(italy) != detector_key(switzerland)
+    assert DetectorSet(()).with_(italy, switzerland).detectors == (italy, switzerland)
+
+    own = flexible_detectors("en_US", locales=(), units=("inch",), guarded=True)
+    widened = flexible_detectors("en_US", locales=("en_GB",), units=("inch",), guarded=True)
+    type_ = "measure:detached-unit:inch"
+    (own_reader,) = [detector for detector in own.detectors if detector.type == type_]
+    (widened_reader,) = [detector for detector in widened.detectors if detector.type == type_]
+
+    assert own is flexible_detectors("en_US", locales=(), units=("inch",), guarded=True)
+    assert widened is flexible_detectors("en_US", locales=("en_GB",), units=("inch",), guarded=True)
+    assert own is not widened
+    assert detector_key(own_reader) != detector_key(widened_reader)
+    assert DetectorSet(()).with_(own_reader, widened_reader).detectors == (
+        own_reader,
+        widened_reader,
+    )
+
+    text = '1 "'
+    expected = [(type_, text)]
+    assert [(item["type"], item["text"]) for item in own_reader.detect(text)] == expected
+    assert [(item["type"], item["text"]) for item in widened_reader.detect(text)] == expected
+
+    own_compiled = DetectorSet((own_reader,)).compile(warm=False)
+    widened_compiled = DetectorSet((widened_reader,)).compile(warm=False)
+    assert own_compiled.key.readers != widened_compiled.key.readers
+    assert [(item["type"], item["text"]) for item in own_compiled.detect(text)] == expected
+    assert [(item["type"], item["text"]) for item in widened_compiled.detect(text)] == expected
 
 
 def test_a_consumer_includes_and_excludes_a_guarded_type_by_type():

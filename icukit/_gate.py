@@ -488,7 +488,13 @@ def _resource_descendant_strings(locale: str, keys: tuple[str, ...]) -> set[str]
 
 
 @lru_cache(maxsize=64)
-def _day_period_strings(locale: str) -> tuple[str, ...]:
+def _day_period_resource_strings(locale: str) -> tuple[str, ...]:
+    """Return every CLDR day-period name exposed by ICU for ``locale``.
+
+    The resource tables are the grammar data behind ``a``, ``b``, and ``B`` fields.
+    Enumerating both contexts and all three widths includes exact periods such as
+    midnight and noon without fitting the vocabulary to sampled instants.
+    """
     found: set[str] = set()
     loc = icu.Locale(locale)
     calendar = str(icu.Calendar.createInstance(loc).getType())
@@ -521,6 +527,13 @@ def _day_period_strings(locale: str) -> tuple[str, ...]:
                         break
                     except icu.ICUError:
                         pass
+    return tuple(sorted(found))
+
+
+@lru_cache(maxsize=64)
+def _day_period_strings(locale: str) -> tuple[str, ...]:
+    found = set(_day_period_resource_strings(locale))
+    loc = icu.Locale(locale)
     for pattern in ("B", "BBBB", "BBBBB", "b", "bbbb", "bbbbb", "a", "aaaa", "aaaaa"):
         formatter = icu.SimpleDateFormat(pattern, loc)
         formatter.setTimeZone(icu.TimeZone.getGMT())

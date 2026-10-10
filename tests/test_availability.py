@@ -86,6 +86,26 @@ def test_b15_curated_measure_is_beside_icu():
     assert {row.source for row in plural_rows} == {"icu", "curated"}
 
 
+def test_detached_unit_availability_is_guarded_and_typed_separately():
+    assert not any(row.family == "detached-unit" for row in availability("en_US"))
+    rows = [
+        row
+        for row in availability("en_US", guarded=True)
+        if row.family == "detached-unit" and row.spec == "inch"
+    ]
+    assert len(rows) == 1
+    assert rows[0].type == "measure:detached-unit:inch"
+    assert rows[0].source == "icu"
+    day = next(
+        row
+        for row in availability("en_US", guarded=True)
+        if row.family == "detached-unit" and row.spec == "day"
+    )
+    assert day.type is None
+    assert day.source is None
+    assert day.reason == "ICU exposes no guarded detached quote or prime surface for unit: 'day'"
+
+
 def test_inline_curated_families_are_unavailable_without_a_language_table():
     rows = availability("de")
     expected = {
@@ -120,8 +140,8 @@ _GANGS_BEFORE = {
         "823c4241f43fe0e73e7c7c6f15f9780e5301cbd33a96f393ba7857b1cd05aa58",
     ),
     ("en_US", True): (
-        415,
-        "828b43ca44fee37fd8ef49a5baec2121281c7292ddd96e7ddd282322c30a5d3b",
+        417,
+        "fe72e959375266c6b6f4a99dc4cdda4bdb67e1d0a27c85c17f343fae4d650810",
         "2d14df990633d737cfa578a6db989d8c30c8c9a890122042836ad393df932e1d",
     ),
     ("de", False): (
