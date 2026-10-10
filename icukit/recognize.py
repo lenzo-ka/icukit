@@ -88,6 +88,7 @@ __all__ = [
     "FlexibleFractionDetector",
     "FlexibleMeasureDetector",
     "FlexibleNumberDetector",
+    "FlexibleSpaceGroupingFragmentDetector",
     "FlexibleNumberRangeDetector",
     "FlexibleOrdinalDetector",
     "FlexiblePercentDetector",
@@ -3513,6 +3514,76 @@ def _shared_number_reader(
         accept_single_letter_roman,
         accept_lowercase_roman,
     )
+
+
+class FlexibleSpaceGroupingFragmentDetector(_GatedReader):
+    """Recognize standalone number fragments inside valid space groupings.
+
+    :class:`FlexibleNumberDetector` reads a valid space grouping as a whole and withholds
+    its separate integer readings. This guarded reader deposits those deliberately
+    withheld paths under ``number:decimal:space-grouping-fragment``. It emits a fragment
+    only inside a span the flexible number reader actually reads whole, and only when the
+    locale's own number style read that fragment on its own before the whole-span policy.
+    Thus English ``"5 300"`` contributes 5 and 300 on request, while a French grouping
+    that was already read whole by the locale's own space-grouping style contributes no
+    invented fragments.
+    """
+
+    group = "number"
+    type = "number:decimal:space-grouping-fragment"
+
+    def __init__(self, locale: str, *, locales: Iterable[str] | None = None) -> None:
+        self.locale = locale
+        self.locales = _locale_selection(locale, locales)
+        self._number = _shared_number_reader(locale, self.locales, True, False)
+        _install_gates(self, {"decimal": self._number._start_gates["decimal"]})
+
+    def _match(self, text: str, start: int):
+        """Read with the locale's own grouping style, without the whole-span guard."""
+        return self._number._match_style(
+            text,
+            start,
+            (
+                self._number._grouping,
+                self._number._primary_grouping,
+                self._number._secondary_grouping,
+            ),
+        )
+
+    def detect(self, text: str) -> list[ValueDetection]:
+        """Return only standalone readings withheld inside whole space groupings."""
+        whole_spans = []
+        for detection in self._number.detect(text):
+            if detection["type"] != self._number.type:
+                continue
+            integer = next(
+                (capture for capture in detection["captures"] if capture.name == "integer"),
+                None,
+            )
+            if integer is not None and any(character in _SPACES for character in integer.text):
+                whole_spans.append((detection["start"], detection["end"]))
+        if not whole_spans:
+            return []
+
+        candidates = _detect_flexible(
+            text,
+            self.locale,
+            self.type,
+            self._number._spec,
+            self._match,
+            gate=self._start_gates["decimal"],
+            stats_key=self._lane_key("decimal"),
+        )
+        return [
+            detection
+            for detection in candidates
+            if any(
+                start <= detection["start"]
+                and detection["end"] <= end
+                and (detection["start"], detection["end"]) != (start, end)
+                for start, end in whole_spans
+            )
+        ]
 
 
 class FlexibleLowercaseRomanDetector(_GatedReader):

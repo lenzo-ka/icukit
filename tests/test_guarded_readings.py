@@ -1,10 +1,10 @@
 """Readings the default readers refuse on purpose are read under their own types.
 
-A lone "one" or "first", a lowercase Roman numeral, a month or weekday name alone, a bare
-hour, and a date with a two- or three-digit year are refused by the readers of the
-default types; each is deposited by an opt-in reader under a type of its own, so a
-consumer that wants every path (forced alignment reads "May" as a month and as a verb)
-includes it by type.
+A lone "one" or "first", a lowercase Roman numeral, a fragment of a space-grouped
+number, a month or weekday name alone, a bare hour, and a date with a two- or three-digit
+year are refused by the readers of the default types; each is deposited by an opt-in
+reader under a type of its own, so a consumer that wants every path (forced alignment
+reads "May" as a month and as a verb) includes it by type.
 """
 
 import pytest
@@ -20,6 +20,7 @@ from icukit.recognize import (
     FlexibleMonthNameDetector,
     FlexibleNumberDetector,
     FlexibleShortYearDateDetector,
+    FlexibleSpaceGroupingFragmentDetector,
     FlexibleSpelloutDetector,
     FlexibleTextDateDetector,
     FlexibleTimeDetector,
@@ -31,6 +32,7 @@ GUARDED_TYPES = {
     "number:spellout-lone",
     "number:spellout-lone:ordinal",
     "number:cardinal:roman-lower",
+    "number:decimal:space-grouping-fragment",
     "date:month-name",
     "date:weekday-name",
     "date:short-year",
@@ -118,6 +120,45 @@ def test_lowercase_roman_is_exactly_what_the_option_adds():
         for d in FlexibleLowercaseRomanDetector("en_US").detect(text)
     }
     assert lower and lower == widened - default
+
+
+# ------------------------------------------------------ space-grouping fragments
+
+
+@pytest.mark.parametrize(
+    ("locale", "text", "whole", "expected"),
+    (
+        ("en_US", "5 300", ["5 300"], [("5", "5"), ("300", "300")]),
+        (
+            "en_US",
+            "10 000 20 000",
+            ["10 000", "20 000"],
+            [("10", "10"), ("000", "000"), ("20", "20"), ("000", "000")],
+        ),
+        (
+            "hi_IN",
+            "1 00 000",
+            ["1 00 000"],
+            [("1", "1"), ("00", "00"), ("000", "000")],
+        ),
+    ),
+)
+def test_space_grouping_fragments_are_guarded_paths(locale, text, whole, expected):
+    default = FlexibleNumberDetector(locale).detect(text)
+    fragments = FlexibleSpaceGroupingFragmentDetector(locale).detect(text)
+
+    assert [item["text"] for item in default] == whole
+    assert [(item["text"], item["value"].decimal) for item in fragments] == expected
+    assert {item["type"] for item in fragments} == {"number:decimal:space-grouping-fragment"}
+
+
+def test_space_grouping_fragments_are_not_invented_for_a_locale_own_whole_reading():
+    assert FlexibleSpaceGroupingFragmentDetector("fr_FR").detect("5 300") == []
+
+
+@pytest.mark.parametrize("text", ("1 2 3", "1999 2000", "12 34"))
+def test_space_grouping_fragments_require_a_whole_grouping_reading(text):
+    assert FlexibleSpaceGroupingFragmentDetector("en_US").detect(text) == []
 
 
 # ---------------------------------------------------------------- month and weekday

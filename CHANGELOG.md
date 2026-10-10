@@ -5,12 +5,13 @@
 ### Fixed
 
 - Space-separated digit groups that have a thousands-grouping shape no longer emit
-  adjacent integer fragments. Flexible readers keep whole groupings accepted by the
-  locale's lenient ICU parser or used by locales of the same language; strict readers
-  keep the locale's own CLDR convention. Grouping shape alone cannot distinguish a
-  grouped number from a list: `5 300` and `75 008` read as one number, while lists whose
-  widths do not fit the locale's grouping, such as `1 2 3` and `1999 2000`, stay
-  separate.
+  adjacent integer fragments by default. Flexible readers keep whole groupings accepted
+  by the locale's lenient ICU parser or used by locales of the same language; strict
+  readers keep the locale's own CLDR convention. Grouping shape alone cannot distinguish
+  a grouped number from a list: `5 300` reads as 5300 by default, while lists whose widths
+  do not fit the locale's grouping, such as `1 2 3` and `1999 2000`, stay separate. The
+  guarded `number:decimal:space-grouping-fragment` reader restores the deliberately
+  withheld 5 and 300 paths for consumers that request every reading.
 
 ## [0.9.1] - 2026-10-09
 

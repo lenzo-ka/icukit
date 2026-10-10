@@ -40,8 +40,27 @@ GUARDED_CLASSES = {
     "FlexibleLowercaseRomanDetector",
     "FlexibleMonthNameDetector",
     "FlexibleShortYearDateDetector",
+    "FlexibleSpaceGroupingFragmentDetector",
     "FlexibleWeekdayNameDetector",
 }
+
+
+@pytest.mark.parametrize(
+    ("locale", "text", "fragments"),
+    (
+        ("en_US", "5 300", ["5", "300"]),
+        ("en_US", "10 000 20 000", ["10", "000", "20", "000"]),
+        ("hi_IN", "1 00 000", ["1", "00", "000"]),
+    ),
+)
+def test_space_grouping_fragments_join_only_the_guarded_gang(locale, text, fragments):
+    type_ = "number:decimal:space-grouping-fragment"
+    default = flexible_detectors(locale).detect(text)
+    guarded = flexible_detectors(locale, guarded=True).detect(text)
+
+    assert not any(item["type"] == type_ for item in default)
+    assert [item["text"] for item in guarded if item["type"] == type_] == fragments
+
 
 # Readers that require explicit caller data never join the default flexible gang.
 OPT_IN_CLASSES = {"MaterialLoneSpelloutDetector", "MaterialSpelloutDetector"}
