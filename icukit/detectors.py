@@ -818,6 +818,76 @@ class DateDetector(_GatedReader):
 # --------------------------------------------------------------------------- numbers
 
 
+_GROUPING_SPACES = frozenset(
+    {
+        " ",
+        "\N{NO-BREAK SPACE}",
+        "\N{THIN SPACE}",
+        "\N{NARROW NO-BREAK SPACE}",
+    }
+)
+
+
+@functools.lru_cache(maxsize=16)
+def _space_grouping_bounds(text: str, digits: frozenset[str]) -> dict[int, tuple[int, int]]:
+    """Map characters in well-formed three-digit space groupings to their whole span.
+
+    A candidate has one to three leading digits and one or more groups of exactly three,
+    with one space-class character between groups. The single pass and bounded memo keep
+    the protection linear when a detector gang asks about the same running text.
+    """
+    bounds: dict[int, tuple[int, int]] = {}
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor] not in digits:
+            cursor += 1
+            continue
+        groups: list[tuple[int, int]] = []
+        group_start = cursor
+        while cursor < len(text) and text[cursor] in digits:
+            cursor += 1
+        groups.append((group_start, cursor))
+        while (
+            cursor < len(text)
+            and text[cursor] in _GROUPING_SPACES
+            and cursor + 1 < len(text)
+            and text[cursor + 1] in digits
+        ):
+            cursor += 1
+            group_start = cursor
+            while cursor < len(text) and text[cursor] in digits:
+                cursor += 1
+            groups.append((group_start, cursor))
+        valid_start = None
+        trailing_groups_are_three = len(groups) > 1 and groups[-1][1] - groups[-1][0] == 3
+        for index in range(len(groups) - 2, -1, -1):
+            width = groups[index][1] - groups[index][0]
+            if trailing_groups_are_three and 1 <= width <= 3:
+                valid_start = groups[index][0]
+            trailing_groups_are_three = trailing_groups_are_three and width == 3
+        if valid_start is not None:
+            span = (valid_start, cursor)
+            bounds.update((offset, span) for offset in range(valid_start, cursor))
+    return bounds
+
+
+def _is_space_grouping_fragment(text: str, start: int, end: int, digits: frozenset[str]) -> bool:
+    """Whether ``[start, end)`` cuts through a well-formed space-grouped integer."""
+    if not (
+        end < len(text)
+        and text[end] in _GROUPING_SPACES
+        or start > 0
+        and text[start - 1] in _GROUPING_SPACES
+    ):
+        return False
+    bounds = _space_grouping_bounds(text, digits)
+    for offset in (start, end - 1):
+        grouped = bounds.get(offset)
+        if grouped is not None and not (start <= grouped[0] and end >= grouped[1]):
+            return True
+    return False
+
+
 class NumberDetector(_GatedReader):
     """Detect canonical ICU decimal, currency, or percent surfaces."""
 
@@ -861,6 +931,8 @@ class NumberDetector(_GatedReader):
         self._plus = symbols.getSymbol(symbol.kPlusSignSymbol)
         self._currency_symbol = symbols.getSymbol(symbol.kCurrencySymbol)
         self._percent = symbols.getSymbol(symbol.kPercentSymbol)
+        zero = ord(self._zero)
+        self._digit_chars = frozenset(chr(zero + offset) for offset in range(10))
         self._inv = _Inverter(self._parse, self._reformat, self._build)
         _install_gates(self, {"scan": _strict_gate(self)})
 
@@ -1047,14 +1119,23 @@ class NumberDetector(_GatedReader):
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:
-        return _scan(
-            text,
-            self.locale,
-            self.type,
-            self._inv,
-            gate=self._start_gates["scan"],
-            stats_key=self._lane_key("scan"),
-        )
+        return [
+            detection
+            for detection in _scan(
+                text,
+                self.locale,
+                self.type,
+                self._inv,
+                gate=self._start_gates["scan"],
+                stats_key=self._lane_key("scan"),
+            )
+            if not _is_space_grouping_fragment(
+                text,
+                detection["start"],
+                detection["end"],
+                self._digit_chars,
+            )
+        ]
 
 
 # --------------------------------------------------------------------------- scanner

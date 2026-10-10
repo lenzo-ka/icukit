@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Space-separated digit groups that have a thousands-grouping shape no longer emit
+  adjacent integer fragments. Flexible readers keep whole groupings accepted by the
+  locale's lenient ICU parser or used by locales of the same language; strict readers
+  keep the locale's own CLDR convention.
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed

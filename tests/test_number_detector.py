@@ -109,3 +109,24 @@ def test_invalid_number_detector_arguments_are_rejected():
         NumberDetector("en_US", "scientific")
     with pytest.raises(ValueError, match="currency"):
         NumberDetector("en_US", "decimal", "USD")
+
+
+@pytest.mark.parametrize("locale", ("en_US", "it_IT", "es_ES", "zh_CN", "de_DE", "de_CH"))
+@pytest.mark.parametrize(
+    "surface",
+    (
+        "1 000",
+        "1\N{NO-BREAK SPACE}000",
+        "1\N{NARROW NO-BREAK SPACE}000",
+        "1\N{THIN SPACE}000",
+        "12 345 678",
+    ),
+)
+def test_noncanonical_space_grouping_is_declined_without_number_fragments(locale, surface):
+    assert NumberDetector(locale, "decimal").detect(surface) == []
+
+
+def test_grouping_protection_keeps_an_independent_number_before_a_grouped_shape():
+    detections = NumberDetector("en_US", "decimal").detect("5 1 000")
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == [("5", "5")]

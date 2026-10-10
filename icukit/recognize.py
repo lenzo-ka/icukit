@@ -41,6 +41,7 @@ from ._tables import persisted
 from .breaker import break_grapheme_spans
 from .detectors import (
     _EXTENDING_CATEGORIES,
+    _GROUPING_SPACES,
     ApproximateValue,
     Capture,
     CompactFormatSpec,
@@ -63,6 +64,7 @@ from .detectors import (
     _date_fields,
     _DateField,
     _is_pattern_letter,
+    _is_space_grouping_fragment,
     _pattern_runs,
     _widen_years,
     _word_edges,
@@ -99,12 +101,7 @@ __all__ = [
     "SingleLetterWordDetector",
 ]
 
-_SPACES = {
-    " ",
-    "\N{NO-BREAK SPACE}",
-    "\N{THIN SPACE}",
-    "\N{NARROW NO-BREAK SPACE}",
-}
+_SPACES = _GROUPING_SPACES
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 # Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
@@ -3029,12 +3026,14 @@ class FlexibleNumberDetector(_GatedReader):
 
     Beside the locale's own grouping, a number reads in each other grouping ICU gives a
     locale of the language ("250 000" as en_ZA formats it, "1'234'567" as en_CH,
-    "12,34,567" as en_IN), as an extra reading: "12 100" still reads "12" and "100",
-    and also 12100. A grouping whose separator is the locale's decimal separator is not
-    read that way, since it would reread every decimal number; instead the language's
-    other decimal styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the
-    locale's own styles do not already read the text: "1,5" reads 1.5 and "1.234,56"
-    1234.56, while "1,234" stays 1234 alone.
+    "12,34,567" as en_IN). A valid space-grouped span is read once as a whole where the
+    locale's own lenient ICU parser accepts it or the language has that convention, never
+    also as separate integers; otherwise its integer fragments are declined. A grouping
+    whose separator is the locale's decimal separator is not read that way, since it would
+    reread every decimal number; instead the language's other decimal styles (en_DE's
+    "1.234,56", en_ZA's "1 234,56") are read only where the locale's own styles do not
+    already read the text: "1,5" reads 1.5 and "1.234,56" 1234.56, while "1,234" stays
+    1234 alone.
 
     ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
     cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
@@ -3057,7 +3056,8 @@ class FlexibleNumberDetector(_GatedReader):
         self.locales = _locale_selection(locale, locales)
         self.accept_single_letter_roman = accept_single_letter_roman
         self.accept_lowercase_roman = accept_lowercase_roman
-        self._nf = icu.NumberFormat.createInstance(icu.Locale(locale))
+        icu_locale = icu.Locale(locale)
+        self._nf = icu.NumberFormat.createInstance(icu_locale)
         symbols = self._nf.getDecimalFormatSymbols()
         symbol = icu.DecimalFormatSymbols
         self._decimal = symbols.getSymbol(symbol.kDecimalSeparatorSymbol)
@@ -3077,7 +3077,18 @@ class FlexibleNumberDetector(_GatedReader):
             self._secondary_grouping = secondary or primary
             grouping_sizes = (secondary, primary) if secondary else (primary,)
         self._spec = NumberFormatSpec(locale, "decimal", grouping_sizes=grouping_sizes)
-        self._other_groupings = _language_groupings(locale, self.locales)
+        self._accepts_space_grouping = bool(
+            self._primary_grouping and self._leniently_accepts_space_grouping(icu_locale)
+        )
+        self._other_groupings = tuple(
+            style
+            for style in _language_groupings(locale, self.locales)
+            if not (
+                self._accepts_space_grouping
+                and style[0] in _SPACES
+                and style[1:3] == (self._primary_grouping, self._secondary_grouping)
+            )
+        )
         self._decimal_styles = _language_decimal_styles(locale, self.locales)
 
         self._roman = icu.RuleBasedNumberFormat(
@@ -3120,6 +3131,25 @@ class FlexibleNumberDetector(_GatedReader):
     def _digits_ascii(self, surface: str) -> str:
         return "".join(
             self._digits[character] for character in surface if character in self._digits
+        )
+
+    def _leniently_accepts_space_grouping(self, locale: icu.Locale) -> bool:
+        """Whether ICU's lenient parser licenses a three-digit space grouping.
+
+        ICU supplies the acceptance policy reflectively. Its parsed ``Formattable`` has
+        neither an exact decimal accessor nor source field spans, so the existing surface
+        parser remains necessary to build the exact value and captures.
+        """
+        glyphs = {value: digit for digit, value in _locale_digit_map(locale).items()}
+        surface = glyphs[1] + " " + glyphs[0] * self._primary_grouping
+        parser = icu.NumberFormat.createInstance(locale)
+        parser.setLenient(True)
+        position = icu.ParsePosition(0)
+        parsed = parser.parse(surface, position)
+        return (
+            parsed is not None
+            and position.getIndex() == len(icu.UnicodeString(surface))
+            and parsed.getInt64() == 10**self._primary_grouping
         )
 
     def _grouping_length(self, text: str, cursor: int, separator: str | None = None) -> int:
@@ -3169,13 +3199,14 @@ class FlexibleNumberDetector(_GatedReader):
             memo[group_start] = (valid, end)
         return memo[start]
 
-    def _match(
+    def _match_style(
         self,
         text: str,
         start: int,
         grouping: tuple[str, int, int] | None = None,
         decimal: str | None = None,
     ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        space_fallback = grouping is None and self._accepts_space_grouping
         separator, primary_grouping, secondary_grouping = grouping or (
             self._grouping,
             self._primary_grouping,
@@ -3211,13 +3242,18 @@ class FlexibleNumberDetector(_GatedReader):
             cursor += 1
         ungrouped_end = cursor
         if primary_grouping:
-            grouping_length = self._grouping_length(text, cursor, separator)
+            if space_fallback and cursor < len(text) and text[cursor] in _SPACES:
+                grouping_length = 1
+                active_separator = " "
+            else:
+                grouping_length = self._grouping_length(text, cursor, separator)
+                active_separator = separator
             group_start = cursor + grouping_length
             if grouping_length and group_start < len(text) and text[group_start] in self._digits:
                 valid, grouped_end = self._grouping_tail(
                     text,
                     group_start,
-                    separator,
+                    active_separator,
                     primary_grouping,
                     secondary_grouping,
                 )
@@ -3277,6 +3313,20 @@ class FlexibleNumberDetector(_GatedReader):
             decimal += "." + fraction_ascii
         captures.sort(key=lambda capture: (capture.start, capture.end))
         return cursor, tuple(captures), NumberValue(decimal=decimal, currency=None)
+
+    def _match(
+        self,
+        text: str,
+        start: int,
+        grouping: tuple[str, int, int] | None = None,
+        decimal: str | None = None,
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        match = self._match_style(text, start, grouping, decimal)
+        if match is not None and _is_space_grouping_fragment(
+            text, start, match[0], self._digit_chars
+        ):
+            return None
+        return match
 
     def _match_other_groupings(self, text: str, start: int) -> list[_FlexibleMatch]:
         """Each reading at ``start`` in another grouping of the language that groups."""
@@ -4000,16 +4050,27 @@ def _number_memo(key: tuple, text: str) -> dict[int, object]:
 
 
 def _plain_number_match(number: FlexibleNumberDetector, text: str, start: int):
-    """``number._match(text, start)``, shared among the readers with ``number``'s key.
+    """The longest plain decimal match, shared among readers with ``number``'s key.
 
     A gang holds many currency and measure readers, each with its own number reader
     built alike, that read the same numbers at the same starts; the reading is made
-    once per text. The key holds the reader's options, so a reader built otherwise
-    never shares another's readings.
+    once per text. Language-relative groupings count as plain decimals here so a whole
+    grouped measure does not fall back to a measure of its final integer fragment. The
+    key holds the reader's options, so a reader built otherwise never shares another's
+    readings.
     """
     memo = _number_memo(number._memo_key, text)
     if start not in memo:
-        memo[start] = number._match(text, start)
+        own = number._match(text, start)
+        alternatives = (
+            (match.end, match.captures, match.value)
+            for match in number._match_other_groupings(text, start)
+        )
+        memo[start] = max(
+            (match for match in (own, *alternatives) if match is not None),
+            key=lambda match: match[0],
+            default=None,
+        )
     return memo[start]
 
 
