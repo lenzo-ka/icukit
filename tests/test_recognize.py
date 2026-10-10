@@ -432,11 +432,88 @@ def test_space_grouping_separators_are_equivalent_when_licensed_by_locale(space)
     assert detection["value"].decimal == "1234.56"
 
 
-def test_non_space_grouping_separator_remains_exact():
-    detection = FlexibleNumberDetector("en_US").detect("1 234")[0]
+@pytest.mark.parametrize(
+    "locale", ("en_US", "it_IT", "es_ES", "zh_CN", "fr_FR", "de_DE", "de_CH", "it_CH")
+)
+@pytest.mark.parametrize(
+    "surface",
+    (
+        "1 000",
+        "1\N{NO-BREAK SPACE}000",
+        "1\N{NARROW NO-BREAK SPACE}000",
+        "1\N{THIN SPACE}000",
+        "12 345 678",
+    ),
+)
+def test_lenient_space_grouping_is_read_once_as_a_whole(locale, surface):
+    detections = FlexibleNumberDetector(locale).detect(surface)
 
-    assert detection["text"] == "1"
-    assert detection["value"].decimal == "1"
+    assert [(item["text"], item["value"].decimal) for item in detections] == [
+        (surface, surface.translate(str.maketrans("", "", " \u00a0\u202f\u2009")))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("locale", "surface", "expected"),
+    (
+        ("en_US", "10 000 20 000", [("10 000", "10000"), ("20 000", "20000")]),
+        ("en_US", "1 000 2", [("1 000", "1000"), ("2", "2")]),
+        ("hi_IN", "1 00 000", [("1 00 000", "100000")]),
+        (
+            "hi_IN",
+            "1 00 000–2 00 000",
+            [("1 00 000", "100000"), ("2 00 000", "200000")],
+        ),
+        ("en_US", "021 555 1234", [("021 555", "021555"), ("1234", "1234")]),
+    ),
+)
+def test_each_valid_grouping_in_a_digit_space_run_is_read_whole(locale, surface, expected):
+    detections = FlexibleNumberDetector(locale).detect(surface)
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == expected
+
+
+@pytest.mark.parametrize("locale", ("fr_FR", "en_US"))
+def test_space_grouping_with_comma_decimal_reads_whole_in_both_decimal_styles(locale):
+    detections = FlexibleNumberDetector(locale).detect("1 000,5")
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == [("1 000,5", "1000.5")]
+
+
+@pytest.mark.parametrize(
+    ("surface", "expected"),
+    (
+        ("5 300", [("5 300", "5300")]),
+        ("75 008", [("75 008", "75008")]),
+        ("1 2 3", [("1", "1"), ("2", "2"), ("3", "3")]),
+        ("1999 2000", [("1999", "1999"), ("2000", "2000")]),
+    ),
+)
+def test_space_grouping_ambiguity_follows_the_documented_shape_policy(surface, expected):
+    detections = FlexibleNumberDetector("en_US").detect(surface)
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == expected
+
+
+def test_signed_and_currency_prefixed_space_groupings_read_whole():
+    signed = FlexibleNumberDetector("en_US").detect("-1 000")
+    currency = FlexibleCurrencyDetector("en_US", "USD").detect("$1 000")
+
+    assert [(item["text"], item["value"].decimal) for item in signed] == [("-1 000", "-1000")]
+    assert [(item["text"], item["value"].decimal) for item in currency] == [("$1 000", "1000")]
+
+
+@pytest.mark.parametrize("locale", ("en_US", "it_IT", "fr_FR", "de_DE", "de_CH", "it_CH"))
+def test_language_relative_apostrophe_grouping_is_read(locale):
+    detections = FlexibleNumberDetector(locale).detect("1'000")
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == [("1'000", "1000")]
+    assert FlexibleNumberDetector(locale).detect("1’000") == []
+
+
+@pytest.mark.parametrize("locale", ("es_ES", "zh_CN"))
+def test_apostrophe_grouping_is_not_borrowed_from_another_language(locale):
+    assert FlexibleNumberDetector(locale).detect("1'000") == []
 
 
 def test_captures_use_source_code_point_offsets_with_astral_prefix():

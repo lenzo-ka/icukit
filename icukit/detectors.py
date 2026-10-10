@@ -818,6 +818,105 @@ class DateDetector(_GatedReader):
 # --------------------------------------------------------------------------- numbers
 
 
+_GROUPING_SPACES = frozenset(
+    {
+        " ",
+        "\N{NO-BREAK SPACE}",
+        "\N{THIN SPACE}",
+        "\N{NARROW NO-BREAK SPACE}",
+    }
+)
+
+
+@functools.lru_cache(maxsize=16)
+def _space_grouping_bounds(
+    text: str,
+    digits: frozenset[str],
+    primary: int,
+    secondary: int,
+) -> dict[int, tuple[int, int]]:
+    """Map characters in every maximal well-formed space grouping to its span.
+
+    The rightmost group has ICU's primary width, earlier non-leading groups have its
+    secondary width, and the leading group has one through ``secondary`` digits. One
+    digit/space run may contain several valid spans (``10 000 20 000``); keeping only
+    its valid suffix would leave fragments of earlier spans unprotected. The single
+    pass and bounded memo keep the protection linear when a detector gang asks about
+    the same running text.
+    """
+    bounds: dict[int, tuple[int, int]] = {}
+    if primary <= 0 or secondary <= 0:
+        return bounds
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor] not in digits:
+            cursor += 1
+            continue
+        groups: list[tuple[int, int]] = []
+        group_start = cursor
+        while cursor < len(text) and text[cursor] in digits:
+            cursor += 1
+        groups.append((group_start, cursor))
+        while (
+            cursor < len(text)
+            and text[cursor] in _GROUPING_SPACES
+            and cursor + 1 < len(text)
+            and text[cursor + 1] in digits
+        ):
+            cursor += 1
+            group_start = cursor
+            while cursor < len(text) and text[cursor] in digits:
+                cursor += 1
+            groups.append((group_start, cursor))
+
+        spans: list[tuple[int, int]] = []
+        chain_start: int | None = None
+        for index, (start, end) in enumerate(groups):
+            width = end - start
+            if index and width == primary and chain_start is not None:
+                span = (groups[chain_start][0], end)
+                if spans and spans[-1][0] == span[0]:
+                    spans[-1] = span
+                else:
+                    spans.append(span)
+
+            if width == secondary:
+                if chain_start is None:
+                    chain_start = index
+            elif 1 <= width <= secondary:
+                chain_start = index
+            else:
+                chain_start = None
+
+        for span in spans:
+            bounds.update((offset, span) for offset in range(*span))
+    return bounds
+
+
+def _is_space_grouping_fragment(
+    text: str,
+    start: int,
+    end: int,
+    digits: frozenset[str],
+    primary: int,
+    secondary: int,
+) -> bool:
+    """Whether ``[start, end)`` cuts through a well-formed space-grouped integer."""
+    if not (
+        end < len(text)
+        and text[end] in _GROUPING_SPACES
+        or start > 0
+        and text[start - 1] in _GROUPING_SPACES
+    ):
+        return False
+    bounds = _space_grouping_bounds(text, digits, primary, secondary)
+    for offset in (start, end - 1):
+        grouped = bounds.get(offset)
+        if grouped is not None and not (start <= grouped[0] and end >= grouped[1]):
+            return True
+    return False
+
+
 class NumberDetector(_GatedReader):
     """Detect canonical ICU decimal, currency, or percent surfaces."""
 
@@ -861,6 +960,8 @@ class NumberDetector(_GatedReader):
         self._plus = symbols.getSymbol(symbol.kPlusSignSymbol)
         self._currency_symbol = symbols.getSymbol(symbol.kCurrencySymbol)
         self._percent = symbols.getSymbol(symbol.kPercentSymbol)
+        zero = ord(self._zero)
+        self._digit_chars = frozenset(chr(zero + offset) for offset in range(10))
         self._inv = _Inverter(self._parse, self._reformat, self._build)
         _install_gates(self, {"scan": _strict_gate(self)})
 
@@ -1047,14 +1148,27 @@ class NumberDetector(_GatedReader):
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:
-        return _scan(
-            text,
-            self.locale,
-            self.type,
-            self._inv,
-            gate=self._start_gates["scan"],
-            stats_key=self._lane_key("scan"),
-        )
+        primary = self._nf.getGroupingSize() if self._nf.isGroupingUsed() else 0
+        secondary = self._nf.getSecondaryGroupingSize() or primary
+        return [
+            detection
+            for detection in _scan(
+                text,
+                self.locale,
+                self.type,
+                self._inv,
+                gate=self._start_gates["scan"],
+                stats_key=self._lane_key("scan"),
+            )
+            if not _is_space_grouping_fragment(
+                text,
+                detection["start"],
+                detection["end"],
+                self._digit_chars,
+                primary,
+                secondary,
+            )
+        ]
 
 
 # --------------------------------------------------------------------------- scanner
