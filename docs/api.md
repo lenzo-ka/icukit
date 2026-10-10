@@ -7778,11 +7778,9 @@ also cuts. Detections starting or ending at any cut are marked ``truncated``.
 
 Detections settled by one call and the absolute open-segment start.
 
-``cuts`` contains cap and caller-imposed boundary offsets. ``reader_cuts`` is
-deprecated and remains in the result shape for compatibility; boundary
-segmentation has no per-reader cuts, so it is always empty.
+``cuts`` contains cap and caller-imposed boundary offsets.
 
-#### `DetectionBatch(detections: 'tuple[ValueDetection, ...]', pending_from: 'int', cuts: 'tuple[int, ...]' = (), reader_cuts: 'tuple[tuple[str, int], ...]' = ()) -> None`
+#### `DetectionBatch(detections: 'tuple[ValueDetection, ...]', pending_from: 'int', cuts: 'tuple[int, ...]' = ()) -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 

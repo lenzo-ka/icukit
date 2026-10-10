@@ -49,15 +49,12 @@ _REFUSAL_MESSAGES = {
 class DetectionBatch:
     """Detections settled by one call and the absolute open-segment start.
 
-    ``cuts`` contains cap and caller-imposed boundary offsets. ``reader_cuts`` is
-    deprecated and remains in the result shape for compatibility; boundary
-    segmentation has no per-reader cuts, so it is always empty.
+    ``cuts`` contains cap and caller-imposed boundary offsets.
     """
 
     detections: tuple[ValueDetection, ...]
     pending_from: int
     cuts: tuple[int, ...] = ()
-    reader_cuts: tuple[tuple[str, int], ...] = ()
 
 
 class StreamPending(TypedDict):

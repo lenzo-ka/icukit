@@ -56,7 +56,6 @@ def test_default_paragraph_stream_is_whole_text_identical(chunks_index):
 
     assert found == expected
     assert batches[-1].pending_from == len(text)
-    assert all(batch.reader_cuts == () for batch in batches)
 
 
 @pytest.mark.parametrize(
