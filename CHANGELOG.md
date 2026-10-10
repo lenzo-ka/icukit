@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `DETACHED_UNIT_FAMILY` preserves detached quote and prime marks under the guarded
+  `measure:detached-unit:<unit>` type. Default readers decline those marks after a
+  space where ICU writes them attached (`84 "`, `6 ′`); `guarded=True` or an explicit
+  guarded-family selection includes those readings for lattice consumers. Letter unit
+  symbols such as `24 h`, `62 d`, and `62 s` retain the default measure reading.
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed
