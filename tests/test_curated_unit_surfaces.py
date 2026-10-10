@@ -40,6 +40,12 @@ def test_no_curated_surface_is_one_icu_already_writes():
     assert not set(curated_unit_surfaces("en")) & icu_rows
 
 
+@pytest.mark.parametrize("surface", ["square ft", "sq. feet"])
+def test_unmeasured_mixed_square_foot_forms_are_not_curated(surface):
+    assert (surface, "square-foot") not in curated_unit_surfaces("en")
+    assert _readings("square-foot", f"100 {surface}") == []
+
+
 def test_curated_rows_carry_icus_expansions():
     rows = {
         row.surface: row

@@ -39,7 +39,7 @@ from ._gate import (
 )
 from ._offsets import boundary_maps
 from ._tables import persisted
-from .breaker import break_grapheme_spans
+from .breaker import _raw_break_sentence_spans, break_grapheme_spans
 from .detectors import (
     _EXTENDING_CATEGORIES,
     _GROUPING_SPACES,
@@ -178,6 +178,7 @@ class _FlexibleMatch:
     captures: tuple[Capture, ...]
     value: object
     spec: object | None = None
+    added_final_period: bool = False
 
 
 def _is_word_character(character: str) -> bool:
@@ -4666,6 +4667,65 @@ def _unit_surface_variants(surface: str) -> tuple[str, ...]:
     return tuple(sorted(variants, key=lambda variant: (-len(variant), variant)))
 
 
+def _english_internal_abbreviation_period_variants(surface: str) -> tuple[str, ...]:
+    """English internal-full-stop spellings of an abbreviated unit surface.
+
+    A period may follow a lowercase ASCII word of two or more letters before the
+    final word (``"sq ft"`` gives ``"sq. ft"``). Uppercase qualifiers such as ``US``
+    and the word ``per`` are not periodized. A final period is handled after a base or
+    internal variant matches. The caller establishes that the complete surface is
+    abbreviated rather than a short-width full word.
+    """
+    words = surface.split(" ")
+    positions = [
+        index
+        for index, word in enumerate(words[:-1])
+        if word != "per" and len(word) > 1 and word.isascii() and word.isalpha() and word.islower()
+    ]
+    variants = set()
+    for count in range(1, 1 << len(positions)):
+        chosen = {positions[bit] for bit in range(len(positions)) if count & (1 << bit)}
+        variants.add(
+            " ".join(f"{word}." if index in chosen else word for index, word in enumerate(words))
+        )
+    return tuple(sorted(variants, key=lambda variant: (-len(variant), variant)))
+
+
+_SENTENCE_PERIOD_CACHE_TEXT_LIMIT = 65_536
+_SENTENCE_CLOSERS = frozenset(
+    {'"', "'", ")", "]", "}", "\N{RIGHT SINGLE QUOTATION MARK}", "\N{RIGHT DOUBLE QUOTATION MARK}"}
+)
+
+
+def _uncached_sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
+    """Ends just after each boundary period, before any closing punctuation."""
+    if "." not in text:
+        return frozenset()
+    ends = set()
+    for span in _raw_break_sentence_spans(text, locale):
+        end = span["end"]
+        while end > span["start"] and text[end - 1].isspace():
+            end -= 1
+        while end > span["start"] and text[end - 1] in _SENTENCE_CLOSERS:
+            end -= 1
+        if text[end - 1 : end] == ".":
+            ends.add(end)
+    return frozenset(ends)
+
+
+@lru_cache(maxsize=8)
+def _cached_sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
+    """Cache sentence boundaries only for texts small enough to bound retained input."""
+    return _uncached_sentence_final_period_ends(text, locale)
+
+
+def _sentence_final_period_ends(text: str, locale: str) -> frozenset[int]:
+    """Ends after boundary periods, caching at most 524,288 source characters."""
+    if len(text) > _SENTENCE_PERIOD_CACHE_TEXT_LIMIT:
+        return _uncached_sentence_final_period_ends(text, locale)
+    return _cached_sentence_final_period_ends(text, locale)
+
+
 @cache
 def _measure_surfaces(
     locale: str, unit: str, per_valid: bool, names: tuple[str, ...] | None = None
@@ -4704,6 +4764,13 @@ class FlexibleMeasureDetector(_GatedReader):
     kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
     each of that locale's plural categories (see :func:`_plural_samples`), each also in
     the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+    English abbreviations of two or more ASCII letters additionally accept a period
+    after each abbreviated word ("5 ft.", "100 sq. ft."). When the final abbreviation
+    period is also sentence-final, both the span with it and the span without it are
+    readings; an internal period belongs only to the punctuated reading. A period on a
+    wide unit word or one-letter symbol remains outside the unit. Before a following
+    numeric token, the period also remains outside the unit: numbered references such
+    as "Ch. 5 sec. 2" do not present "5 sec." as a seconds reading.
     Spacing stays flexible except for detached quote or prime marks. Those do not read
     after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
     :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
@@ -4741,9 +4808,45 @@ class FlexibleMeasureDetector(_GatedReader):
         self._spaced_unit_surfaces = {
             (surface, target) for surface, _width, spaced, target in self._units if spaced
         }
+        language = icu.Locale(locale).getLanguage()
+        wide = {
+            (surface, target) for surface, width, _spaced, target in self._units if width == "wide"
+        }
+        abbreviations = {
+            (surface, width, target)
+            for surface, width, _spaced, target in self._units
+            if language == "en"
+            and width != "wide"
+            and (surface, target) not in wide
+            and len(surface.rsplit(" ", 1)[-1]) > 1
+            and surface.rsplit(" ", 1)[-1].isascii()
+            and surface.rsplit(" ", 1)[-1].isalpha()
+            and surface.rsplit(" ", 1)[-1].islower()
+        }
+        period_units = {
+            (variant, width, spaced, target)
+            for surface, width, spaced, target in self._units
+            if (surface, width, target) in abbreviations
+            for variant in _english_internal_abbreviation_period_variants(surface)
+        }
+        self._periodizable_units = frozenset(abbreviations)
         # Longest first, those written as the text is (spaced or attached) ahead.
         self._ordered_units = {
             has_space: tuple(sorted(self._units, key=lambda item: item[2] != has_space))
+            for has_space in (False, True)
+        }
+        self._ordered_period_units = {
+            has_space: tuple(
+                sorted(period_units, key=lambda item: (-len(item[0]), item[2] != has_space))
+            )
+            for has_space in (False, True)
+        }
+        self._unit_heads = {
+            has_space: self._by_surface_head(self._ordered_units[has_space])
+            for has_space in (False, True)
+        }
+        self._period_unit_heads = {
+            has_space: self._by_surface_head(self._ordered_period_units[has_space])
             for has_space in (False, True)
         }
         per_heads = heads(
@@ -4762,6 +4865,16 @@ class FlexibleMeasureDetector(_GatedReader):
         if cursor < len(text) and text[cursor] in _SPACES:
             return cursor + 1
         return cursor
+
+    @staticmethod
+    def _by_surface_head(
+        units: tuple[tuple[str, str, bool, str], ...],
+    ) -> dict[str, tuple[tuple[str, str, bool, str], ...]]:
+        """Preserve candidate order while indexing unit surfaces by first character."""
+        groups: dict[str, list[tuple[str, str, bool, str]]] = {}
+        for item in units:
+            groups.setdefault(item[0][0], []).append(item)
+        return {head: tuple(items) for head, items in groups.items()}
 
     @staticmethod
     def _continues_word(text: str, cursor: int) -> bool:
@@ -4803,7 +4916,8 @@ class FlexibleMeasureDetector(_GatedReader):
         number_end, captures, value = match
         unit_start = self._space(text, number_end)
         has_space = unit_start != number_end
-        for surface, width, expects_space, unit in self._ordered_units[has_space]:
+        head = text[unit_start : unit_start + 1]
+        for surface, width, expects_space, unit in self._unit_heads[has_space].get(head, ()):
             # A detached mark can read as punctuation. Reject only when this
             # ICU-derived row attaches it; a spaced row sorts first.
             guarded_detached = has_space and self._is_guarded_detached(
@@ -4815,23 +4929,87 @@ class FlexibleMeasureDetector(_GatedReader):
             cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
             if not text.startswith(surface, cursor):
                 continue
-            end = cursor + len(surface)
-            # A mixed unit's first component may run straight into the next number
-            # ("5'10\""): a mark ends the unit even with a digit after it.
-            open_mark = (
-                digit_may_follow and not surface[-1:].isalnum() and text[end : end + 1].isdigit()
+            found = self._finish_unit_match(
+                text,
+                cursor,
+                surface,
+                width,
+                unit,
+                captures,
+                value,
+                digit_may_follow,
+                (surface, width, unit) in self._periodizable_units,
             )
-            if self._continues_word(text, end) and not open_mark:
+            if found is not None:
+                return found
+        for surface, width, expects_space, unit in self._period_unit_heads[has_space].get(head, ()):
+            guarded_detached = has_space and self._is_guarded_detached(
+                surface, width, expects_space, unit
+            )
+            if guarded_detached != self._detached_only:
                 continue
-            unit_capture = Capture("unit", cursor, end, surface, unit, "symbol")
-            spec = MeasureFormatSpec(self.locale, unit, width)
-            return _FlexibleMatch(
-                end,
-                (*captures, unit_capture),
-                MeasureValue(value.decimal, unit),
-                spec,
+            cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
+            if not text.startswith(surface, cursor):
+                continue
+            found = self._finish_unit_match(
+                text,
+                cursor,
+                surface,
+                width,
+                unit,
+                captures,
+                value,
+                digit_may_follow,
+                True,
             )
+            if found is not None:
+                return found
         return None
+
+    def _finish_unit_match(
+        self,
+        text: str,
+        cursor: int,
+        surface: str,
+        width: str,
+        unit: str,
+        captures: tuple[Capture, ...],
+        value: NumberValue,
+        digit_may_follow: bool,
+        periodizable: bool,
+    ) -> _FlexibleMatch | None:
+        """Finish one already-matched base or internally punctuated unit surface."""
+        end = cursor + len(surface)
+        added_final_period = False
+        period_end = end + 1
+        has_final_period = periodizable and text[end:period_end] == "."
+        next_cursor = period_end
+        if has_final_period:
+            while next_cursor < len(text) and text[next_cursor].isspace():
+                next_cursor += 1
+        number_follows = (
+            has_final_period and next_cursor < len(text) and icu.Char.isdigit(text[next_cursor])
+        )
+        if has_final_period and not self._continues_word(text, period_end) and not number_follows:
+            end += 1
+            added_final_period = True
+        # A mixed unit's first component may run straight into the next number
+        # ("5'10\""): a mark ends the unit even with a digit after it.
+        open_mark = (
+            digit_may_follow and not text[end - 1 : end].isalnum() and text[end : end + 1].isdigit()
+        )
+        if self._continues_word(text, end) and not open_mark:
+            return None
+        written = text[cursor:end]
+        unit_capture = Capture("unit", cursor, end, written, unit, "symbol")
+        spec = MeasureFormatSpec(self.locale, unit, width)
+        return _FlexibleMatch(
+            end,
+            (*captures, unit_capture),
+            MeasureValue(value.decimal, unit),
+            spec,
+            added_final_period,
+        )
 
     def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:
         """A rate's per form at ``start`` with no amount before it: "/s", "per second"."""
@@ -4848,15 +5026,47 @@ class FlexibleMeasureDetector(_GatedReader):
             return _FlexibleMatch(end, (unit_capture,), UnitValue(unit), spec)
         return None
 
+    def _matches(
+        self,
+        text: str,
+        start: int,
+        sentence_period_ends: Callable[[], frozenset[int]],
+    ) -> list[_FlexibleMatch]:
+        """The measure reading, plus its period-less sentence-final alternative."""
+        found = self._match(text, start)
+        if found is None:
+            return []
+        readings = [found]
+        if not found.added_final_period or found.end not in sentence_period_ends():
+            return readings
+        captures = tuple(
+            replace(capture, end=capture.end - 1, text=capture.text[:-1])
+            if capture.name == "unit" and capture.end == found.end
+            else capture
+            for capture in found.captures
+        )
+        readings.append(replace(found, end=found.end - 1, captures=captures))
+        return readings
+
     def detect(self, text: str) -> list[ValueDetection]:
-        """Return flexible measure candidates in source order, a bare per form beside them."""
+        """Return flexible measure readings in source order, a bare per form beside them."""
         amount_plan = _scan_plan_for(text, self.locale, self._start_gates["amount"])
-        measures = _detect_flexible(
+        sentence_period_ends: frozenset[int] | None = None
+
+        def boundaries() -> frozenset[int]:
+            nonlocal sentence_period_ends
+            if sentence_period_ends is None:
+                sentence_period_ends = _sentence_final_period_ends(text, self.locale)
+            return sentence_period_ends
+
+        def match(source: str, start: int) -> list[_FlexibleMatch]:
+            return self._matches(source, start, boundaries)
+
+        measures = _detect_flexible_alternatives(
             text,
             self.locale,
             self.type,
-            None,
-            self._match,
+            match,
             gate=self._start_gates["amount"],
             stats_key=self._lane_key("amount"),
             _plan=amount_plan,
@@ -4888,7 +5098,7 @@ class FlexibleMeasureDetector(_GatedReader):
             )
             if not any(m["start"] <= item["start"] and item["end"] <= m["end"] for m in measures)
         ]
-        return sorted((*measures, *rates), key=lambda item: (item["start"], item["end"]))
+        return sorted((*measures, *rates), key=lambda item: (item["start"], -item["end"]))
 
 
 class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):

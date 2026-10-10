@@ -392,6 +392,7 @@ def test_the_set_reads_the_flexible_features_in_en_us():
             MeasureValue("4527", "second"),
         ),
         "5 ft, 10 in": ("measure:foot-and-inch", MeasureValue("70", "inch")),
+        "100 sq. ft.": ("measure:square-foot", MeasureValue("100", "square-foot")),
         "1.234,56": ("number:decimal", NumberValue("1234.56")),
         "Tue 2:07 PM": (
             "date:datetime-flexible",
@@ -416,6 +417,15 @@ def test_the_set_reads_the_flexible_features_in_en_us():
     }
     missing = {text: want for text, want in expected.items() if want not in _whole(gang, text)}
     assert not missing
+
+
+def test_the_set_keeps_both_sentence_final_abbreviation_readings():
+    readings = [
+        (found["start"], found["end"], found["text"])
+        for found in _gang("en_US").detect("He is 5 ft.")
+        if found["type"] == "measure:foot"
+    ]
+    assert readings == [(6, 11, "5 ft."), (6, 10, "5 ft")]
 
 
 def test_the_set_reads_a_comma_decimal_and_a_euro_amount_in_de_de():
