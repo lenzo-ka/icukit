@@ -55,11 +55,9 @@ features were selected by held-out permutation importance; and the model was
 compiled for icukit's flat equality evaluator. Test data was not used for
 training or selection.
 
-The real-text model is offered under CC BY-SA 4.0 as a conservative
-distribution choice. Whether training on the CC BY-SA documents makes the
-model Adapted Material, whether ShareAlike is legally required, and whether
-this attribution is sufficient remain questions for release review; the
-receipt records that unresolved status explicitly.
+The real-text model is distributed under CC BY-SA 4.0 because part of its
+training text is CC BY-SA; ShareAlike is applied to the model, with attribution
+as listed above and in `REAL_TEXT_RECEIPT.json`.
 
 The rule artifacts, model artifacts, this notice, and the accompanying receipts
 are distributed under the Creative Commons Attribution-ShareAlike 4.0

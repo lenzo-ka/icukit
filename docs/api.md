@@ -15,6 +15,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleCurrencyNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateIntervalDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleDetachedUnitDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleFractionDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumberDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -42,6 +43,11 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`SingleLetterWordDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`DetectorSet`](#icukitdetectors) — class, `icukit.detectors`
 - [`CompiledDetectorSet`](#icukitcompiled) — class, `icukit.compiled`
+- [`BoundaryMode`](#icukitstream) — alias, `icukit.stream`
+- [`DetectionBatch`](#icukitstream) — class, `icukit.stream`
+- [`StreamPending`](#icukitstream) — class, `icukit.stream`
+- [`DetectionStream`](#icukitstream) — class, `icukit.stream`
+- [`DEFAULT_MAX_PENDING_CHARS`](#icukitstream) — constant, `icukit.stream`
 - [`ReaderSpec`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileKey`](#icukitcompiled) — class, `icukit.compiled`
 - [`CompileStats`](#icukitcompiled) — class, `icukit.compiled`
@@ -84,6 +90,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`DATE_INTERVAL_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DATE_TIME_SKELETON_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DEFAULT_FAMILIES`](#icukitengine) — constant, `icukit.engine`
+- [`DETACHED_UNIT_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`GUARDED_FAMILIES`](#icukitengine) — constant, `icukit.engine`
 - [`LONE_SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`LOWERCASE_ROMAN_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -906,7 +913,8 @@ Initialize self.  See help(type(self)) for accurate signature.
 Report the default generated and flexible selections for ``locale``.
 
 Flexible rows use the default locales, currencies, and units; ``guarded=True``
-includes the guarded families. ICU/CLDR, shipped curated tables, and explicitly
+includes the guarded families, including detached quote and prime marks that ICU
+writes attached to their numbers. ICU/CLDR, shipped curated tables, and explicitly
 supplied user material are separate rows. A row with no source means there is no
 usable reader: it was not built, or it was built with nothing to read.
 
@@ -1985,6 +1993,10 @@ Detect with a context-local immutable scan plan, resetting it on every exit.
 
 Return one gate status row for every declared scan lane.
 
+#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph')`
+
+Return a boundary-segmented stream using compiled whole-text detection.
+
 #### `warm() -> 'CompiledDetectorSet'`
 
 Force lazy sub-readers and zone tables under the build phase.
@@ -2756,6 +2768,10 @@ Compile this gang explicitly, optionally forcing lazy reader state.
 
 The members' types, in order; a type repeats once per locale it is built for.
 
+#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph')`
+
+Return a boundary-segmented detector over arbitrary text chunks.
+
 #### `with_(*more: 'Detector') -> 'DetectorSet'`
 
 Return a new gang with ``more`` detectors added.
@@ -3432,8 +3448,9 @@ expansion is intentionally not an invertible formatter operation.
 readers of the readings the default readers refuse on purpose -- a lone "one" or
 "first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
 with a two- or three-digit year, a year range ICU never writes ("1914-1918",
-"1893–94") -- each under its own type, so a consumer that wants
-every path (a lattice for forced alignment) opts in with
+"1893–94"), or a detached quote or prime mark that ICU writes attached (``84 "``
+beside ``84"``) -- each under its own type, so a
+consumer that wants every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
 
@@ -3470,9 +3487,13 @@ values it chooses from ICU; ``guarded=True`` adds the guarded readers.
 note: A measure family belongs here once its ICU surfaces have an introspective
 inverter. Abbreviations use their typed lexicon.
 
+#### `DETACHED_UNIT_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -5807,6 +5828,29 @@ own locale's zone first.
 
 Return this reader's stable lane names and sound start gates.
 
+### class `FlexibleDetachedUnitDetector`
+
+Recognize only a deliberately guarded detached unit surface.
+
+A quote or prime mark is guarded where ICU joins it to its number: ``84"``, ``6'``.
+The ordinary measure reader declines the detached spelling (``84 "``, ``6 '``);
+this reader deposits exactly that spelling under ``measure:detached-unit:<unit>``
+for lattice consumers that opt in. A mark that ICU spaces and a curated surface
+remain ordinary measure readings. Letter unit symbols retain the default measure
+reader's flexible spacing.
+
+#### `FlexibleDetachedUnitDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return flexible measure readings in source order, a bare per form beside them.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleFractionDetector`
 
 Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
@@ -5841,6 +5885,17 @@ The surfaces are the unit's short, narrow, and wide forms as ICU formats them
 kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
 each of that locale's plural categories (see :func:`_plural_samples`), each also in
 the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+English abbreviations of two or more ASCII letters additionally accept a period
+after each abbreviated word ("5 ft.", "100 sq. ft."). When the final abbreviation
+period is also sentence-final, both the span with it and the span without it are
+readings; an internal period belongs only to the punctuated reading. A period on a
+wide unit word or one-letter symbol remains outside the unit. Before a following
+numeric token, the period also remains outside the unit: numbered references such
+as "Ch. 5 sec. 2" do not present "5 sec." as a seconds reading.
+Spacing stays flexible except for detached quote or prime marks. Those do not read
+after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
+:class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
+a separate type.
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
 number directly. A per form written without an amount ("/s", "per second") reads as
@@ -5853,7 +5908,7 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 #### `detect(text: 'str') -> 'list[ValueDetection]'`
 
-Return flexible measure candidates in source order, a bare per form beside them.
+Return flexible measure readings in source order, a bare per form beside them.
 
 #### `start_gates() -> 'Mapping[str, StartGate | None]'`
 
@@ -7729,6 +7784,87 @@ Example:
     'paypal'
     >>> get_skeleton("paypal")
     'paypal'
+
+## icukit.stream
+
+Bounded detection over boundary-delimited text supplied in arbitrary chunks.
+
+The default paragraph mode holds an open paragraph and runs the gang's ordinary
+whole-text :meth:`~icukit.detectors.DetectorSet.detect` exactly once when that
+paragraph closes. Stock readers do not cross paragraph boundaries, so no-cut output
+is identical to whole-text detection with only absolute-offset shifts. A third-party
+reader has that guarantee only when its detections are context-independent across the
+selected boundary grammar: adding text beyond a boundary cannot create, remove, or
+change a detection on the other side. Line mode is a lower-latency option; a wrapped
+number range may cross one line break, so line mode is not guaranteed to preserve
+whole-text identity. Explicit mode settles only at :meth:`DetectionStream.flush`,
+:meth:`DetectionStream.boundary`, or close.
+
+An open segment is length-bounded by ``max_pending_chars`` (4096 by default). When no
+configured boundary closes it in time, the stream examines the fixed cap-length
+prefix and cuts at its last grapheme edge immediately following whitespace, then at
+its last grapheme edge, with a code-point cut only when one overlong grapheme leaves
+no positive grapheme boundary within the hard cap. Such cuts are deterministic
+functions of the text. Caller-imposed :meth:`DetectionStream.flush` boundaries are
+also cuts. Detections starting or ending at any cut are marked ``truncated``.
+
+### Constants and type aliases
+
+#### `BoundaryMode` (type alias)
+
+`Literal['paragraph', 'line', 'explicit']`
+
+#### `DEFAULT_MAX_PENDING_CHARS` (constant)
+
+`4096`
+
+### class `DetectionBatch`
+
+Detections settled by one call and the absolute open-segment start.
+
+``cuts`` contains cap and caller-imposed boundary offsets.
+
+#### `DetectionBatch(detections: 'tuple[ValueDetection, ...]', pending_from: 'int', cuts: 'tuple[int, ...]' = ()) -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+### class `DetectionStream`
+
+Incrementally detect closed segments with bounded retention and absolute offsets.
+
+``boundary`` selects ``"paragraph"`` (the identity-preserving default for stock
+readers), ``"line"`` (lower latency without an identity guarantee), or
+``"explicit"`` (only :meth:`flush`, :meth:`boundary`, and :meth:`close` settle).
+The chunk passed to :meth:`feed` is appended before boundaries and cap cuts are
+drained, so it can transiently exceed the configured cap during that call.
+
+#### `DetectionStream(detectors: 'DetectorSet | object | Iterable[Detector]', /, *, max_pending_chars: 'int' = 4096, boundary: 'BoundaryMode' = 'paragraph') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `boundary() -> 'DetectionBatch'`
+
+Mark an explicit boundary; equivalent to :meth:`flush`.
+
+#### `close() -> 'DetectionBatch'`
+
+Settle at end of input and close; repeated calls return an empty batch.
+
+#### `feed(chunk: 'str', /) -> 'DetectionBatch'`
+
+Append ``chunk`` and return detections from newly closed segments.
+
+#### `flush() -> 'DetectionBatch'`
+
+Settle at a caller-imposed cut and mark detections touching either side.
+
+#### `pending() -> 'StreamPending'`
+
+Return the current absolute settlement and retention positions.
+
+### class `StreamPending`
+
+A snapshot of retained and undecided stream state.
 
 ## icukit.timezone
 

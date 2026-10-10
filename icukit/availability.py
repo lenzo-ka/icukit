@@ -171,7 +171,8 @@ def availability(
     """Report the default generated and flexible selections for ``locale``.
 
     Flexible rows use the default locales, currencies, and units; ``guarded=True``
-    includes the guarded families. ICU/CLDR, shipped curated tables, and explicitly
+    includes the guarded families, including detached quote and prime marks that ICU
+    writes attached to their numbers. ICU/CLDR, shipped curated tables, and explicitly
     supplied user material are separate rows. A row with no source means there is no
     usable reader: it was not built, or it was built with nothing to read.
     """

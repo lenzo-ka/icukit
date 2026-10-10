@@ -36,6 +36,7 @@ LOCALES = ("en_US", "de_DE", "ja_JP")
 
 GUARDED_CLASSES = {
     "FlexibleBareHourDetector",
+    "FlexibleDetachedUnitDetector",
     "FlexibleLoneSpelloutDetector",
     "FlexibleLowercaseRomanDetector",
     "FlexibleMonthNameDetector",
@@ -319,16 +320,32 @@ def test_guarded_readers_join_on_request_and_every_type_leads_with_its_group(loc
     gang = report.detectors
     # ja_JP's textual date patterns write no short year, so it has no short-year reader,
     # and the report says so.
-    absent = (
+    short_year_absent = (
         {"FlexibleShortYearDateDetector"}
         if any(skipped.family == "short-year" for skipped in report.skipped)
         else set()
     )
+    assert (locale == "ja_JP") == bool(short_year_absent)
 
-    assert (locale == "ja_JP") == bool(absent)
+    absent = set(short_year_absent)
+    if locale != "en_US":
+        absent.add("FlexibleDetachedUnitDetector")
+
     assert _classes(gang) == _reader_classes() - absent - OPT_IN_CLASSES
     for detector in gang.detectors:
         assert detector.type.split(":")[0] == detector.group, detector.type
+
+
+def test_detached_units_join_the_flexible_set_only_on_request():
+    default = flexible_detectors("en_US", locales=(), units=("inch",))
+    guarded = flexible_detectors("en_US", locales=(), units=("inch",), guarded=True)
+
+    assert not [found for found in default.detect("62 ″") if found["type"].startswith("measure:")]
+    assert [
+        (found["type"], found["text"])
+        for found in guarded.detect("62 ″")
+        if found["start"] == 0 and found["end"] == 4
+    ] == [("measure:detached-unit:inch", "62 ″")]
 
 
 def _whole(gang, text: str) -> list[tuple[str, object]]:
@@ -353,6 +370,7 @@ def test_the_set_reads_the_flexible_features_in_en_us():
             MeasureValue("4527", "second"),
         ),
         "5 ft, 10 in": ("measure:foot-and-inch", MeasureValue("70", "inch")),
+        "100 sq. ft.": ("measure:square-foot", MeasureValue("100", "square-foot")),
         "1.234,56": ("number:decimal", NumberValue("1234.56")),
         "Tue 2:07 PM": (
             "date:datetime-flexible",
@@ -377,6 +395,15 @@ def test_the_set_reads_the_flexible_features_in_en_us():
     }
     missing = {text: want for text, want in expected.items() if want not in _whole(gang, text)}
     assert not missing
+
+
+def test_the_set_keeps_both_sentence_final_abbreviation_readings():
+    readings = [
+        (found["start"], found["end"], found["text"])
+        for found in _gang("en_US").detect("He is 5 ft.")
+        if found["type"] == "measure:foot"
+    ]
+    assert readings == [(6, 11, "5 ft."), (6, 10, "5 ft")]
 
 
 def test_the_set_reads_a_comma_decimal_and_a_euro_amount_in_de_de():

@@ -42,7 +42,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from dataclasses import field as dataclass_field
 from decimal import Decimal
 from threading import Lock
-from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, NotRequired, Protocol, runtime_checkable
 
 import icu
 
@@ -354,6 +354,7 @@ class ValueDetection(Detection):
     value: object
     captures: tuple[Capture, ...]
     spec: object
+    truncated: NotRequired[Literal[True]]
 
 
 # --------------------------------------------------------------------------- refusal
@@ -1472,6 +1473,21 @@ class DetectorSet:
         from .compiled import compile_detectors
 
         return compile_detectors(self, warm=warm)
+
+    def stream(
+        self,
+        *,
+        max_pending_chars: int = 4096,
+        boundary: Literal["paragraph", "line", "explicit"] = "paragraph",
+    ):
+        """Return a boundary-segmented detector over arbitrary text chunks."""
+        from .stream import DetectionStream
+
+        return DetectionStream(
+            self,
+            max_pending_chars=max_pending_chars,
+            boundary=boundary,
+        )
 
     def __getstate__(self):
         """Omit process-local compiled state and its lock from pickles and copies."""

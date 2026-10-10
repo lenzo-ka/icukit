@@ -1055,8 +1055,9 @@ Examples:
 ## `icukit languages` (aliases: langs)
 
 With LANG, report the default selection of generated and flexible reader families:
-default locales, currencies, and units, plus guarded families with --guarded. Rows with
-no source have no usable reader: they were not built or were built with nothing to read.
+default locales, currencies, and units, plus guarded families with --guarded, including
+detached quote and prime marks that ICU writes attached to their numbers. Rows with no
+source have no usable reader: they were not built or were built with nothing to read.
 For a user row, provenance is the material's own provenance.source, verbatim user text
 that icukit does not interpret. icukit computes and reports no measured shares.
 

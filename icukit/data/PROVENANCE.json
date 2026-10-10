@@ -19,7 +19,7 @@
     },
     "icukit/data/break_rules/en/NOTICE": {
       "spdx": "CC-BY-SA-4.0",
-      "sha256": "8000c195d532bc6ecc4762f00fabd4c991370e871ecfb11a7647cdc466d5c886"
+      "sha256": "338ee404e8cddc5264a09398d9535329f78aeb55fcf2b154fcab380fbdec21de"
     }
   },
   "files": [
@@ -57,7 +57,7 @@
     },
     {
       "path": "break_rules/en/NOTICE",
-      "sha256": "8000c195d532bc6ecc4762f00fabd4c991370e871ecfb11a7647cdc466d5c886",
+      "sha256": "338ee404e8cddc5264a09398d9535329f78aeb55fcf2b154fcab380fbdec21de",
       "source": "attribution for google/tn-en_with_types and Wikipedia contributors",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",
@@ -69,7 +69,7 @@
     },
     {
       "path": "break_rules/en/REAL_TEXT_RECEIPT.json",
-      "sha256": "e16d3600e9e7f8b3eb171b2f5ab17b353c1d3d1fff3a6d3b3d0e6da65e530829",
+      "sha256": "db7907bb430b23a6df573d94a199108071418e9cde2a6f8d630b9c8f19c77b33",
       "source": "training-source, held-out selection, production-latency, and select-shard measurement receipt for the English real-text model",
       "spdx": "CC-BY-SA-4.0",
       "class": "shippable-share-alike",

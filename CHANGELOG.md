@@ -4,19 +4,46 @@
 
 ### Added
 
-- Add the opt-in `en-real-cart@1` English sentence-break model. It composes
-  after the shipped exception list, uses eight held-out-selected features and
-  a flat equality evaluator, and remains non-default. The digest-, runtime-,
-  and deployment-version-bound artifact includes GUM and UK House of Commons
-  Hansard attribution, a source and measurement receipt, and an explicit
-  pre-release legal-review flag for the CC BY-SA characterization.
+- Flexible English measure readers accept periods after known abbreviated unit words
+  of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
+  curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
+  boundary produces readings both with and without the period; internal periods belong
+  to the punctuated reading. Periods before a following number, after full unit words,
+  and after one-letter symbols remain punctuation.
+- `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
+  with paragraph-boundary segmentation by default, optional line or explicit
+  boundaries, absolute offsets, `pending_from` on every batch, bounded pending text,
+  transactional feed updates, deterministic cut reporting, and truncated detections
+  at safety cuts. Paragraph streams without cuts are identical to whole-text detection
+  for stock readers; the lower-latency line mode may split a wrapped number range and
+  does not make that guarantee.
+- `detection_to_dict()` now includes `truncated` when a capped detection carries it.
+- `DETACHED_UNIT_FAMILY` preserves detached quote and prime marks under the guarded
+  `measure:detached-unit:<unit>` type. Default readers decline those marks after a
+  space where ICU writes them attached (`84 "`, `6 ′`); `guarded=True` or an explicit
+  guarded-family selection includes those readings for lattice consumers. Letter unit
+  symbols such as `24 h`, `62 d`, and `62 s` retain the default measure reading.
+- Add the opt-in `en-real-cart@1` English sentence-break model, selected with
+  `base="en-real-cart@1"` and never the default. It is consulted only where the
+  English exception list leaves a candidate undecided, uses eight features chosen by
+  permutation importance with a flat evaluator, and costs well under twice the default
+  sentence-break latency. The model file is distributed under CC BY-SA 4.0 because
+  part of its training text is CC BY-SA, with GUM and UK House of Commons Hansard
+  attribution and a per-document source receipt.
 
 ### Changed
 
-- Keep `en-real-cart@1` below twice the default sentence-break latency by
-  sharing exception/model token-run state and caching complete-text features.
-- Accept reduced `icukit.features@1` schemas in explicit Cartlet models when
-  every feature name is unique and belongs to the runtime schema.
+- Decode quoted literals in ICU date-interval separators, and skip interval parsing when
+  a text has none of the decoded mandatory literals under the reader's exact separator
+  comparison. Narrow spell-out token comparisons by their folded prefix. Long runs of
+  isolated digits no longer pay those unsuccessful per-start costs.
+- Explicit Cartlet models may use a reduced `icukit.features@1` schema when every
+  feature name is unique and belongs to the runtime schema.
+
+### Fixed
+
+- Number and measure ranges in the flexible readers no longer read across a paragraph
+  boundary (for example `3,5 °C` and `-5 °C` in Catalan, separated by a blank line).
 
 ## [0.9.1] - 2026-10-09
 

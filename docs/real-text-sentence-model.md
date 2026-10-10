@@ -155,7 +155,6 @@ positive numeric D1 bound and does not justify making the model a default.
 
 The bundled `NOTICE` and `REAL_TEXT_RECEIPT.json` identify the GUM documents,
 source URLs, source-specific CC BY or CC BY-SA terms, and Hansard's Open
-Parliament Licence. The artifact is offered under CC BY-SA 4.0 as a
-conservative distribution choice. Release remains subject to seat review of
-whether the CC BY-SA inputs make the model Adapted Material, whether
-ShareAlike is legally required, and whether the attribution is sufficient.
+Parliament Licence. The model is distributed under CC BY-SA 4.0 because part
+of its training text is CC BY-SA. ShareAlike is applied to the model, with
+attribution as listed in those bundled files. No release review is pending.

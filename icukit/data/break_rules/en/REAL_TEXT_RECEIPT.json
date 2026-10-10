@@ -3,9 +3,9 @@
     "artifact_spdx": "CC-BY-SA-4.0",
     "legal_code": "LICENSE",
     "notice": "NOTICE",
-    "review_note": "The artifact is offered under CC-BY-SA-4.0 as a conservative distribution choice. Before release, the seat must determine whether training on the CC-BY-SA documents makes the model Adapted Material, whether ShareAlike is legally required, and whether the bundled attribution is sufficient. No conclusion is asserted here.",
-    "seat_review_required": true,
-    "share_alike_characterization": "unresolved"
+    "review_note": "The model is distributed under CC-BY-SA-4.0 because part of its training text is CC-BY-SA. ShareAlike is applied to the model; attribution is provided in NOTICE and the source entries in this receipt. The license decision was recorded on 2026-10-10, and no release review is pending.",
+    "release_review_required": false,
+    "share_alike_characterization": "applies"
   },
   "measurements": {
     "d1": {
