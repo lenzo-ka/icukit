@@ -5,8 +5,10 @@ import pytest
 import icukit.recognize as recognize_module
 from icukit import flexible_detectors
 from icukit.recognize import (
+    FlexibleDetachedUnitDetector,
     FlexibleMeasureDetector,
     FlexibleMixedMeasureDetector,
+    FlexibleNumberDetector,
     FlexiblePercentDetector,
     FlexibleTextDateDetector,
     _language_era_orders,
@@ -103,6 +105,129 @@ def test_a_measure_reads_in_the_forms_icu_formats_and_equates(unit, text, value,
 
 def test_a_unit_surface_must_end_its_word():
     assert _measures("square-kilometer", "12 km2x") == []
+
+
+@pytest.mark.parametrize(
+    "unit, detached",
+    [
+        ("inch", '84 "'),
+        ("inch", "84 ″"),
+        ("foot", "6 '"),
+        ("foot", "6 ′"),
+    ],
+)
+def test_a_detached_quote_or_prime_needs_a_spaced_icu_pattern(unit, detached):
+    assert _measures(unit, detached) == []
+
+
+@pytest.mark.parametrize(
+    "locale, unit, detached, amount",
+    [
+        ("en_US", "inch", '84 "', "84"),
+        ("en_US", "inch", "62 ″", "62"),
+        ("en_US", "foot", "6 '", "6"),
+        ("en_US", "foot", "6 ′", "6"),
+    ],
+)
+def test_the_guarded_detached_unit_reader_restores_the_reading(locale, unit, detached, amount):
+    readings = [
+        found
+        for found in FlexibleDetachedUnitDetector(locale, unit, locales=()).detect(detached)
+        if found["start"] == 0 and found["end"] == len(detached)
+    ]
+
+    assert len(readings) == 1
+    assert readings[0]["type"] == f"measure:detached-unit:{unit}"
+    assert readings[0]["text"] == detached
+    assert readings[0]["value"].unit == unit
+    assert readings[0]["value"].decimal == amount
+
+
+def test_the_guarded_detached_unit_reader_emits_only_its_guarded_spelling():
+    detector = FlexibleDetachedUnitDetector("en_US", "inch", locales=())
+    assert detector.detect('84"') == []
+    assert detector.detect("84 in") == []
+    assert detector.detect("/in") == []
+
+
+def test_a_period_after_a_guarded_detached_mark_stays_outside_the_reading():
+    text = '84 ".'
+    assert _measures("inch", text) == []
+    assert [
+        (found["type"], found["text"])
+        for found in FlexibleDetachedUnitDetector("en_US", "inch", locales=()).detect(text)
+    ] == [("measure:detached-unit:inch", '84 "')]
+
+
+def test_a_detached_mark_after_a_periodized_abbreviation_does_not_become_a_unit():
+    text = "5 ft. ″"
+    assert [surface for surface, _value, _unit in _measures("foot", text)] == ["5 ft.", "5 ft"]
+    assert FlexibleDetachedUnitDetector("en_US", "inch", locales=()).detect(text) == []
+
+
+@pytest.mark.parametrize(
+    "locale, unit, text, amount",
+    [
+        ("en_US", "hour", "24 h", "24"),
+        ("de_DE", "hour", "3 h", "3"),
+        ("de_DE", "hour", "1 h", "1"),
+        ("en_US", "day", "62 d", "62"),
+        ("en_US", "second", "5 s", "5"),
+        ("es_ES", "century", "62 s", "62"),
+    ],
+)
+def test_one_letter_unit_symbols_keep_the_default_measure_reading(locale, unit, text, amount):
+    assert _measures(unit, text, locale) == [(text, amount, unit)]
+
+
+def test_a_number_before_a_detached_prime_remains_one_digit_run():
+    text = "45° 30 ′ N"
+    readings = FlexibleNumberDetector("en_US").detect(text)
+    thirty = [reading for reading in readings if reading["start"] == 4]
+
+    assert [(reading["text"], reading["start"], reading["end"]) for reading in thirty] == [
+        ("30", 4, 6)
+    ]
+    assert [(capture.name, capture.start, capture.end) for capture in thirty[0]["captures"]] == [
+        ("integer", 4, 6)
+    ]
+
+
+@pytest.mark.parametrize(
+    "unit, text, amount",
+    [
+        ("inch", '84"', "84"),
+        ("foot", "6'", "6"),
+        ("day", "62d", "62"),
+        ("inch", "62in", "62"),
+        ("foot", "6ft", "6"),
+        ("day", "62days", "62"),
+        ("kilogram", "5kg", "5"),
+        ("kilometer", "100km", "100"),
+        ("ounce", "12oz", "12"),
+        ("milligram", "5mg", "5"),
+        ("inch", "62 in", "62"),
+    ],
+)
+def test_other_unit_spacing_stays_flexible(unit, text, amount):
+    assert _measures(unit, text) == [(text, amount, unit)]
+
+
+def test_a_one_character_wide_unit_name_is_not_an_abbreviation():
+    assert _measures("day", "62 天", "zh_CN") == [("62 天", "62", "day")]
+
+
+@pytest.mark.parametrize(
+    "locale, unit, text",
+    [("en_US", "inch", "3.8 in"), ("en_AU", "century", "10 C")],
+)
+def test_an_ambiguous_unit_surface_that_icu_formats_still_reads(locale, unit, text):
+    assert _measures(unit, text, locale) == [(text, text.split()[0], unit)]
+
+
+def test_an_australian_english_century_surface_reaches_the_default_en_us_reader():
+    assert _measures("century", "10 C") == [("10 C", "10", "century")]
+    assert FlexibleMeasureDetector("en_US", "century", locales=()).detect("10 C") == []
 
 
 def test_unit_variants_are_nfkc_and_ascii_confusables_of_marks():

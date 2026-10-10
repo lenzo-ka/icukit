@@ -143,3 +143,17 @@ def test_detection_shape_and_non_ascii_json():
     assert next(iter(serialized["captures"][0])) == "kind"
     assert detections_to_json([detection]) == [serialized]
     assert "café" in json.dumps(serialized, ensure_ascii=False)
+
+
+def test_truncated_serialization():
+    detection = ValueDetection(
+        text="12",
+        start=0,
+        end=2,
+        type="number:decimal",
+        value=NumberValue("12"),
+        captures=(),
+        spec=NumberFormatSpec("en_US", "decimal"),
+        truncated=True,
+    )
+    assert detection_to_dict(detection)["truncated"] is True

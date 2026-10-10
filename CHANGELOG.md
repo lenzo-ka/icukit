@@ -10,6 +10,31 @@
   boundary produces readings both with and without the period; internal periods belong
   to the punctuated reading. Periods before a following number, after full unit words,
   and after one-letter symbols remain punctuation.
+- `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
+  with paragraph-boundary segmentation by default, optional line or explicit
+  boundaries, absolute offsets, `pending_from` on every batch, bounded pending text,
+  transactional feed updates, deterministic cut reporting, and truncated detections
+  at safety cuts. Paragraph streams without cuts are identical to whole-text detection
+  for stock readers; the lower-latency line mode may split a wrapped number range and
+  does not make that guarantee.
+- `detection_to_dict()` now includes `truncated` when a capped detection carries it.
+- `DETACHED_UNIT_FAMILY` preserves detached quote and prime marks under the guarded
+  `measure:detached-unit:<unit>` type. Default readers decline those marks after a
+  space where ICU writes them attached (`84 "`, `6 ′`); `guarded=True` or an explicit
+  guarded-family selection includes those readings for lattice consumers. Letter unit
+  symbols such as `24 h`, `62 d`, and `62 s` retain the default measure reading.
+
+### Changed
+
+- Decode quoted literals in ICU date-interval separators, and skip interval parsing when
+  a text has none of the decoded mandatory literals under the reader's exact separator
+  comparison. Narrow spell-out token comparisons by their folded prefix. Long runs of
+  isolated digits no longer pay those unsuccessful per-start costs.
+
+### Fixed
+
+- Number and measure ranges in the flexible readers no longer read across a paragraph
+  boundary (for example `3,5 °C` and `-5 °C` in Catalan, separated by a blank line).
 
 ## [0.9.1] - 2026-10-09
 

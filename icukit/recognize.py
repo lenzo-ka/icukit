@@ -8,6 +8,7 @@ those candidates unchanged.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from copy import copy
 from dataclasses import dataclass, replace
@@ -82,6 +83,7 @@ __all__ = [
     "FlexibleCurrencyNameDetector",
     "FlexibleDateDetector",
     "FlexibleDateIntervalDetector",
+    "FlexibleDetachedUnitDetector",
     "FlexibleFractionDetector",
     "FlexibleMeasureDetector",
     "FlexibleNumberDetector",
@@ -1446,6 +1448,33 @@ def _interval_pattern_parts(pattern: str) -> tuple[str, str, str] | None:
     return None
 
 
+def _interval_pattern_literal(pattern: str) -> str | None:
+    """Decode a field-free ICU pattern fragment to the literal text it writes.
+
+    ASCII pattern letters outside quotes are fields, not literals, so their presence
+    means the fragment is not proved field-free. Apostrophes quote literal pattern
+    letters and a doubled apostrophe writes one apostrophe; quote syntax itself is
+    never part of the returned surface.
+    """
+    literal = []
+    quoted = False
+    cursor = 0
+    while cursor < len(pattern):
+        character = pattern[cursor]
+        if character == "'":
+            if cursor + 1 < len(pattern) and pattern[cursor + 1] == "'":
+                literal.append("'")
+                cursor += 2
+                continue
+            quoted = not quoted
+        elif not quoted and _is_pattern_letter(character):
+            return None
+        else:
+            literal.append(character)
+        cursor += 1
+    return None if quoted else "".join(literal)
+
+
 def _continues_interval_word(text: str, cursor: int) -> bool:
     if cursor < 0 or cursor >= len(text):
         return False
@@ -1483,6 +1512,23 @@ def _date_interval_gate(
         if result is not None:
             result = result | matcher_gate
     return result
+
+
+def _interval_separator_needle(separator_literal: str) -> str | None:
+    """Return one exact literal every matching separator surface must contain.
+
+    ``separator_literal`` is decoded surface text, never ICU pattern syntax. The reader
+    equates the four members of ``_SPACES`` but compares every other code point exactly,
+    so any non-space run is mandatory in the same equivalence space. A separator made
+    only of flexible spaces has no safe needle.
+    """
+    cursor = 0
+    while cursor < len(separator_literal) and separator_literal[cursor] in _SPACES:
+        cursor += 1
+    end = cursor
+    while end < len(separator_literal) and separator_literal[end] not in _SPACES:
+        end += 1
+    return separator_literal[cursor:end] or None
 
 
 class FlexibleDateIntervalDetector(_GatedReader):
@@ -1526,6 +1572,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
             pattern = interval_info.getIntervalPattern(skeleton, calendar_field)
             if pattern:
                 parts = _interval_pattern_parts(pattern)
+                if parts is not None:
+                    part1, separator_pattern, part2 = parts
+                    separator = _interval_pattern_literal(separator_pattern)
+                    parts = None if separator is None else (part1, separator, part2)
             else:
                 parts = _recovered_interval_parts(locale, skeleton, calendar_field)
             if parts is None or parts in seen:
@@ -1565,6 +1615,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
                 )
             )
         self._matchers = tuple(matchers)
+        separator_needles = tuple(
+            _interval_separator_needle(matcher[1]) for matcher in self._matchers
+        )
+        self._separator_needles = frozenset(separator_needles) if all(separator_needles) else None
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._spec = DateIntervalSpec(locale, skeleton)
         self._dif = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
@@ -2045,6 +2099,12 @@ class FlexibleDateIntervalDetector(_GatedReader):
         A span whose zone text names several zones is read once per zone, the reader's
         own locale's zone first.
         """
+        if not self._matchers:
+            return []
+        if self._separator_needles is not None and not any(
+            needle in text for needle in self._separator_needles
+        ):
+            return []
         # Compute the code-point/UTF-16 offset maps once per scan and pass them to every
         # candidate start (avoids O(n^2) scanning). They are bound to this call, never
         # stored on the detector, so one detector can serve concurrent or nested calls.
@@ -4537,6 +4597,10 @@ class FlexibleMeasureDetector(_GatedReader):
     wide unit word or one-letter symbol remains outside the unit. Before a following
     numeric token, the period also remains outside the unit: numbered references such
     as "Ch. 5 sec. 2" do not present "5 sec." as a seconds reading.
+    Spacing stays flexible except for detached quote or prime marks. Those do not read
+    after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
+    :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
+    a separate type.
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
     number directly. A per form written without an amount ("/s", "per second") reads as
@@ -4545,6 +4609,7 @@ class FlexibleMeasureDetector(_GatedReader):
     """
 
     group = "measure"
+    _detached_only = False
 
     def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale
@@ -4566,6 +4631,9 @@ class FlexibleMeasureDetector(_GatedReader):
         if not surfaces:
             raise ValueError(f"ICU exposes no supported suffix surface for unit: {unit!r}")
         self._units = tuple(sorted(surfaces + rates, key=lambda item: len(item[0]), reverse=True))
+        self._spaced_unit_surfaces = {
+            (surface, target) for surface, _width, spaced, target in self._units if spaced
+        }
         language = icu.Locale(locale).getLanguage()
         wide = {
             (surface, target) for surface, width, _spaced, target in self._units if width == "wide"
@@ -4649,6 +4717,17 @@ class FlexibleMeasureDetector(_GatedReader):
             icu.UCharCategory.OTHER_NUMBER,
         }
 
+    def _is_guarded_detached(
+        self, surface: str, width: str, expects_space: bool, unit: str
+    ) -> bool:
+        """Whether a spaced surface is guarded because ICU writes it attached."""
+        return (
+            not expects_space
+            and (surface, unit) not in self._spaced_unit_surfaces
+            and width != "curated"
+            and surface in {'"', "'", "″", "′"}
+        )
+
     def _match(
         self, text: str, start: int, digit_may_follow: bool = False
     ) -> _FlexibleMatch | None:
@@ -4659,7 +4738,14 @@ class FlexibleMeasureDetector(_GatedReader):
         unit_start = self._space(text, number_end)
         has_space = unit_start != number_end
         head = text[unit_start : unit_start + 1]
-        for surface, width, _expects_space, unit in self._unit_heads[has_space].get(head, ()):
+        for surface, width, expects_space, unit in self._unit_heads[has_space].get(head, ()):
+            # A detached mark can read as punctuation. Reject only when this
+            # ICU-derived row attaches it; a spaced row sorts first.
+            guarded_detached = has_space and self._is_guarded_detached(
+                surface, width, expects_space, unit
+            )
+            if guarded_detached != self._detached_only:
+                continue
             # A rate's per form ("/km²") follows the number directly, not after a space.
             cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
             if not text.startswith(surface, cursor):
@@ -4677,9 +4763,12 @@ class FlexibleMeasureDetector(_GatedReader):
             )
             if found is not None:
                 return found
-        for surface, width, _expects_space, unit in self._period_unit_heads[has_space].get(
-            head, ()
-        ):
+        for surface, width, expects_space, unit in self._period_unit_heads[has_space].get(head, ()):
+            guarded_detached = has_space and self._is_guarded_detached(
+                surface, width, expects_space, unit
+            )
+            if guarded_detached != self._detached_only:
+                continue
             cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
             if not text.startswith(surface, cursor):
                 continue
@@ -4817,6 +4906,35 @@ class FlexibleMeasureDetector(_GatedReader):
             if not any(m["start"] <= item["start"] and item["end"] <= m["end"] for m in measures)
         ]
         return sorted((*measures, *rates), key=lambda item: (item["start"], -item["end"]))
+
+
+class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):
+    """Recognize only a deliberately guarded detached unit surface.
+
+    A quote or prime mark is guarded where ICU joins it to its number: ``84\"``, ``6'``.
+    The ordinary measure reader declines the detached spelling (``84 \"``, ``6 '``);
+    this reader deposits exactly that spelling under ``measure:detached-unit:<unit>``
+    for lattice consumers that opt in. A mark that ICU spaces and a curated surface
+    remain ordinary measure readings. Letter unit symbols retain the default measure
+    reader's flexible spacing.
+    """
+
+    _detached_only = True
+
+    def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
+        super().__init__(locale, unit, locales=locales)
+        if not any(
+            self._is_guarded_detached(surface, width, expects_space, target)
+            for surface, width, expects_space, target in self._units
+        ):
+            raise ValueError(
+                f"ICU exposes no guarded detached quote or prime surface for unit: {unit!r}"
+            )
+        self.type = f"measure:detached-unit:{unit}"
+
+    def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:
+        """Decline bare per forms, which are not detached unit readings."""
+        return None
 
 
 class FlexibleMixedMeasureDetector(_GatedReader):
@@ -5571,10 +5689,25 @@ class FlexibleSpelloutDetector(_GatedReader):
         self._spec = self._format_spec()
         self._connectors, self._tokens, self._ambiguous_units = self._table(locale, self._ruleset)
         tokens_by_first: dict[str, list[str]] = {}
+        single_tokens_by_first: dict[str, list[str]] = {}
         for token in self._tokens:
             tokens_by_first.setdefault(token[0], []).append(token)
+            if len(token) == 1:
+                single_tokens_by_first.setdefault(token[0], []).append(token)
         self._tokens_by_first = {
             first: tuple(first_tokens) for first, first_tokens in tokens_by_first.items()
+        }
+        self._single_tokens_by_first = {
+            first: tuple(first_tokens) for first, first_tokens in single_tokens_by_first.items()
+        }
+        prefixes = {token[:2] for token in self._tokens if len(token) > 1}
+        self._tokens_by_prefix = {
+            prefix: tuple(
+                token
+                for token in tokens_by_first[prefix[0]]
+                if len(token) == 1 or token.startswith(prefix)
+            )
+            for prefix in prefixes
         }
         _install_gates(
             self,
@@ -5611,12 +5744,15 @@ class FlexibleSpelloutDetector(_GatedReader):
 
     @staticmethod
     def _casefolded_token_end(text: str, start: int, token: str) -> int | None:
-        folded = ""
+        folded_length = 0
         cursor = start
-        while cursor < len(text) and len(folded) < len(token):
-            folded += text[cursor].casefold()
+        while cursor < len(text) and folded_length < len(token):
+            piece = text[cursor].casefold()
+            if not token.startswith(piece, folded_length):
+                return None
+            folded_length += len(piece)
             cursor += 1
-        return cursor if folded == token else None
+        return cursor if folded_length == len(token) else None
 
     def _token_end(self, text: str, start: int) -> int | None:
         if start >= len(text):
@@ -5624,7 +5760,19 @@ class FlexibleSpelloutDetector(_GatedReader):
         first = text[start].casefold()
         if not first:
             return None
-        for token in self._tokens_by_first.get(first[0], ()):
+        prefix = first
+        cursor = start + 1
+        while cursor < len(text) and len(prefix) < 2:
+            prefix += text[cursor].casefold()
+            cursor += 1
+        candidates = (
+            self._tokens_by_first.get(first[0], ())
+            if len(prefix) < 2
+            else self._tokens_by_prefix.get(
+                prefix[:2], self._single_tokens_by_first.get(first[0], ())
+            )
+        )
+        for token in candidates:
             end = self._casefolded_token_end(text, start, token)
             if end is not None:
                 return end
@@ -8044,6 +8192,7 @@ _RANGE_WINDOW = 48
 # A range's endpoint is not one number of a longer run joined by these ("14-3-3",
 # "2024-03-05", "2:07–4:07"), which is a code, a date, or a time, not a range.
 _RANGE_CHAIN_MARKS = frozenset({_HYPHEN_MINUS, ":", "/", "."})
+_PARAGRAPH_BOUNDARY = re.compile(r"(?:\r\n|\n)[ \t]*(?:\r\n|\n)|\u2029")
 
 
 def _range_mark(text: str) -> str:
@@ -8218,6 +8367,11 @@ def _with_unit(value: NumberValue, key: tuple[str, str]) -> NumberValue | Measur
 
 def _is_space(character: str) -> bool:
     return character in _SPACES or character.isspace()
+
+
+def _has_paragraph_boundary(text: str) -> bool:
+    """Whether ``text`` contains a blank-line or paragraph-separator boundary."""
+    return _PARAGRAPH_BOUNDARY.search(text) is not None
 
 
 def _runs_on(text: str, start: int, end: int, marks: Iterable[str]) -> bool:
@@ -8645,7 +8799,11 @@ class FlexibleNumberRangeDetector:
                 rights += self._read_sides(text, right_start, window_end, at_end=False)
         for left, right in dict.fromkeys(product(lefts, rights)):
             pair = self._pair(left, right)
-            if pair is None or _runs_on(text, left.start, right.end, self._marks):
+            if (
+                pair is None
+                or _has_paragraph_boundary(text[left.end : right.start])
+                or _runs_on(text, left.start, right.end, self._marks)
+            ):
                 continue
             start_value, end_value, collapse = pair
             if _minus_before(text, left.start):
