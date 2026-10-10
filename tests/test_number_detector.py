@@ -109,3 +109,30 @@ def test_invalid_number_detector_arguments_are_rejected():
         NumberDetector("en_US", "scientific")
     with pytest.raises(ValueError, match="currency"):
         NumberDetector("en_US", "decimal", "USD")
+
+
+@pytest.mark.parametrize(
+    ("locale", "surface", "expected"),
+    (
+        ("en_US", "10 000 20 000", [("10", "10"), ("20", "20")]),
+        ("en_US", "1 000 2", [("1", "1"), ("2", "2")]),
+        ("hi_IN", "1 00 000", [("1", "1")]),
+    ),
+)
+def test_strict_space_grouping_fragments_remain_as_on_main(locale, surface, expected):
+    detections = NumberDetector(locale, "decimal").detect(surface)
+
+    assert [(item["text"], item["value"].decimal) for item in detections] == expected
+
+
+@pytest.mark.parametrize(
+    ("locale", "kind", "value"),
+    (("fr_FR", "decimal", -1000), ("en_ZA", "currency", 1000)),
+)
+def test_canonical_signed_and_currency_space_groupings_remain_whole(locale, kind, value):
+    detector = NumberDetector(locale, kind)
+    surface = detector._nf.format(value)
+
+    detections = detector.detect(surface)
+
+    assert [item["text"] for item in detections] == [surface]

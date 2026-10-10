@@ -5945,12 +5945,16 @@ Recognize flexible decimal spellings and Roman cardinals from ICU data.
 
 Beside the locale's own grouping, a number reads in each other grouping ICU gives a
 locale of the language ("250 000" as en_ZA formats it, "1'234'567" as en_CH,
-"12,34,567" as en_IN), as an extra reading: "12 100" still reads "12" and "100",
-and also 12100. A grouping whose separator is the locale's decimal separator is not
-read that way, since it would reread every decimal number; instead the language's
-other decimal styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the
-locale's own styles do not already read the text: "1,5" reads 1.5 and "1.234,56"
-1234.56, while "1,234" stays 1234 alone.
+"12,34,567" as en_IN), as an extra reading. A valid space-grouped span also reads
+whole where the locale's own lenient ICU parser accepts it. Existing fragment
+readings remain beside the whole reading so a downstream ranker can resolve the
+ambiguity: "5 300" reads as 5, 300, and 5300, while a list whose widths do not fit
+the grouping ("1 2 3", "1999 2000") stays separate.
+A grouping whose separator is the locale's decimal separator is not read that way,
+since it would reread every decimal number; instead the language's other decimal
+styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the locale's own
+styles do not already read the text: "1,5" reads 1.5 and "1.234,56" 1234.56, while
+"1,234" stays 1234 alone.
 
 ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
 cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with

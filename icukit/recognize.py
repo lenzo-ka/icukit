@@ -42,6 +42,7 @@ from ._tables import persisted
 from .breaker import _raw_break_sentence_spans, break_grapheme_spans
 from .detectors import (
     _EXTENDING_CATEGORIES,
+    _GROUPING_SPACES,
     ApproximateValue,
     Capture,
     CompactFormatSpec,
@@ -65,6 +66,7 @@ from .detectors import (
     _DateField,
     _is_pattern_letter,
     _pattern_runs,
+    _space_grouping_bounds,
     _widen_years,
     _word_edges,
     _word_interior_offsets,
@@ -101,12 +103,7 @@ __all__ = [
     "SingleLetterWordDetector",
 ]
 
-_SPACES = {
-    " ",
-    "\N{NO-BREAK SPACE}",
-    "\N{THIN SPACE}",
-    "\N{NARROW NO-BREAK SPACE}",
-}
+_SPACES = _GROUPING_SPACES
 _SLASHES = {"/", "\N{FRACTION SLASH}"}
 # Resource bound for expanded scientific decimals; larger canonical strings are not deposited.
 _MAX_SCIENTIFIC_CANONICAL_DIGITS = 1000
@@ -3090,12 +3087,16 @@ class FlexibleNumberDetector(_GatedReader):
 
     Beside the locale's own grouping, a number reads in each other grouping ICU gives a
     locale of the language ("250 000" as en_ZA formats it, "1'234'567" as en_CH,
-    "12,34,567" as en_IN), as an extra reading: "12 100" still reads "12" and "100",
-    and also 12100. A grouping whose separator is the locale's decimal separator is not
-    read that way, since it would reread every decimal number; instead the language's
-    other decimal styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the
-    locale's own styles do not already read the text: "1,5" reads 1.5 and "1.234,56"
-    1234.56, while "1,234" stays 1234 alone.
+    "12,34,567" as en_IN), as an extra reading. A valid space-grouped span also reads
+    whole where the locale's own lenient ICU parser accepts it. Existing fragment
+    readings remain beside the whole reading so a downstream ranker can resolve the
+    ambiguity: "5 300" reads as 5, 300, and 5300, while a list whose widths do not fit
+    the grouping ("1 2 3", "1999 2000") stays separate.
+    A grouping whose separator is the locale's decimal separator is not read that way,
+    since it would reread every decimal number; instead the language's other decimal
+    styles (en_DE's "1.234,56", en_ZA's "1 234,56") are read only where the locale's own
+    styles do not already read the text: "1,5" reads 1.5 and "1.234,56" 1234.56, while
+    "1,234" stays 1234 alone.
 
     ``accept_single_letter_roman`` defaults to true because corpora use ``I`` as the
     cardinal one. Lowercase Roman numerals are opt-in because their surfaces collide with
@@ -3118,7 +3119,8 @@ class FlexibleNumberDetector(_GatedReader):
         self.locales = _locale_selection(locale, locales)
         self.accept_single_letter_roman = accept_single_letter_roman
         self.accept_lowercase_roman = accept_lowercase_roman
-        self._nf = icu.NumberFormat.createInstance(icu.Locale(locale))
+        icu_locale = icu.Locale(locale)
+        self._nf = icu.NumberFormat.createInstance(icu_locale)
         symbols = self._nf.getDecimalFormatSymbols()
         symbol = icu.DecimalFormatSymbols
         self._decimal = symbols.getSymbol(symbol.kDecimalSeparatorSymbol)
@@ -3138,6 +3140,9 @@ class FlexibleNumberDetector(_GatedReader):
             self._secondary_grouping = secondary or primary
             grouping_sizes = (secondary, primary) if secondary else (primary,)
         self._spec = NumberFormatSpec(locale, "decimal", grouping_sizes=grouping_sizes)
+        self._accepts_space_grouping = bool(
+            self._primary_grouping and self._leniently_accepts_space_grouping(icu_locale)
+        )
         self._other_groupings = _language_groupings(locale, self.locales)
         self._decimal_styles = _language_decimal_styles(locale, self.locales)
 
@@ -3183,11 +3188,56 @@ class FlexibleNumberDetector(_GatedReader):
             self._digits[character] for character in surface if character in self._digits
         )
 
+    def _leniently_accepts_space_grouping(self, locale: icu.Locale) -> bool:
+        """Whether ICU's lenient parser licenses the locale's space-grouping shape.
+
+        ICU supplies the acceptance policy reflectively. Its parsed ``Formattable`` has
+        neither an exact decimal accessor nor source field spans, so the existing surface
+        parser remains necessary to build the exact value and captures.
+        """
+        glyphs = {value: digit for digit, value in _locale_digit_map(locale).items()}
+        surface = glyphs[1] + " " + glyphs[0] * self._primary_grouping
+        parser = icu.NumberFormat.createInstance(locale)
+        parser.setLenient(True)
+        position = icu.ParsePosition(0)
+        parsed = parser.parse(surface, position)
+        return (
+            parsed is not None
+            and position.getIndex() == len(icu.UnicodeString(surface))
+            and parsed.getInt64() == 10**self._primary_grouping
+        )
+
     def _grouping_length(self, text: str, cursor: int, separator: str | None = None) -> int:
         separator = self._grouping if separator is None else separator
         if separator in _SPACES:
             return int(cursor < len(text) and text[cursor] in _SPACES)
         return len(separator) if text.startswith(separator, cursor) else 0
+
+    def _grouping_may_continue(self, text: str, cursor: int, separator: str) -> bool:
+        """Whether a separator and locale digit follow an already-read number."""
+        length = self._grouping_length(text, cursor, separator)
+        digit_start = cursor + length
+        return bool(length and digit_start < len(text) and text[digit_start] in self._digit_chars)
+
+    def _has_space_grouping(self, text: str) -> bool:
+        """Whether ``text`` contains a space grouping this reader can add."""
+        if self._grouping not in _SPACES and not self._accepts_space_grouping:
+            return False
+        if not any(
+            text[index] in _SPACES
+            and text[index - 1] in self._digit_chars
+            and text[index + 1] in self._digit_chars
+            for index in range(1, len(text) - 1)
+        ):
+            return False
+        return bool(
+            _space_grouping_bounds(
+                text,
+                self._digit_chars,
+                self._primary_grouping,
+                self._secondary_grouping,
+            )
+        )
 
     def _grouping_tail(
         self,
@@ -3230,13 +3280,16 @@ class FlexibleNumberDetector(_GatedReader):
             memo[group_start] = (valid, end)
         return memo[start]
 
-    def _match(
+    def _match_style(
         self,
         text: str,
         start: int,
         grouping: tuple[str, int, int] | None = None,
         decimal: str | None = None,
+        *,
+        whole_space: bool = False,
     ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        space_fallback = whole_space and grouping is None and self._accepts_space_grouping
         separator, primary_grouping, secondary_grouping = grouping or (
             self._grouping,
             self._primary_grouping,
@@ -3272,18 +3325,36 @@ class FlexibleNumberDetector(_GatedReader):
             cursor += 1
         ungrouped_end = cursor
         if primary_grouping:
-            grouping_length = self._grouping_length(text, cursor, separator)
-            group_start = cursor + grouping_length
-            if grouping_length and group_start < len(text) and text[group_start] in self._digits:
-                valid, grouped_end = self._grouping_tail(
+            space_grouping = whole_space and (
+                separator in _SPACES
+                or (space_fallback and cursor < len(text) and text[cursor] in _SPACES)
+            )
+            if space_grouping:
+                grouped = _space_grouping_bounds(
                     text,
-                    group_start,
-                    separator,
+                    self._digit_chars,
                     primary_grouping,
                     secondary_grouping,
-                )
-                if valid and 1 <= ungrouped_end - integer_start <= secondary_grouping:
-                    cursor = grouped_end
+                ).get(integer_start)
+                if grouped is not None and grouped[0] == integer_start:
+                    cursor = grouped[1]
+            else:
+                grouping_length = self._grouping_length(text, cursor, separator)
+                group_start = cursor + grouping_length
+                if (
+                    grouping_length
+                    and group_start < len(text)
+                    and text[group_start] in self._digits
+                ):
+                    valid, grouped_end = self._grouping_tail(
+                        text,
+                        group_start,
+                        separator,
+                        primary_grouping,
+                        secondary_grouping,
+                    )
+                    if valid and 1 <= ungrouped_end - integer_start <= secondary_grouping:
+                        cursor = grouped_end
 
         integer_end = cursor
         integer_text = text[integer_start:integer_end]
@@ -3339,16 +3410,53 @@ class FlexibleNumberDetector(_GatedReader):
         captures.sort(key=lambda capture: (capture.start, capture.end))
         return cursor, tuple(captures), NumberValue(decimal=decimal, currency=None)
 
-    def _match_other_groupings(self, text: str, start: int) -> list[_FlexibleMatch]:
+    def _match(
+        self,
+        text: str,
+        start: int,
+        grouping: tuple[str, int, int] | None = None,
+        decimal: str | None = None,
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        return self._match_style(text, start, grouping, decimal)
+
+    def _match_added_space_grouping(
+        self, text: str, start: int, *, after: int | None = None
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+        """Read one locale-shaped space grouping without replacing older readings."""
+        if self._grouping not in _SPACES and not self._accepts_space_grouping:
+            return None
+        if after is None:
+            own = self._match(text, start)
+            if own is None:
+                return None
+            after = own[0]
+        if not self._grouping_may_continue(text, after, " "):
+            return None
+        match = self._match_style(text, start, whole_space=True)
+        if match is None:
+            return None
+        integer = next(capture for capture in match[1] if capture.name == "integer")
+        return match if any(character in _SPACES for character in integer.text) else None
+
+    def _match_other_groupings(
+        self, text: str, start: int, *, after: int | None = None
+    ) -> list[_FlexibleMatch]:
         """Each reading at ``start`` in another grouping of the language that groups."""
+        if after is None:
+            own = self._match(text, start)
+            if own is None:
+                return []
+            after = own[0]
         found = []
         for separator, primary, secondary, spec in self._other_groupings:
+            if not self._grouping_may_continue(text, after, separator):
+                continue
             match = self._match(text, start, (separator, primary, secondary))
             if match is None:
                 continue
             end, captures, value = match
             integer = next(capture for capture in captures if capture.name == "integer")
-            if not integer.text.isdigit():
+            if end > after and not integer.text.isdigit():
                 found.append(_FlexibleMatch(end, captures, value, spec))
         return found
 
@@ -3364,6 +3472,7 @@ class FlexibleNumberDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible decimal candidates in source order."""
+        decimal_plan = _scan_plan_for(text, self.locale, self._start_gates["decimal"])
         decimals = _detect_flexible(
             text,
             self.locale,
@@ -3372,6 +3481,7 @@ class FlexibleNumberDetector(_GatedReader):
             self._match,
             gate=self._start_gates["decimal"],
             stats_key=self._lane_key("decimal"),
+            _plan=decimal_plan,
         )
         if self._other_groupings:
             spans = {(item["start"], item["end"]) for item in decimals}
@@ -3403,6 +3513,23 @@ class FlexibleNumberDetector(_GatedReader):
                     stats_key=self._lane_key("decimal-styles"),
                 )
                 if not any(s <= item["start"] and item["end"] <= e for s, e in own)
+            )
+        if self._has_space_grouping(text):
+            added = _detect_flexible(
+                text,
+                self.locale,
+                self.type,
+                self._spec,
+                self._match_added_space_grouping,
+                gate=self._start_gates["decimal"],
+                stats_key=self._lane_key("decimal"),
+                _plan=decimal_plan,
+            )
+            existing = {(item["start"], item["end"], item["value"]) for item in decimals}
+            decimals.extend(
+                item
+                for item in added
+                if (item["start"], item["end"], item["value"]) not in existing
             )
         romans = _detect_flexible(
             text,
@@ -4054,28 +4181,57 @@ def _number_reader_key(number: FlexibleNumberDetector) -> tuple:
 # Each memo keeps its 16 most recent (reader key, text) entries, across all keys; an
 # entry holds a reading or None for each start tried. With the grapheme starts, the
 # memos hold about 110 bytes per character of a text an en_US flexible set has read.
+_NUMBER_WIDENED = object()
+
+
 @lru_cache(maxsize=16)
-def _number_memo(key: tuple, text: str) -> dict[int, object]:
-    """Readings of ``text`` by the number readers of ``key``, by start, filled lazily."""
+def _number_memo(key: tuple, text: str) -> dict[object, object]:
+    """Readings of ``text`` by the number readers of ``key``, filled lazily."""
     return {}
 
 
-def _plain_number_match(number: FlexibleNumberDetector, text: str, start: int):
-    """``number._match(text, start)``, shared among the readers with ``number``'s key.
+def _plain_number_match(
+    number: FlexibleNumberDetector, text: str, start: int, *, whole: bool = True
+):
+    """The longest plain decimal match, shared among readers with ``number``'s key.
 
     A gang holds many currency and measure readers, each with its own number reader
     built alike, that read the same numbers at the same starts; the reading is made
-    once per text. The key holds the reader's options, so a reader built otherwise
-    never shares another's readings.
+    once per text. With ``whole``, language-relative and lenient space groupings count
+    as plain decimals so a whole grouped measure is available. Callers also run the
+    prior-reading pass so its fragmentary candidates remain available. The key holds
+    the reader's options, so a reader built otherwise never shares another's readings.
     """
     memo = _number_memo(number._memo_key, text)
-    if start not in memo:
-        memo[start] = number._match(text, start)
-    return memo[start]
+    key = (start, whole)
+    if key not in memo:
+        own = number._match(text, start)
+        memo.setdefault((start, False), own)
+        if not whole:
+            memo[key] = own
+        else:
+            best = own
+            if own is not None:
+                added = number._match_added_space_grouping(text, start, after=own[0])
+                if added is not None and added[0] > own[0]:
+                    best = added
+                for alternative in number._match_other_groupings(text, start, after=own[0]):
+                    match = (alternative.end, alternative.captures, alternative.value)
+                    if best is None or match[0] > best[0]:
+                        best = match
+                if best is not None and best[0] > own[0]:
+                    memo[_NUMBER_WIDENED] = True
+            memo[key] = best
+    return memo[key]
+
+
+def _plain_number_widened(number: FlexibleNumberDetector, text: str) -> bool:
+    """Whether a whole-number lookup in ``text`` outran its prior plain reading."""
+    return bool(_number_memo(number._memo_key, text).get(_NUMBER_WIDENED, False))
 
 
 @lru_cache(maxsize=16)
-def _currency_amount_memo(key: tuple, text: str) -> dict[int, object]:
+def _currency_amount_memo(key: tuple, text: str) -> dict[tuple[int, bool], object]:
     """Amounts of ``text`` as the currency readers of ``key`` read them, by start."""
     return {}
 
@@ -4177,7 +4333,9 @@ class FlexibleCurrencyDetector(_GatedReader):
     def _currency_affix(locale: icu.Locale, currency: str, width: int) -> str:
         return _locale_currency_affix(locale.getName(), currency, width)
 
-    def _match(self, text: str, start: int) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
+    def _match(
+        self, text: str, start: int, *, whole: bool = True
+    ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         if start > 0 and _is_word_character(text[start - 1]):
             return None
         for symbol in self._currencies:
@@ -4185,13 +4343,13 @@ class FlexibleCurrencyDetector(_GatedReader):
                 continue
             symbol_end = start + len(symbol)
             number_start = self._space(text, symbol_end)
-            match = self._amount(text, number_start)
+            match = self._amount(text, number_start, whole=whole)
             if match is not None:
                 end, captures, value = match
                 currency = Capture("currency", start, symbol_end, symbol, self.currency, "symbol")
                 return end, (currency, *captures), NumberValue(value.decimal, self.currency)
 
-        match = self._amount(text, start)
+        match = self._amount(text, start, whole=whole)
         if match is None:
             return None
         number_end, captures, value = match
@@ -4224,20 +4382,21 @@ class FlexibleCurrencyDetector(_GatedReader):
         )
         return name_end, (*captures, currency), NumberValue(value.decimal, self.currency)
 
-    def _amount(self, text: str, start: int):
+    def _amount(self, text: str, start: int, *, whole: bool = True):
         # An amount depends on the number and compact readers, not on the currency, so
         # the readers of a gang's currencies share it.
         memo = _currency_amount_memo(self._amount_key, text)
-        if start not in memo:
-            memo[start] = self._read_amount(text, start)
-        return memo[start]
+        key = (start, whole)
+        if key not in memo:
+            memo[key] = self._read_amount(text, start, whole=whole)
+        return memo[key]
 
-    def _read_amount(self, text: str, start: int):
-        matches = [_plain_number_match(self._number, text, start)]
+    def _read_amount(self, text: str, start: int, *, whole: bool = True):
+        matches = [_plain_number_match(self._number, text, start, whole=whole)]
         matches.extend(detector._match(text, start) for detector in self._compact)
         # CLDR English short compacts carry B, but not the corpus suffix bn.
         if self.locale.startswith("en"):
-            plain = _plain_number_match(self._number, text, start)
+            plain = _plain_number_match(self._number, text, start, whole=whole)
             if plain is not None:
                 end, captures, value = plain
                 for suffix, magnitude in (("bn", 9),):
@@ -4259,12 +4418,12 @@ class FlexibleCurrencyDetector(_GatedReader):
             default=None,
         )
 
-    def _match_signed(self, text: str, start: int):
+    def _match_signed(self, text: str, start: int, *, whole: bool = True):
         """An amount ICU's negative forms wrap ("-$42.50", "($42.50)"), else a plain one."""
         for before, after in _negative_currency_wraps(self.locale, self.currency, self.locales):
             if not before or not text.startswith(before, start):
                 continue
-            inner = self._match(text, start + len(before))
+            inner = self._match(text, start + len(before), whole=whole)
             if inner is None:
                 continue
             end, captures, value = inner
@@ -4275,11 +4434,12 @@ class FlexibleCurrencyDetector(_GatedReader):
                 wrap.append(Capture("sign", end, end + len(after), after, None, "symbol"))
             ordered = tuple(sorted((*captures, *wrap), key=lambda c: (c.start, c.end)))
             return end + len(after), ordered, NumberValue("-" + value.decimal, self.currency)
-        return self._match(text, start)
+        return self._match(text, start, whole=whole)
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible currency candidates in source order."""
-        return _detect_flexible(
+        plan = _scan_plan_for(text, self.locale, self._start_gates["signed"])
+        current = _detect_flexible(
             text,
             self.locale,
             self.type,
@@ -4287,7 +4447,21 @@ class FlexibleCurrencyDetector(_GatedReader):
             self._match_signed,
             gate=self._start_gates["signed"],
             stats_key=self._lane_key("signed"),
+            _plan=plan,
         )
+        if _plain_number_widened(self._number, text):
+            prior = _detect_flexible(
+                text,
+                self.locale,
+                self.type,
+                self._spec,
+                lambda text, start: self._match_signed(text, start, whole=False),
+                gate=self._start_gates["signed"],
+                stats_key=self._lane_key("signed"),
+                _plan=plan,
+            )
+            current.extend(item for item in prior if item not in current)
+        return sorted(current, key=lambda item: (item["start"], item["end"]))
 
 
 @cache
@@ -4729,9 +4903,14 @@ class FlexibleMeasureDetector(_GatedReader):
         )
 
     def _match(
-        self, text: str, start: int, digit_may_follow: bool = False
+        self,
+        text: str,
+        start: int,
+        digit_may_follow: bool = False,
+        *,
+        whole: bool = True,
     ) -> _FlexibleMatch | None:
-        match = _plain_number_match(self._number, text, start)
+        match = _plain_number_match(self._number, text, start, whole=whole)
         if match is None:
             return None
         number_end, captures, value = match
@@ -4871,6 +5050,7 @@ class FlexibleMeasureDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return flexible measure readings in source order, a bare per form beside them."""
+        amount_plan = _scan_plan_for(text, self.locale, self._start_gates["amount"])
         sentence_period_ends: frozenset[int] | None = None
 
         def boundaries() -> frozenset[int]:
@@ -4889,7 +5069,20 @@ class FlexibleMeasureDetector(_GatedReader):
             match,
             gate=self._start_gates["amount"],
             stats_key=self._lane_key("amount"),
+            _plan=amount_plan,
         )
+        if _plain_number_widened(self._number, text):
+            prior = _detect_flexible(
+                text,
+                self.locale,
+                self.type,
+                None,
+                lambda text, start: self._match(text, start, whole=False),
+                gate=self._start_gates["amount"],
+                stats_key=self._lane_key("amount"),
+                _plan=amount_plan,
+            )
+            measures.extend(item for item in prior if item not in measures)
         # A per form inside a rate with its amount ("5 per square kilometre") is that
         # rate's, not a bare one.
         rates = [
@@ -5000,13 +5193,13 @@ class FlexibleMixedMeasureDetector(_GatedReader):
             {"mixed": self._components[0].start_gates()["amount"]},
         )
 
-    def _match(self, text: str, start: int) -> _FlexibleMatch | None:
-        first = self._components[0]._match(text, start, digit_may_follow=True)
+    def _match(self, text: str, start: int, *, whole: bool = True) -> _FlexibleMatch | None:
+        first = self._components[0]._match(text, start, digit_may_follow=True, whole=whole)
         if first is None or first.value.unit != self._components[0].unit:
             return None
-        return self._continue(text, first, 1, Decimal(first.value.decimal), first.captures)
+        return self._continue(text, first, 1, Decimal(first.value.decimal), first.captures, whole)
 
-    def _continue(self, text, previous, index, total, captures) -> _FlexibleMatch | None:
+    def _continue(self, text, previous, index, total, captures, whole) -> _FlexibleMatch | None:
         """The components from ``index`` on, each after a joiner ICU writes."""
         if index == len(self._components):
             value = MeasureValue(format(total, "f"), self._small_unit)
@@ -5016,18 +5209,26 @@ class FlexibleMixedMeasureDetector(_GatedReader):
         for joiner in self._joiners[index - 1]:
             if not text.startswith(joiner, previous.end):
                 continue
-            match = component._match(text, previous.end + len(joiner), digit_may_follow=not last)
+            match = component._match(
+                text,
+                previous.end + len(joiner),
+                digit_may_follow=not last,
+                whole=whole,
+            )
             if match is None or match.value.unit != component.unit:
                 continue
             carried = total * self._factors[index - 1] + Decimal(match.value.decimal)
-            found = self._continue(text, match, index + 1, carried, (*captures, *match.captures))
+            found = self._continue(
+                text, match, index + 1, carried, (*captures, *match.captures), whole
+            )
             if found is not None:
                 return found
         return None
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping mixed-unit measures in source order."""
-        return _detect_flexible(
+        plan = _scan_plan_for(text, self.locale, self._start_gates["mixed"])
+        current = _detect_flexible(
             text,
             self.locale,
             self.type,
@@ -5035,7 +5236,21 @@ class FlexibleMixedMeasureDetector(_GatedReader):
             self._match,
             gate=self._start_gates["mixed"],
             stats_key=self._lane_key("mixed"),
+            _plan=plan,
         )
+        if _plain_number_widened(self._number, text):
+            prior = _detect_flexible(
+                text,
+                self.locale,
+                self.type,
+                self._spec,
+                lambda text, start: self._match(text, start, whole=False),
+                gate=self._start_gates["mixed"],
+                stats_key=self._lane_key("mixed"),
+                _plan=plan,
+            )
+            current.extend(item for item in prior if item not in current)
+        return sorted(current, key=lambda item: (item["start"], item["end"]))
 
 
 # CLDR's numeric duration patterns (durationUnits) and the ICU mixed unit each writes.
@@ -6065,13 +6280,13 @@ class FlexibleCurrencyNameDetector(_GatedReader):
                     return end
         return None
 
-    def _match(self, text: str, start: int):
+    def _match(self, text: str, start: int, *, whole: bool = True):
         if start > 0 and text[start - 1].isalnum():
             return None
         currency_end = self._currency_at(text, start, True)
         if currency_end is not None:
             number_start = self._space(text, currency_end)
-            number = _plain_number_match(self._number, text, number_start)
+            number = _plain_number_match(self._number, text, number_start, whole=whole)
             if number is not None:
                 end, captures, value = number
                 currency_capture = Capture(
@@ -6079,7 +6294,7 @@ class FlexibleCurrencyNameDetector(_GatedReader):
                 )
                 return end, (currency_capture, *captures), NumberValue(value.decimal, self.currency)
 
-        number = _plain_number_match(self._number, text, start)
+        number = _plain_number_match(self._number, text, start, whole=whole)
         if number is None:
             return None
         number_end, captures, value = number
@@ -6107,7 +6322,8 @@ class FlexibleCurrencyNameDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping spelled-currency candidates in source order."""
-        return _detect_flexible(
+        plan = _scan_plan_for(text, self.locale, self._start_gates["named"])
+        current = _detect_flexible(
             text,
             self.locale,
             self.type,
@@ -6115,7 +6331,21 @@ class FlexibleCurrencyNameDetector(_GatedReader):
             self._match,
             gate=self._start_gates["named"],
             stats_key=self._lane_key("named"),
+            _plan=plan,
         )
+        if _plain_number_widened(self._number, text):
+            prior = _detect_flexible(
+                text,
+                self.locale,
+                self.type,
+                self._spec,
+                lambda text, start: self._match(text, start, whole=False),
+                gate=self._start_gates["named"],
+                stats_key=self._lane_key("named"),
+                _plan=plan,
+            )
+            current.extend(item for item in prior if item not in current)
+        return sorted(current, key=lambda item: (item["start"], item["end"]))
 
 
 @cache
@@ -8121,9 +8351,10 @@ def _detect_flexible(
     *,
     gate: StartGate | None = None,
     stats_key: str | None = None,
+    _plan: _ScanPlan | None | object = _PLAN_UNSET,
 ) -> list[ValueDetection]:
     inspect_gate = GATE_STATS and gates_enabled() and gate is not None
-    plan = _scan_plan_for(text, locale, gate)
+    plan = _scan_plan_for(text, locale, gate) if _plan is _PLAN_UNSET else _plan
     starts = (
         plan.grapheme_starts[locale]
         if inspect_gate and plan is not None

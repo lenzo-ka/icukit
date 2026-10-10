@@ -819,6 +819,80 @@ class DateDetector(_GatedReader):
 # --------------------------------------------------------------------------- numbers
 
 
+_GROUPING_SPACES = frozenset(
+    {
+        " ",
+        "\N{NO-BREAK SPACE}",
+        "\N{THIN SPACE}",
+        "\N{NARROW NO-BREAK SPACE}",
+    }
+)
+
+
+@functools.lru_cache(maxsize=16)
+def _space_grouping_bounds(
+    text: str,
+    digits: frozenset[str],
+    primary: int,
+    secondary: int,
+) -> dict[int, tuple[int, int]]:
+    """Map characters in every maximal well-formed space grouping to its span.
+
+    The rightmost group has ICU's primary width, earlier non-leading groups have its
+    secondary width, and the leading group has one through ``secondary`` digits. One
+    digit/space run may contain several valid spans (``10 000 20 000``), so both whole
+    readings are mapped instead of only its valid suffix. The single pass and bounded
+    memo keep the lookup linear when a detector gang asks about the same running text.
+    """
+    bounds: dict[int, tuple[int, int]] = {}
+    if primary <= 0 or secondary <= 0:
+        return bounds
+    cursor = 0
+    while cursor < len(text):
+        if text[cursor] not in digits:
+            cursor += 1
+            continue
+        groups: list[tuple[int, int]] = []
+        group_start = cursor
+        while cursor < len(text) and text[cursor] in digits:
+            cursor += 1
+        groups.append((group_start, cursor))
+        while (
+            cursor < len(text)
+            and text[cursor] in _GROUPING_SPACES
+            and cursor + 1 < len(text)
+            and text[cursor + 1] in digits
+        ):
+            cursor += 1
+            group_start = cursor
+            while cursor < len(text) and text[cursor] in digits:
+                cursor += 1
+            groups.append((group_start, cursor))
+
+        spans: list[tuple[int, int]] = []
+        chain_start: int | None = None
+        for index, (start, end) in enumerate(groups):
+            width = end - start
+            if index and width == primary and chain_start is not None:
+                span = (groups[chain_start][0], end)
+                if spans and spans[-1][0] == span[0]:
+                    spans[-1] = span
+                else:
+                    spans.append(span)
+
+            if width == secondary:
+                if chain_start is None:
+                    chain_start = index
+            elif 1 <= width <= secondary:
+                chain_start = index
+            else:
+                chain_start = None
+
+        for span in spans:
+            bounds.update((offset, span) for offset in range(*span))
+    return bounds
+
+
 class NumberDetector(_GatedReader):
     """Detect canonical ICU decimal, currency, or percent surfaces."""
 
