@@ -10,11 +10,12 @@ includes it by type.
 import pytest
 
 from icukit import DetectorSet
-from icukit.detectors import DateTimeValue, NumberValue
+from icukit.detectors import DateTimeValue, NumberValue, detector_key
 from icukit.engine import (
     DEFAULT_FAMILIES,
     DETACHED_UNIT_FAMILY,
     GUARDED_FAMILIES,
+    flexible_detectors,
     generated_detectors,
 )
 from icukit.recognize import (
@@ -403,6 +404,43 @@ def test_the_detached_unit_family_is_independently_selectable():
     ]
     direct = FlexibleDetachedUnitDetector("en_US", "day").detect("62 d")
     assert found == [("measure:detached-unit:day", "62 d", direct[0]["value"])]
+
+
+def test_detached_unit_locale_selections_coexist_without_leaking_readings():
+    italy = FlexibleDetachedUnitDetector("it_IT", "day", locales=())
+    switzerland = FlexibleDetachedUnitDetector("it_CH", "day", locales=())
+    assert detector_key(italy) != detector_key(switzerland)
+    assert DetectorSet(()).with_(italy, switzerland).detectors == (italy, switzerland)
+
+    own = flexible_detectors("zh_Hant_HK", locales=(), units=("cup",), guarded=True)
+    widened = flexible_detectors("zh_Hant_HK", locales=("zh",), units=("cup",), guarded=True)
+    type_ = "measure:detached-unit:cup"
+    (own_reader,) = [detector for detector in own.detectors if detector.type == type_]
+    (widened_reader,) = [detector for detector in widened.detectors if detector.type == type_]
+
+    assert own is flexible_detectors("zh_Hant_HK", locales=(), units=("cup",), guarded=True)
+    assert widened is flexible_detectors(
+        "zh_Hant_HK", locales=("zh",), units=("cup",), guarded=True
+    )
+    assert own is not widened
+    assert detector_key(own_reader) != detector_key(widened_reader)
+    assert DetectorSet(()).with_(own_reader, widened_reader).detectors == (
+        own_reader,
+        widened_reader,
+    )
+
+    text = "1 c"
+    assert own_reader.detect(text) == []
+    assert [(item["type"], item["text"]) for item in widened_reader.detect(text)] == [(type_, text)]
+    assert own_reader.detect(text) == []
+
+    own_compiled = DetectorSet((own_reader,)).compile(warm=False)
+    widened_compiled = DetectorSet((widened_reader,)).compile(warm=False)
+    assert own_compiled.key.readers != widened_compiled.key.readers
+    assert own_compiled.detect(text) == []
+    assert [(item["type"], item["text"]) for item in widened_compiled.detect(text)] == [
+        (type_, text)
+    ]
 
 
 def test_a_consumer_includes_and_excludes_a_guarded_type_by_type():
