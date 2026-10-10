@@ -270,32 +270,33 @@ def test_reading_costs_a_small_multiple_of_the_generated_set():
     assert min(ratios) < 3, ratios
 
 
-def test_space_grouping_candidate_retries_scale_nearly_linearly(monkeypatch):
-    original = recognize.FlexibleNumberDetector._grouping_length
+@pytest.mark.parametrize("locale", ("zh_CN", "it_IT"))
+def test_space_grouping_candidate_retries_do_not_grow_with_the_run(monkeypatch, locale):
+    original = recognize.FlexibleNumberDetector._match_style
     probes = 0
 
-    def counted_grouping_length(self, text, cursor, separator=None):
+    def counted_match_style(self, text, start, grouping=None, decimal=None, **kwargs):
         nonlocal probes
         probes += 1
-        return original(self, text, cursor, separator)
+        return original(self, text, start, grouping, decimal, **kwargs)
 
-    monkeypatch.setattr(
-        recognize.FlexibleNumberDetector, "_grouping_length", counted_grouping_length
-    )
+    monkeypatch.setattr(recognize.FlexibleNumberDetector, "_match_style", counted_match_style)
 
     def grouping_probes(repetitions):
+        recognize._space_grouping_bounds.cache_clear()
         recognize._grouping_tail_memo.cache_clear()
-        detector = recognize.FlexibleNumberDetector("af_ZA")
-        text = "1 " + "234 " * repetitions + "56x! "
+        detector = recognize.FlexibleNumberDetector(locale)
+        text = "1" + " 000" * repetitions
         before = probes
-        assert len(detector.detect(text)) == repetitions + 1
+        detections = detector.detect(text)
+        assert (0, len(text)) in [(item["start"], item["end"]) for item in detections]
         return probes - before
 
-    small = grouping_probes(125)
-    large = grouping_probes(500)
+    small = grouping_probes(500)
+    large = grouping_probes(2000)
 
-    # The input grows fourfold. One probe per candidate plus one per previously unseen
-    # grouping tail keeps work linear; rescanning each tail would grow about sixteenfold.
+    # The input grows fourfold. The own style advances once over the whole span; a
+    # language-relative alternative may still make one constant-cost try per group.
     assert large <= 5 * small, (small, large)
 
 

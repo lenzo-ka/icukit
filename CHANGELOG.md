@@ -9,6 +9,14 @@
   space where ICU writes them attached (`84 "`, `6 ′`); `guarded=True` or an explicit
   guarded-family selection includes those readings for lattice consumers. Letter unit
   symbols such as `24 h`, `62 d`, and `62 s` retain the default measure reading.
+### Fixed
+
+- Flexible readers add a whole reading for valid space-grouped numbers accepted by the
+  locale's lenient ICU parser or used by locales of the same language, without removing
+  the separate integer readings they already produced. The downstream ranker therefore
+  chooses among 5, 300, and 5300 for `5 300`; lists whose widths do not fit the locale's
+  grouping, such as `1 2 3` and `1999 2000`, keep only their separate readings. Strict
+  readers retain their existing behavior and the locale's own CLDR convention.
 
 ## [0.9.1] - 2026-10-09
 
