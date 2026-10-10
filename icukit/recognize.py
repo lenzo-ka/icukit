@@ -9,6 +9,7 @@ those candidates unchanged.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from collections.abc import Callable, Iterable
 from copy import copy
 from dataclasses import dataclass, replace
@@ -74,6 +75,35 @@ from .detectors import (
 from .unit_surfaces import curated_currency_surfaces, curated_unit_surfaces
 
 _PLAN_UNSET = object()
+
+
+def _digits_int(digits: str) -> int | None:
+    """Parse captured digits, returning ``None`` past Python's conversion guard."""
+    try:
+        return int(digits)
+    except ValueError:
+        if digits and digits.isdecimal():
+            return None
+        raise
+
+
+def _canonical_integer_digits(digits: str) -> str:
+    """Canonicalize an ASCII digit run without converting the whole run to ``int``."""
+    return digits.lstrip("0") or "0"
+
+
+def _bounded_digit_run(text: str, start: int, digits, maximum: int) -> tuple[int, int]:
+    """Scan a digit run while saturating its numeric value above ``maximum``."""
+    cursor = start
+    value = 0
+    overflow = maximum + 1
+    while cursor < len(text) and text[cursor] in digits:
+        if value <= maximum:
+            candidate = value * 10 + int(digits[text[cursor]])
+            value = candidate if candidate <= maximum else overflow
+        cursor += 1
+    return cursor, value
+
 
 __all__ = [
     "AlphanumericRunsDetector",
@@ -454,7 +484,9 @@ class PluralNumeralDetector:
             begin = start - 1
             captures.append(Capture("elision", begin, start, text[begin:start]))
         digits = "".join(str(icu.Char.digit(character, 10)) for character in text[start:number_end])
-        captures.append(Capture("number", start, number_end, text[start:number_end], int(digits)))
+        captures.append(
+            Capture("number", start, number_end, text[start:number_end], _digits_int(digits))
+        )
         if cursor < len(text) and _is_apostrophe(text[cursor]):
             captures.append(Capture("apostrophe", cursor, cursor + 1, text[cursor]))
             cursor += 1
@@ -467,7 +499,7 @@ class PluralNumeralDetector:
                     start=begin,
                     end=end,
                     type=self.type,
-                    value=NumberValue(str(int(digits)), None),
+                    value=NumberValue(_canonical_integer_digits(digits), None),
                     captures=tuple(captures),
                     spec=None,
                 )
@@ -747,11 +779,7 @@ class FlexibleDateDetector(_GatedReader):
         return tuple(fields), tuple(literals)
 
     def _digit_run(self, text: str, start: int) -> tuple[int, str, int]:
-        cursor = start
-        value = 0
-        while cursor < len(text) and text[cursor] in self._digits:
-            value = value * 10 + self._digits[text[cursor]]
-            cursor += 1
+        cursor, value = _bounded_digit_run(text, start, self._digits, 9999)
         return cursor, text[start:cursor], value
 
     def _structure_matcher(self, fields, separators, pattern):
@@ -1528,6 +1556,41 @@ def _interval_separator_needle(separator_literal: str) -> str | None:
     return separator_literal[cursor:end] or None
 
 
+def _interval_side_needle(patterns: tuple[str, str]) -> str | None:
+    """Return one exact non-space literal every rendering of the sides contains.
+
+    ICU date pattern letters are fields only when they are unquoted ASCII letters.
+    Everything else is literal surface text.  The interval reformat gate compares side
+    punctuation exactly and folds case, so the longest case-folded non-space literal is
+    a safe matcher-local prerequisite (``:`` for a time, ``/`` for a numeric date).
+    """
+    runs: list[str] = []
+    for pattern in patterns:
+        literal: list[str] = []
+        quoted = False
+        cursor = 0
+        while cursor < len(pattern):
+            character = pattern[cursor]
+            if character == "'":
+                if cursor + 1 < len(pattern) and pattern[cursor + 1] == "'":
+                    literal.append("'")
+                    cursor += 2
+                    continue
+                quoted = not quoted
+                cursor += 1
+                continue
+            if (not quoted and _is_pattern_letter(character)) or character in _SPACES:
+                if literal:
+                    runs.append("".join(literal).casefold())
+                    literal.clear()
+            else:
+                literal.append(character)
+            cursor += 1
+        if literal:
+            runs.append("".join(literal).casefold())
+    return max(runs, key=len, default=None)
+
+
 class FlexibleDateIntervalDetector(_GatedReader):
     """Recognize date/time interval surfaces by inverting ICU DateIntervalFormat recipes.
 
@@ -1616,6 +1679,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
             _interval_separator_needle(matcher[1]) for matcher in self._matchers
         )
         self._separator_needles = frozenset(separator_needles) if all(separator_needles) else None
+        self._side_needles = tuple(_interval_side_needle(matcher[5]) for matcher in self._matchers)
         self._calendar = icu.Calendar.createInstance(icu_locale).getType()
         self._spec = DateIntervalSpec(locale, skeleton)
         self._dif = icu.DateIntervalFormat.createInstance(skeleton, icu_locale)
@@ -2061,6 +2125,7 @@ class FlexibleDateIntervalDetector(_GatedReader):
         start: int,
         offset_maps: tuple[list[int], dict[int, int]] | None = None,
         ustr=None,
+        normalized_text: str | None = None,
     ):
         if _continues_interval_word(text, start - 1):
             return []
@@ -2070,7 +2135,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
         # may write its name on one dating only (Irish time is "IST" in summer).
         readings: dict[tuple, tuple] = {}
         leads_with_digit = icu.Char.isdigit(text[start]) if start < len(text) else False
-        for matcher in self._matchers:
+        normalized_text = text.casefold() if normalized_text is None else normalized_text
+        for matcher, side_needle in zip(self._matchers, self._side_needles, strict=True):
+            if side_needle is not None and side_needle not in normalized_text:
+                continue
             if matcher[8] and not leads_with_digit:
                 continue  # ICU writes this side's first field in digits
             for dating in matcher[9]:
@@ -2113,9 +2181,10 @@ class FlexibleDateIntervalDetector(_GatedReader):
         else:
             offset_maps = boundary_maps(text)
             ustr = icu.UnicodeString(text)
+        normalized_text = text.casefold()
 
         def match(source: str, start: int):
-            return self._match(source, start, offset_maps, ustr)
+            return self._match(source, start, offset_maps, ustr, normalized_text)
 
         found = _detect_flexible_alternatives(
             text,
@@ -2579,12 +2648,7 @@ class FlexibleTextDateDetector(_GatedReader):
         return tuple(fields), tuple(literals)
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
-        cursor = start
-        value = 0
-        while cursor < len(text) and text[cursor] in self._digits:
-            value = value * 10 + self._digits[text[cursor]]
-            cursor += 1
-        return cursor, value
+        return _bounded_digit_run(text, start, self._digits, 9999)
 
     def _ordinal_end(self, text: str, start: int, digit_end: int, value: int) -> int:
         rendered = self._rbnf.format(value)
@@ -2788,6 +2852,10 @@ class FlexibleTextDateDetector(_GatedReader):
         Each kind is its own pass, so their readings may overlap ("5 May 2000 AD" gives
         the date and "2000 AD"); none takes a start from another.
         """
+        # Every accepted path contains a named month, weekday, quarter, or era. Avoid
+        # trying every textual structure at every digit in long numeric-only input.
+        if not any(character.isalpha() for character in text):
+            return []
         dates = _detect_flexible(
             text,
             self.locale,
@@ -2852,6 +2920,8 @@ class FlexibleShortYearDateDetector(FlexibleTextDateDetector):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return the dates with a two- or three-digit year, in source order."""
+        if not any(character.isalpha() for character in text):
+            return []
         return [
             date
             for date in _detect_flexible(
@@ -3501,7 +3571,18 @@ class FlexibleNumberDetector(_GatedReader):
             # Only where the locale's own styles do not already read the text (kal's
             # ruling of 2026-09-24): "1,234" stays 1234 alone in en_US, while "1 234,56"
             # reads 1234.56 though en_US reads a fragment "1" of it.
-            own = [(item["start"], item["end"]) for item in decimals]
+            own = sorted((item["start"], item["end"]) for item in decimals)
+            own_starts = [start for start, _end in own]
+            own_max_ends = []
+            maximum_end = -1
+            for _start, end in own:
+                maximum_end = max(maximum_end, end)
+                own_max_ends.append(maximum_end)
+
+            def contained(item: ValueDetection) -> bool:
+                index = bisect_right(own_starts, item["start"]) - 1
+                return index >= 0 and item["end"] <= own_max_ends[index]
+
             decimals.extend(
                 item
                 for item in _detect_flexible_alternatives(
@@ -3512,7 +3593,7 @@ class FlexibleNumberDetector(_GatedReader):
                     gate=self._start_gates["decimal-styles"],
                     stats_key=self._lane_key("decimal-styles"),
                 )
-                if not any(s <= item["start"] and item["end"] <= e for s, e in own)
+                if not contained(item)
             )
         if self._has_space_grouping(text):
             added = _detect_flexible(
@@ -4286,6 +4367,10 @@ class FlexibleCurrencyDetector(_GatedReader):
             tuple((c.locale, c.width, c.fold_symbol_case) for c in self._compact),
         )
         self._currency_name = FlexibleCurrencyNameDetector(locale, currency)
+        currency_name_heads = set().union(*self._currency_name._name_heads.values())
+        if locale.startswith("en") and currency == "USD":
+            currency_name_heads.add("d")
+        self._currency_name_heads = frozenset(currency_name_heads)
         number_format = icu.NumberFormat.createCurrencyInstance(icu.Locale(locale))
         number_format.setCurrency(currency)
         symbols = number_format.getDecimalFormatSymbols()
@@ -4309,15 +4394,15 @@ class FlexibleCurrencyDetector(_GatedReader):
             surface for surface, code in curated_currency_surfaces(language) if code == currency
         )
         self._currencies = tuple(sorted(reflected_symbols, key=len, reverse=True))
+        self._currency_heads = heads(self._currencies)
         self._spec = NumberFormatSpec(locale, "currency", currency=currency)
         amount_gate = self._number.start_gates()["decimal"]
         for compact in self._compact:
             if amount_gate is not None:
                 amount_gate = amount_gate | compact.start_gates()["compact"]
-        wraps = heads(
-            before for before, _after in _negative_currency_wraps(locale, currency, self.locales)
-        )
-        prefix_gate = StartGate(chars=wraps | heads(self._currencies))
+        self._negative_wraps = _negative_currency_wraps(locale, currency, self.locales)
+        self._wrap_heads = heads(before for before, _after in self._negative_wraps)
+        prefix_gate = StartGate(chars=self._wrap_heads | self._currency_heads)
         _install_gates(
             self,
             {"signed": prefix_gate | amount_gate},
@@ -4338,27 +4423,33 @@ class FlexibleCurrencyDetector(_GatedReader):
     ) -> tuple[int, tuple[Capture, ...], NumberValue] | None:
         if start > 0 and _is_word_character(text[start - 1]):
             return None
-        for symbol in self._currencies:
-            if not text.startswith(symbol, start):
-                continue
-            symbol_end = start + len(symbol)
-            number_start = self._space(text, symbol_end)
-            match = self._amount(text, number_start, whole=whole)
-            if match is not None:
-                end, captures, value = match
-                currency = Capture("currency", start, symbol_end, symbol, self.currency, "symbol")
-                return end, (currency, *captures), NumberValue(value.decimal, self.currency)
+        if text[start : start + 1] in self._currency_heads:
+            for symbol in self._currencies:
+                if not text.startswith(symbol, start):
+                    continue
+                symbol_end = start + len(symbol)
+                number_start = self._space(text, symbol_end)
+                match = self._amount(text, number_start, whole=whole)
+                if match is not None:
+                    end, captures, value = match
+                    currency = Capture(
+                        "currency", start, symbol_end, symbol, self.currency, "symbol"
+                    )
+                    return end, (currency, *captures), NumberValue(value.decimal, self.currency)
 
         match = self._amount(text, start, whole=whole)
         if match is None:
             return None
         number_end, captures, value = match
         symbol_start = self._space(text, number_end)
-        for symbol in self._currencies:
-            if text.startswith(symbol, symbol_start):
-                end = symbol_start + len(symbol)
-                currency = Capture("currency", symbol_start, end, symbol, self.currency, "symbol")
-                return end, (*captures, currency), NumberValue(value.decimal, self.currency)
+        if text[symbol_start : symbol_start + 1] in self._currency_heads:
+            for symbol in self._currencies:
+                if text.startswith(symbol, symbol_start):
+                    end = symbol_start + len(symbol)
+                    currency = Capture(
+                        "currency", symbol_start, end, symbol, self.currency, "symbol"
+                    )
+                    return end, (*captures, currency), NumberValue(value.decimal, self.currency)
         if symbol_start == number_end:
             return None
         name_end = self._currency_name._currency_at(text, symbol_start, False)
@@ -4420,7 +4511,8 @@ class FlexibleCurrencyDetector(_GatedReader):
 
     def _match_signed(self, text: str, start: int, *, whole: bool = True):
         """An amount ICU's negative forms wrap ("-$42.50", "($42.50)"), else a plain one."""
-        for before, after in _negative_currency_wraps(self.locale, self.currency, self.locales):
+        wraps = self._negative_wraps if text[start : start + 1] in self._wrap_heads else ()
+        for before, after in wraps:
             if not before or not text.startswith(before, start):
                 continue
             inner = self._match(text, start + len(before), whole=whole)
@@ -4438,6 +4530,13 @@ class FlexibleCurrencyDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping flexible currency candidates in source order."""
+        if not any(
+            character in self._currency_heads
+            or (folded := character.casefold())
+            and folded[0] in self._currency_name_heads
+            for character in text
+        ):
+            return []
         plan = _scan_plan_for(text, self.locale, self._start_gates["signed"])
         current = _detect_flexible(
             text,
@@ -4849,6 +4948,9 @@ class FlexibleMeasureDetector(_GatedReader):
             has_space: self._by_surface_head(self._ordered_period_units[has_space])
             for has_space in (False, True)
         }
+        self._all_unit_heads = frozenset(self._unit_heads[False]) | frozenset(
+            self._unit_heads[True]
+        )
         per_heads = heads(
             surface for surface, _width, _spaced, target in self._units if target != self.unit
         )
@@ -5050,6 +5152,8 @@ class FlexibleMeasureDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return flexible measure readings in source order, a bare per form beside them."""
+        if not any(character in self._all_unit_heads for character in text):
+            return []
         amount_plan = _scan_plan_for(text, self.locale, self._start_gates["amount"])
         sentence_period_ends: frozenset[int] | None = None
 
@@ -5344,7 +5448,7 @@ class FlexibleNumericDurationDetector(_GatedReader):
         key, fields, widths, separators, decimal = pattern
         cursor = start
         captures: list[Capture] = []
-        values: list[int] = []
+        values: list[int | Decimal] = []
         for index, (field, width) in enumerate(zip(fields, widths, strict=True)):
             if index:
                 separator = separators[index - 1]
@@ -5356,10 +5460,11 @@ class FlexibleNumericDurationDetector(_GatedReader):
             if length == 0 or (index and length != width):
                 return None
             digits = "".join(self._digits[character] for character in text[cursor:end])
-            value = int(digits)
+            capture_value = _digits_int(digits)
+            value = capture_value if capture_value is not None else Decimal(digits)
             if index and value >= 60:
                 return None
-            captures.append(Capture(field, cursor, end, text[cursor:end], value, "numeric"))
+            captures.append(Capture(field, cursor, end, text[cursor:end], capture_value, "numeric"))
             values.append(value)
             cursor = end
         fraction = ""
@@ -6016,10 +6121,18 @@ class FlexibleSpelloutDetector(_GatedReader):
             return None
         return parsed[1]
 
-    def _match(self, text: str, start: int, token_end=None, guard: bool = True):
+    def _match(
+        self,
+        text: str,
+        start: int,
+        token_end=None,
+        parse_integer=None,
+        guard: bool = True,
+    ):
         if not self._left_boundary(text, start):
             return None
         token_end = token_end or (lambda cursor: self._token_end(text, cursor))
+        parse_integer = parse_integer or self._parse_integer
         cursor = start
         token_ends: list[int] = []
         expect_token = True
@@ -6042,7 +6155,7 @@ class FlexibleSpelloutDetector(_GatedReader):
         if not token_ends:
             return None
         run_end = token_ends[-1]
-        parsed = self._parse_integer(text[start:run_end])
+        parsed = parse_integer(text[start:run_end])
         if parsed is None:
             return None
         consumed, parsed_value = parsed
@@ -6061,9 +6174,10 @@ class FlexibleSpelloutDetector(_GatedReader):
             if end == absolute_end:
                 value = parsed_value
             else:
-                value = self._integer_value(surface)
-                if value is None:
+                prefix = parse_integer(surface)
+                if prefix is None or prefix[0] != len(surface):
                     continue
+                value = prefix[1]
             canonical = self._rbnf.format(value, self._ruleset)
             if canonical.casefold() != surface.casefold():
                 continue
@@ -6079,13 +6193,17 @@ class FlexibleSpelloutDetector(_GatedReader):
         """The greedy scan, with or without the guard on a lone ambiguous unit word."""
         token_ends: dict[int, int | None] = {}
 
+        @lru_cache(maxsize=256)
+        def parse_integer(surface: str) -> tuple[int, int] | None:
+            return self._parse_integer(surface)
+
         def token_end(cursor: int) -> int | None:
             if cursor not in token_ends:
                 token_ends[cursor] = self._token_end(text, cursor)
             return token_ends[cursor]
 
         def match(source: str, start: int):
-            return self._match(source, start, token_end, guard)
+            return self._match(source, start, token_end, parse_integer, guard)
 
         return _detect_flexible(
             text,
@@ -6252,6 +6370,15 @@ class FlexibleCurrencyNameDetector(_GatedReader):
             names.setdefault(long_name.casefold(), (long_name, prefix))
             names.setdefault(canonical.casefold(), (canonical, prefix))
         self._names = tuple(sorted(names.values(), key=lambda item: len(item[0]), reverse=True))
+        self._name_heads = {
+            prefix: _matcher_folded_heads(
+                surface for surface, is_prefix in self._names if is_prefix == prefix
+            )
+            for prefix in (False, True)
+        }
+        self._names_require_alpha = all(
+            any(character.isalpha() for character in surface) for surface, _prefix in self._names
+        )
         self._spec = NumberFormatSpec(locale, "currency", currency=canonical)
         prefix_names = (surface for surface, prefix in self._names if prefix)
         named_gate = (
@@ -6271,6 +6398,9 @@ class FlexibleCurrencyNameDetector(_GatedReader):
         return cursor
 
     def _currency_at(self, text: str, start: int, prefix: bool):
+        folded = text[start : start + 1].casefold()
+        if not folded or folded[0] not in self._name_heads[prefix]:
+            return None
         for surface, is_prefix in self._names:
             if is_prefix != prefix:
                 continue
@@ -6322,6 +6452,8 @@ class FlexibleCurrencyNameDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return greedy, non-overlapping spelled-currency candidates in source order."""
+        if self._names_require_alpha and not any(character.isalpha() for character in text):
+            return []
         plan = _scan_plan_for(text, self.locale, self._start_gates["named"])
         current = _detect_flexible(
             text,
@@ -6856,12 +6988,7 @@ class FlexibleTimeDetector(_GatedReader):
         return joined, hour12, period_side
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
-        cursor = start
-        value = 0
-        while cursor < len(text) and text[cursor] in self._digits:
-            value = value * 10 + self._digits[text[cursor]]
-            cursor += 1
-        return cursor, value
+        return _bounded_digit_run(text, start, self._digits, 99)
 
     def _field(self, text: str, start: int, width: int) -> tuple[int, int] | None:
         cursor, value = self._digit_run(text, start)
@@ -7366,6 +7493,10 @@ class FlexibleBareHourDetector(_GatedReader):
 
     def detect(self, text: str) -> list[ValueDetection]:
         """Return lone clock hours in source order, outside the time and date readings."""
+        if len(text) > 2 and not text.strip("".join(self._digits)):
+            # A run longer than two locale digits is one word. No interior fragment can
+            # be a lone hour, so avoid testing the same failed boundary at every digit.
+            return []
         found = _detect_flexible(
             text,
             self.locale,
@@ -8026,12 +8157,7 @@ class FlexibleOrdinalDetector(_GatedReader):
         )
 
     def _digit_run(self, text: str, start: int) -> tuple[int, int]:
-        cursor = start
-        value = 0
-        while cursor < len(text) and text[cursor] in self._digits:
-            value = value * 10 + self._digits[text[cursor]]
-            cursor += 1
-        return cursor, value
+        return _bounded_digit_run(text, start, self._digits, _MAX_RBNF_ORDINAL_VALUE)
 
     def _grouped_run(self, text: str, start: int) -> tuple[int, int]:
         """A digit run that may hold the locale's grouping separator between digits."""
@@ -8039,7 +8165,9 @@ class FlexibleOrdinalDetector(_GatedReader):
         value = 0
         while cursor < len(text):
             if text[cursor] in self._digits:
-                value = value * 10 + self._digits[text[cursor]]
+                if value <= _MAX_RBNF_ORDINAL_VALUE:
+                    candidate = value * 10 + self._digits[text[cursor]]
+                    value = min(candidate, _MAX_RBNF_ORDINAL_VALUE + 1)
                 cursor += 1
                 continue
             after = cursor + len(self._grouping)

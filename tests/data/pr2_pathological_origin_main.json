@@ -1,0 +1,56 @@
+{
+  "base": "f704b61",
+  "clock": "process_time",
+  "rows": [
+    {
+      "id": "en_US-gang-a",
+      "label": "C",
+      "seconds_16k": 0.353899,
+      "seconds_64k": 1.438492,
+      "ratio_64k_16k": 4.0658,
+      "detections_64k": 0
+    },
+    {
+      "id": "en_US-gang-period",
+      "label": "C",
+      "seconds_16k": 8.625726,
+      "seconds_64k": 34.608996,
+      "ratio_64k_16k": 4.0123,
+      "detections_64k": 0
+    },
+    {
+      "id": "en_US-gang-dash",
+      "label": "C",
+      "seconds_16k": 10.315504,
+      "seconds_64k": 40.373456,
+      "ratio_64k_16k": 3.9139,
+      "detections_64k": 0
+    },
+    {
+      "id": "en_US-FlexibleCurrencyDetector-USD-dash",
+      "label": "C",
+      "seconds_16k": 0.263820,
+      "seconds_64k": 1.237676,
+      "ratio_64k_16k": 4.6914,
+      "detections_64k": 0
+    },
+    {
+      "id": "en_US-FlexibleMeasureDetector-meter-dash",
+      "label": "C",
+      "seconds_16k": 0.020724,
+      "seconds_64k": 0.072499,
+      "ratio_64k_16k": 3.4983,
+      "detections_64k": 0
+    },
+    {
+      "id": "en_US-PluralNumeralDetector-4301-digits",
+      "label": "R",
+      "error": "ValueError"
+    },
+    {
+      "id": "en_US-FlexibleNumericDurationDetector-4301-digits",
+      "label": "R",
+      "error": "ValueError"
+    }
+  ]
+}

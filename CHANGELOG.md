@@ -39,9 +39,25 @@
   isolated digits no longer pay those unsuccessful per-start costs.
 - Explicit Cartlet models may use a reduced `icukit.features@1` schema when every
   feature name is unique and belongs to the runtime schema.
+- **Behavior change:** Sentences longer than 1,024 code points are force-broken at
+  a clause, whitespace, grapheme, or code-point fallback boundary. The hard bound
+  wins over a protected span when no unprotected position fits.
+- **Behavior change:** Regex time and stack overruns raise instead of silently
+  returning no match or unchanged input.
+- **Behavior change:** Locale-list pattern filters use bounded ICU regular
+  expressions instead of Python regular expressions.
+- **Behavior change:** Limited regex replacement uses ICU replacement syntax,
+  including numbered and named capture references.
 
 ### Fixed
 
+- **Behavior change:** Digit captures longer than Python's integer-string conversion
+  limit no longer abort plural-numeral or numeric-duration detection; their capture
+  value is `None`.
+- Pathological digit, whitespace, repeated spell-out, interval-separator, currency, and
+  measure runs remain linear. Readers now saturate rejected numeric fields, skip proved
+  interior starts and absent mandatory literal heads, reuse identical spell-out parses,
+  and index decimal-alternative containment instead of rescanning earlier spans.
 - Number and measure ranges in the flexible readers no longer read across a paragraph
   boundary (for example `3,5 °C` and `-5 °C` in Catalan, separated by a blank line).
 - Flexible readers add a whole reading for valid space-grouped numbers accepted by the
