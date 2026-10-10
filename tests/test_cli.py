@@ -315,6 +315,28 @@ class TestRegexCommand:
         assert "replace" in out
         assert "split" in out
 
+    @pytest.mark.parametrize(
+        "subcommand", ["find", "replace", "split", "match", "search", "script", "list"]
+    )
+    def test_regex_subcommand_help_has_limits(self, subcommand):
+        code, out, err = run_cli("regex", subcommand, "--help")
+        assert code == 0
+        assert "--time-limit" in out
+        assert "--stack-limit" in out
+
+    def test_regex_cli_limit_error(self):
+        code, out, err = run_cli(
+            "regex",
+            "search",
+            "(a+)+$",
+            "--time-limit",
+            "1",
+            input_text="a" * 65_536 + "b",
+        )
+        assert code == 2
+        assert out == ""
+        assert "regex exceeded its time limit of 1 steps" in err
+
     def test_regex_find(self):
         """Should find regex matches."""
         code, out, err = run_cli("regex", "find", r"\d+", input_text="abc123def456")

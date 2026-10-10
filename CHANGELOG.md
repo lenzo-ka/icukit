@@ -10,6 +10,11 @@
   boundary produces readings both with and without the period; internal periods belong
   to the punctuated reading. Periods before a following number, after full unit words,
   and after one-letter symbols remain punctuation.
+- Sentence breaking now accepts `max_sentence_chars` (default 1,024; `None`
+  disables it) and reports forced boundaries with the `"forced"` layer.
+- ICU regex entry points now accept per-operation `time_limit` steps and
+  `stack_limit` bytes, with matching command-line options. Resource overruns
+  raise `RegexLimitError`.
 - `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
   with paragraph-boundary segmentation by default, optional line or explicit
   boundaries, absolute offsets, `pending_from` on every batch, bounded pending text,
