@@ -15,6 +15,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FlexibleCurrencyNameDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleDateIntervalDetector`](#icukitrecognize) — class, `icukit.recognize`
+- [`FlexibleDetachedUnitDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleFractionDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleMeasureDetector`](#icukitrecognize) — class, `icukit.recognize`
 - [`FlexibleNumberDetector`](#icukitrecognize) — class, `icukit.recognize`
@@ -84,6 +85,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`DATE_INTERVAL_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DATE_TIME_SKELETON_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`DEFAULT_FAMILIES`](#icukitengine) — constant, `icukit.engine`
+- [`DETACHED_UNIT_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`GUARDED_FAMILIES`](#icukitengine) — constant, `icukit.engine`
 - [`LONE_SPELLOUT_NUMBER_FAMILY`](#icukitengine) — constant, `icukit.engine`
 - [`LOWERCASE_ROMAN_FAMILY`](#icukitengine) — constant, `icukit.engine`
@@ -3431,8 +3433,9 @@ expansion is intentionally not an invertible formatter operation.
 readers of the readings the default readers refuse on purpose -- a lone "one" or
 "first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
 with a two- or three-digit year, a year range ICU never writes ("1914-1918",
-"1893–94") -- each under its own type, so a consumer that wants
-every path (a lattice for forced alignment) opts in with
+"1893–94"), or a detached unit mark or one-letter abbreviation that ICU writes attached
+(``84 "`` beside ``84"``, "62 d" beside "62d") -- each under its own type, so a
+consumer that wants every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
 
@@ -3469,9 +3472,13 @@ values it chooses from ICU; ``guarded=True`` adds the guarded readers.
 note: A measure family belongs here once its ICU surfaces have an introspective
 inverter. Abbreviations use their typed lexicon.
 
+#### `DETACHED_UNIT_FAMILY` (constant)
+
+`<icukit.engine.Family>`
+
 #### `GUARDED_FAMILIES` (constant)
 
-`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
+`(<icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>, <icukit.engine.Family>)`
 
 The readings the default readers refuse on purpose, each under its own type; not in
 DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
@@ -5806,6 +5813,29 @@ own locale's zone first.
 
 Return this reader's stable lane names and sound start gates.
 
+### class `FlexibleDetachedUnitDetector`
+
+Recognize only a deliberately guarded detached unit surface.
+
+A quote or prime mark, or a one-letter short or narrow abbreviation, is guarded
+where ICU joins it to its number: ``84"``, "62d". The ordinary measure reader
+declines the detached spelling (``84 "``, "62 d"); this reader deposits exactly
+that spelling under ``measure:detached-unit:<unit>`` for lattice consumers that opt
+in. A surface that ICU spaces, a wide one-letter unit name, and a curated surface
+remain ordinary measure readings.
+
+#### `FlexibleDetachedUnitDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `detect(text: 'str') -> 'list[ValueDetection]'`
+
+Return flexible measure candidates in source order, a bare per form beside them.
+
+#### `start_gates() -> 'Mapping[str, StartGate | None]'`
+
+Return this reader's stable lane names and sound start gates.
+
 ### class `FlexibleFractionDetector`
 
 Recognize signed ``N/D`` fractions and NFKC-decomposable vulgar fractions.
@@ -5840,6 +5870,11 @@ The surfaces are the unit's short, narrow, and wide forms as ICU formats them
 kilometres" reads in en_US text; see :func:`_language_locales`), for an amount in
 each of that locale's plural categories (see :func:`_plural_samples`), each also in
 the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
+Spacing stays flexible except for two detached forms that collide with ordinary text:
+quote or prime marks, and one-letter abbreviations. Those do not read after a space
+when their ICU pattern joins them to the number (``84"``, "62d");
+:class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
+a separate type.
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
 number directly. A per form written without an amount ("/s", "per second") reads as
