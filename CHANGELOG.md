@@ -13,6 +13,13 @@
   does not make that guarantee.
 - `detection_to_dict()` now includes `truncated` when a capped detection carries it.
 
+### Changed
+
+- Decode quoted literals in ICU date-interval separators, and skip interval parsing when
+  a text has none of the decoded mandatory literals under the reader's exact separator
+  comparison. Narrow spell-out token comparisons by their folded prefix. Long runs of
+  isolated digits no longer pay those unsuccessful per-start costs.
+
 ### Fixed
 
 - Number and measure ranges in the flexible readers no longer read across a paragraph
