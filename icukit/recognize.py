@@ -82,6 +82,7 @@ __all__ = [
     "FlexibleCurrencyNameDetector",
     "FlexibleDateDetector",
     "FlexibleDateIntervalDetector",
+    "FlexibleDetachedUnitDetector",
     "FlexibleFractionDetector",
     "FlexibleMeasureDetector",
     "FlexibleNumberDetector",
@@ -4472,7 +4473,9 @@ class FlexibleMeasureDetector(_GatedReader):
     the spellings ICU equates with it (see :func:`_unit_surface_variants`: "km2", 12").
     Spacing stays flexible except for two detached forms that collide with ordinary text:
     quote or prime marks, and one-letter abbreviations. Those do not read after a space
-    when their ICU pattern joins them to the number (``84"``, "62d").
+    when their ICU pattern joins them to the number (``84"``, "62d");
+    :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
+    a separate type.
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
     number directly. A per form written without an amount ("/s", "per second") reads as
@@ -4481,6 +4484,7 @@ class FlexibleMeasureDetector(_GatedReader):
     """
 
     group = "measure"
+    _detached_only = False
 
     def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale
@@ -4504,6 +4508,9 @@ class FlexibleMeasureDetector(_GatedReader):
         self._units = tuple(sorted(surfaces + rates, key=lambda item: len(item[0]), reverse=True))
         self._wide_unit_surfaces = {
             (surface, target) for surface, width, _spaced, target in self._units if width == "wide"
+        }
+        self._spaced_unit_surfaces = {
+            (surface, target) for surface, _width, spaced, target in self._units if spaced
         }
         # Longest first, those written as the text is (spaced or attached) ahead.
         self._ordered_units = {
@@ -4542,6 +4549,24 @@ class FlexibleMeasureDetector(_GatedReader):
             icu.UCharCategory.OTHER_NUMBER,
         }
 
+    def _is_guarded_detached(
+        self, surface: str, width: str, expects_space: bool, unit: str
+    ) -> bool:
+        """Whether a spaced surface is guarded because ICU writes it attached."""
+        detached_mark = surface in {'"', "'", "″", "′"}
+        detached_letter = (
+            width in {"short", "narrow"}
+            and (surface, unit) not in self._wide_unit_surfaces
+            and len(surface) == 1
+            and surface.isalpha()
+        )
+        return (
+            not expects_space
+            and (surface, unit) not in self._spaced_unit_surfaces
+            and width != "curated"
+            and (detached_mark or detached_letter)
+        )
+
     def _match(
         self, text: str, start: int, digit_may_follow: bool = False
     ) -> _FlexibleMatch | None:
@@ -4555,19 +4580,10 @@ class FlexibleMeasureDetector(_GatedReader):
             # A detached mark can read as punctuation, and a detached one-letter
             # abbreviation can read as prose. Reject only when this ICU-derived row
             # attaches it; a spaced row sorts first, and a wide name is not abbreviated.
-            detached_mark = surface in {'"', "'", "″", "′"}
-            detached_letter = (
-                width in {"short", "narrow"}
-                and (surface, unit) not in self._wide_unit_surfaces
-                and len(surface) == 1
-                and surface.isalpha()
+            guarded_detached = has_space and self._is_guarded_detached(
+                surface, width, expects_space, unit
             )
-            if (
-                has_space
-                and not expects_space
-                and width != "curated"
-                and (detached_mark or detached_letter)
-            ):
+            if guarded_detached != self._detached_only:
                 continue
             # A rate's per form ("/km²") follows the number directly, not after a space.
             cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
@@ -4633,6 +4649,33 @@ class FlexibleMeasureDetector(_GatedReader):
             if not any(m["start"] <= item["start"] and item["end"] <= m["end"] for m in measures)
         ]
         return sorted((*measures, *rates), key=lambda item: (item["start"], item["end"]))
+
+
+class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):
+    """Recognize only a deliberately guarded detached unit surface.
+
+    A quote or prime mark, or a one-letter short or narrow abbreviation, is guarded
+    where ICU joins it to its number: ``84\"``, "62d". The ordinary measure reader
+    declines the detached spelling (``84 \"``, "62 d"); this reader deposits exactly
+    that spelling under ``measure:detached-unit:<unit>`` for lattice consumers that opt
+    in. A surface that ICU spaces, a wide one-letter unit name, and a curated surface
+    remain ordinary measure readings.
+    """
+
+    _detached_only = True
+
+    def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
+        super().__init__(locale, unit, locales=locales)
+        if not any(
+            self._is_guarded_detached(surface, width, expects_space, target)
+            for surface, width, expects_space, target in self._units
+        ):
+            raise ValueError(f"ICU exposes no guarded detached surface for unit: {unit!r}")
+        self.type = f"measure:detached-unit:{unit}"
+
+    def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:
+        """Decline bare per forms, which are not detached unit readings."""
+        return None
 
 
 class FlexibleMixedMeasureDetector(_GatedReader):

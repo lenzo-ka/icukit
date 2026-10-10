@@ -3,6 +3,7 @@
 import pytest
 
 from icukit.recognize import (
+    FlexibleDetachedUnitDetector,
     FlexibleMeasureDetector,
     FlexibleMixedMeasureDetector,
     FlexiblePercentDetector,
@@ -115,6 +116,37 @@ def test_a_unit_surface_must_end_its_word():
 )
 def test_a_detached_mark_or_one_letter_unit_needs_a_spaced_icu_pattern(unit, detached):
     assert _measures(unit, detached) == []
+
+
+@pytest.mark.parametrize(
+    "locale, unit, detached, amount",
+    [
+        ("en_US", "inch", '84 "', "84"),
+        ("en_US", "inch", "62 ″", "62"),
+        ("en_US", "foot", "6 ′", "6"),
+        ("en_US", "day", "62 d", "62"),
+        ("es_ES", "century", "62 s", "62"),
+    ],
+)
+def test_the_guarded_detached_unit_reader_restores_the_reading(locale, unit, detached, amount):
+    readings = [
+        found
+        for found in FlexibleDetachedUnitDetector(locale, unit, locales=()).detect(detached)
+        if found["start"] == 0 and found["end"] == len(detached)
+    ]
+
+    assert len(readings) == 1
+    assert readings[0]["type"] == f"measure:detached-unit:{unit}"
+    assert readings[0]["text"] == detached
+    assert readings[0]["value"].unit == unit
+    assert readings[0]["value"].decimal == amount
+
+
+def test_the_guarded_detached_unit_reader_emits_only_its_guarded_spelling():
+    detector = FlexibleDetachedUnitDetector("en_US", "inch", locales=())
+    assert detector.detect('84"') == []
+    assert detector.detect("84 in") == []
+    assert detector.detect("/in") == []
 
 
 @pytest.mark.parametrize(

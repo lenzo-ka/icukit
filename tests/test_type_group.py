@@ -16,6 +16,7 @@ NEEDS_MORE_THAN_A_LOCALE = {
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
     "FlexibleDateIntervalDetector",
+    "FlexibleDetachedUnitDetector",
     "FlexibleMeasureDetector",
     "FlexibleMixedMeasureDetector",
 }

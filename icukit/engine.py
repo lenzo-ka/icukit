@@ -10,8 +10,9 @@ expansion is intentionally not an invertible formatter operation.
 readers of the readings the default readers refuse on purpose -- a lone "one" or
 "first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
 with a two- or three-digit year, a year range ICU never writes ("1914-1918",
-"1893–94") -- each under its own type, so a consumer that wants
-every path (a lattice for forced alignment) opts in with
+"1893–94"), or a detached unit mark or one-letter abbreviation that ICU writes attached
+(``84 \"`` beside ``84\"``, "62 d" beside "62d") -- each under its own type, so a
+consumer that wants every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
 
@@ -50,6 +51,7 @@ from .recognize import (
     FlexibleDateDetector,
     FlexibleDateIntervalDetector,
     FlexibleDateTimeDetector,
+    FlexibleDetachedUnitDetector,
     FlexibleFractionDetector,
     FlexibleLoneSpelloutDetector,
     FlexibleLowercaseRomanDetector,
@@ -93,6 +95,7 @@ __all__ = [
     "DATE_INTERVAL_FAMILY",
     "DATE_TIME_SKELETON_FAMILY",
     "DEFAULT_FAMILIES",
+    "DETACHED_UNIT_FAMILY",
     "Family",
     "GUARDED_FAMILIES",
     "GenerationReport",
@@ -732,19 +735,6 @@ DEFAULT_FAMILIES = (
     NUMBER_RANGE_FAMILY,
 )
 
-# The readings the default readers refuse on purpose, each under its own type; not in
-# DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
-GUARDED_FAMILIES = (
-    LONE_SPELLOUT_NUMBER_FAMILY,
-    LOWERCASE_ROMAN_FAMILY,
-    MONTH_NAME_FAMILY,
-    WEEKDAY_NAME_FAMILY,
-    SHORT_YEAR_FAMILY,
-    SHORT_YEAR_ERA_FAMILY,
-    BARE_HOUR_FAMILY,
-    SHORT_YEAR_INTERVAL_FAMILY,
-)
-
 _FAMILY_PROBES = (
     (DATE_TIME_SKELETON_FAMILY, _date_time_probe),
     (DATE_INTERVAL_FAMILY, _date_interval_probe),
@@ -1068,6 +1058,45 @@ def _every_region_units() -> tuple[str, ...]:
     )
 
 
+def _single_units(
+    locale: str, locales: tuple[str, ...] | None, units: tuple[str, ...] | None
+) -> tuple[str, ...]:
+    """The selected non-mixed units for one flexible or detached-unit family."""
+    if units is not None:
+        return tuple(unit for unit in units if "-and-" not in unit)
+    language = icu.Locale(locale).getLanguage()
+    return tuple(
+        dict.fromkeys(
+            (
+                *_preferred_units(locale, locales),
+                *_every_region_units(),
+                *curated_composed_units(language),
+            )
+        )
+    )
+
+
+DETACHED_UNIT_FAMILY = _parameter_family(
+    "detached-unit",
+    lambda locale: _single_units(locale, None, None),
+    FlexibleDetachedUnitDetector,
+)
+
+# The readings the default readers refuse on purpose, each under its own type; not in
+# DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
+GUARDED_FAMILIES = (
+    LONE_SPELLOUT_NUMBER_FAMILY,
+    LOWERCASE_ROMAN_FAMILY,
+    MONTH_NAME_FAMILY,
+    WEEKDAY_NAME_FAMILY,
+    SHORT_YEAR_FAMILY,
+    SHORT_YEAR_ERA_FAMILY,
+    BARE_HOUR_FAMILY,
+    SHORT_YEAR_INTERVAL_FAMILY,
+    DETACHED_UNIT_FAMILY,
+)
+
+
 def _flexible_families(
     locales: tuple[str, ...] | None,
     currencies: tuple[str, ...] | None,
@@ -1088,19 +1117,7 @@ def _flexible_families(
     # A mixed unit ("foot-and-inch") has a reader of its own; a caller's ``units`` may
     # hold both kinds.
     def single_units(locale: str) -> Iterable[Spec]:
-        if units is not None:
-            return tuple(unit for unit in units if "-and-" not in unit)
-        # With the composed units icukit's curated table chooses ("40 MJ/kg", "5 m³/s").
-        language = icu.Locale(locale).getLanguage()
-        return tuple(
-            dict.fromkeys(
-                (
-                    *_preferred_units(locale, locales),
-                    *_every_region_units(),
-                    *curated_composed_units(language),
-                )
-            )
-        )
+        return _single_units(locale, locales, units)
 
     def mixed_units(locale: str) -> Iterable[Spec]:
         if units is not None:
@@ -1175,6 +1192,13 @@ def _flexible_families(
                 "ICU's best pattern for the j skeleton has no hour field",
             ),
             SHORT_YEAR_INTERVAL_FAMILY,
+            DETACHED_UNIT_FAMILY
+            if locales is None and units is None
+            else _parameter_family(
+                "detached-unit",
+                single_units,
+                lambda locale, unit: FlexibleDetachedUnitDetector(locale, unit, locales=locales),
+            ),
         ]
     return tuple(families)
 

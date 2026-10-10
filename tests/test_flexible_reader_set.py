@@ -36,6 +36,7 @@ LOCALES = ("en_US", "de_DE", "ja_JP")
 
 GUARDED_CLASSES = {
     "FlexibleBareHourDetector",
+    "FlexibleDetachedUnitDetector",
     "FlexibleLoneSpelloutDetector",
     "FlexibleLowercaseRomanDetector",
     "FlexibleMonthNameDetector",
@@ -329,6 +330,18 @@ def test_guarded_readers_join_on_request_and_every_type_leads_with_its_group(loc
     assert _classes(gang) == _reader_classes() - absent - OPT_IN_CLASSES
     for detector in gang.detectors:
         assert detector.type.split(":")[0] == detector.group, detector.type
+
+
+def test_detached_units_join_the_flexible_set_only_on_request():
+    default = flexible_detectors("en_US", locales=(), units=("day",))
+    guarded = flexible_detectors("en_US", locales=(), units=("day",), guarded=True)
+
+    assert not [found for found in default.detect("62 d") if found["type"].startswith("measure:")]
+    assert [
+        (found["type"], found["text"])
+        for found in guarded.detect("62 d")
+        if found["start"] == 0 and found["end"] == 4
+    ] == [("measure:detached-unit:day", "62 d")]
 
 
 def _whole(gang, text: str) -> list[tuple[str, object]]:

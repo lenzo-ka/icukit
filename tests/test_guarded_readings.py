@@ -11,10 +11,16 @@ import pytest
 
 from icukit import DetectorSet
 from icukit.detectors import DateTimeValue, NumberValue
-from icukit.engine import DEFAULT_FAMILIES, GUARDED_FAMILIES, generated_detectors
+from icukit.engine import (
+    DEFAULT_FAMILIES,
+    DETACHED_UNIT_FAMILY,
+    GUARDED_FAMILIES,
+    generated_detectors,
+)
 from icukit.recognize import (
     FlexibleBareHourDetector,
     FlexibleDateTimeDetector,
+    FlexibleDetachedUnitDetector,
     FlexibleLoneSpelloutDetector,
     FlexibleLowercaseRomanDetector,
     FlexibleMonthNameDetector,
@@ -36,6 +42,7 @@ GUARDED_TYPES = {
     "date:short-year",
     "time:bare-hour",
     "date-interval:short-year:y",
+    "measure:detached-unit:inch",
 }
 
 
@@ -384,6 +391,18 @@ def test_guarded_types_are_generated_when_a_consumer_opts_in():
     names = set(generated_detectors("en_US", (*DEFAULT_FAMILIES, *GUARDED_FAMILIES)).names())
     assert GUARDED_TYPES <= names
     assert "number:spellout" in names
+
+
+def test_the_detached_unit_family_is_independently_selectable():
+    assert DETACHED_UNIT_FAMILY in GUARDED_FAMILIES
+    gang = generated_detectors("en_US", (DETACHED_UNIT_FAMILY,))
+    found = [
+        (reading["type"], reading["text"], reading["value"])
+        for reading in gang.detect("62 d")
+        if reading["start"] == 0 and reading["end"] == 4
+    ]
+    direct = FlexibleDetachedUnitDetector("en_US", "day").detect("62 d")
+    assert found == [("measure:detached-unit:day", "62 d", direct[0]["value"])]
 
 
 def test_a_consumer_includes_and_excludes_a_guarded_type_by_type():

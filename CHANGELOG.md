@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- `DETACHED_UNIT_FAMILY` preserves ambiguous detached unit spellings under the guarded
+  `measure:detached-unit:<unit>` type. Default readers still decline a quote or prime
+  mark, or a one-letter abbreviation, after a space where ICU writes it attached
+  (`84 "`, `62 d`); `guarded=True` or an explicit guarded-family selection includes
+  those readings for lattice consumers.
+
 ## [0.9.1] - 2026-10-09
 
 ### Fixed
