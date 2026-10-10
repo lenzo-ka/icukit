@@ -218,6 +218,27 @@ def test_table_store_shared_across_gangs():
     assert info["detect_hits"] == 0
 
 
+def test_detached_unit_locale_selection_survives_disk_cache_reload(isolated_cache):
+    clear_detector_caches()
+
+    def detached(locales):
+        gang = flexible_detectors("en_US", locales=locales, units=("inch",), guarded=True)
+        return next(
+            detector for detector in gang.detectors if detector.type == "measure:detached-unit:inch"
+        )
+
+    text = '1 "'
+    assert [item["text"] for item in detached(()).detect(text)] == [text]
+    assert [item["text"] for item in detached(("en_GB",)).detect(text)] == [text]
+    cache.flush()
+
+    clear_detector_caches()
+    cache.configure(enabled=True, directory=isolated_cache)
+    assert [item["text"] for item in detached(("en_GB",)).detect(text)] == [text]
+    assert [item["text"] for item in detached(()).detect(text)] == [text]
+    assert cache.cache_info()["tables_loaded"]["build"] > 0
+
+
 def test_table_key_fields_from_sources():
     key = _tables.table_key()
     expected_tz = hashlib.sha256(

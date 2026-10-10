@@ -12,6 +12,11 @@
   for stock readers; the lower-latency line mode may split a wrapped number range and
   does not make that guarantee.
 - `detection_to_dict()` now includes `truncated` when a capped detection carries it.
+- `DETACHED_UNIT_FAMILY` preserves detached quote and prime marks under the guarded
+  `measure:detached-unit:<unit>` type. Default readers decline those marks after a
+  space where ICU writes them attached (`84 "`, `6 ′`); `guarded=True` or an explicit
+  guarded-family selection includes those readings for lattice consumers. Letter unit
+  symbols such as `24 h`, `62 d`, and `62 s` retain the default measure reading.
 
 ### Changed
 
