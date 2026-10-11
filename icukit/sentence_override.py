@@ -100,11 +100,10 @@ _SENTENCE_TERMINATOR = icu.UnicodeSet(
     r"\p{Sentence_Break=CR}\p{Sentence_Break=LF}\p{Sentence_Break=Sep}]"
 )
 _SENTENCE_TERMINATOR.freeze()
-_SENTENCE_RESET = icu.UnicodeSet(
-    r"[\p{Sentence_Break=Upper}\p{Sentence_Break=Lower}"
-    r"\p{Sentence_Break=OLetter}\p{Sentence_Break=Numeric}]"
+_SENTENCE_CLOSE = icu.UnicodeSet(
+    r"[\p{Sentence_Break=Close}\p{Sentence_Break=Extend}\p{Sentence_Break=Format}]"
 )
-_SENTENCE_RESET.freeze()
+_SENTENCE_CLOSE.freeze()
 _OPS = {"in", "not_in", "prefix", "le", "ge"}
 _FEATURES = "icukit.features@1"
 _NAMED_RULE_BASES = {
@@ -3296,18 +3295,50 @@ class IncrementalSentenceBreaker:
         candidate. Keep the ordinary stream window as left context so a later
         terminator sees every bounded rule and inventory input. A run crossing the
         new origin is summarized by the same prefix state as ordinary compaction.
-        When a prior terminator exists, retire it only after a following letter or
-        number has reset ICU's sentence state; otherwise retain that unbounded run.
+        With prior terminators, restart only at the beginning of a real whitespace
+        run; an individually oversized transparent run remains the exactness fallback.
         """
         retain = max(self._base_offset, self._bound_start - _STREAM_WINDOW)
-        local_retain = retain - self._base_offset
-        while local_retain > 0 and not _is_white_space(self._text[local_retain - 1]):
-            local_retain -= 1
-        if local_retain == 0:
-            return
-        while local_retain > 0 and _is_white_space(self._text[local_retain - 1]):
-            local_retain -= 1
-        retain = self._base_offset + local_retain
+        if self._has_terminator:
+            local_retain = retain - self._base_offset
+            while local_retain > 0 and not _is_white_space(self._text[local_retain - 1]):
+                local_retain -= 1
+            if local_retain == 0:
+                local_retain = retain - self._base_offset
+                terminal_context = local_retain
+                while terminal_context > 0 and _SENTENCE_CLOSE.contains(
+                    self._text[terminal_context - 1]
+                ):
+                    terminal_context -= 1
+                if (
+                    terminal_context == 0
+                    and local_retain > 0
+                    and _SENTENCE_CLOSE.contains(self._text[local_retain - 1])
+                ):
+                    return
+                if terminal_context > 0 and _SENTENCE_TERMINATOR.contains(
+                    self._text[terminal_context - 1]
+                ):
+                    local_retain = terminal_context - 1
+            else:
+                while local_retain > 0 and _is_white_space(self._text[local_retain - 1]):
+                    local_retain -= 1
+            terminal_context = local_retain
+            while terminal_context > 0 and _SENTENCE_CLOSE.contains(
+                self._text[terminal_context - 1]
+            ):
+                terminal_context -= 1
+            if terminal_context > 0 and _SENTENCE_TERMINATOR.contains(
+                self._text[terminal_context - 1]
+            ):
+                local_retain = terminal_context - 1
+                while local_retain > 0 and not _is_white_space(self._text[local_retain - 1]):
+                    local_retain -= 1
+                if local_retain == 0:
+                    return
+                while local_retain > 0 and _is_white_space(self._text[local_retain - 1]):
+                    local_retain -= 1
+            retain = self._base_offset + local_retain
         for span in self._protected:
             if span["end"] > retain:
                 retain = min(retain, span["start"])
@@ -3316,20 +3347,6 @@ class IncrementalSentenceBreaker:
         if drop <= 0:
             return
         text = self._text
-        if self._has_terminator:
-            discarded = text[:drop]
-            last_terminator = max(
-                (
-                    index
-                    for index, char in enumerate(discarded)
-                    if _SENTENCE_TERMINATOR.contains(char)
-                ),
-                default=-1,
-            )
-            if last_terminator >= 0 and not any(
-                _SENTENCE_RESET.contains(char) for char in discarded[last_terminator + 1 :]
-            ):
-                return
         self._record_run_prefix(text, drop)
         self._text = text[drop:]
         self._base_offset = retain
@@ -3337,6 +3354,34 @@ class IncrementalSentenceBreaker:
         self._cache.clear()
         if self._has_terminator:
             self._has_terminator = _has_sentence_terminator(self._text)
+
+    def _deferred_transparent_results(
+        self,
+        previous_total: int,
+        chunk: str,
+    ) -> list[BreakDecision] | None:
+        """Advance a provisional END through Close/space without reevaluating it."""
+        if (
+            not chunk
+            or _has_sentence_terminator(chunk)
+            or not all(_is_white_space(char) or _SENTENCE_CLOSE.contains(char) for char in chunk)
+            or not any(
+                item["offset"] == previous_total and item["waiting_on"] == "icu"
+                for item in self._pending
+            )
+        ):
+            return None
+        for item in self._pending:
+            if item["offset"] == previous_total:
+                item["offset"] = self._total_length
+        forced = self._bounded_results((), closed=False)
+        if forced:
+            self._emitted_through = max(
+                self._emitted_through,
+                max(item["offset"] for item in forced),
+            )
+            self._compact_forced_prefix()
+        return forced
 
     def _evaluate(self, *, closed: bool) -> list[BreakDecision]:
         text = self._text
@@ -3517,13 +3562,17 @@ class IncrementalSentenceBreaker:
             start = 0
             while start < len(chunk):
                 part = chunk[start : start + _STREAM_WINDOW]
+                previous_total = self._total_length
                 self._text += part
                 self._total_length += len(part)
                 self._append_bound_input(part)
                 self._has_terminator = self._has_terminator or _has_sentence_terminator(part)
                 if protected_through is not None:
                     self._watermark = min(protected_through, self._total_length)
-                if self._has_terminator:
+                deferred = self._deferred_transparent_results(previous_total, part)
+                if deferred is not None:
+                    emitted.extend(deferred)
+                elif self._has_terminator:
                     evaluated = self._evaluate(closed=False)
                     emitted.extend(evaluated)
                     forced = [item for item in evaluated if item["layer"] == "forced"]
@@ -3559,6 +3608,13 @@ class IncrementalSentenceBreaker:
                 )
                 self._compact_forced_prefix()
             return forced
+        deferred = (
+            None
+            if additions
+            else self._deferred_transparent_results(prospective_length - len(chunk), chunk)
+        )
+        if deferred is not None:
+            return deferred
         evaluated = self._evaluate(closed=False)
         forced = [item for item in evaluated if item["layer"] == "forced"]
         if forced:

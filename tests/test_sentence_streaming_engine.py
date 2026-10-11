@@ -139,6 +139,27 @@ def test_long_unterminated_random_chunkings_equal_whole_text(reflow, maximum):
         assert actual == expected
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "." * 12_000,
+        "A.)" + " " * 11_996 + "B",
+    ],
+)
+@pytest.mark.parametrize("maximum", [64, 1024, None])
+def test_long_unresolved_terminator_context_equals_whole_text(text, maximum):
+    override = SentenceOverride("en_US", base="none", max_sentence_chars=maximum)
+    expected = override.decide(text)
+    stream = override.stream()
+    actual = []
+
+    for chunk in _random_chunks(text, 1701):
+        actual.extend(stream.feed(chunk))
+    actual.extend(stream.close())
+
+    assert actual == expected
+
+
 @pytest.mark.slow
 def test_unterminated_sentence_stream_scales_linearly():
     def measure(size):
