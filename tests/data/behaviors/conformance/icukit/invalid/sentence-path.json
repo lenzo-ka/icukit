@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "sentence": {
+    "base": "models/custom.json"
+  }
+}

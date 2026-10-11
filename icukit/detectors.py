@@ -668,6 +668,57 @@ def _date_fields(pattern: str, *, resolve_day_period: bool = True) -> tuple[_Dat
     return tuple(sorted(found, key=lambda field: order[field.name]))
 
 
+def _date_pattern(locale: str, skeleton: str) -> str:
+    """Return the ICU pattern when the strict date detector can invert it."""
+    generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
+    pattern = generator.getBestPattern(skeleton)
+    # A skeleton this locale's generator cannot express yields an empty pattern,
+    # which carries no field for the check below to find unsupported. Left alone it
+    # builds a detector that matches nothing on every input and never says why, so
+    # "I cannot detect this skeleton" reaches the caller as "there are no dates
+    # here". Refuse it instead, naming the skeleton.
+    if not pattern:
+        raise ValueError(
+            f"DateDetector cannot detect skeleton {skeleton!r} in locale "
+            f"{locale!r}: the locale's pattern generator produces no pattern "
+            f"for it, so no date could ever be recognized"
+        )
+    # Refuse a skeleton whose best pattern carries a field this detector cannot make
+    # invertible, rather than emit a value that cannot reproduce the surface. Hour
+    # cycles are fully modeled. A 12-hour field with a day period resolves to
+    # HOUR_OF_DAY only for literal-bearing patterns; ordinary h:mm a remains the
+    # flexible time reader's scope. Without a period (CLDR's J preference) it remains
+    # an ambiguous h field. Quarter/week/time-zone fields remain out of scope.
+    modeled = {
+        "G",
+        "y",
+        "M",
+        "L",
+        "d",
+        "h",
+        "H",
+        "K",
+        "k",
+        "m",
+        "s",
+        "E",
+        "e",
+        "c",
+    }
+    if _pattern_word_literals(pattern):
+        modeled.update({"a", "b", "B"})
+    letters = {letter for letter, _ in _pattern_runs(pattern)}
+    unmodeled = sorted(letters - modeled)
+    if unmodeled:
+        raise ValueError(
+            f"DateDetector cannot invert pattern field(s) {unmodeled} in {pattern!r} "
+            f"(skeleton {skeleton!r}); 12-hour/day-period fields require a "
+            f"distinguishing word; quarter, week, and time-zone fields are not "
+            f"supported"
+        )
+    return pattern
+
+
 class DateDetector(_GatedReader):
     """Detect canonical ICU date surfaces for ``locale`` and ``skeleton``.
 
@@ -718,18 +769,7 @@ class DateDetector(_GatedReader):
         self.type = f"date:short-year:{skeleton}" if short_years else f"date:{skeleton}"
         generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
         enumerated_skeletons = {str(item) for item in generator.getSkeletons()}
-        self.pattern = generator.getBestPattern(skeleton)
-        # A skeleton this locale's generator cannot express yields an empty pattern,
-        # which carries no field for the check below to find unsupported. Left alone it
-        # builds a detector that matches nothing on every input and never says why, so
-        # "I cannot detect this skeleton" reaches the caller as "there are no dates
-        # here". Refuse it instead, naming the skeleton.
-        if not self.pattern:
-            raise ValueError(
-                f"DateDetector cannot detect skeleton {skeleton!r} in locale "
-                f"{locale!r}: the locale's pattern generator produces no pattern "
-                f"for it, so no date could ever be recognized"
-            )
+        self.pattern = _date_pattern(locale, skeleton)
         self._df = icu.SimpleDateFormat(self.pattern, icu.Locale(locale))
         self._df.setTimeZone(icu.TimeZone.getGMT())
         patterns = [self.pattern]
@@ -740,39 +780,7 @@ class DateDetector(_GatedReader):
             (pattern, self._date_formatter(pattern)) for pattern in dict.fromkeys(patterns)
         )
         self._fields = _date_fields(self.pattern)
-        # Refuse a skeleton whose best pattern carries a field this detector cannot make
-        # invertible, rather than emit a value that cannot reproduce the surface. The
-        # Hour cycles are fully modeled. A 12-hour field with a day period resolves to
-        # HOUR_OF_DAY only for this change's literal-bearing patterns; ordinary h:mm a
-        # remains the flexible time reader's scope. Without a period (CLDR's J
-        # preference) it remains an ambiguous h field. Quarter/week/time-zone fields
-        # remain out of scope.
-        _modeled = {
-            "G",
-            "y",
-            "M",
-            "L",
-            "d",
-            "h",
-            "H",
-            "K",
-            "k",
-            "m",
-            "s",
-            "E",
-            "e",
-            "c",
-        }
-        if self._literal_words:
-            _modeled.update({"a", "b", "B"})
-        _letters = {letter for letter, _ in _pattern_runs(self.pattern)}
-        _unmodeled = sorted(_letters - _modeled)
-        if _unmodeled:
-            raise ValueError(
-                f"DateDetector cannot invert pattern field(s) {_unmodeled} in {self.pattern!r} "
-                f"(skeleton {skeleton!r}); quarter, week, and time-zone fields are not "
-                f"supported"
-            )
+        letters = {letter for letter, _ in _pattern_runs(self.pattern)}
         # Only readers introduced by the literal-hour expansion need the numeric
         # run-on guards below. Applying them to every literal-bearing date pattern
         # would remove older era/date readings whose canonical surface happens to
@@ -781,10 +789,10 @@ class DateDetector(_GatedReader):
         # hour skeletons missing from ICU's enumeration are new in this family.
         self._guard_literal_hour_boundaries = bool(
             self._literal_words
-            and _letters & {"h", "H", "K", "k"}
-            and (skeleton not in enumerated_skeletons or bool(_letters & {"h", "K", "a", "b", "B"}))
+            and letters & {"h", "H", "K", "k"}
+            and (skeleton not in enumerated_skeletons or bool(letters & {"h", "K", "a", "b", "B"}))
         )
-        self._has_era = "G" in _letters
+        self._has_era = "G" in letters
         current = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
         year_position = icu.FieldPosition(icu.DateFormat.kYearField)
         current_surface = self._df.format(current.getTime(), year_position)
@@ -822,7 +830,7 @@ class DateDetector(_GatedReader):
             self._parser.setLenient(False)
         # A weekday with no year ("Tue, 3/5") names a date in some year the text does not
         # give; ICU resolves a year-less parse in 1970, where 5 March is a Thursday.
-        self._yearless_weekday = bool(_letters & {"E", "e", "c"}) and "y" not in _letters
+        self._yearless_weekday = bool(letters & {"E", "e", "c"}) and "y" not in letters
         self._inv = _Inverter(self._parse, self._reformat, self._build)
         _install_gates(self, {"scan": _strict_gate(self)})
 

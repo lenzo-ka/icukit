@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "sentence": {
+    "base": "en-tn@1",
+    "reflow": "lines"
+  },
+  "detection": {
+    "flexible": true,
+    "guarded": true,
+    "locales": [
+      "en_GB"
+    ],
+    "currencies": [
+      "USD"
+    ],
+    "units": [
+      "kilogram"
+    ],
+    "skeletons": [
+      "yMd"
+    ]
+  },
+  "stream": {
+    "max_pending_chars": 2048,
+    "boundary": "paragraph",
+    "reflow": "paragraphs"
+  }
+}
