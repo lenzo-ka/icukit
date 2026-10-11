@@ -1,43 +1,79 @@
 """ICU regex resource limits and stateful-loop semantics."""
 
+import json
+import subprocess
+import sys
+
 import pytest
 
 from icukit import (
     PatternError,
     RegexLimitError,
     UnicodeRegex,
-    regex_detect,
     regex_replace,
     regex_search,
     regex_split,
 )
-from icukit.cli.locale_helpers import parse_multi_value
 
 
 @pytest.mark.parametrize(
     "operation",
     [
-        lambda text: UnicodeRegex("(a+)+$").find_all(text),
-        lambda text: UnicodeRegex("(a+)+$").search(text),
-        lambda text: UnicodeRegex("(a+)+$").split(text),
-        lambda text: UnicodeRegex("(a+)+$").replace(text, "x"),
-        lambda text: regex_detect(text, "(a+)+$", "test"),
+        "find_all",
+        "search",
+        "split",
+        "replace",
+        "regex_detect",
+        "stateful_find_all",
     ],
 )
 def test_regex_catastrophic_raises(operation):  # R
-    with pytest.raises(PatternError) as caught:
-        operation("a" * 65_536 + "b")
+    script = r"""
+import json
+import sys
+import time
+from icukit import PatternError, UnicodeRegex, regex_detect
 
-    assert type(caught.value).__name__ == "RegexLimitError"
-    assert str(caught.value) == "regex exceeded its time limit of 10000 steps: '(a+)+$'"
-    assert caught.value.__cause__ is None
+operation = sys.argv[1]
+pattern = r"\G(?:x|(a+)+$)" if operation == "stateful_find_all" else "(a+)+$"
+text = ("x" if operation == "stateful_find_all" else "") + "a" * 65_536 + "b"
+regex = UnicodeRegex(pattern)
+operations = {
+    "find_all": lambda: regex.find_all(text),
+    "search": lambda: regex.search(text),
+    "split": lambda: regex.split(text),
+    "replace": lambda: regex.replace(text, "x"),
+    "regex_detect": lambda: regex_detect(text, pattern, "test"),
+    "stateful_find_all": lambda: regex.find_all(text),
+}
+started = time.perf_counter()
+try:
+    operations[operation]()
+except PatternError as exc:
+    result = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "cause": None if exc.__cause__ is None else type(exc.__cause__).__name__,
+        "elapsed": time.perf_counter() - started,
+    }
+else:
+    result = {"type": None, "elapsed": time.perf_counter() - started}
+print(json.dumps(result))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script, operation],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    result = json.loads(completed.stdout)
 
-
-def test_regex_stateful_g_catastrophic_raises():  # R
-    with pytest.raises(PatternError) as caught:
-        UnicodeRegex(r"\G(?:x|(a+)+$)").find_all("x" + "a" * 65_536 + "b")
-
-    assert type(caught.value).__name__ == "RegexLimitError"
+    assert result["type"] == "RegexLimitError"
+    assert result["elapsed"] < 5
+    if operation != "stateful_find_all":
+        assert result["message"] == "regex exceeded its time limit of 10000 steps: '(a+)+$'"
+        assert result["cause"] is None
 
 
 @pytest.mark.parametrize(
@@ -57,8 +93,32 @@ def test_regex_stack_overflow_not_silent(pattern, operation):  # R
 
 
 def test_locale_filter_pattern_bounded():  # R
-    with pytest.raises(RegexLimitError):
-        parse_multi_value("(a|aa)+$", available_values=["a" * 48 + "b"])
+    script = """
+import json
+import time
+from icukit import RegexLimitError
+from icukit.cli.locale_helpers import parse_multi_value
+
+started = time.perf_counter()
+try:
+    parse_multi_value("(a|aa)+$", available_values=["a" * 48 + "b"])
+except RegexLimitError as exc:
+    result = {"type": type(exc).__name__, "elapsed": time.perf_counter() - started}
+else:
+    result = {"type": None, "elapsed": time.perf_counter() - started}
+print(json.dumps(result))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result["type"] == "RegexLimitError"
+    assert result["elapsed"] < 5
 
 
 def test_regex_find_all_not_truncated():  # C

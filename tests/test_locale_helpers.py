@@ -1,5 +1,8 @@
 """Tests for locale_helpers utilities."""
 
+import pytest
+
+from icukit import PatternError
 from icukit.cli.locale_helpers import MAJOR_SCRIPTS, parse_multi_value
 
 
@@ -32,6 +35,10 @@ class TestParseMultiValue:
         assert "Latin-Cyrillic" in result
         assert "Latin-Greek" in result
         assert "Cyrillic-Latin" not in result
+
+    def test_invalid_icu_regex_is_not_treated_as_literals(self):
+        with pytest.raises(PatternError):
+            parse_multi_value("(?P<x>en),fr", available_values=["en", "fr"])
 
     def test_major_keyword_scripts(self):
         """'major' keyword should return major scripts."""

@@ -51,8 +51,13 @@
   returning no match or unchanged input.
 - **Behavior change:** Locale-list pattern filters use bounded ICU regular
   expressions instead of Python regular expressions.
+- Invalid locale-list regular expressions now raise `PatternError` instead of
+  falling back to comma-separated literal matching.
 - **Behavior change:** Limited regex replacement uses ICU replacement syntax,
   including numbered and named capture references.
+- The default pytest configuration excludes the exhaustive slow pathological-input
+  matrix. Run it explicitly with `pytest -m slow`; a full local gate runs both the
+  default suite and that command.
 
 ### Fixed
 

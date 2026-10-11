@@ -1438,7 +1438,9 @@ def _scan(
     if text and len(ctx.interior) == len(text) - 1:
         # Every offset after zero is inside one uninterrupted word. Strict readers can
         # therefore try only zero; iterating an admitted start at every digit made each
-        # reader rescan an already-proved interior on long digit runs.
+        # reader rescan an already-proved interior on long digit runs. Gate diagnostics
+        # cover eligible starts, not these skipped word-interior offsets; the ordinary
+        # loop below excludes interiors before recording or auditing them as well.
         starts = (
             (0,)
             if inspect_gate or not gates_enabled() or gate is None or gate.admits(text[0])
