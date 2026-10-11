@@ -956,11 +956,12 @@ regular-expression resource limits.
 
 Schema-settable public keyword names, grouped by their receiving API.
 
-The main-branch names are ``sentence.base``; ``detection.currencies``,
+The names are ``sentence.base``, ``sentence.max_sentence_chars``, and
+``sentence.reflow``; ``detection.currencies``,
 ``detection.flexible``, ``detection.guarded``, ``detection.locales``,
 ``detection.skeletons``, and ``detection.units``; and ``stream.boundary`` and
-``stream.max_pending_chars``. Regex resource-limit and sentence-length names appear
-when their receiving public APIs provide them.
+``stream.max_pending_chars``, and ``stream.reflow``. Regex resource-limit names
+appear when their receiving public APIs provide them.
 
 
 #### `BEHAVIOR_SCHEMA_VERSION` (constant)

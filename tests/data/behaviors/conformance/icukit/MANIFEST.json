@@ -25,7 +25,7 @@
       "expected": "INVALID_VALUE"
     },
     "valid/bare-current.json": {
-      "sha256": "sha256:9e88d739897d6204355ab8e60daf49a989e114ced0d53af9a2d4700d5f689743",
+      "sha256": "sha256:7877fb37d1d885e1dc39f5e87fe959e486fc14c986e1aadb11302c4249fc89f9",
       "expected": "valid"
     },
     "valid/bare-empty.json": {

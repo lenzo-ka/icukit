@@ -17,11 +17,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from types import MappingProxyType
-from typing import NamedTuple, cast
+from typing import NamedTuple, cast, get_args
 
 import icu
 
 from .breaker import Breaker
+from .reflow import ReflowMode
 from .regex import UnicodeRegex
 
 __all__ = [
@@ -45,6 +46,7 @@ _SECTIONS = ("frend", "icukit")
 _PROVENANCE_KEYS = frozenset({"source", "note"})
 _NAME_RE = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")
 _SENTENCE_BASES = frozenset({"none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"})
+_REFLOW_MODES = cast(tuple[str, ...], get_args(ReflowMode))
 
 _MAX_BYTES = 65_536
 _MAX_DEPTH = 16
@@ -56,6 +58,8 @@ _MAX_INTEGER_TEXT = str(_MAX_INTEGER)
 _SENTENCE_KEYS = ["base"]
 if "max_sentence_chars" in inspect.signature(Breaker).parameters:
     _SENTENCE_KEYS.append("max_sentence_chars")
+if "reflow" in inspect.signature(Breaker).parameters:
+    _SENTENCE_KEYS.append("reflow")
 
 _REGEX_KEYS = []
 _regex_parameters = inspect.signature(UnicodeRegex).parameters
@@ -67,17 +71,18 @@ BEHAVIOR_OPTION_NAMES: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
         "sentence": tuple(_SENTENCE_KEYS),
         "detection": ("currencies", "flexible", "guarded", "locales", "skeletons", "units"),
-        "stream": ("boundary", "max_pending_chars"),
+        "stream": ("boundary", "max_pending_chars", "reflow"),
         "regex": tuple(_REGEX_KEYS),
     }
 )
 """Schema-settable public keyword names, grouped by their receiving API.
 
-The main-branch names are ``sentence.base``; ``detection.currencies``,
+The names are ``sentence.base``, ``sentence.max_sentence_chars``, and
+``sentence.reflow``; ``detection.currencies``,
 ``detection.flexible``, ``detection.guarded``, ``detection.locales``,
 ``detection.skeletons``, and ``detection.units``; and ``stream.boundary`` and
-``stream.max_pending_chars``. Regex resource-limit and sentence-length names appear
-when their receiving public APIs provide them.
+``stream.max_pending_chars``, and ``stream.reflow``. Regex resource-limit names
+appear when their receiving public APIs provide them.
 """
 
 
@@ -451,6 +456,11 @@ def _value_reason(group: str, key: str, value: object) -> str | None:
             if value is None or isinstance(value, str) and value in _SENTENCE_BASES:
                 return None
             return f"{name} must be null or a named base, got {value!r}"
+        if key == "reflow":
+            if isinstance(value, str) and value in _REFLOW_MODES:
+                return None
+            choices = ", ".join(repr(mode) for mode in _REFLOW_MODES)
+            return f"{name} must be one of {choices}, got {value!r}"
         return _positive_int(value, name, optional=True)
     if group == "detection":
         if key in {"flexible", "guarded"}:
@@ -484,6 +494,11 @@ def _value_reason(group: str, key: str, value: object) -> str | None:
             if isinstance(value, str) and value in {"paragraph", "line", "explicit"}:
                 return None
             return f"{name} must be 'paragraph', 'line', or 'explicit', got {value!r}"
+        if key == "reflow":
+            if isinstance(value, str) and value in _REFLOW_MODES:
+                return None
+            choices = ", ".join(repr(mode) for mode in _REFLOW_MODES)
+            return f"{name} must be one of {choices}, got {value!r}"
         return _positive_int(value, name)
     if group == "regex":
         return _positive_int(value, name, optional=True)

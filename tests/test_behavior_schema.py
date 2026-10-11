@@ -7,6 +7,7 @@ import inspect
 import json
 from collections.abc import Mapping
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
@@ -14,8 +15,13 @@ from icukit import (
     BEHAVIOR_OPTION_NAMES,
     BehaviorLoadError,
     Breaker,
+    CompiledDetectorSet,
     DetectorSet,
+    ReflowMode,
+    SentenceOverride,
     UnicodeRegex,
+    break_sentence_spans,
+    break_sentences,
     load_behavior_schema,
     reader_set,
 )
@@ -116,13 +122,53 @@ def test_bare_section_maps_directly_to_public_options():
     assert loaded.name is None
     assert loaded.version is None
     assert loaded.extends == ()
-    assert loaded.sentence == {"base": "en-tn@1"}
-    assert loaded.stream == {"max_pending_chars": 2048, "boundary": "paragraph"}
+    assert loaded.sentence == {"base": "en-tn@1", "reflow": "lines"}
+    assert loaded.stream == {
+        "max_pending_chars": 2048,
+        "boundary": "paragraph",
+        "reflow": "paragraphs",
+    }
     breaker = Breaker("en_US", **loaded.sentence)
     detectors = reader_set("en_US", **loaded.detection)
     stream = detectors.stream(**loaded.stream)
     assert breaker.base == "en-tn@1"
+    assert breaker.reflow == "lines"
     assert stream.pending()["pending_from"] == 0
+
+
+def test_sentence_reflow_spreads_into_every_receiving_api():
+    loaded = load_behavior_schema({"schema_version": 1, "sentence": {"reflow": "lines"}})
+    text = (
+        "This sentence has enough ordinary words to exceed the short-line protection threshold"
+        "\ncontinues here."
+    )
+
+    override = SentenceOverride("en_US", **loaded.sentence)
+    breaker = Breaker("en_US", **loaded.sentence)
+
+    assert override.reflow == "lines"
+    assert breaker.reflow == "lines"
+    assert len(breaker.break_sentence_spans(text)) == 1
+    assert len(break_sentences(text, **loaded.sentence)) == 1
+    assert len(break_sentence_spans(text, **loaded.sentence)) == 1
+
+
+def test_stream_reflow_spreads_into_both_receiving_apis():
+    loaded = load_behavior_schema({"schema_version": 1, "stream": {"reflow": "lines"}})
+    text = "A sufficiently long source line describes the measured value 3\nkg."
+    detectors = reader_set(
+        "en_US",
+        flexible=True,
+        locales=(),
+        currencies=(),
+        units=("kilogram",),
+    )
+
+    for target in (detectors, detectors.compile(warm=False)):
+        stream = target.stream(**loaded.stream)
+        stream.feed(text)
+        found = stream.close().detections
+        assert any(item["text"] == "3\nkg" for item in found)
 
 
 def test_full_envelope_digest_covers_opaque_frend_section_and_ignores_formatting(tmp_path):
@@ -202,6 +248,30 @@ def test_unhashable_option_values_are_refused(group, option, value, tmp_path):
 
     assert [item.code for item in mapping_error.refusals] == ["INVALID_VALUE"]
     assert [item.code for item in file_error.refusals] == ["INVALID_VALUE"]
+
+
+@pytest.mark.parametrize("group", ["sentence", "stream"])
+def test_invalid_reflow_value_is_refused(group):
+    error = _error({"schema_version": 1, group: {"reflow": "invalid"}})
+
+    assert [item.code for item in error.refusals] == ["INVALID_VALUE"]
+    assert f"{group}.reflow must be one of" in error.refusals[0].detail
+
+
+@pytest.mark.parametrize("mode", get_args(ReflowMode))
+@pytest.mark.parametrize("group", ["sentence", "stream"])
+def test_reflow_values_follow_the_public_type_alias(group, mode):
+    loaded = load_behavior_schema({"schema_version": 1, group: {"reflow": mode}})
+
+    assert loaded.section[group]["reflow"] == mode
+
+
+def test_absent_reflow_values_leave_api_defaults_in_effect():
+    loaded = load_behavior_schema({"schema_version": 1})
+
+    assert "reflow" not in loaded.sentence
+    assert "reflow" not in loaded.stream
+    assert Breaker("en_US", **loaded.sentence).reflow == "none"
 
 
 def test_integers_have_a_signed_64_bit_magnitude_cap(tmp_path):
@@ -288,7 +358,7 @@ def test_multi_error_refusal_count_and_order_are_stable():
         ("INVALID_SCHEMA_VERSION", "sections.icukit.schema_version must be integer 1, got 2"),
         (
             "INVALID_KEY",
-            "unknown key 'unknown'; known keys: base, max_sentence_chars",
+            "unknown key 'unknown'; known keys: base, max_sentence_chars, reflow",
         ),
         ("INVALID_VALUE", "sentence.base must be null or a named base, got 'missing'"),
         ("INVALID_VALUE", "detection.flexible must be a bool, got 'yes'"),
@@ -309,9 +379,16 @@ def test_option_name_groups_match_receiving_keyword_parameters():
             if parameter.kind is inspect.Parameter.KEYWORD_ONLY
         }
 
-    assert set(BEHAVIOR_OPTION_NAMES["sentence"]) == keyword_only(Breaker)
+    sentence = set(BEHAVIOR_OPTION_NAMES["sentence"])
+    stream = set(BEHAVIOR_OPTION_NAMES["stream"])
+
+    assert sentence == keyword_only(Breaker)
+    assert sentence <= keyword_only(SentenceOverride)
+    assert sentence <= keyword_only(break_sentences)
+    assert sentence <= keyword_only(break_sentence_spans)
     assert set(BEHAVIOR_OPTION_NAMES["detection"]) == keyword_only(reader_set) - {"material"}
-    assert set(BEHAVIOR_OPTION_NAMES["stream"]) == keyword_only(DetectorSet.stream)
+    assert stream == keyword_only(DetectorSet.stream)
+    assert stream == keyword_only(CompiledDetectorSet.stream)
     assert set(BEHAVIOR_OPTION_NAMES["regex"]) == keyword_only(UnicodeRegex)
 
 

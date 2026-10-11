@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
   "sentence": {
-    "base": "en-tn@1"
+    "base": "en-tn@1",
+    "reflow": "lines"
   },
   "detection": {
     "flexible": true,
@@ -21,6 +22,7 @@
   },
   "stream": {
     "max_pending_chars": 2048,
-    "boundary": "paragraph"
+    "boundary": "paragraph",
+    "reflow": "paragraphs"
   }
 }
