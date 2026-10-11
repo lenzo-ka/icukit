@@ -92,11 +92,7 @@
   exact END evaluation but still scans it only once. A pending terminator followed
   by an arbitrarily long whitespace tail remains the exact-retention fallback until
   later text fixes its offset and logical end. Provisional END context advances
-  through whitespace and closing characters without a full rescan, and compaction
-  no longer leaves stale pending candidates that can stall forced emission.
-- Behavior-schema date skeletons are validated against every explicitly selected
-  detection locale, with ICU root used when no locale is selected, so locale-specific
-  uninvertible patterns are refused during loading.
+  through whitespace and closing characters without a full rescan.
 - The generated date/time skeleton readers now include ICU hour patterns whose literal
   words distinguish them from bare numbers, including omitted `H` and locale-preference
   `j`/`J`/`C` patterns. Thus German `8 Uhr` and `08 Uhr`, French `8 h`, Bulgarian
