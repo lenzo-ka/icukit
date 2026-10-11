@@ -163,8 +163,9 @@ def test_date_detector_resolves_a_literal_12_hour_pattern_with_its_day_period():
 
     detection = detector.detect(formatter.format(_instant()))[0]
 
-    assert detection["value"].fields == (("H", 12),)
+    assert detection["value"].fields == (("H", 0),)
     assert {capture.name for capture in detection["captures"]} == {"H", "day-period"}
+    assert _rebuild(detection) == formatter.format(_instant())
 
 
 def test_date_detector_leaves_ordinary_day_period_patterns_to_the_flexible_reader():

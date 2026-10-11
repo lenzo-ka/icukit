@@ -330,6 +330,24 @@ def _date_time_probe(spec: Spec, locale: str) -> _Probe:
         return _Probe(None, str(error))
     if not detector.pattern:
         return _Probe(None, "ICU returned an empty best pattern")
+    if detector._guard_literal_hour_boundaries:
+        # Literal hour/day-period fields became constructible with this family. Some
+        # ICU formatters write a canonical midnight surface that their paired parser
+        # cannot read (notably flexible B day periods). Do not advertise a reader that
+        # fails its own formatter at the admission boundary; keep the refusal visible
+        # in GenerationReport instead.
+        calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale("en"))
+        calendar.clear()
+        calendar.set(2026, 0, 3, 0, 7, 6)
+        surface = detector._df.format(calendar.getTime())
+        if not any(
+            detection["start"] == 0 and detection["end"] == len(surface)
+            for detection in detector.detect(surface)
+        ):
+            return _Probe(
+                None,
+                f"ICU-unparseable canonical surface {surface!r} for pattern {detector.pattern!r}",
+            )
     return _Probe(detector)
 
 

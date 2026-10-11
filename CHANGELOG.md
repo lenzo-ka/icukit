@@ -81,9 +81,10 @@
   `08:00 ч.`, and equivalent forms across ICU locales are read whole while their
   overlapping number readings remain. Literal-bearing twelve-hour patterns resolve
   their ICU day period to an `H` field; a `J` pattern without a day period retains its
-  ambiguous `h`. These readers skip text without their mandatory literal words and do
-  not start inside a longer time token. Ordinary day-period patterns remain with the
-  flexible time reader.
+  ambiguous `h`. These readers require a digit beside their distinguishing literal and
+  do not start or end inside a longer date, time, or range token. A detector whose ICU
+  parser cannot read its own canonical midnight surface is reported as skipped rather
+  than advertised. Ordinary day-period patterns remain with the flexible time reader.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
   limit no longer abort plural-numeral or numeric-duration detection; their capture
   value is `None`. Fraction, relative-date, and scientific-notation readers skip a

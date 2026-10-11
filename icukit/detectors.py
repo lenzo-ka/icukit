@@ -597,45 +597,44 @@ def _widen_years(pattern: str) -> str:
     return "".join(out)
 
 
+@functools.cache
 def _date_fields(pattern: str, *, resolve_day_period: bool = True) -> tuple[_DateField, ...]:
     # This is CLDR pattern grammar, not locale data. Calendar values and displayed names
     # are obtained from the formatter/calendar at runtime.
     runs = _pattern_runs(pattern)
     resolves_hour = resolve_day_period and any(letter in {"a", "b", "B"} for letter, _ in runs)
     mapping = {
-        "G": ("G", icu.Calendar.ERA, icu.DateFormat.kEraField, True),
-        "y": ("y", icu.Calendar.YEAR, icu.DateFormat.kYearField, True),
-        "M": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
-        "L": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
-        "d": ("d", icu.Calendar.DATE, icu.DateFormat.kDateField, True),
-        "H": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay0Field, True),
+        "G": ("G", icu.Calendar.ERA, True),
+        "y": ("y", icu.Calendar.YEAR, True),
+        "M": ("M", icu.Calendar.MONTH, True),
+        "L": ("M", icu.Calendar.MONTH, True),
+        "d": ("d", icu.Calendar.DATE, True),
+        "H": ("H", icu.Calendar.HOUR_OF_DAY, True),
         "h": (
             "H" if resolves_hour else "h",
             icu.Calendar.HOUR_OF_DAY if resolves_hour else icu.Calendar.HOUR,
-            icu.DateFormat.kHour1Field,
             True,
         ),
         "K": (
             "H" if resolves_hour else "h",
             icu.Calendar.HOUR_OF_DAY if resolves_hour else icu.Calendar.HOUR,
-            icu.DateFormat.kHour0Field,
             True,
         ),
-        "k": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay1Field, True),
-        "m": ("m", icu.Calendar.MINUTE, icu.DateFormat.kMinuteField, True),
-        "s": ("s", icu.Calendar.SECOND, icu.DateFormat.kSecondField, True),
-        "a": ("day-period", icu.Calendar.AM_PM, icu.DateFormat.kAmPmField, False),
-        "b": ("day-period", icu.Calendar.AM_PM, icu.DateFormat.kAmPmField, False),
-        "B": ("day-period", icu.Calendar.AM_PM, icu.DateFormat.kAmPmField, False),
-        "E": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
-        "e": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
-        "c": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
+        "k": ("H", icu.Calendar.HOUR_OF_DAY, True),
+        "m": ("m", icu.Calendar.MINUTE, True),
+        "s": ("s", icu.Calendar.SECOND, True),
+        "a": ("day-period", icu.Calendar.AM_PM, False),
+        "b": ("day-period", icu.Calendar.AM_PM, False),
+        "B": ("day-period", icu.Calendar.AM_PM, False),
+        "E": ("weekday", icu.Calendar.DAY_OF_WEEK, False),
+        "e": ("weekday", icu.Calendar.DAY_OF_WEEK, False),
+        "c": ("weekday", icu.Calendar.DAY_OF_WEEK, False),
     }
     found: list[_DateField] = []
     for letter, width in runs:
         if letter not in mapping:
             continue
-        name, calendar_field, _format_field, value_field = mapping[letter]
+        name, calendar_field, value_field = mapping[letter]
         found.append(
             _DateField(
                 letter,
@@ -711,6 +710,7 @@ class DateDetector(_GatedReader):
         self.short_years = short_years
         self.type = f"date:short-year:{skeleton}" if short_years else f"date:{skeleton}"
         generator = icu.DateTimePatternGenerator.createInstance(icu.Locale(locale))
+        enumerated_skeletons = {str(item) for item in generator.getSkeletons()}
         self.pattern = generator.getBestPattern(skeleton)
         # A skeleton this locale's generator cannot express yields an empty pattern,
         # which carries no field for the check below to find unsupported. Left alone it
@@ -766,6 +766,17 @@ class DateDetector(_GatedReader):
                 f"(skeleton {skeleton!r}); quarter, week, and time-zone fields are not "
                 f"supported"
             )
+        # Only readers introduced by the literal-hour expansion need the numeric
+        # run-on guards below. Applying them to every literal-bearing date pattern
+        # would remove older era/date readings whose canonical surface happens to
+        # follow a digit (for example Japanese ``9西暦2026年``). The old detector could
+        # already build H/k patterns enumerated by ICU; h/K/day-period patterns and
+        # hour skeletons missing from ICU's enumeration are new in this family.
+        self._guard_literal_hour_boundaries = bool(
+            self._literal_words
+            and _letters & {"h", "H", "K", "k"}
+            and (skeleton not in enumerated_skeletons or bool(_letters & {"h", "K", "a", "b", "B"}))
+        )
         self._has_era = "G" in _letters
         current = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
         year_position = icu.FieldPosition(icu.DateFormat.kYearField)
@@ -876,7 +887,7 @@ class DateDetector(_GatedReader):
         if field.name == "weekday":
             symbols = icu.DateFormatSymbols(icu.Locale("en"))
             return symbols.getWeekdays()[value].lower()
-        if field.letter == "h" and value == 0:
+        if field.letter == "h" and field.calendar_field == icu.Calendar.HOUR and value == 0:
             return 12
         if field.letter == "k" and value == 0:
             return 24
@@ -895,7 +906,10 @@ class DateDetector(_GatedReader):
         captures: list[Capture] = []
         forms: list[tuple[str, str]] = []
         start_u16 = cp_to_u16[start_cp]
-        for field in self._fields:
+        # Width-adjusted literal-hour parsing may select a pattern other than the
+        # locale's best pattern. Derive fields from the pattern actually used so the
+        # captures and spec metadata describe the surface, not the original width.
+        for field in _date_fields(pattern):
             value = self._field_value(calendar, field)
             if field.value_field:
                 values.append((field.name, value))
@@ -959,6 +973,10 @@ class DateDetector(_GatedReader):
         # parse-and-reformat check still decides every text that passes this coarse gate.
         if self._literal_words and not all(word in text for word in self._literal_words):
             return []
+        if self._guard_literal_hour_boundaries and not any(
+            _literal_word_has_neighboring_digit(text, word) for word in self._literal_words
+        ):
+            return []
         # A decimal run is one word, so only offset zero is eligible. ICU date values
         # have bounded numeric fields; 16 code points per pattern code point (and a
         # 64-code-point floor) exceeds those ranges while preserving arbitrary padding
@@ -979,12 +997,13 @@ class DateDetector(_GatedReader):
             gate=self._start_gates["scan"],
             stats_key=self._lane_key("scan"),
         )
-        if not self._literal_words:
+        if not self._guard_literal_hour_boundaries:
             return found
         return [
             detection
             for detection in found
             if not _starts_inside_number_run(text, detection["start"])
+            and not _ends_inside_number_run(text, detection["end"])
         ]
 
 
@@ -1417,7 +1436,28 @@ def _is_decimal_run(text: str) -> bool:
     return text.isdecimal()
 
 
-_NUMBER_RUN_MARKS = frozenset({"-", ":", "/", "."})
+_NUMBER_RUN_MARKS = frozenset({"-", "‐", "‑", "‒", "–", "—", "−", ":", "/", "."})
+
+
+def _literal_word_has_neighboring_digit(text: str, word: str) -> bool:
+    """Whether an occurrence of ``word`` borders a numeric field through punctuation.
+
+    Literal-hour patterns put their distinguishing word beside a numeric hour, with
+    only pattern punctuation or spacing between them (``8 Uhr``, ``zeg. 8``, ``8时``).
+    Requiring that local shape keeps ordinary uses of short literals and nouns such as
+    German ``Uhr`` out of the strict date scanner. The walk stops at the first
+    alphanumeric character, so an unrelated number elsewhere in the sentence does not
+    satisfy the gate.
+    """
+    search_from = 0
+    while (start := text.find(word, search_from)) >= 0:
+        for cursor, step in ((start - 1, -1), (start + len(word), 1)):
+            while 0 <= cursor < len(text) and not icu.Char.isalnum(text[cursor]):
+                cursor += step
+            if 0 <= cursor < len(text) and icu.Char.isdigit(text[cursor]):
+                return True
+        search_from = start + 1
+    return False
 
 
 def _starts_inside_number_run(text: str, start: int, marks: Iterable[str] = ()) -> bool:
@@ -1430,6 +1470,14 @@ def _starts_inside_number_run(text: str, start: int, marks: Iterable[str] = ()) 
     joins = _NUMBER_RUN_MARKS | set(marks)
     return (start >= 2 and text[start - 1] in joins and icu.Char.isdigit(text[start - 2])) or (
         start >= 1 and not icu.Char.isdigit(text[start]) and icu.Char.isdigit(text[start - 1])
+    )
+
+
+def _ends_inside_number_run(text: str, end: int, marks: Iterable[str] = ()) -> bool:
+    """Whether ``end`` precedes the rest of one joined number/date/time run."""
+    joins = _NUMBER_RUN_MARKS | set(marks)
+    return (end + 1 < len(text) and text[end] in joins and icu.Char.isdigit(text[end + 1])) or (
+        0 < end < len(text) and not icu.Char.isdigit(text[end - 1]) and icu.Char.isdigit(text[end])
     )
 
 
