@@ -94,6 +94,16 @@ class TestDetectCommand:
         assert code == 0, err
         assert out.splitlines() == []
 
+    def test_oversized_fraction_does_not_raise(self):
+        text = "1" * 4301 + "/2"
+
+        code, out, err = run_cli(
+            "detect", "--flexible", "--guarded", "--locales", "", "-j", input_text=text
+        )
+
+        assert code == 0, err
+        assert isinstance(json.loads(out), list)
+
     def test_explicit_empty_text_overrides_stdin(self):
         # An explicit --text "" is honored (returns []); it must not fall through to stdin.
         code, out, err = run_cli("detect", "-t", "", "-j", input_text="January 3, 2025")

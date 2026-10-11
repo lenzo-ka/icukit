@@ -99,7 +99,7 @@ def _bounded_digit_run(text: str, start: int, digits, maximum: int) -> tuple[int
     overflow = maximum + 1
     while cursor < len(text) and text[cursor] in digits:
         if value <= maximum:
-            candidate = value * 10 + int(digits[text[cursor]])
+            candidate = value * 10 + digits[text[cursor]]
             value = candidate if candidate <= maximum else overflow
         cursor += 1
     return cursor, value
@@ -3995,7 +3995,10 @@ class FlexibleRelativeDateDetector(_GatedReader):
                 continue
             if self._continues_word(text, end):
                 continue
-            offset = sign * int(number_value.decimal)
+            parsed_offset = _digits_int(number_value.decimal)
+            if parsed_offset is None:
+                continue
+            offset = sign * parsed_offset
             canonical = self._formatters[style].formatNumeric(offset, unit_enum)
             if canonical.casefold() != text[start:end].casefold():
                 continue
@@ -5847,8 +5850,11 @@ class FlexibleScientificDetector(_GatedReader):
                 "numeric",
             )
         )
+        parsed_exponent = _digits_int(exponent_ascii)
+        if parsed_exponent is None:
+            return None
         try:
-            exponent = int(exponent_ascii) * (-1 if negative else 1)
+            exponent = parsed_exponent * (-1 if negative else 1)
             sign, digits, decimal_exponent = Decimal(mantissa.decimal).as_tuple()
             # Shift the exponent exactly so no significant digit is rounded away.
             adjusted_exponent = decimal_exponent + exponent
@@ -7831,7 +7837,11 @@ class FlexibleFractionDetector(_GatedReader):
         pieces = normalized.split("\N{FRACTION SLASH}")
         if len(pieces) != 2 or not all(piece.isdecimal() for piece in pieces):
             return None
-        return int(pieces[0]), int(pieces[1])
+        numerator = _digits_int(pieces[0])
+        denominator = _digits_int(pieces[1])
+        if numerator is None or denominator is None:
+            return None
+        return numerator, denominator
 
     def _match_vulgar(self, text: str, start: int, number_start: int, negative: bool):
         first_end = self._digit_run(text, number_start)
@@ -7860,7 +7870,10 @@ class FlexibleFractionDetector(_GatedReader):
         whole = 0
         if whole_end > number_start:
             surface = text[number_start:whole_end]
-            whole = int(self._ascii(surface))
+            parsed_whole = _digits_int(self._ascii(surface))
+            if parsed_whole is None:
+                return None
+            whole = parsed_whole
             captures.append(
                 Capture("whole", number_start, whole_end, surface, str(whole), "numeric")
             )
@@ -7908,7 +7921,10 @@ class FlexibleFractionDetector(_GatedReader):
                 and (text[candidate_end] in _SLASHES)
             ):
                 whole_surface = text[number_start:first_end]
-                whole_value = int(self._ascii(whole_surface))
+                parsed_whole = _digits_int(self._ascii(whole_surface))
+                if parsed_whole is None:
+                    return None
+                whole_value = parsed_whole
                 whole_capture = Capture(
                     "whole",
                     number_start,
@@ -7937,8 +7953,10 @@ class FlexibleFractionDetector(_GatedReader):
 
         numerator_surface = text[numerator_start:numerator_end]
         denominator_surface = text[denominator_start:denominator_end]
-        numerator = int(self._ascii(numerator_surface))
-        denominator = int(self._ascii(denominator_surface))
+        numerator = _digits_int(self._ascii(numerator_surface))
+        denominator = _digits_int(self._ascii(denominator_surface))
+        if numerator is None or denominator is None:
+            return None
         if denominator == 0:
             return None
 

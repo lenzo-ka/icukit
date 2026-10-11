@@ -9,6 +9,7 @@ import pytest
 from icukit.engine import reader_set
 from icukit.recognize import (
     FlexibleCurrencyDetector,
+    FlexibleFractionDetector,
     FlexibleMeasureDetector,
     FlexibleNumericDurationDetector,
     PluralNumeralDetector,
@@ -30,6 +31,8 @@ _PATHOLOGICAL_RUNS = (
     ("one-space", "1 "),
     ("minus-one", "-1"),
     ("spellout", "one "),
+    ("slash", "1/"),
+    ("fraction-slash", "1\N{FRACTION SLASH}"),
 )
 
 
@@ -67,6 +70,23 @@ def test_long_digit_capture_is_kept_with_unrepresentable_int_value():  # R
     assert duration["captures"][0].value is None
     assert duration["value"].decimal.isdecimal()
     assert len(duration["value"].decimal) >= len(digits)
+
+
+@pytest.mark.parametrize(
+    "surface",
+    [
+        "{digits} 1/2",
+        "{digits}/2",
+        "1/{digits}",
+        "{digits}\N{FRACTION SLASH}2",
+    ],
+)
+def test_long_fraction_digit_components_do_not_raise(surface):  # R
+    text = surface.format(digits="1" * 4301)
+
+    detections = FlexibleFractionDetector("en_US").detect(text)
+
+    assert [item["text"] for item in detections] == (["1/2"] if " 1/2" in text else [])
 
 
 def test_stream_cap_on_64k_run():  # S
