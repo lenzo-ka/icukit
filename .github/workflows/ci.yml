@@ -63,6 +63,10 @@ jobs:
         run: |
           python -m pytest tests/ -v
 
+      - name: Run slow tests
+        if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
+        run: python -m pytest tests/ -m slow -v
+
   tiergraph-integration:
     # The normal `test` job covers the released tiergraph version users receive.
     # This separate integration is an upstream canary: it installs tiergraph from

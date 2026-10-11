@@ -9,6 +9,8 @@ from ...errors import PatternError
 from ...formatters import format_json, print_output
 from ...regex import (
     CASE_INSENSITIVE,
+    DEFAULT_REGEX_STACK_LIMIT,
+    DEFAULT_REGEX_TIME_LIMIT,
     DOTALL,
     MULTILINE,
     list_unicode_categories,
@@ -150,6 +152,39 @@ Common Scripts:
             help="Multiline mode (^ and $ match line boundaries)",
         )
         regex_group.add_argument("-s", "--dotall", action="store_true", help="Dot matches newlines")
+        cls._add_regex_limits(regex_group)
+
+    @classmethod
+    def _add_regex_limits(cls, parser):
+        """Add common regex resource-limit arguments."""
+        parser.add_argument(
+            "--time-limit",
+            type=cls._nonnegative_limit,
+            default=DEFAULT_REGEX_TIME_LIMIT,
+            metavar="N",
+            help="ICU engine steps allowed per operation (0 disables; default: 10000)",
+        )
+        parser.add_argument(
+            "--stack-limit",
+            type=cls._nonnegative_limit,
+            default=DEFAULT_REGEX_STACK_LIMIT,
+            metavar="BYTES",
+            help="ICU regex stack bytes (0 disables; default: 8000000)",
+        )
+
+    @staticmethod
+    def _nonnegative_limit(value):
+        parsed = int(value)
+        if parsed < 0:
+            raise argparse.ArgumentTypeError("limit must be zero or a positive integer")
+        return parsed
+
+    @staticmethod
+    def _get_limits(args):
+        return {
+            "time_limit": args.time_limit or None,
+            "stack_limit": args.stack_limit or None,
+        }
 
     @classmethod
     def _configure_find(cls, parser):
@@ -227,6 +262,7 @@ Common Scripts:
             help="Substitution expression: s/pattern/replacement/[gi] (delimiter can be any char)",
         )
         cls._add_input_options(parser)
+        cls._add_regex_flags(parser)
         cls._add_output_options(parser)
 
     @classmethod
@@ -243,6 +279,7 @@ Common Scripts:
         parser.add_argument(
             "-H", "--no-header", action="store_true", help="Suppress header in TSV output"
         )
+        cls._add_regex_limits(parser.add_argument_group("regex limits"))
 
     @classmethod
     def _get_flags(cls, args):
@@ -266,7 +303,12 @@ Common Scripts:
             def find_processor(text):
                 nonlocal line_number
                 line_number += 1
-                matches = regex_find(args.pattern, text, flags=flags)
+                matches = regex_find(
+                    args.pattern,
+                    text,
+                    flags=flags,
+                    **cls._get_limits(args),
+                )
 
                 def add_line_number(result):
                     if getattr(args, "line_numbers", False) and result:
@@ -342,6 +384,7 @@ Common Scripts:
                     args.replacement,
                     flags=flags,
                     limit=args.limit if args.limit else -1,
+                    **cls._get_limits(args),
                 )
                 return format_json(result) if as_json else result
 
@@ -360,7 +403,12 @@ Common Scripts:
             flags = cls._get_flags(args)
 
             def split_processor(text):
-                parts = regex_split(args.pattern, text, flags=flags)
+                parts = regex_split(
+                    args.pattern,
+                    text,
+                    flags=flags,
+                    **cls._get_limits(args),
+                )
                 if args.limit:
                     parts = parts[: args.limit]
 
@@ -384,9 +432,19 @@ Common Scripts:
             flags = cls._get_flags(args)
 
             def match_processor(text):
-                if regex_fullmatch(args.pattern, text, flags=flags):
+                if regex_fullmatch(
+                    args.pattern,
+                    text,
+                    flags=flags,
+                    **cls._get_limits(args),
+                ):
                     if getattr(args, "verbose", False):
-                        matches = regex_find(f"^{args.pattern}$", text.strip(), flags=flags)
+                        matches = regex_find(
+                            f"^{args.pattern}$",
+                            text.strip(),
+                            flags=flags,
+                            **cls._get_limits(args),
+                        )
                         return f"MATCH: {matches[0]['text']}"
                     return "MATCH"
                 else:
@@ -411,7 +469,12 @@ Common Scripts:
 
             def search_processor(text):
                 nonlocal found
-                if regex_search(args.pattern, text, flags=flags):
+                if regex_search(
+                    args.pattern,
+                    text,
+                    flags=flags,
+                    **cls._get_limits(args),
+                ):
                     found = True
                 return ""  # No output
 
@@ -438,7 +501,14 @@ Common Scripts:
             limit = -1 if global_flag else 1
 
             def script_processor(text):
-                result = regex_replace(pattern, text, replacement, flags=flags, limit=limit)
+                result = regex_replace(
+                    pattern,
+                    text,
+                    replacement,
+                    flags=flags,
+                    limit=limit,
+                    **cls._get_limits(args),
+                )
                 return format_json(result) if as_json else result
 
             with open_output(getattr(args, "output", None)) as output:

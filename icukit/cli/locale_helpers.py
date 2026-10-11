@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import re
-
 import icu
 
+from ..regex import CASE_INSENSITIVE, UnicodeRegex
 from ..script import _MAX_SCRIPT_CODE
 
 
@@ -65,11 +64,8 @@ def parse_multi_value(
     if is_pattern and available_values:
         # Convert comma to pipe for regex OR operation
         pattern = value.replace(",", "|")
-        try:
-            regex = re.compile(f"^({pattern})$", re.IGNORECASE)
-            return [item for item in available_values if regex.match(item)]
-        except re.error:
-            pass
+        regex = UnicodeRegex(f"^({pattern})$", CASE_INSENSITIVE)
+        return [item for item in available_values if regex.match(item)]
 
     # Simple comma-separated values
     values = [v.strip() for v in value.split(",")]

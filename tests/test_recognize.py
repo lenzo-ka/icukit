@@ -151,6 +151,21 @@ def test_date_interval_without_a_separator_does_no_matcher_work(monkeypatch):
     assert calls == 0
 
 
+def test_date_interval_without_side_literals_skips_only_affected_matchers(monkeypatch):
+    calls = []
+    original = FlexibleDateIntervalDetector._read
+
+    def counted_read(self, matcher, *args):
+        calls.append(matcher[5])
+        return original(self, matcher, *args)
+
+    monkeypatch.setattr(FlexibleDateIntervalDetector, "_read", counted_read)
+    detector = FlexibleDateIntervalDetector("th_TH", "Hm")
+
+    assert detector.detect("-1" * 1000) == []
+    assert calls == []
+
+
 def _interval_detections(gang, text):
     return detections_to_json(
         item for item in gang.detect(text) if item["type"].startswith("date-interval:")
@@ -2019,6 +2034,23 @@ def test_flexible_spellout_dense_input_has_linear_token_evaluations():
     assert elapsed < 30
     assert len(detections) == 500
     assert all(item["value"] == NumberValue("23", None) for item in detections)
+
+
+def test_flexible_spellout_reuses_identical_surface_parses():
+    detector = FlexibleSpelloutDetector("en_US")
+    parse_calls = 0
+    original_parse = detector._parse_integer
+
+    def counted_parse(surface):
+        nonlocal parse_calls
+        parse_calls += 1
+        return original_parse(surface)
+
+    detector._parse_integer = counted_parse
+
+    assert detector.detect("one " * 500) == []
+    # The 256-token lookahead ceiling gives at most 256 distinct suffix lengths.
+    assert parse_calls <= 256
 
 
 def test_flexible_spellout_holds_other_candidates_and_is_deterministic():

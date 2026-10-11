@@ -45,6 +45,9 @@ def _has_property(char: str, prop: int) -> bool:
 GATE_TESTS: Mapping[str, Callable[[str], bool]] = {
     "icu.isdigit": icu.Char.isdigit,
     "icu.not_isalpha": lambda char: not icu.Char.isalpha(char),
+    "icu.nonalpha_nonspace": lambda char: (
+        not icu.Char.isalpha(char) and not _has_property(char, icu.UProperty.WHITE_SPACE)
+    ),
     "white_space": lambda char: _has_property(char, icu.UProperty.WHITE_SPACE),
     "default_ignorable": lambda char: _has_property(
         char, icu.UProperty.DEFAULT_IGNORABLE_CODE_POINT
@@ -856,7 +859,10 @@ def _strict_gate(reader: object) -> StartGate | None:
     return StartGate(
         chars=heads(digits),
         folded=frozenset(folded),
-        tests=frozenset({"icu.not_isalpha"}),
+        # ICU parsers may skip leading whitespace, but the reformat-equality contract
+        # can never accept it because canonical date and number surfaces have no
+        # leading whitespace. Excluding it avoids suffix rescans at every space.
+        tests=frozenset({"icu.nonalpha_nonspace"}),
     )
 
 
