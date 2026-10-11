@@ -230,6 +230,44 @@ def test_invalid_icu_date_skeleton_is_refused_at_load():
     assert "cannot detect skeleton '!!!'" in error.refusals[0].detail
 
 
+def test_jm_skeleton_is_validated_for_en_us_at_load():
+    error = _error(
+        {
+            "schema_version": 1,
+            "detection": {"locales": ["en_US"], "skeletons": ["jm"]},
+        }
+    )
+
+    assert [item.code for item in error.refusals] == ["INVALID_VALUE"]
+    assert "invalid ICU date skeleton 'jm' for locale 'en_US'" in error.refusals[0].detail
+    assert "12-hour/day-period" in error.refusals[0].detail
+
+
+def test_skeleton_validation_checks_every_configured_locale(monkeypatch):
+    checked = []
+
+    def date_pattern(locale, skeleton):
+        checked.append((locale, skeleton))
+        return "HH:mm"
+
+    monkeypatch.setattr("icukit.detectors._date_pattern", date_pattern)
+
+    loaded = load_behavior_schema(
+        {
+            "schema_version": 1,
+            "detection": {"locales": ["en_US", "en_GB"], "skeletons": ["jm", "Hm"]},
+        }
+    )
+
+    assert loaded.detection["skeletons"] == ("jm", "Hm")
+    assert checked == [
+        ("en_US", "jm"),
+        ("en_GB", "jm"),
+        ("en_US", "Hm"),
+        ("en_GB", "Hm"),
+    ]
+
+
 def test_multi_error_refusal_count_and_order_are_stable():
     error = _error(
         {
@@ -248,7 +286,10 @@ def test_multi_error_refusal_count_and_order_are_stable():
             "unknown key 'unknown'; known keys: detection, regex, sentence, stream",
         ),
         ("INVALID_SCHEMA_VERSION", "sections.icukit.schema_version must be integer 1, got 2"),
-        ("INVALID_KEY", "unknown key 'unknown'; known keys: base"),
+        (
+            "INVALID_KEY",
+            "unknown key 'unknown'; known keys: base, max_sentence_chars",
+        ),
         ("INVALID_VALUE", "sentence.base must be null or a named base, got 'missing'"),
         ("INVALID_VALUE", "detection.flexible must be a bool, got 'yes'"),
         ("INVALID_VALUE", "detection.guarded must be a bool, got 1"),
@@ -356,3 +397,45 @@ def test_pr2_regex_limits_are_wired_when_available():
 
     regex = UnicodeRegex("a", **loaded.regex)
     assert regex.search("a")
+
+
+@pytest.mark.parametrize("value", [None, 1, 512])
+def test_pr2_sentence_bound_acceptance_matches_breaker(value):
+    document = {"schema_version": 1, "sentence": {"max_sentence_chars": value}}
+
+    loaded = load_behavior_schema(document)
+    breaker = Breaker("en_US", **loaded.sentence)
+
+    assert breaker.max_sentence_chars == value
+
+
+@pytest.mark.parametrize("option", ["time_limit", "stack_limit"])
+@pytest.mark.parametrize("value", [None, 1, 1_000_000])
+def test_pr2_regex_limit_acceptance_matches_unicode_regex(option, value):
+    document = {"schema_version": 1, "regex": {option: value}}
+
+    loaded = load_behavior_schema(document)
+    regex = UnicodeRegex("a", **loaded.regex)
+
+    assert getattr(regex, option) == value
+
+
+@pytest.mark.parametrize(
+    ("group", "option", "target"),
+    [
+        (
+            "sentence",
+            "max_sentence_chars",
+            lambda value: Breaker("en_US", max_sentence_chars=value),
+        ),
+        ("regex", "time_limit", lambda value: UnicodeRegex("a", time_limit=value)),
+        ("regex", "stack_limit", lambda value: UnicodeRegex("a", stack_limit=value)),
+    ],
+)
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "10"])
+def test_pr2_limit_refusals_match_receiving_api(group, option, target, value):
+    document = {"schema_version": 1, group: {option: value}}
+
+    assert _error(document).refusals[0].code == "INVALID_VALUE"
+    with pytest.raises(ValueError, match=rf"{option} must be a positive int or None"):
+        target(value)

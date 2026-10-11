@@ -478,14 +478,6 @@ def _value_reason(group: str, key: str, value: object) -> str | None:
             for item in values:
                 if icu.Locale(item).getName() != item or item not in available:
                     return f"{name} has unknown or noncanonical ICU locale {item!r}"
-        elif key == "skeletons":
-            from .detectors import _date_pattern
-
-            for item in values:
-                try:
-                    _date_pattern(icu.Locale.getRoot().getName(), item)
-                except (icu.ICUError, ValueError) as error:
-                    return f"{name} has invalid ICU date skeleton {item!r}: {error}"
         return None
     if group == "stream":
         if key == "boundary":
@@ -539,6 +531,33 @@ def _icukit_section(data: Mapping[str, object], shown: str) -> list[BehaviorRefu
                 errors.append(
                     _refuse("INVALID_VALUE", f"{shown}: sections.icukit.{group}.{key}: {reason}")
                 )
+        if group == "detection":
+            skeletons = raw.get("skeletons")
+            locales = raw.get("locales")
+            if (
+                _string_list(skeletons, "detection.skeletons", optional=True) is None
+                and skeletons is not None
+                and _string_list(locales, "detection.locales", optional=True) is None
+            ):
+                from .detectors import _date_pattern
+
+                validation_locales = (
+                    cast(list[str], locales) if locales else [icu.Locale.getRoot().getName()]
+                )
+                for skeleton in cast(list[str], skeletons):
+                    for locale in validation_locales:
+                        try:
+                            _date_pattern(locale, skeleton)
+                        except (icu.ICUError, ValueError) as error:
+                            errors.append(
+                                _refuse(
+                                    "INVALID_VALUE",
+                                    f"{shown}: sections.icukit.detection.skeletons: "
+                                    f"detection.skeletons has invalid ICU date skeleton "
+                                    f"{skeleton!r} for locale {locale!r}: {error}",
+                                )
+                            )
+                            break
     return errors
 
 
@@ -554,6 +573,8 @@ def load_behavior_schema(
 
     Unknown options are refused. This excludes file paths, regular-expression patterns,
     exception policies, and process settings; sentence bases must use a published name.
+    Date skeletons are validated for every explicitly selected ``detection.locales``
+    locale, or against the ICU root locale when that option is absent, null, or empty.
     """
     data, canonical, shown = _read(source)
     envelope = any(key in data for key in _TOP_KEYS - {"schema_version"})

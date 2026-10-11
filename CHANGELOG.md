@@ -66,6 +66,9 @@
 
 ### Fixed
 
+- Behavior-schema date skeletons are validated against every explicitly selected
+  detection locale, with ICU root used when no locale is selected, so locale-specific
+  uninvertible patterns are refused during loading.
 - Locale-material files now receive the same depth and one-million-value checks as
   mapping input and are capped at 64 MiB before decoding.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion

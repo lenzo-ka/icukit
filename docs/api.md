@@ -1004,6 +1004,8 @@ envelope is digested in full even though icukit interprets only
 
 Unknown options are refused. This excludes file paths, regular-expression patterns,
 exception policies, and process settings; sentence bases must use a published name.
+Date skeletons are validated for every explicitly selected ``detection.locales``
+locale, or against the ICU root locale when that option is absent, null, or empty.
 
 ## icukit.bidi
 
