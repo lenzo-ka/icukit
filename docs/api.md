@@ -220,6 +220,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`BREAK_WORD`](#icukitbreaker) — constant, `icukit.breaker`
 - [`BREAK_LINE`](#icukitbreaker) — constant, `icukit.breaker`
 - [`BREAK_CHARACTER`](#icukitbreaker) — constant, `icukit.breaker`
+- [`ReflowMode`](#icukitreflow) — alias, `icukit.reflow`
+- [`reflow`](#icukitreflow) — function, `icukit.reflow`
 - [`Prop`](#icukitclasses) — alias, `icukit.classes`
 - [`ClassPoint`](#icukitclasses) — class, `icukit.classes`
 - [`ClassWindow`](#icukitclasses) — class, `icukit.classes`
@@ -1124,7 +1126,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024)`
+#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024, reflow: 'ReflowMode' = 'none')`
 
 Initialize a Breaker instance.
 
@@ -1137,6 +1139,8 @@ Args:
         are opt-in English bases.
     max_sentence_chars: Hard maximum sentence length in code points;
         ``None`` disables forced boundaries.
+    reflow: Reflow line endings before sentence breaking while keeping
+        all returned offsets and span text in the original input.
 
 Raises:
     BreakerError: If the locale is invalid.
@@ -1373,7 +1377,7 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024) -> 'list[BreakSpan]'`
+### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024, reflow: 'ReflowMode' = 'none') -> 'list[BreakSpan]'`
 
 Return sentence spans from the locale default or selected base.
 
@@ -1382,7 +1386,7 @@ non-English and POSIX defaults are raw ICU.
 
 ``max_sentence_chars`` is a hard code-point bound; ``None`` disables it.
 
-### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024) -> 'list[str]'`
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024, reflow: 'ReflowMode' = 'none') -> 'list[str]'`
 
 Break text into sentences.
 
@@ -1397,6 +1401,8 @@ Args:
         ``"none"`` selects raw ICU without the list.
     max_sentence_chars: Hard maximum sentence length in code points;
         ``None`` disables forced boundaries.
+    reflow: Reflow line endings before sentence breaking while preserving
+        original-text spans.
 
 Returns:
     List of sentence strings.
@@ -6339,6 +6345,62 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Return isolated one-letter word candidates in source order.
 
+## icukit.reflow
+
+Document reflow heuristics for plain text and sentence segmentation.
+
+Reflow is an ICUKit policy rather than an ICU text form.  The modes below are
+therefore intentionally small, named heuristics.  Unicode properties used by
+the heuristics come from ICU; the numeric thresholds and protected shapes are
+part of the documented policy.
+
+``reflow`` changes only selected line terminators to U+0020 and always returns
+exactly as many code points as it receives. Sentence breaking uses that
+equal-length view internally while retaining original text and offsets.
+
+The ruled terminators are LF, CR, CRLF, NEL, and U+2028. U+2029, VT, and FF
+are never rewritten. Every decision keeps its terminator unless the necessary
+context appears within 1,024 code points. ``lines`` joins a lone terminator
+except before a list marker, beside an all-capital heading of at most 80 code
+points, before indentation of two horizontal spaces or one tab, after a line
+shorter than 40 code points, or inside a run of at least three capital-started
+nonblank lines no longer than 60 code points. ``paragraphs`` also joins a blank
+separator when the preceding block is unterminated and the following block
+begins with neither a capital, list marker, nor heading. ``auto`` samples at
+most the first eight complete lines and 1,024 code points of each blank-line
+block. It selects ``lines`` when there are at least three sampled lines, at
+least 70 percent of non-final widths fall between 75 percent of the sample
+width and that width, and at least 50 percent lack ICU sentence-terminal
+punctuation.
+
+The protection rules are deliberately narrow. They do not recognize
+title-case headings, two-line or lowercase verse, CJK verse without cased
+letters, arrow bullets, code, or legal formatting. Capital-started verse longer
+than 60 code points is also outside the measured rule. These shapes need an
+explicit protected span when retaining their line endings matters.
+
+### Constants and type aliases
+
+#### `ReflowMode` (type alias)
+
+`Literal['none', 'lines', 'paragraphs', 'auto']`
+
+### `reflow(text: 'str', mode: 'ReflowMode' = 'lines') -> 'str'`
+
+Reflow plain text while preserving its code-point length.
+
+``none`` returns its input unchanged. ``lines`` joins eligible single line
+endings, ``paragraphs`` may also join eligible blank-line separators, and
+``auto`` applies ``lines`` only to blocks whose bounded sample resembles
+hard-wrapped prose. Protected headings, lists, indentation, short lines,
+and measured verse-like capital-started runs remain broken. The heuristic
+intentionally does not infer title-case headings, two-line or lowercase
+verse, CJK verse, arrow bullets, code, or legal formatting.
+
+The result has ``len(result) == len(text)``. Collapsing selected whitespace
+was measured on two reference books and did not improve the whole
+no-offsets sentence-breaking path by the required 10 percent.
+
 ## icukit.regex
 
 Unicode regular expression utilities using ICU.
@@ -7486,13 +7548,16 @@ Args:
     cache: Reuse immutable per-token features in incremental evaluation.
     max_sentence_chars: Hard maximum sentence length in code points. ``None``
         disables forced boundaries.
+    reflow: Reflow line endings before sentence breaking. The default
+        ``"none"`` leaves ICU's input unchanged; every other mode keeps
+        original-text offsets through equal-length substitution.
 
 Example:
     >>> override = SentenceOverride()
     >>> [(item["offset"], item["layer"]) for item in override.decide("Hello. Next.")]
     [(7, 'icu'), (12, 'icu')]
 
-#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True, max_sentence_chars: 'int | None' = 1024) -> 'None'`
+#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True, max_sentence_chars: 'int | None' = 1024, reflow: 'ReflowMode' = 'none') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -7508,7 +7573,7 @@ Return one-best spans and each candidate retaining two alternatives.
 
 Return the one-best sentence spans; trailing whitespace stays left.
 
-#### `stream(*, protection: "Literal['none', 'watermark']" = 'none') -> 'IncrementalSentenceBreaker'`
+#### `stream(*, protection: "Literal['none', 'watermark']" = 'none') -> 'IncrementalSentenceBreaker | IncrementalReflowSentenceBreaker'`
 
 Return an incremental breaker sharing this override's decision core.
 
