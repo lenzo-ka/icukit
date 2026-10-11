@@ -61,6 +61,13 @@
 
 ### Fixed
 
+- The generated date/time skeleton readers now include ICU hour patterns whose literal
+  words distinguish them from bare numbers, including omitted `H` and locale-preference
+  `j`/`J`/`C` patterns. Thus German `8 Uhr` and `08 Uhr`, French `8 h`, Bulgarian
+  `08:00 ч.`, and equivalent forms across ICU locales are read whole while their
+  overlapping number readings remain. Literal-bearing twelve-hour patterns resolve
+  their ICU day period to an `H` field; a `J` pattern without a day period retains its
+  ambiguous `h`. Ordinary day-period patterns remain with the flexible time reader.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
   limit no longer abort plural-numeral or numeric-duration detection; their capture
   value is `None`. Fraction, relative-date, and scientific-notation readers skip a

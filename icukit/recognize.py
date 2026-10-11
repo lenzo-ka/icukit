@@ -969,7 +969,14 @@ _INTERVAL_SAMPLE_ENDS = {
 
 def _interval_fields(pattern: str) -> tuple[_DateField, ...]:
     """The date fields of one interval side, plus its AM/PM marker when it has one."""
-    fields = list(_date_fields(pattern))
+    # DateDetector exposes a display-only ``day-period`` capture. The interval reader
+    # has older endpoint machinery that needs the same ICU field under its semantic
+    # ``ampm`` name so it can combine it with ``h`` before building each endpoint.
+    fields = [
+        field
+        for field in _date_fields(pattern, resolve_day_period=False)
+        if field.name != "day-period"
+    ]
     for letter, width in _pattern_runs(pattern):
         if letter == "a":
             field_id = _letter_field_id(letter)

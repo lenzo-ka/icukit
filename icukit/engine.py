@@ -38,6 +38,7 @@ from .detectors import (
     Detector,
     DetectorSet,
     NumberDetector,
+    _pattern_has_word_literal,
     date_detectors,
     number_detectors,
 )
@@ -297,6 +298,23 @@ def _date_time_skeletons(locale: str) -> Iterable[Spec]:
         padded = skeleton.replace("M", "MM").replace("d", "dd")
         if generator.getBestPattern(padded) != generator.getBestPattern(skeleton):
             skeletons.add(padded)
+
+    # DateTimePatternGenerator.getSkeletons() omits the lone 24-hour skeleton and the
+    # locale-preference metacharacters j/J/C even when their best pattern carries a
+    # word literal (de H -> "HH 'Uhr'", zh H -> "H时"). Those patterns are not bare
+    # hours: their literal distinguishes the whole temporal surface from the number
+    # inside it, so they belong in the default formatter-inverting family. PyICU
+    # exposes neither a pattern token stream nor an inventory of accepted skeleton
+    # requests; the small product below is CLDR's hour-cycle field grammar, while the
+    # actual patterns and literals remain ICU data read at runtime.
+    represented = {str(generator.getBestPattern(skeleton)) for skeleton in skeletons}
+    for hour in "hHkKjJC":
+        for rest in ("", "m", "ms"):
+            skeleton = hour + rest
+            pattern = str(generator.getBestPattern(skeleton))
+            if pattern and pattern not in represented and _pattern_has_word_literal(pattern):
+                skeletons.add(skeleton)
+                represented.add(pattern)
     return sorted(skeletons)
 
 

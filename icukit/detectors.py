@@ -462,7 +462,66 @@ def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
     return runs
 
 
+def _pattern_has_word_literal(pattern: str) -> bool:
+    """Whether a CLDR date pattern contains a letter outside its field runs.
+
+    ASCII letters are pattern fields unless quoted; non-ASCII letters are literal
+    text even without quotes (Japanese ``H時``). Doubled apostrophes are literal
+    apostrophes. This tiny scanner follows CLDR date-pattern quoting because PyICU
+    exposes only the finished pattern string, not its tokens.
+    """
+    quoted = False
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "'":
+            if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                index += 2
+                continue
+            quoted = not quoted
+        elif character.isalpha() and (quoted or not character.isascii()):
+            return True
+        index += 1
+    return False
+
+
+def _hour_width_pattern(pattern: str, width: int) -> str:
+    """Return ``pattern`` with each unquoted hour field set to ``width``.
+
+    DateTimePatternGenerator can normalize ``H`` to ``HH`` even though both widths are
+    valid ICU patterns. PyICU exposes no field-width override for a best pattern, so
+    this follows CLDR's quote grammar and changes only h/H/K/k runs; all locale text
+    and field ordering remain ICU's.
+    """
+    out: list[str] = []
+    quoted = False
+    index = 0
+    while index < len(pattern):
+        character = pattern[index]
+        if character == "'":
+            if index + 1 < len(pattern) and pattern[index + 1] == "'":
+                out.append("''")
+                index += 2
+                continue
+            quoted = not quoted
+            out.append(character)
+            index += 1
+            continue
+        if not quoted and character in "hHkK":
+            end = index + 1
+            while end < len(pattern) and pattern[end] == character:
+                end += 1
+            out.append(character * width)
+            index = end
+            continue
+        out.append(character)
+        index += 1
+    return "".join(out)
+
+
 def _date_form(letter: str, width: int) -> str:
+    if letter in {"a", "b", "B"}:
+        return "symbol"
     if letter == "G":
         # CLDR pattern grammar: one to three G write the abbreviated era, four the
         # wide, five the narrow.
@@ -523,9 +582,11 @@ def _widen_years(pattern: str) -> str:
     return "".join(out)
 
 
-def _date_fields(pattern: str) -> tuple[_DateField, ...]:
+def _date_fields(pattern: str, *, resolve_day_period: bool = True) -> tuple[_DateField, ...]:
     # This is CLDR pattern grammar, not locale data. Calendar values and displayed names
     # are obtained from the formatter/calendar at runtime.
+    runs = _pattern_runs(pattern)
+    resolves_hour = resolve_day_period and any(letter in {"a", "b", "B"} for letter, _ in runs)
     mapping = {
         "G": ("G", icu.Calendar.ERA, icu.DateFormat.kEraField, True),
         "y": ("y", icu.Calendar.YEAR, icu.DateFormat.kYearField, True),
@@ -533,17 +594,30 @@ def _date_fields(pattern: str) -> tuple[_DateField, ...]:
         "L": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
         "d": ("d", icu.Calendar.DATE, icu.DateFormat.kDateField, True),
         "H": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay0Field, True),
-        "h": ("h", icu.Calendar.HOUR, icu.DateFormat.kHour1Field, True),
-        "K": ("h", icu.Calendar.HOUR, icu.DateFormat.kHour0Field, True),
+        "h": (
+            "H" if resolves_hour else "h",
+            icu.Calendar.HOUR_OF_DAY if resolves_hour else icu.Calendar.HOUR,
+            icu.DateFormat.kHour1Field,
+            True,
+        ),
+        "K": (
+            "H" if resolves_hour else "h",
+            icu.Calendar.HOUR_OF_DAY if resolves_hour else icu.Calendar.HOUR,
+            icu.DateFormat.kHour0Field,
+            True,
+        ),
         "k": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay1Field, True),
         "m": ("m", icu.Calendar.MINUTE, icu.DateFormat.kMinuteField, True),
         "s": ("s", icu.Calendar.SECOND, icu.DateFormat.kSecondField, True),
+        "a": ("day-period", icu.Calendar.AM_PM, icu.DateFormat.kAmPmField, False),
+        "b": ("day-period", icu.Calendar.AM_PM, icu.DateFormat.kAmPmField, False),
+        "B": ("day-period", icu.Calendar.AM_PM, icu.DateFormat.kAmPmField, False),
         "E": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
         "e": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
         "c": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
     }
     found: list[_DateField] = []
-    for letter, width in _pattern_runs(pattern):
+    for letter, width in runs:
         if letter not in mapping:
             continue
         name, calendar_field, _format_field, value_field = mapping[letter]
@@ -558,7 +632,18 @@ def _date_fields(pattern: str) -> tuple[_DateField, ...]:
                 value_field,
             )
         )
-    order = {"G": -1, "y": 0, "M": 1, "d": 2, "weekday": 3, "H": 4, "h": 4, "m": 5, "s": 6}
+    order = {
+        "G": -1,
+        "y": 0,
+        "M": 1,
+        "d": 2,
+        "weekday": 3,
+        "H": 4,
+        "h": 4,
+        "day-period": 5,
+        "m": 6,
+        "s": 7,
+    }
     return tuple(sorted(found, key=lambda field: order[field.name]))
 
 
@@ -588,6 +673,14 @@ class DateDetector(_GatedReader):
     44 BC" is ``(("G", 0), ("y", 44), ...)``, the year as written, never widened to a
     century). Its type is ``date:short-year:<skeleton>``, beside the text-date reader's
     ``date:short-year``, and a pattern without an era refuses it.
+
+    In a pattern with a word literal, a 12-hour field accompanied by ICU's ``a``, ``b``,
+    or ``B`` day period is resolved to a 24-hour ``H`` value; a 12-hour field without a
+    period retains ``h`` because the surface does not choose morning or afternoon.
+    One- and two-digit hour widths are both inverted with a spec carrying the width
+    actually read. This covers ICU patterns such as German ``HH 'Uhr'`` without turning
+    an undecorated number into a default time reading or widening the ordinary
+    day-period readers.
     """
 
     group = "date"
@@ -617,21 +710,45 @@ class DateDetector(_GatedReader):
             )
         self._df = icu.SimpleDateFormat(self.pattern, icu.Locale(locale))
         self._df.setTimeZone(icu.TimeZone.getGMT())
+        patterns = [self.pattern]
+        if _pattern_has_word_literal(self.pattern):
+            patterns.extend(_hour_width_pattern(self.pattern, width) for width in (1, 2))
+        self._formats = tuple(
+            (pattern, self._date_formatter(pattern)) for pattern in dict.fromkeys(patterns)
+        )
         self._fields = _date_fields(self.pattern)
         # Refuse a skeleton whose best pattern carries a field this detector cannot make
         # invertible, rather than emit a value that cannot reproduce the surface. The
-        # 24-hour clock (H/k), dates, and the era (G) are fully modeled; the 12-hour
-        # clock needs a day-period field whose value modeling is deferred, and
-        # quarter/week/time-zone fields are out of scope. A day-period letter (a/b/B) is
-        # exactly what makes "3:45 PM" non-invertible from bare (h, m).
-        _modeled = {"G", "y", "M", "L", "d", "H", "k", "m", "s", "E", "e", "c"}
+        # Hour cycles are fully modeled. A 12-hour field with a day period resolves to
+        # HOUR_OF_DAY only for this change's literal-bearing patterns; ordinary h:mm a
+        # remains the flexible time reader's scope. Without a period (CLDR's J
+        # preference) it remains an ambiguous h field. Quarter/week/time-zone fields
+        # remain out of scope.
+        _modeled = {
+            "G",
+            "y",
+            "M",
+            "L",
+            "d",
+            "h",
+            "H",
+            "K",
+            "k",
+            "m",
+            "s",
+            "E",
+            "e",
+            "c",
+        }
+        if _pattern_has_word_literal(self.pattern):
+            _modeled.update({"a", "b", "B"})
         _letters = {letter for letter, _ in _pattern_runs(self.pattern)}
         _unmodeled = sorted(_letters - _modeled)
         if _unmodeled:
             raise ValueError(
                 f"DateDetector cannot invert pattern field(s) {_unmodeled} in {self.pattern!r} "
-                f"(skeleton {skeleton!r}); 12-hour/day-period, quarter, week, and time-zone "
-                f"fields are not supported"
+                f"(skeleton {skeleton!r}); quarter, week, and time-zone fields are not "
+                f"supported"
             )
         self._has_era = "G" in _letters
         current = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
@@ -675,6 +792,11 @@ class DateDetector(_GatedReader):
         self._inv = _Inverter(self._parse, self._reformat, self._build)
         _install_gates(self, {"scan": _strict_gate(self)})
 
+    def _date_formatter(self, pattern: str):
+        formatter = icu.SimpleDateFormat(pattern, icu.Locale(self.locale))
+        formatter.setTimeZone(icu.TimeZone.getGMT())
+        return formatter
+
     def _parse(self, text: icu.UnicodeString, start_u16: int) -> tuple[int, object] | None:
         calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(self.locale))
         calendar.clear()
@@ -686,9 +808,19 @@ class DateDetector(_GatedReader):
         if position.getErrorIndex() != -1 or position.getIndex() <= start_u16:
             return None
         end = position.getIndex()
+        surface = str(text[start_u16:end])
         if self._yearless_weekday:
-            calendar = self._weekday_year(calendar, str(text[start_u16:end]))
-        return end, calendar
+            calendar = self._weekday_year(calendar, surface)
+        pattern, formatter = self._formats[0]
+        for candidate_pattern, candidate in self._formats:
+            try:
+                matches = candidate.format(calendar.getTime()) == surface
+            except icu.ICUError:
+                matches = False
+            if matches:
+                pattern, formatter = candidate_pattern, candidate
+                break
+        return end, (calendar, pattern, formatter)
 
     def _weekday_year(self, calendar: object, surface: str) -> object:
         """The parse placed in a year where its day falls on the weekday the text names.
@@ -718,8 +850,8 @@ class DateDetector(_GatedReader):
         return calendar
 
     def _reformat(self, parsed: object) -> str:
-        calendar = parsed
-        return self._df.format(calendar.getTime())
+        calendar, _pattern, formatter = parsed
+        return formatter.format(calendar.getTime())
 
     def _field_value(self, calendar: object, field: _DateField) -> object:
         value = calendar.get(field.calendar_field)
@@ -742,7 +874,7 @@ class DateDetector(_GatedReader):
         cp_to_u16: list[int],
         u16_to_cp: dict[int, int],
     ) -> tuple[object, tuple[Capture, ...], object] | None:
-        calendar = parsed
+        calendar, pattern, formatter = parsed
         values: list[tuple[str, int]] = []
         captures: list[Capture] = []
         forms: list[tuple[str, str]] = []
@@ -753,7 +885,7 @@ class DateDetector(_GatedReader):
                 values.append((field.name, value))
             forms.append((field.name, field.form))
             position = icu.FieldPosition(field.format_field)
-            self._df.format(calendar.getTime(), position)
+            formatter.format(calendar.getTime(), position)
             if position.getBeginIndex() == position.getEndIndex():
                 # A value field must be locatable; otherwise skip this candidate. A
                 # display-only field (weekday) is derivable from the date via the pattern,
@@ -798,7 +930,7 @@ class DateDetector(_GatedReader):
         spec = DateFormatSpec(
             self.locale,
             self.skeleton,
-            self.pattern,
+            pattern,
             calendar_type,
             self.tz,
             tuple(forms),
