@@ -1,5 +1,7 @@
 """Forced maximum-length sentence breaks."""
 
+import random
+
 import pytest
 
 from icukit import Breaker, SentenceOverride, break_sentence_spans, break_sentences
@@ -100,13 +102,45 @@ def test_forced_protected_span_bound():  # R
 
 
 def test_forced_stream_equals_whole():  # C
-    text = "a" * 1500
     override = SentenceOverride("en_US")
+    text = "a" * 1500
     expected = override.decide(text)
 
     for cut in range(len(text) + 1):
         stream = override.stream()
         assert stream.feed(text[:cut]) + stream.feed(text[cut:]) + stream.close() == expected
+
+    text = "a" * 1023 + " \r\n" + "b" * 1024
+    stream = override.stream()
+    assert stream.feed(text) + stream.close() == override.decide(text)
+
+    rng = random.Random(0)
+    whitespace_runs = (" \r\n", "\t\r\n", " \N{NEXT LINE}", "\N{NO-BREAK SPACE}\N{NEXT LINE}")
+    for maximum in (64, 512, 1024):
+        bounded = SentenceOverride("en_US", max_sentence_chars=maximum)
+        for _ in range(12):
+            whitespace = rng.choice(whitespace_runs)
+            text = "a" * (maximum - 1) + whitespace + "b" * (maximum + 17)
+            expected = bounded.decide(text)
+            cuts = sorted(rng.sample(range(1, len(text)), rng.randint(1, 8)))
+            chunks = [
+                text[start:end] for start, end in zip((0, *cuts), (*cuts, len(text)), strict=True)
+            ]
+            stream = bounded.stream()
+            actual = []
+            for chunk in chunks:
+                actual.extend(stream.feed(chunk))
+            actual.extend(stream.close())
+            assert actual == expected
+
+
+def test_forced_protected_offset_only_when_no_unprotected_tier():  # R
+    text = "a" * 100 + ", " + "b" * 900 + " " + "c" * 200
+    protected = [{"start": 0, "end": 103, "type": "name"}]
+
+    first = SentenceOverride("en_US").decide(text, protected=protected)[0]
+
+    assert (first["offset"], first["id"]) == (1003, "max-sentence-chars:whitespace")
 
 
 def test_sentence_under_bound_unbroken():  # C

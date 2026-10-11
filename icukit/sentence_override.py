@@ -2792,8 +2792,9 @@ def _forced_offset(
 
     This clause/whitespace/grapheme heuristic is an icukit segmentation policy,
     not an ICU form. ICU supplies only the line and character opportunities used
-    as evidence for each tier. A protected position is a fallback within its tier,
-    because the maximum remains a hard bound.
+    as evidence for each tier. Protected positions are considered only when every
+    eligible position in every tier is protected, because the maximum remains a hard
+    bound.
     """
     sample = text[start : start + maximum + 1]
     upper = min(start + maximum, len(text))
@@ -2816,18 +2817,22 @@ def _forced_offset(
         if 0 < offset <= maximum
     ]
 
-    def latest(offsets: list[int]) -> int | None:
-        ordinary = [offset for offset in offsets if not _inside_protected(offset, protected)]
-        return max(ordinary or offsets, default=None)
-
-    for tier, offsets in (
+    tiers = (
         ("clause", clause),
         ("whitespace", whitespace),
         ("grapheme", grapheme),
-    ):
-        found = latest(offsets)
-        if found is not None:
-            return found, cast(Literal["clause", "whitespace", "grapheme", "codepoint"], tier)
+    )
+    for protected_only in (False, True):
+        for tier, offsets in tiers:
+            eligible = [
+                offset
+                for offset in offsets
+                if _inside_protected(offset, protected) is protected_only
+            ]
+            if eligible:
+                return max(eligible), cast(
+                    Literal["clause", "whitespace", "grapheme", "codepoint"], tier
+                )
     return upper, "codepoint"
 
 
@@ -2851,22 +2856,6 @@ def _forced_decision(
         "id": f"max-sentence-chars:{tier}",
         "tokens_read": 0,
     }
-
-
-def _forced_offsets(
-    text: str,
-    start: int,
-    maximum: int,
-    locale: str,
-    protected: Sequence[ProtectedSpan] = (),
-) -> list[BreakDecision]:
-    """Return every forced decision needed to bound one closed sentence span."""
-    decisions = []
-    while len(text) - start > maximum:
-        decision = _forced_decision(text, start, maximum, locale, protected)
-        decisions.append(decision)
-        start = decision["offset"]
-    return decisions
 
 
 def _force_closed_decisions(
@@ -2950,6 +2939,7 @@ class IncrementalSentenceBreaker:
         self._held_decisions: list[BreakDecision] = []
         self._bound_text = ""
         self._bound_start = 0
+        self._bound_whitespace_start = 0
         self._bound_protected: list[ProtectedSpan] = []
         self._closed = False
         self._cache = _TokenFeatureCache(owner.cache, owner._run_requirements)
@@ -3002,9 +2992,23 @@ class IncrementalSentenceBreaker:
 
     def _advance_bound(self, offset: int) -> None:
         drop = offset - self._bound_start
+        whitespace_start = drop
+        while whitespace_start > 0 and _is_white_space(self._bound_text[whitespace_start - 1]):
+            whitespace_start -= 1
+        if whitespace_start:
+            self._bound_whitespace_start = self._bound_start + whitespace_start
         self._bound_text = self._bound_text[drop:]
         self._bound_start = offset
         self._bound_protected = [item for item in self._bound_protected if item["end"] > offset]
+
+    def _resolved_bound_end(self, local_offset: int) -> int:
+        """Restore trailing-whitespace context that precedes the bounded slice."""
+        logical_end = local_offset
+        while logical_end > 0 and _is_white_space(self._bound_text[logical_end - 1]):
+            logical_end -= 1
+        if logical_end:
+            return self._bound_start + logical_end
+        return self._bound_whitespace_start
 
     def _bounded_results(
         self,
@@ -3045,22 +3049,18 @@ class IncrementalSentenceBreaker:
                     "none",
                     _enforce_bound=False,
                 )._whole(prefix, local_protected)
-                replacement_offsets = {
-                    self._bound_start + item["offset"]
-                    for item in resolved
-                    if item["offset"] <= maximum
-                }
-                self._held_decisions = [
-                    item
-                    for item in self._held_decisions
-                    if item["offset"] not in replacement_offsets
-                ]
+                held_offsets = {item["offset"] for item in self._held_decisions}
                 for item in resolved:
                     if item["offset"] > maximum:
                         continue
                     shifted = dict(item)
                     shifted["offset"] += self._bound_start
-                    shifted["end"] += self._bound_start
+                    shifted["end"] = self._resolved_bound_end(item["offset"])
+                    if shifted["offset"] in held_offsets:
+                        # A held decision was derived with its full left context. The
+                        # bounded slice may begin inside its trailing whitespace, so it
+                        # can resolve pending offsets but must not replace held fields.
+                        continue
                     self._held_decisions.append(cast(BreakDecision, shifted))
                 self._held_decisions.sort(key=lambda item: item["offset"])
             natural_index = next(
@@ -3491,6 +3491,7 @@ class IncrementalSentenceBreaker:
         self._bound_text = ""
         self._bound_protected = []
         self._bound_start = self._total_length
+        self._bound_whitespace_start = self._total_length
         self._run_prefix = None
         # Cache keys and every eviction threshold are segment-local. A flush
         # starts a new coordinate space, so no prior key can be retained.
