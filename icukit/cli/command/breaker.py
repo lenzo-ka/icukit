@@ -140,6 +140,21 @@ class BreakerCommand(SubcommandBase):
         )
 
     @classmethod
+    def _add_reflow_option(cls, parser):
+        parser.add_argument(
+            "--reflow",
+            nargs="?",
+            const="lines",
+            default="none",
+            choices=["none", "lines", "paragraphs", "auto"],
+            metavar="MODE",
+            help=(
+                "Reflow line endings before sentence breaking; bare --reflow uses lines and "
+                "does not consume a following non-mode file (default: none)"
+            ),
+        )
+
+    @classmethod
     def add_subparser(cls, subparsers):
         """Add the break command with its subcommands."""
         parser = subparsers.add_parser(
@@ -241,6 +256,7 @@ Examples:
         cls._add_locale_option(parser)
         cls._add_sentence_base_option(parser)
         cls._add_max_sentence_chars_option(parser)
+        cls._add_reflow_option(parser)
         cls._add_spans_option(parser)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
@@ -303,6 +319,7 @@ Examples:
         cls._add_locale_option(parser)
         cls._add_sentence_base_option(parser)
         cls._add_max_sentence_chars_option(parser)
+        cls._add_reflow_option(parser)
         cls._add_spans_option(parser)
         parser.add_argument(
             "--skip-punctuation",
@@ -432,6 +449,7 @@ Examples:
             args.locale,
             base=getattr(args, "base", None),
             max_sentence_chars=args.max_sentence_chars,
+            reflow=getattr(args, "reflow", "none"),
         )
         cls._validate_provenance(args)
         as_json = getattr(args, "json", False)
@@ -603,6 +621,7 @@ Examples:
             args.locale,
             base=getattr(args, "base", None),
             max_sentence_chars=args.max_sentence_chars,
+            reflow=getattr(args, "reflow", "none"),
         )
         cls._validate_provenance(args)
         skip_punct = getattr(args, "skip_punctuation", False)

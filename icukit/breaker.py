@@ -34,6 +34,7 @@ import icu
 
 from ._offsets import OffsetMaps, offset_maps, set_span_offsets
 from .errors import BreakerError
+from .reflow import ReflowMode, _substitute, _validate_mode
 
 __all__ = [
     "Breaker",
@@ -223,11 +224,17 @@ def _sentence_override(
     locale: str,
     base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None,
     max_sentence_chars: int | None,
+    reflow: ReflowMode = "none",
 ):
     """Return the shared immutable sentence override for one selection."""
     from .sentence_override import SentenceOverride
 
-    return SentenceOverride(locale, base=base, max_sentence_chars=max_sentence_chars)
+    return SentenceOverride(
+        locale,
+        base=base,
+        max_sentence_chars=max_sentence_chars,
+        reflow=reflow,
+    )
 
 
 class Breaker:
@@ -255,6 +262,7 @@ class Breaker:
         *,
         base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
         max_sentence_chars: int | None = 1024,
+        reflow: ReflowMode = "none",
     ):
         """Initialize a Breaker instance.
 
@@ -267,6 +275,8 @@ class Breaker:
                 are opt-in English bases.
             max_sentence_chars: Hard maximum sentence length in code points;
                 ``None`` disables forced boundaries.
+            reflow: Reflow line endings before sentence breaking while keeping
+                all returned offsets and span text in the original input.
 
         Raises:
             BreakerError: If the locale is invalid.
@@ -279,9 +289,11 @@ class Breaker:
             or max_sentence_chars <= 0
         ):
             raise ValueError("max_sentence_chars must be a positive int or None")
+        _validate_mode(reflow)
         self.locale = locale
         self.base = base
         self.max_sentence_chars = max_sentence_chars
+        self.reflow = reflow
         try:
             self._locale_obj = icu.Locale(locale)
         except icu.ICUError as e:
@@ -333,7 +345,8 @@ class Breaker:
                 _force_closed_decisions,
             )
 
-            raw = _raw_break_sentence_spans(text, self.locale)
+            breaking_text = text if self.reflow == "none" else _substitute(text, self.reflow)
+            raw = _raw_break_sentence_spans(breaking_text, self.locale)
             decisions = [
                 _decision(
                     span["end"],
@@ -348,7 +361,7 @@ class Breaker:
             yield from _decision_spans(
                 text,
                 _force_closed_decisions(
-                    text,
+                    breaking_text,
                     decisions,
                     self.max_sentence_chars,
                     self.locale,
@@ -359,6 +372,7 @@ class Breaker:
             self.locale,
             self.base,
             self.max_sentence_chars,
+            self.reflow,
         ).spans(text)
 
     def break_sentence_spans(self, text: str) -> list[BreakSpan]:
@@ -696,6 +710,7 @@ def break_sentences(
     *,
     base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
     max_sentence_chars: int | None = 1024,
+    reflow: ReflowMode = "none",
 ) -> list[str]:
     """Break text into sentences.
 
@@ -710,6 +725,8 @@ def break_sentences(
             ``"none"`` selects raw ICU without the list.
         max_sentence_chars: Hard maximum sentence length in code points;
             ``None`` disables forced boundaries.
+        reflow: Reflow line endings before sentence breaking while preserving
+            original-text spans.
 
     Returns:
         List of sentence strings.
@@ -722,6 +739,7 @@ def break_sentences(
         locale,
         base=base,
         max_sentence_chars=max_sentence_chars,
+        reflow=reflow,
     ).break_sentences(text, skip_empty)
 
 
@@ -797,6 +815,7 @@ def break_sentence_spans(
     *,
     base: Literal["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"] | None = None,
     max_sentence_chars: int | None = 1024,
+    reflow: ReflowMode = "none",
 ) -> list[BreakSpan]:
     """Return sentence spans from the locale default or selected base.
 
@@ -809,6 +828,7 @@ def break_sentence_spans(
         locale,
         base=base,
         max_sentence_chars=max_sentence_chars,
+        reflow=reflow,
     ).break_sentence_spans(text)
 
 

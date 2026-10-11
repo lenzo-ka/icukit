@@ -113,13 +113,26 @@ class PrefixArgumentParser(argparse.ArgumentParser):
     def parse_args(self, args=None, namespace=None):
         if args is None:
             args = sys.argv[1:]
+        args = list(args)
+
+        # ``--reflow`` has an optional mode, but a following non-mode token is
+        # an input file rather than a misspelled mode. Normalize the bare form
+        # before argparse applies nargs="?" so both option/file orders are
+        # unambiguous. Explicit modes remain accepted with or without ``=``.
+        modes = {"none", "lines", "paragraphs", "auto"}
+        args = [
+            "--reflow=lines"
+            if item == "--reflow" and (index + 1 == len(args) or args[index + 1] not in modes)
+            else item
+            for index, item in enumerate(args)
+        ]
 
         if len(args) > 0 and self._subparsers_action and not args[0].startswith("-"):
             command_prefix = args[0]
             resolved, suggestions = resolve_command(command_prefix)
 
             if resolved:
-                args = [resolved] + list(args[1:])
+                args = [resolved] + args[1:]
             elif suggestions:
                 self._show_ambiguous_error(command_prefix, suggestions)
 
