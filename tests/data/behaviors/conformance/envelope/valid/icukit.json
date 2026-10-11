@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "behavior-schema",
+  "name": "icukit",
+  "version": 1,
+  "extends": [],
+  "provenance": {
+    "source": "frend tests"
+  },
+  "sections": {
+    "icukit": {
+      "schema_version": 1,
+      "sentence": {
+        "base": "en-tn@1"
+      },
+      "detection": {
+        "guarded": true
+      },
+      "stream": {
+        "max_pending_chars": 4096,
+        "boundary": "paragraph"
+      }
+    }
+  }
+}
