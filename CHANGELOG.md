@@ -8,7 +8,9 @@
   icukit section with bounded strict JSON validation, an immutable grouped option
   mapping, and a canonical whole-input digest. The section exposes the current
   sentence, detection, and streaming options while excluding paths, regex patterns,
-  exception policies, and process settings.
+  exception policies, and process settings. Date skeletons are validated against every
+  explicitly selected detection locale, with ICU root used when no locale is selected,
+  so locale-specific uninvertible patterns are refused during loading.
 - Add text-only `reflow()` and `ReflowMode`, plus offset-preserving `reflow=`
   modes on `SentenceOverride`, `Breaker`, `break_sentences`,
   `break_sentence_spans`, the incremental sentence stream, detection streams from
@@ -95,6 +97,16 @@
 - Behavior-schema date skeletons are validated against every explicitly selected
   detection locale, with ICU root used when no locale is selected, so locale-specific
   uninvertible patterns are refused during loading.
+- The generated date/time skeleton readers now include ICU hour patterns whose literal
+  words distinguish them from bare numbers, including omitted `H` and locale-preference
+  `j`/`J`/`C` patterns. Thus German `8 Uhr` and `08 Uhr`, French `8 h`, Bulgarian
+  `08:00 ч.`, and equivalent forms across ICU locales are read whole while their
+  overlapping number readings remain. Literal-bearing twelve-hour patterns resolve
+  their ICU day period to an `H` field; a `J` pattern without a day period retains its
+  ambiguous `h`. These readers require a digit beside their distinguishing literal and
+  do not start or end inside a longer date, time, or range token. A detector whose ICU
+  parser cannot read its own canonical midnight surface is reported as skipped rather
+  than advertised. Ordinary day-period patterns remain with the flexible time reader.
 - Locale-material files now receive the same depth and one-million-value checks as
   mapping input and are capped at 64 MiB before decoding.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion

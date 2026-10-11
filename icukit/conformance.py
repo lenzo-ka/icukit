@@ -21,6 +21,7 @@ from .detectors import (
     NumberDetector,
     NumberFormatSpec,
     NumberValue,
+    _pattern_field_id,
 )
 
 Profile = Literal["ci", "full"]
@@ -165,11 +166,26 @@ def _date_setup(cell: Cell):
         "M": icu.Calendar.MONTH,
         "d": icu.Calendar.DATE,
         "H": icu.Calendar.HOUR_OF_DAY,
+        "h": icu.Calendar.HOUR,
         "m": icu.Calendar.MINUTE,
     }
     runs = _pattern_runs(pattern)
-    letter_names = {"G": "G", "y": "y", "M": "M", "L": "M", "d": "d", "H": "H", "m": "m"}
-    order = {"G": -1, "y": 0, "M": 1, "d": 2, "H": 3, "m": 4}
+    resolves_hour = any(letter in {"a", "b", "B"} for letter, _ in runs)
+    letter_names = {
+        "G": "G",
+        "y": "y",
+        "M": "M",
+        "L": "M",
+        "d": "d",
+        "h": "H" if resolves_hour else "h",
+        "H": "H",
+        "K": "H" if resolves_hour else "h",
+        "k": "H",
+        "m": "m",
+        "s": "s",
+    }
+    field_map["s"] = icu.Calendar.SECOND
+    order = {"G": -1, "y": 0, "M": 1, "d": 2, "H": 3, "h": 3, "m": 4, "s": 5}
     present = sorted(
         {letter_names[letter] for letter, _ in runs if letter in letter_names},
         key=order.__getitem__,
@@ -183,8 +199,15 @@ def _date_setup(cell: Cell):
         "M": "M",
         "L": "M",
         "d": "d",
+        "h": "H" if resolves_hour else "h",
         "H": "H",
+        "K": "H" if resolves_hour else "h",
+        "k": "H",
         "m": "m",
+        "s": "s",
+        "a": "day-period",
+        "b": "day-period",
+        "B": "day-period",
         "E": "weekday",
         "e": "weekday",
         "c": "weekday",
@@ -197,8 +220,21 @@ def _date_setup(cell: Cell):
                 form = {3: "short", 4: "wide"}.get(width, "narrow")
             elif letter == "G":
                 form = _era_form(width)
+            elif letter in {"a", "b", "B"}:
+                form = "symbol"
             forms.append((form_names[letter], form))
-    form_order = {"G": -1, "y": 0, "M": 1, "d": 2, "weekday": 3, "H": 4, "m": 5}
+    form_order = {
+        "G": -1,
+        "y": 0,
+        "M": 1,
+        "d": 2,
+        "weekday": 3,
+        "H": 4,
+        "h": 4,
+        "day-period": 5,
+        "m": 6,
+        "s": 7,
+    }
     forms.sort(key=lambda item: form_order[item[0]])
     expected = DateTimeValue(tuple(fields), calendar.getType())
     spec = DateFormatSpec(
@@ -219,14 +255,32 @@ def _era_form(width: int) -> str:
 
 
 def _date_captures(formatter, instant, calendar, surface, runs) -> tuple[Capture, ...]:
+    resolves_hour = any(letter in {"a", "b", "B"} for letter, _ in runs)
     field_data = {
         "G": ("era", icu.Calendar.ERA, icu.DateFormat.kEraField, True),
         "y": ("y", icu.Calendar.YEAR, icu.DateFormat.kYearField, True),
         "M": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
         "L": ("M", icu.Calendar.MONTH, icu.DateFormat.kMonthField, True),
         "d": ("d", icu.Calendar.DATE, icu.DateFormat.kDateField, True),
+        "h": (
+            "H" if resolves_hour else "h",
+            icu.Calendar.HOUR_OF_DAY if resolves_hour else icu.Calendar.HOUR,
+            _pattern_field_id("h"),
+            True,
+        ),
         "H": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay0Field, True),
+        "K": (
+            "H" if resolves_hour else "h",
+            icu.Calendar.HOUR_OF_DAY if resolves_hour else icu.Calendar.HOUR,
+            _pattern_field_id("K"),
+            True,
+        ),
+        "k": ("H", icu.Calendar.HOUR_OF_DAY, icu.DateFormat.kHourOfDay1Field, True),
         "m": ("m", icu.Calendar.MINUTE, icu.DateFormat.kMinuteField, True),
+        "s": ("s", icu.Calendar.SECOND, icu.DateFormat.kSecondField, True),
+        "a": ("day-period", icu.Calendar.AM_PM, _pattern_field_id("a"), False),
+        "b": ("day-period", icu.Calendar.AM_PM, _pattern_field_id("b"), False),
+        "B": ("day-period", icu.Calendar.AM_PM, _pattern_field_id("B"), False),
         "E": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
         "e": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
         "c": ("weekday", icu.Calendar.DAY_OF_WEEK, icu.DateFormat.kDayOfWeekField, False),
@@ -255,6 +309,8 @@ def _date_captures(formatter, instant, calendar, surface, runs) -> tuple[Capture
             form = {3: "short", 4: "wide"}.get(width, "narrow")
         elif letter == "G":
             form = _era_form(width)
+        elif letter in {"a", "b", "B"}:
+            form = "symbol"
         captures.append(Capture(name, begin, end, surface[begin:end], value, form))
     captures.sort(key=lambda capture: (capture.start, capture.end))
     return tuple(captures)
