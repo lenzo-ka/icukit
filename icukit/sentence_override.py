@@ -48,6 +48,15 @@ from .exceptions import (
     _sentence_boundary_claims,
     _sentence_rule_index,
 )
+from .reflow import (
+    _REFLOW_HOLD_CHARS,
+    ReflowMode,
+    _auto_uses_lines,
+    _lines,
+    _substitute,
+    _trim_horizontal,
+    _validate_mode,
+)
 from .shape import _shape_with_selections, shape, shape_scheme
 from .tokens import (
     TOKEN_PROFILE,
@@ -3563,6 +3572,330 @@ class IncrementalSentenceBreaker:
         return self.close()
 
 
+class IncrementalReflowSentenceBreaker:
+    """Bounded reflow prefilter over the incremental sentence breaker.
+
+    The prefilter withholds at most ``_REFLOW_HOLD_CHARS`` after a line
+    terminator decision. It feeds only equal-length substituted text to the
+    underlying breaker, so every public offset remains an original-text code
+    point. Flush starts a new reflow segment just as it starts a new ICU
+    segment.
+    """
+
+    def __init__(
+        self,
+        owner: SentenceOverride,
+        protection: Literal["none", "watermark"],
+    ) -> None:
+        self._owner = owner
+        self._protection = protection
+        self._inner = IncrementalSentenceBreaker(owner, protection)
+        self._text = ""
+        self._base_offset = 0
+        self._total_length = 0
+        self._segment_start = 0
+        self._fed = 0
+        self._protected: list[ProtectedSpan] = []
+        self._relayed_protected = 0
+        self._protected_through = 0
+        self._closed = False
+        self._block_starts = [0]
+        self._block_scan = 0
+        self._last_terminator_end: int | None = None
+        self._only_horizontal_after_terminator = False
+        self._leading_auto_start = 0
+        self._leading_auto_mode: ReflowMode | None = None
+        self.lookahead = owner.lookahead
+
+    def _char(self, position: int) -> str:
+        return self._text[position - self._base_offset]
+
+    def _slice(self, start: int, end: int) -> str:
+        return self._text[start - self._base_offset : end - self._base_offset]
+
+    def _scan_blocks(self) -> None:
+        """Record auto-mode block starts while scanning each source code point once."""
+        from .reflow import _HORIZONTAL_SPACE
+
+        index = self._block_scan
+        while index < self._total_length:
+            char = self._char(index)
+            if char == "\n" and index > self._base_offset and self._char(index - 1) == "\r":
+                if self._last_terminator_end == index:
+                    self._last_terminator_end = index + 1
+                    if self._block_starts[-1] == index:
+                        self._block_starts[-1] = index + 1
+                index += 1
+                continue
+            if char == "\u2029":
+                if self._block_starts[-1] == index:
+                    self._block_starts[-1] = index + 1
+                else:
+                    self._block_starts.append(index + 1)
+                self._last_terminator_end = index + 1
+                self._only_horizontal_after_terminator = True
+            elif char in {"\n", "\r", "\x85", "\u2028"}:
+                if self._last_terminator_end is not None and self._only_horizontal_after_terminator:
+                    if self._block_starts[-1] == self._last_terminator_end:
+                        self._block_starts[-1] = index + 1
+                    else:
+                        self._block_starts.append(index + 1)
+                self._last_terminator_end = index + 1
+                self._only_horizontal_after_terminator = True
+            elif self._last_terminator_end is not None and not _HORIZONTAL_SPACE.contains(char):
+                self._only_horizontal_after_terminator = False
+            index += 1
+        self._block_scan = index
+
+    def _line_context_start(self, position: int) -> int:
+        """Retain the bounded line and separator context behind ``position``.
+
+        A paragraph separator can itself occupy 1,024 code points and its
+        decision may inspect up to another 1,024 code points of the preceding
+        nonblank line. Keeping both caps also preserves every capital-run line
+        whose leading character can affect the next frozen boundary.
+        """
+        start = max(
+            self._base_offset,
+            self._segment_start,
+            position - 2 * _REFLOW_HOLD_CHARS,
+        )
+        if (
+            start > self._base_offset
+            and start < self._total_length
+            and self._char(start - 1) == "\r"
+            and self._char(start) == "\n"
+        ):
+            start -= 1
+        return start
+
+    def _auto_mode(self, block_start: int, next_block: int | None) -> ReflowMode:
+        if block_start == self._leading_auto_start and self._leading_auto_mode is not None:
+            return self._leading_auto_mode
+        block_end = self._total_length if next_block is None else next_block
+        sample_end = min(block_end, block_start + _REFLOW_HOLD_CHARS)
+        if block_start < self._base_offset:
+            raise AssertionError("auto block sample was discarded before it was classified")
+        sample = self._slice(block_start, sample_end)
+        lines = _lines(sample)
+        for index, line in enumerate(lines[:-1]):
+            following = lines[index + 1]
+            if not _trim_horizontal(sample[following.start : following.content_end]):
+                sample = sample[: line.terminator_end]
+                break
+        mode: ReflowMode = "lines" if _auto_uses_lines(sample) else "none"
+        return mode
+
+    def _substituted_chunk(self, end: int) -> str:
+        """Transform only context whose decisions can affect the next frozen slice."""
+        context_start = self._line_context_start(self._fed)
+        mode = self._owner.reflow
+        if mode != "auto":
+            transformed = _substitute(self._slice(context_start, self._total_length), mode)
+            return transformed[self._fed - context_start : end - context_start]
+
+        block_index = bisect_right(self._block_starts, self._fed) - 1
+        cursor = self._fed
+        result: list[str] = []
+        while cursor < end:
+            block_start = max(self._segment_start, self._block_starts[block_index])
+            next_block = (
+                self._block_starts[block_index + 1]
+                if block_index + 1 < len(self._block_starts)
+                else None
+            )
+            block_end = self._total_length if next_block is None else next_block
+            transform_start = context_start if cursor == self._fed else block_start
+            block_mode = self._auto_mode(block_start, next_block)
+            transformed = _substitute(
+                self._slice(transform_start, block_end),
+                block_mode,
+            )
+            slice_end = min(end, block_end)
+            result.append(transformed[cursor - transform_start : slice_end - transform_start])
+            cursor = slice_end
+            block_index += 1
+        return "".join(result)
+
+    def _separator_start(self, end: int) -> int:
+        """Keep CRLF and blank-line separators on one side of the frontier."""
+        from .reflow import _HORIZONTAL_SPACE
+
+        if (
+            self._base_offset < end < self._total_length
+            and self._char(end - 1) == "\r"
+            and self._char(end) == "\n"
+        ):
+            return end - 1
+        ruled = {"\n", "\r", "\x85", "\u2028"}
+
+        def separator_char(char: str) -> bool:
+            return char in ruled or _HORIZONTAL_SPACE.contains(char)
+
+        left = end
+        while left > self._base_offset and separator_char(self._char(left - 1)):
+            left -= 1
+        right = end
+        while right < self._total_length and separator_char(self._char(right)):
+            right += 1
+        events = 0
+        first: int | None = None
+        last_end: int | None = None
+        index = left
+        while index < right:
+            char = self._char(index)
+            if char in ruled:
+                if first is None:
+                    first = index
+                events += 1
+                last_end = index + 1
+                if char == "\r" and index + 1 < right and self._char(index + 1) == "\n":
+                    index += 1
+                    last_end = index + 1
+            index += 1
+        return (
+            first
+            if events >= 2 and first is not None and last_end is not None and end <= last_end
+            else end
+        )
+
+    def _settled_end(self) -> int:
+        end = max(self._fed, self._total_length - _REFLOW_HOLD_CHARS)
+        for span in self._protected[self._relayed_protected :]:
+            if span["start"] < end < span["end"]:
+                end = span["start"]
+                break
+        return max(self._fed, self._separator_start(end))
+
+    def _compact(self) -> None:
+        retain = self._line_context_start(self._fed)
+        if retain <= self._base_offset:
+            return
+        block_index = bisect_right(self._block_starts, retain) - 1
+        block_start = self._block_starts[block_index]
+        next_block = (
+            self._block_starts[block_index + 1]
+            if block_index + 1 < len(self._block_starts)
+            else None
+        )
+        if self._owner.reflow == "auto" and block_start < retain:
+            leading_mode = self._auto_mode(block_start, next_block)
+            self._leading_auto_start = block_start
+            self._leading_auto_mode = leading_mode
+        else:
+            self._leading_auto_start = block_start
+            self._leading_auto_mode = None
+        self._text = self._slice(retain, self._total_length)
+        self._base_offset = retain
+        keep_block = max(0, bisect_right(self._block_starts, retain) - 1)
+        self._block_starts = self._block_starts[keep_block:]
+        if self._relayed_protected:
+            self._protected = self._protected[self._relayed_protected :]
+            self._relayed_protected = 0
+
+    def _feed_through(self, end: int) -> list[BreakDecision]:
+        if end <= self._fed:
+            return []
+        chunk = self._substituted_chunk(end)
+        additions: list[ProtectedSpan] = []
+        while self._relayed_protected < len(self._protected):
+            span = self._protected[self._relayed_protected]
+            if span["end"] > end:
+                break
+            additions.append(span)
+            self._relayed_protected += 1
+        kwargs: dict[str, object] = {"protected": additions}
+        if self._protection == "watermark":
+            kwargs["protected_through"] = min(self._protected_through, end)
+        self._fed = end
+        result = self._inner.feed(chunk, **kwargs)  # type: ignore[arg-type]
+        self._compact()
+        return result
+
+    def feed(
+        self,
+        chunk: str,
+        /,
+        *,
+        protected: Iterable[ProtectedSpan] = (),
+        protected_through: int | None = None,
+    ) -> list[BreakDecision]:
+        """Append source text and emit decisions whose reflow context is fixed."""
+        if self._closed:
+            raise RuntimeError("incremental sentence breaker is closed")
+        if not isinstance(chunk, str):
+            raise TypeError("chunk must be str")
+        additions = [cast(ProtectedSpan, dict(item)) for item in protected]
+        prospective_length = self._total_length + len(chunk)
+        all_protected = [*self._protected, *additions]
+        _validated_protected(all_protected, prospective_length)
+        if any(item["start"] < self._fed for item in additions):
+            raise LateProtectedSpan("protected span arrived after reflowed text was emitted")
+        if protected_through is not None:
+            if self._protection != "watermark":
+                raise ValueError("protected_through requires protection='watermark'")
+            if (
+                not isinstance(protected_through, int)
+                or isinstance(protected_through, bool)
+                or not self._protected_through <= protected_through <= prospective_length
+            ):
+                raise ValueError("protected_through must advance within buffered text")
+            self._protected_through = protected_through
+        self._protected = all_protected
+        self._text += chunk
+        self._total_length = prospective_length
+        self._scan_blocks()
+        return self._feed_through(self._settled_end())
+
+    def pending(self) -> list[PendingCandidate]:
+        """Return inner candidates plus the first withheld reflow terminator."""
+        result = self._inner.pending()
+        pending_text = self._slice(self._fed, self._total_length)
+        for index, char in enumerate(pending_text, self._fed):
+            if char in {"\n", "\r", "\x85", "\u2028"}:
+                terminator_end = index + 1
+                if char == "\r" and terminator_end < self._total_length:
+                    terminator_end += self._char(terminator_end) == "\n"
+                result.append(
+                    {
+                        "offset": terminator_end,
+                        "tokens_after": 0,
+                        "waiting_on": "reflow",
+                    }
+                )
+                break
+        return sorted(result, key=lambda item: item["offset"])
+
+    def flush(self) -> list[BreakDecision]:
+        """Resolve reflow at END and start a new logical segment."""
+        if self._closed:
+            return []
+        result = self._feed_through(self._total_length)
+        result.extend(self._inner.flush())
+        self._base_offset = self._total_length
+        self._text = ""
+        self._segment_start = self._total_length
+        self._fed = self._total_length
+        self._block_starts = [self._total_length]
+        self._block_scan = self._total_length
+        self._last_terminator_end = None
+        self._only_horizontal_after_terminator = False
+        self._leading_auto_start = self._total_length
+        self._leading_auto_mode = None
+        self._protected = []
+        self._relayed_protected = 0
+        return result
+
+    def close(self) -> list[BreakDecision]:
+        """Resolve reflow at END and reject later input."""
+        if self._closed:
+            return []
+        result = self._feed_through(self._total_length)
+        result.extend(self._inner.close())
+        self._closed = True
+        return result
+
+
 class SentenceOverride:
     """Apply token integrity, exceptions, rules, or a model to ICU candidates.
 
@@ -3610,6 +3943,9 @@ class SentenceOverride:
         cache: Reuse immutable per-token features in incremental evaluation.
         max_sentence_chars: Hard maximum sentence length in code points. ``None``
             disables forced boundaries.
+        reflow: Reflow line endings before sentence breaking. The default
+            ``"none"`` leaves ICU's input unchanged; every other mode keeps
+            original-text offsets through equal-length substitution.
 
     Example:
         >>> override = SentenceOverride()
@@ -3628,6 +3964,7 @@ class SentenceOverride:
         inventories: Sequence[LoadedExceptionInventory] = (),
         cache: bool = True,
         max_sentence_chars: int | None = DEFAULT_MAX_SENTENCE_CHARS,
+        reflow: ReflowMode = "none",
     ) -> None:
         if not isinstance(locale, str) or not locale:
             raise ValueError("locale must be a nonempty string")
@@ -3643,9 +3980,11 @@ class SentenceOverride:
             or max_sentence_chars <= 0
         ):
             raise ValueError("max_sentence_chars must be a positive int or None")
+        _validate_mode(reflow)
         self.locale = locale
         self.cache = cache
         self.max_sentence_chars = max_sentence_chars
+        self.reflow = reflow
         uses_english_default = locale_default and _uses_english_default(locale)
         if locale_default and not uses_english_default:
             base = "none"
@@ -3785,6 +4124,8 @@ class SentenceOverride:
             "features": _FEATURES,
             "max_sentence_chars": self.max_sentence_chars,
         }
+        if self.reflow != "none":
+            definition["reflow"] = self.reflow
         self.identity = "sha256:" + hashlib.sha256(_canonical(definition)).hexdigest()
         self.lookahead = max(
             (*(item.lookahead for item in layers), loaded_base.lookahead if loaded_base else 0)
@@ -3822,13 +4163,14 @@ class SentenceOverride:
         if not text:
             return []
         protected_items = [cast(ProtectedSpan, dict(item)) for item in protected]
+        breaking_text = text if self.reflow == "none" else _substitute(text, self.reflow)
         decisions = IncrementalSentenceBreaker(
             self,
             "none",
             _enforce_bound=False,
-        )._whole(text, protected_items)
+        )._whole(breaking_text, protected_items)
         return _force_closed_decisions(
-            text,
+            breaking_text,
             decisions,
             self.max_sentence_chars,
             self.locale,
@@ -3860,7 +4202,7 @@ class SentenceOverride:
 
     def stream(
         self, *, protection: Literal["none", "watermark"] = "none"
-    ) -> IncrementalSentenceBreaker:
+    ) -> IncrementalSentenceBreaker | IncrementalReflowSentenceBreaker:
         """Return an incremental breaker sharing this override's decision core.
 
         Collation-variant word- and sentence-level exception rules are refused:
@@ -3885,6 +4227,8 @@ class SentenceOverride:
                 "exception rules incrementally with a bounded hold; use them with "
                 "the whole-text API, or use exact variants"
             )
+        if self.reflow != "none":
+            return IncrementalReflowSentenceBreaker(self, protection)
         return IncrementalSentenceBreaker(self, protection)
 
 

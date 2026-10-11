@@ -401,6 +401,7 @@ from .recognize import (
     PluralNumeralDetector,
     SingleLetterWordDetector,
 )
+from .reflow import ReflowMode, reflow
 from .regex import (
     CASE_INSENSITIVE,
     COMMENTS,
@@ -743,6 +744,8 @@ __all__ = [
     "BREAK_WORD",
     "BREAK_LINE",
     "BREAK_CHARACTER",
+    "ReflowMode",
+    "reflow",
     # Character classes, shapes, and sentence-break tokens
     "Prop",
     "ClassPoint",

@@ -9,6 +9,22 @@
   mapping, and a canonical whole-input digest. The section exposes the current
   sentence, detection, and streaming options while excluding paths, regex patterns,
   exception policies, and process settings.
+- Add text-only `reflow()` and `ReflowMode`, plus offset-preserving `reflow=`
+  modes on `SentenceOverride`, `Breaker`, `break_sentences`,
+  `break_sentence_spans`, the incremental sentence stream, detection streams from
+  `DetectorSet` and `CompiledDetectorSet`, and `ik break` sentence and tokenization
+  commands. Detection stream boundaries are selected on the reflowed view, while
+  detection and capture text remain original-source slices.
+  The capital-run protection is intentionally limited to three or more
+  capital-started lines no longer than 60 code points. Title-case headings,
+  two-line and lowercase verse, CJK verse without cased letters, arrow bullets,
+  code, and legal formatting require explicit protected spans when their line
+  endings must be retained.
+  Streamed and whole-text reflow make identical decisions within the same
+  1,024-code-point bound, a blank-line separator is reflowed wholly or not at
+  all, and streaming memory stays bounded. A bare `--reflow` selects `lines`
+  before or after a file argument. With the default `reflow="none"`, output
+  and `SentenceOverride` identity are unchanged.
 - Flexible English measure readers accept periods after known abbreviated unit words
   of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
   curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
