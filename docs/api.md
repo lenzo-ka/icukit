@@ -993,9 +993,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Load one full behavior envelope or bare icukit section.
 
-File and mapping inputs share the same 64 KiB, 16-level, 4,096-value, and
-256-code-point string caps. A full envelope is digested in full even though icukit
-interprets only ``sections.icukit``. An absent icukit section is neutral.
+File and mapping inputs share the same 64 KiB, 16-level, 4,096-value,
+256-code-point string, and 9,223,372,036,854,775,807 integer magnitude caps. A full
+envelope is digested in full even though icukit interprets only
+``sections.icukit``. An absent icukit section is neutral.
 
 Unknown options are refused. This excludes file paths, regular-expression patterns,
 exception policies, and process settings; sentence bases must use a published name.

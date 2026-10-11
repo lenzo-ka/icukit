@@ -1,8 +1,11 @@
 """Behavior-schema loader and shared conformance fixtures."""
 
 import copy
+import enum
 import hashlib
+import inspect
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -11,6 +14,7 @@ from icukit import (
     BEHAVIOR_OPTION_NAMES,
     BehaviorLoadError,
     Breaker,
+    DetectorSet,
     UnicodeRegex,
     load_behavior_schema,
     reader_set,
@@ -177,6 +181,146 @@ def test_mapping_cycles_and_non_json_values_are_invalid_json():
         _error({"schema_version": 1, "sentence": {"base": float("nan")}}).refusals[0].code
         == "INVALID_JSON"
     )
+
+
+@pytest.mark.parametrize(
+    ("group", "option", "value"),
+    [
+        ("sentence", "base", ["none"]),
+        ("sentence", "base", {"name": "none"}),
+        ("stream", "boundary", ["paragraph"]),
+        ("stream", "boundary", {"name": "paragraph"}),
+    ],
+)
+def test_unhashable_option_values_are_refused(group, option, value, tmp_path):
+    document = {"schema_version": 1, group: {option: value}}
+
+    mapping_error = _error(document)
+    path = tmp_path / "unhashable.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    file_error = _error(path)
+
+    assert [item.code for item in mapping_error.refusals] == ["INVALID_VALUE"]
+    assert [item.code for item in file_error.refusals] == ["INVALID_VALUE"]
+
+
+def test_integers_have_a_signed_64_bit_magnitude_cap(tmp_path):
+    maximum = 2**63 - 1
+    loaded = load_behavior_schema({"schema_version": 1, "stream": {"max_pending_chars": maximum}})
+    assert loaded.stream["max_pending_chars"] == maximum
+
+    mapping_error = _error({"schema_version": 1, "stream": {"max_pending_chars": maximum + 1}})
+    path = tmp_path / "huge-integer.json"
+    path.write_text(
+        '{"schema_version":1,"stream":{"max_pending_chars":' + "9" * 5000 + "}}",
+        encoding="utf-8",
+    )
+    file_error = _error(path)
+
+    assert [item.code for item in mapping_error.refusals] == ["INVALID_JSON"]
+    assert [item.code for item in file_error.refusals] == ["INVALID_JSON"]
+    assert "9223372036854775807" in mapping_error.refusals[0].detail
+    assert "9223372036854775807" in file_error.refusals[0].detail
+
+
+def test_invalid_icu_date_skeleton_is_refused_at_load():
+    error = _error({"schema_version": 1, "detection": {"skeletons": ["!!!"]}})
+
+    assert [item.code for item in error.refusals] == ["INVALID_VALUE"]
+    assert "cannot detect skeleton '!!!'" in error.refusals[0].detail
+
+
+def test_multi_error_refusal_count_and_order_are_stable():
+    error = _error(
+        {
+            "schema_version": 2,
+            "unknown": True,
+            "sentence": {"unknown": True, "base": "missing"},
+            "detection": {"flexible": "yes", "guarded": 1},
+            "stream": {"boundary": "page", "max_pending_chars": 0},
+        }
+    )
+
+    assert len(error.refusals) == 8
+    assert [(item.code, item.detail.split(": ", 2)[-1]) for item in error.refusals] == [
+        (
+            "INVALID_KEY",
+            "unknown key 'unknown'; known keys: detection, regex, sentence, stream",
+        ),
+        ("INVALID_SCHEMA_VERSION", "sections.icukit.schema_version must be integer 1, got 2"),
+        ("INVALID_KEY", "unknown key 'unknown'; known keys: base"),
+        ("INVALID_VALUE", "sentence.base must be null or a named base, got 'missing'"),
+        ("INVALID_VALUE", "detection.flexible must be a bool, got 'yes'"),
+        ("INVALID_VALUE", "detection.guarded must be a bool, got 1"),
+        (
+            "INVALID_VALUE",
+            "stream.boundary must be 'paragraph', 'line', or 'explicit', got 'page'",
+        ),
+        ("INVALID_VALUE", "stream.max_pending_chars must be a positive integer, got 0"),
+    ]
+
+
+def test_option_name_groups_match_receiving_keyword_parameters():
+    def keyword_only(target):
+        return {
+            name
+            for name, parameter in inspect.signature(target).parameters.items()
+            if parameter.kind is inspect.Parameter.KEYWORD_ONLY
+        }
+
+    assert set(BEHAVIOR_OPTION_NAMES["sentence"]) == keyword_only(Breaker)
+    assert set(BEHAVIOR_OPTION_NAMES["detection"]) == keyword_only(reader_set) - {"material"}
+    assert set(BEHAVIOR_OPTION_NAMES["stream"]) == keyword_only(DetectorSet.stream)
+    assert set(BEHAVIOR_OPTION_NAMES["regex"]) == keyword_only(UnicodeRegex)
+
+
+def test_mapping_input_is_normalized_to_plain_json_scalars():
+    class Count(enum.IntEnum):
+        SEVEN = 7
+
+    loaded = load_behavior_schema(
+        {"schema_version": 1, "stream": {"max_pending_chars": Count.SEVEN}}
+    )
+
+    assert loaded.stream["max_pending_chars"] == 7
+    assert type(loaded.stream["max_pending_chars"]) is int
+
+
+def test_duplicate_keys_from_custom_mapping_are_invalid_json():
+    class DuplicateMapping(Mapping):
+        def __iter__(self):
+            return iter(("schema_version", "stream"))
+
+        def __len__(self):
+            return 2
+
+        def __getitem__(self, key):
+            if key == "schema_version":
+                return 1
+            if key == "stream":
+                return {"max_pending_chars": 7}
+            raise KeyError(key)
+
+        def items(self):
+            return (
+                ("schema_version", 1),
+                ("stream", {"max_pending_chars": 3}),
+                ("stream", {"max_pending_chars": 7}),
+            )
+
+    error = _error(DuplicateMapping())
+
+    assert [item.code for item in error.refusals] == ["INVALID_JSON"]
+    assert "duplicate object key 'stream'" in error.refusals[0].detail
+
+
+def test_too_large_fixture_padding_is_the_byte_cap_condition():
+    path = DATA / "envelope/invalid/too-large.json"
+    raw = path.read_bytes()
+
+    assert len(raw) > 65_536
+    assert len(raw.rstrip()) <= 65_536
+    assert [item.code for item in _error(path).refusals] == ["TOO_LARGE"]
 
 
 def test_excluded_settings_and_regex_patterns_are_unknown_keys():

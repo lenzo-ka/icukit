@@ -50,6 +50,8 @@ _MAX_BYTES = 65_536
 _MAX_DEPTH = 16
 _MAX_VALUES = 4_096
 _MAX_STRING = 256
+_MAX_INTEGER = 2**63 - 1
+_MAX_INTEGER_TEXT = str(_MAX_INTEGER)
 
 _SENTENCE_KEYS = ["base"]
 if "max_sentence_chars" in inspect.signature(Breaker).parameters:
@@ -166,6 +168,15 @@ def _float(value: str) -> float:
     return parsed
 
 
+def _integer(value: str) -> int:
+    digits = value.removeprefix("-").lstrip("0") or "0"
+    if len(digits) > len(_MAX_INTEGER_TEXT) or (
+        len(digits) == len(_MAX_INTEGER_TEXT) and digits > _MAX_INTEGER_TEXT
+    ):
+        raise _InvalidJSON(f"integer magnitude exceeds {_MAX_INTEGER}")
+    return int(value)
+
+
 def _bounded_plain(
     value: object,
     *,
@@ -194,6 +205,8 @@ def _bounded_plain(
                 raise _InvalidJSON(f"object key must be a string, got {key!r}")
             if len(key) > _MAX_STRING:
                 raise _InvalidJSON(f"JSON string exceeds {_MAX_STRING} code points")
+            if key in result:
+                raise _InvalidJSON(f"duplicate object key {key!r}")
             result[str(key)] = _bounded_plain(
                 item,
                 depth=depth + 1,
@@ -214,12 +227,18 @@ def _bounded_plain(
             )
             for item in value
         ]
-    if value is None or isinstance(value, (bool, int)):
+    if value is None:
         return value
+    if isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, int):
+        if abs(value) > _MAX_INTEGER:
+            raise _InvalidJSON(f"integer magnitude exceeds {_MAX_INTEGER}")
+        return int(value)
     if isinstance(value, float):
         if not math.isfinite(value):
             raise _InvalidJSON("non-finite number")
-        return value
+        return float(value)
     raise _InvalidJSON(f"value is not a JSON type: {type(value).__name__}")
 
 
@@ -267,6 +286,7 @@ def _read(
                 object_pairs_hook=_object,
                 parse_constant=_constant,
                 parse_float=_float,
+                parse_int=_integer,
             )
         elif isinstance(source, Mapping):
             shown = "<mapping>"
@@ -290,7 +310,14 @@ def _read(
         return plain, canonical, shown
     except BehaviorLoadError:
         raise
-    except (UnicodeError, json.JSONDecodeError, _InvalidJSON, RecursionError) as error:
+    except (
+        UnicodeError,
+        json.JSONDecodeError,
+        _InvalidJSON,
+        RecursionError,
+        TypeError,
+        ValueError,
+    ) as error:
         shown = os.fspath(source) if isinstance(source, (str, os.PathLike)) else "<mapping>"
         raise BehaviorLoadError([_refuse("INVALID_JSON", f"{shown}: {error}")]) from error
 
@@ -421,7 +448,7 @@ def _value_reason(group: str, key: str, value: object) -> str | None:
     name = f"{group}.{key}"
     if group == "sentence":
         if key == "base":
-            if value is None or value in _SENTENCE_BASES:
+            if value is None or isinstance(value, str) and value in _SENTENCE_BASES:
                 return None
             return f"{name} must be null or a named base, got {value!r}"
         return _positive_int(value, name, optional=True)
@@ -451,10 +478,18 @@ def _value_reason(group: str, key: str, value: object) -> str | None:
             for item in values:
                 if icu.Locale(item).getName() != item or item not in available:
                     return f"{name} has unknown or noncanonical ICU locale {item!r}"
+        elif key == "skeletons":
+            from .detectors import _date_pattern
+
+            for item in values:
+                try:
+                    _date_pattern(icu.Locale.getRoot().getName(), item)
+                except (icu.ICUError, ValueError) as error:
+                    return f"{name} has invalid ICU date skeleton {item!r}: {error}"
         return None
     if group == "stream":
         if key == "boundary":
-            if value in {"paragraph", "line", "explicit"}:
+            if isinstance(value, str) and value in {"paragraph", "line", "explicit"}:
                 return None
             return f"{name} must be 'paragraph', 'line', or 'explicit', got {value!r}"
         return _positive_int(value, name)
@@ -512,9 +547,10 @@ def load_behavior_schema(
 ) -> BehaviorSchema:
     """Load one full behavior envelope or bare icukit section.
 
-    File and mapping inputs share the same 64 KiB, 16-level, 4,096-value, and
-    256-code-point string caps. A full envelope is digested in full even though icukit
-    interprets only ``sections.icukit``. An absent icukit section is neutral.
+    File and mapping inputs share the same 64 KiB, 16-level, 4,096-value,
+    256-code-point string, and 9,223,372,036,854,775,807 integer magnitude caps. A full
+    envelope is digested in full even though icukit interprets only
+    ``sections.icukit``. An absent icukit section is neutral.
 
     Unknown options are refused. This excludes file paths, regular-expression patterns,
     exception policies, and process settings; sentence bases must use a published name.
