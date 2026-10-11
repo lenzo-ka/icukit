@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "kind": "behavior-schema",
+  "name": "repeated-extends",
+  "version": 1,
+  "extends": [
+    "a",
+    "a"
+  ],
+  "provenance": {
+    "source": "frend tests"
+  },
+  "sections": {}
+}

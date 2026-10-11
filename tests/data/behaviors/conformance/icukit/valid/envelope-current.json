@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "kind": "behavior-schema",
+  "name": "icukit-current",
+  "version": 1,
+  "extends": [],
+  "provenance": {
+    "source": "icukit tests"
+  },
+  "sections": {
+    "frend": {
+      "opaque": true
+    },
+    "icukit": {
+      "schema_version": 1,
+      "sentence": {
+        "base": "en-real-cart@1"
+      },
+      "detection": {
+        "flexible": false,
+        "guarded": false,
+        "locales": null,
+        "currencies": [],
+        "units": [],
+        "skeletons": []
+      },
+      "stream": {
+        "max_pending_chars": 4096,
+        "boundary": "explicit"
+      }
+    }
+  }
+}

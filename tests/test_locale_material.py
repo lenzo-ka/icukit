@@ -330,6 +330,27 @@ def test_duplicate_keys_and_nonfinite_numbers_are_invalid_json(tmp_path):
     assert _codes(nonfinite) == ["INVALID_JSON"]
 
 
+def test_file_input_has_the_mapping_depth_value_and_byte_caps(tmp_path, monkeypatch):
+    import icukit.material as material_module
+
+    monkeypatch.setattr(material_module, "_MAX_DEPTH", 4)
+    deep = tmp_path / "deep.json"
+    deep.write_text('{"a":{"b":{"c":{"d":{}}}}}', encoding="utf-8")
+    assert _codes(deep) == ["INVALID_JSON"]
+
+    monkeypatch.setattr(material_module, "_MAX_NODES", 4)
+    values = tmp_path / "values.json"
+    values.write_text('{"a":[1,2,3,4]}', encoding="utf-8")
+    assert _codes(values) == ["INVALID_JSON"]
+
+    monkeypatch.setattr(material_module, "_MAX_FILE_BYTES", 16)
+    large = tmp_path / "large.json"
+    large.write_bytes(b" " * 17)
+    error = _refusals(large)
+    assert [item.code for item in error] == ["INVALID_JSON"]
+    assert "16-byte locale-material limit" in error[0].detail
+
+
 def test_every_malformed_input_in_the_refusal_sweep_raises_material_load_error(tmp_path):
     bad_values = (None, [], {}, 0, 1.5, True, "x")
     for field in ("schema_version", "kind", "locale", "rules", "provenance", "witnesses"):

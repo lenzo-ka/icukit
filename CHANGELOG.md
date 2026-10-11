@@ -4,6 +4,11 @@
 
 ### Added
 
+- `load_behavior_schema()` loads either the shared behavior-schema envelope or a bare
+  icukit section with bounded strict JSON validation, an immutable grouped option
+  mapping, and a canonical whole-input digest. The section exposes the current
+  sentence, detection, and streaming options while excluding paths, regex patterns,
+  exception policies, and process settings.
 - Add text-only `reflow()` and `ReflowMode`, plus offset-preserving `reflow=`
   modes on `SentenceOverride`, `Breaker`, `break_sentences`,
   `break_sentence_spans`, the incremental sentence stream, detection streams from
@@ -87,6 +92,11 @@
   later text fixes its offset and logical end. Provisional END context advances
   through whitespace and closing characters without a full rescan, and compaction
   no longer leaves stale pending candidates that can stall forced emission.
+- Behavior-schema date skeletons are validated against every explicitly selected
+  detection locale, with ICU root used when no locale is selected, so locale-specific
+  uninvertible patterns are refused during loading.
+- Locale-material files now receive the same depth and one-million-value checks as
+  mapping input and are capped at 64 MiB before decoding.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
   limit no longer abort plural-numeral or numeric-duration detection; their capture
   value is `None`. Fraction, relative-date, and scientific-notation readers skip a
