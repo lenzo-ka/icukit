@@ -105,7 +105,7 @@ def test_default_whole_text_inventory_work_scales_with_text(monkeypatch):
 
 def test_unbroken_run_is_the_documented_safe_retention_fallback():
     text = "a" * (sentence_override_module._STREAM_WINDOW * 2)
-    override = SentenceOverride(base="none")
+    override = SentenceOverride(base="none", max_sentence_chars=None)
     stream = override.stream()
 
     emitted = stream.feed(text)

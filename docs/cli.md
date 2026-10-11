@@ -259,6 +259,7 @@ Show ICU's standard root rule source as a tailoring base. Locale dictionary and 
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--base`: Sentence base (default: ICU + token integrity + shipped list for English except POSIX; raw ICU otherwise; en-tn@1, en-tn-cart@1, and en-real-cart@1 are opt-in)
+- `--max-sentence-chars`: Force sentences to at most N code points (default: 1024; none disables) (default: `1024`)
 - `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
@@ -274,6 +275,7 @@ Show ICU's standard root rule source as a tailoring base. Locale dictionary and 
 
 - `-l, --locale`: Locale (default: en_US) (default: `en_US`)
 - `--base`: Sentence base (default: ICU + token integrity + shipped list for English except POSIX; raw ICU otherwise; en-tn@1, en-tn-cart@1, and en-real-cart@1 are opt-in)
+- `--max-sentence-chars`: Force sentences to at most N code points (default: 1024; none disables) (default: `1024`)
 - `--spans`: Output structured spans (JSON includes text, compatibility start/end, explicit code-point, UTF-8 byte, UTF-16 code-unit offsets, types, and statuses; TSV shows explicitly named offsets) (default: `False`)
 - `--skip-punctuation, -p`: Skip punctuation tokens (default: `False`)
 - `-t, --text`: Process TEXT directly
@@ -1705,6 +1707,8 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
+- `--time-limit`: ICU engine steps allowed per operation (0 disables; default: 10000) (default: `10000`)
+- `--stack-limit`: ICU regex stack bytes (0 disables; default: 8000000) (default: `8000000`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
@@ -1722,6 +1726,8 @@ Common Scripts:
 - `what`: What to list (default: all) (default: `all`)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
+- `--time-limit`: ICU engine steps allowed per operation (0 disables; default: 10000) (default: `10000`)
+- `--stack-limit`: ICU regex stack bytes (0 disables; default: 8000000) (default: `8000000`)
 
 ### `icukit regex match` (aliases: m)
 
@@ -1733,6 +1739,8 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
+- `--time-limit`: ICU engine steps allowed per operation (0 disables; default: 10000) (default: `10000`)
+- `--stack-limit`: ICU regex stack bytes (0 disables; default: 8000000) (default: `8000000`)
 - `-v, --verbose`: Show match details (default: `False`)
 
 ### `icukit regex replace` (aliases: r, sub)
@@ -1747,6 +1755,8 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
+- `--time-limit`: ICU engine steps allowed per operation (0 disables; default: 10000) (default: `10000`)
+- `--stack-limit`: ICU regex stack bytes (0 disables; default: 8000000) (default: `8000000`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
@@ -1758,6 +1768,11 @@ Common Scripts:
 - `expression`: Substitution expression: s/pattern/replacement/[gi] (delimiter can be any char)
 - `-t, --text`: Process TEXT directly
 - `files`: Process FILE(s)
+- `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
+- `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
+- `-s, --dotall`: Dot matches newlines (default: `False`)
+- `--time-limit`: ICU engine steps allowed per operation (0 disables; default: 10000) (default: `10000`)
+- `--stack-limit`: ICU regex stack bytes (0 disables; default: 8000000) (default: `8000000`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)
@@ -1772,6 +1787,8 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
+- `--time-limit`: ICU engine steps allowed per operation (0 disables; default: 10000) (default: `10000`)
+- `--stack-limit`: ICU regex stack bytes (0 disables; default: 8000000) (default: `8000000`)
 
 ### `icukit regex split` (aliases: sp)
 
@@ -1784,6 +1801,8 @@ Common Scripts:
 - `-i, --ignore-case`: Case-insensitive matching (Unicode-aware) (default: `False`)
 - `-m, --multiline`: Multiline mode (^ and $ match line boundaries) (default: `False`)
 - `-s, --dotall`: Dot matches newlines (default: `False`)
+- `--time-limit`: ICU engine steps allowed per operation (0 disables; default: 10000) (default: `10000`)
+- `--stack-limit`: ICU regex stack bytes (0 disables; default: 8000000) (default: `8000000`)
 - `-o, --output`: Output file in UTF-8; atomically replaces an existing file (default: stdout)
 - `-j, --json`: Output in JSON format (default: `False`)
 - `-H, --no-header`: Suppress header in TSV output (default: `False`)

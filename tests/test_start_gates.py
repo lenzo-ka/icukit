@@ -125,7 +125,7 @@ def test_en_US_gate_literals():
     strict = StartGate(
         chars=frozenset("0123456789"),
         folded=frozenset("0123456789abdefijmnopstw"),
-        tests=frozenset({"icu.not_isalpha"}),
+        tests=frozenset({"icu.nonalpha_nonspace"}),
     )
     assert DateDetector("en_US", "yMd").start_gates()["scan"] == strict
     assert DateDetector("en_US", "MMMd").start_gates()["scan"] == strict

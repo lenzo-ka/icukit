@@ -33,6 +33,25 @@ def run_cli(*args):
     return result.returncode, result.stdout, result.stderr
 
 
+def test_sentence_max_chars_cli_and_none_opt_out():
+    text = "a" * 25
+    code, out, err = run_cli(
+        "break", "sentences", "--spans", "--json", "--max-sentence-chars", "10", "-t", text
+    )
+    assert code == 0, err
+    assert [(item["start"], item["end"]) for item in json.loads(out)] == [
+        (0, 10),
+        (10, 20),
+        (20, 25),
+    ]
+
+    code, out, err = run_cli(
+        "break", "sentences", "--spans", "--json", "--max-sentence-chars", "none", "-t", text
+    )
+    assert code == 0, err
+    assert [(item["start"], item["end"]) for item in json.loads(out)] == [(0, 25)]
+
+
 def assert_offsets(spans, text=SOURCE):
     utf8 = text.encode("utf-8")
     utf16 = text.encode("utf-16-le")

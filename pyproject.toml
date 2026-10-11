@@ -109,7 +109,8 @@ icukit = [
 testpaths = ["tests"]
 # Print each test's time beside it, in run order (per-test times need -v).
 console_output_style = "times"
-addopts = "-v"
+addopts = "-v -m 'not slow'"
+markers = ["slow: exhaustive pathological-input and scaling checks"]
 
 [tool.ruff]
 line-length = 100

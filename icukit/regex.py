@@ -87,22 +87,22 @@ See Also:
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Literal
 
 import icu
 
 from ._offsets import (
     boundary_maps,
-    codepoint_map,
-    to_codepoint,
     u16_boundary_to_codepoint,
 )
-from .errors import PatternError
+from .errors import PatternError, RegexLimitError
 from .script import list_scripts as _list_scripts
 
 __all__ = [
     "CASE_INSENSITIVE",
     "COMMENTS",
+    "DEFAULT_REGEX_STACK_LIMIT",
+    "DEFAULT_REGEX_TIME_LIMIT",
     "DOTALL",
     "MULTILINE",
     "UnicodeRegex",
@@ -116,6 +116,38 @@ __all__ = [
     "regex_search",
     "regex_split",
 ]
+
+DEFAULT_REGEX_TIME_LIMIT = 10_000
+DEFAULT_REGEX_STACK_LIMIT = 8_000_000
+_U_REGEX_STACK_OVERFLOW = 66321
+_U_REGEX_TIME_OUT = 66322
+
+
+def _positive_limit(value: int | None, name: str) -> int | None:
+    if value is not None and (not isinstance(value, int) or isinstance(value, bool) or value <= 0):
+        raise ValueError(f"{name} must be a positive int or None")
+    return value
+
+
+class _RegexOperationState:
+    """Track ICU's cumulative callback ticks relative to one matcher operation."""
+
+    def __init__(self, limit: int | None) -> None:
+        self.limit = limit
+        self.ticks = 0
+        self.baseline = 0
+        self.exceeded = False
+
+    def begin(self) -> None:
+        self.baseline = self.ticks
+        self.exceeded = False
+
+    def callback(self, ticks: int) -> bool:
+        self.ticks = ticks
+        if self.limit is not None and ticks - self.baseline > self.limit:
+            self.exceeded = True
+            return False
+        return True
 
 
 class UnicodeRegex:
@@ -132,6 +164,8 @@ class UnicodeRegex:
     Attributes:
         pattern (str): The regex pattern string.
         flags (int): Combination of regex flags (CASE_INSENSITIVE, MULTILINE, etc.).
+        time_limit (int | None): ICU engine steps allowed per operation.
+        stack_limit (int | None): ICU regex stack bytes.
 
     Pattern Syntax:
         ICU regex supports extensive Unicode property matching:
@@ -192,18 +226,31 @@ class UnicodeRegex:
         "Math": r"\p{Sm}",
     }
 
-    def __init__(self, pattern: str, flags: int = 0):
+    def __init__(
+        self,
+        pattern: str,
+        flags: int = 0,
+        *,
+        time_limit: int | None = DEFAULT_REGEX_TIME_LIMIT,
+        stack_limit: int | None = DEFAULT_REGEX_STACK_LIMIT,
+    ):
         """Initialize a Unicode regex.
 
         Args:
             pattern: ICU regex pattern.
             flags: Regex flags (CASE_INSENSITIVE, MULTILINE, etc.).
+            time_limit: ICU engine steps allowed for each matching operation;
+                ``None`` disables the limit.
+            stack_limit: ICU regex stack bytes; ``None`` uses ICU's unlimited setting.
 
         Raises:
             PatternError: If the pattern is invalid.
+            ValueError: If either limit is not a positive integer or ``None``.
         """
         self.pattern = pattern
         self.flags = flags
+        self.time_limit = _positive_limit(time_limit, "time_limit")
+        self.stack_limit = _positive_limit(stack_limit, "stack_limit")
         self._regex = None
         self._compile()
 
@@ -213,6 +260,61 @@ class UnicodeRegex:
             self._regex = icu.RegexPattern.compile(self.pattern, self.flags)
         except icu.ICUError as e:
             raise PatternError(f"Invalid regex pattern '{self.pattern}': {e}") from e
+
+    def _limit_error(self, limit: Literal["time", "stack"]) -> RegexLimitError:
+        value = self.time_limit if limit == "time" else self.stack_limit
+        if value is None:
+            raise AssertionError(f"disabled {limit} limit reported by ICU")
+        return RegexLimitError(limit, value, self.pattern)
+
+    def _matcher(self, text: str):
+        matcher = self._regex.matcher(text)
+        matcher.setTimeLimit(0)
+        matcher.setStackLimit(self.stack_limit or 0)
+        state = _RegexOperationState(self.time_limit)
+        if self.time_limit is not None:
+            matcher.setMatchCallback(state.callback)
+        return matcher, state
+
+    def _operation(self, state: _RegexOperationState, call):
+        state.begin()
+        try:
+            result = call()
+        except icu.ICUError as error:
+            code = error.args[0] if error.args else None
+            if state.exceeded or code == _U_REGEX_TIME_OUT:
+                raise self._limit_error("time") from None
+            if code == _U_REGEX_STACK_OVERFLOW:
+                raise self._limit_error("stack") from error
+            raise
+        if state.exceeded:
+            raise self._limit_error("time")
+        return result
+
+    def _confirm_no_match(self, text: str, start_u16: int) -> None:
+        """Make ICU surface a stack overflow that stateful ``find`` hid as ``False``."""
+        matcher, state = self._matcher(text)
+        end_u16 = len(icu.UnicodeString(text))
+        matcher.region(start_u16, end_u16)
+        self._operation(state, matcher.lookingAt)
+        self._operation(state, lambda: matcher.find(start_u16))
+
+    def _find_next(
+        self,
+        matcher,
+        state: _RegexOperationState,
+        text: str,
+        start_u16: int,
+        *,
+        positioned: bool = False,
+    ) -> bool:
+        found = self._operation(
+            state,
+            (lambda: matcher.find(start_u16)) if positioned else matcher.find,
+        )
+        if not found:
+            self._confirm_no_match(text, start_u16)
+        return found
 
     @classmethod
     def list_properties(cls) -> dict[str, str]:
@@ -340,9 +442,15 @@ class UnicodeRegex:
             raise ValueError("start must be non-negative")
         if start > len(text):
             return None
-        matcher = self._regex.matcher(text)
+        matcher, state = self._matcher(text)
         cp_to_u16, u16_to_cp = boundary_maps(text)
-        if matcher.find(cp_to_u16[start]):
+        if self._find_next(
+            matcher,
+            state,
+            text,
+            cp_to_u16[start],
+            positioned=True,
+        ):
             return _match_record(matcher, u16_to_cp)
         return None
 
@@ -356,11 +464,13 @@ class UnicodeRegex:
             List of match dictionaries.
         """
         matches = []
-        matcher = self._regex.matcher(text)
+        matcher, state = self._matcher(text)
         _, u16_to_cp = boundary_maps(text)
+        last_end = 0
 
-        while matcher.find():
+        while self._find_next(matcher, state, text, last_end):
             matches.append(_match_record(matcher, u16_to_cp))
+            last_end = matcher.end()
 
         return matches
 
@@ -373,8 +483,11 @@ class UnicodeRegex:
         Returns:
             True if entire text matches.
         """
-        matcher = self._regex.matcher(text)
-        return matcher.matches()
+        matcher, state = self._matcher(text)
+        matched = self._operation(state, matcher.matches)
+        if not matched:
+            self._confirm_no_match(text, 0)
+        return matched
 
     def search(self, text: str) -> bool:
         """Check if pattern exists anywhere in text.
@@ -385,8 +498,8 @@ class UnicodeRegex:
         Returns:
             True if pattern found.
         """
-        matcher = self._regex.matcher(text)
-        return matcher.find()
+        matcher, state = self._matcher(text)
+        return self._find_next(matcher, state, text, 0)
 
     def replace(self, text: str, replacement: str, limit: int = -1) -> str:
         """Replace matches with replacement text.
@@ -399,36 +512,15 @@ class UnicodeRegex:
         Returns:
             Text with replacements made.
         """
-        matcher = self._regex.matcher(text)
-
-        if limit == -1:
-            return matcher.replaceAll(replacement)
-        elif limit == 1:
-            return matcher.replaceFirst(replacement)
-        else:
-            # For limited replacements, do it manually
-            result = []
-            last_end = 0
-            count = 0
-            offmap = codepoint_map(text)
-
-            while matcher.find() and count < limit:
-                start = to_codepoint(offmap, matcher.start())
-                end = to_codepoint(offmap, matcher.end())
-                result.append(text[last_end:start])
-
-                # Process replacement with group substitutions
-                replaced = replacement
-                for i in range(matcher.groupCount() + 1):
-                    group_text = matcher.group(i) or ""
-                    replaced = replaced.replace(f"${i}", group_text)
-
-                result.append(replaced)
-                last_end = end
-                count += 1
-
-            result.append(text[last_end:])
-            return "".join(result)
+        matcher, state = self._matcher(text)
+        result = icu.UnicodeString()
+        count = 0
+        last_end = 0
+        while (limit < 0 or count < limit) and self._find_next(matcher, state, text, last_end):
+            matcher.appendReplacement(result, replacement)
+            count += 1
+            last_end = matcher.end()
+        return str(matcher.appendTail(result))
 
     def replace_with_callback(self, text: str, callback) -> str:
         """Replace matches using a callback function.
@@ -489,11 +581,13 @@ class UnicodeRegex:
         Yields:
             Match dictionaries.
         """
-        matcher = self._regex.matcher(text)
+        matcher, state = self._matcher(text)
         _, u16_to_cp = boundary_maps(text)
+        last_end = 0
 
-        while matcher.find():
+        while self._find_next(matcher, state, text, last_end):
             yield _match_record(matcher, u16_to_cp)
+            last_end = matcher.end()
 
 
 def _codepoint_boundary(u16_to_cp: dict[int, int], offset: int) -> int:
@@ -533,7 +627,14 @@ DOTALL = icu.URegexpFlag.DOTALL
 COMMENTS = icu.URegexpFlag.COMMENTS
 
 
-def regex_find(pattern: str, text: str, flags: int = 0) -> list[dict[str, Any]]:
+def regex_find(
+    pattern: str,
+    text: str,
+    flags: int = 0,
+    *,
+    time_limit: int | None = DEFAULT_REGEX_TIME_LIMIT,
+    stack_limit: int | None = DEFAULT_REGEX_STACK_LIMIT,
+) -> list[dict[str, Any]]:
     """Find all matches of pattern in text.
 
     Args:
@@ -544,11 +645,18 @@ def regex_find(pattern: str, text: str, flags: int = 0) -> list[dict[str, Any]]:
     Returns:
         List of match dictionaries.
     """
-    regex = UnicodeRegex(pattern, flags)
+    regex = UnicodeRegex(pattern, flags, time_limit=time_limit, stack_limit=stack_limit)
     return regex.find_all(text)
 
 
-def regex_fullmatch(pattern: str, text: str, flags: int = 0) -> bool:
+def regex_fullmatch(
+    pattern: str,
+    text: str,
+    flags: int = 0,
+    *,
+    time_limit: int | None = DEFAULT_REGEX_TIME_LIMIT,
+    stack_limit: int | None = DEFAULT_REGEX_STACK_LIMIT,
+) -> bool:
     """Test whether a pattern matches the entire stripped text.
 
     The pattern is wrapped with ``^`` and ``$`` exactly as supplied.
@@ -562,10 +670,25 @@ def regex_fullmatch(pattern: str, text: str, flags: int = 0) -> bool:
         True if the anchored pattern produces a match.
     """
     anchored_pattern = f"^{pattern}$"
-    return bool(regex_find(anchored_pattern, text.strip(), flags=flags))
+    return bool(
+        regex_find(
+            anchored_pattern,
+            text.strip(),
+            flags=flags,
+            time_limit=time_limit,
+            stack_limit=stack_limit,
+        )
+    )
 
 
-def regex_search(pattern: str, text: str, flags: int = 0) -> bool:
+def regex_search(
+    pattern: str,
+    text: str,
+    flags: int = 0,
+    *,
+    time_limit: int | None = DEFAULT_REGEX_TIME_LIMIT,
+    stack_limit: int | None = DEFAULT_REGEX_STACK_LIMIT,
+) -> bool:
     """Test whether a pattern occurs anywhere in text.
 
     Args:
@@ -576,7 +699,12 @@ def regex_search(pattern: str, text: str, flags: int = 0) -> bool:
     Returns:
         True if at least one match is found.
     """
-    return bool(regex_find(pattern, text, flags=flags))
+    return UnicodeRegex(
+        pattern,
+        flags,
+        time_limit=time_limit,
+        stack_limit=stack_limit,
+    ).search(text)
 
 
 def parse_substitution(expr: str) -> tuple[str, str, bool, bool]:
@@ -622,7 +750,14 @@ def parse_substitution(expr: str) -> tuple[str, str, bool, bool]:
 
 
 def regex_replace(
-    pattern: str, text: str, replacement: str, flags: int = 0, limit: int = -1
+    pattern: str,
+    text: str,
+    replacement: str,
+    flags: int = 0,
+    limit: int = -1,
+    *,
+    time_limit: int | None = DEFAULT_REGEX_TIME_LIMIT,
+    stack_limit: int | None = DEFAULT_REGEX_STACK_LIMIT,
 ) -> str:
     """Replace pattern matches in text.
 
@@ -636,11 +771,19 @@ def regex_replace(
     Returns:
         Text with replacements.
     """
-    regex = UnicodeRegex(pattern, flags)
+    regex = UnicodeRegex(pattern, flags, time_limit=time_limit, stack_limit=stack_limit)
     return regex.replace(text, replacement, limit)
 
 
-def regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> list[str]:
+def regex_split(
+    pattern: str,
+    text: str,
+    flags: int = 0,
+    limit: int = -1,
+    *,
+    time_limit: int | None = DEFAULT_REGEX_TIME_LIMIT,
+    stack_limit: int | None = DEFAULT_REGEX_STACK_LIMIT,
+) -> list[str]:
     """Split text by pattern.
 
     Args:
@@ -652,7 +795,7 @@ def regex_split(pattern: str, text: str, flags: int = 0, limit: int = -1) -> lis
     Returns:
         List of split parts.
     """
-    regex = UnicodeRegex(pattern, flags)
+    regex = UnicodeRegex(pattern, flags, time_limit=time_limit, stack_limit=stack_limit)
     return regex.split(text, limit)
 
 

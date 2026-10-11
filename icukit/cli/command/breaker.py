@@ -120,6 +120,25 @@ class BreakerCommand(SubcommandBase):
             ),
         )
 
+    @staticmethod
+    def _sentence_length(value):
+        if value.casefold() == "none":
+            return None
+        parsed = int(value)
+        if parsed <= 0:
+            raise argparse.ArgumentTypeError("max sentence chars must be positive or 'none'")
+        return parsed
+
+    @classmethod
+    def _add_max_sentence_chars_option(cls, parser):
+        parser.add_argument(
+            "--max-sentence-chars",
+            type=cls._sentence_length,
+            default=1024,
+            metavar="N|none",
+            help="Force sentences to at most N code points (default: 1024; none disables)",
+        )
+
     @classmethod
     def add_subparser(cls, subparsers):
         """Add the break command with its subcommands."""
@@ -221,6 +240,7 @@ Examples:
         """Configure sentences subcommand."""
         cls._add_locale_option(parser)
         cls._add_sentence_base_option(parser)
+        cls._add_max_sentence_chars_option(parser)
         cls._add_spans_option(parser)
         cls._add_input_options(parser)
         cls._add_output_options(parser)
@@ -282,6 +302,7 @@ Examples:
         """Configure tokenize subcommand."""
         cls._add_locale_option(parser)
         cls._add_sentence_base_option(parser)
+        cls._add_max_sentence_chars_option(parser)
         cls._add_spans_option(parser)
         parser.add_argument(
             "--skip-punctuation",
@@ -407,7 +428,11 @@ Examples:
     @handles_errors(BreakerError)
     def cmd_sentences(cls, args):
         """Break text into sentences; spans retain unstripped source segments."""
-        breaker = Breaker(args.locale, base=getattr(args, "base", None))
+        breaker = Breaker(
+            args.locale,
+            base=getattr(args, "base", None),
+            max_sentence_chars=args.max_sentence_chars,
+        )
         cls._validate_provenance(args)
         as_json = getattr(args, "json", False)
         as_jsonl = getattr(args, "jsonl", False)
@@ -574,7 +599,11 @@ Examples:
     @handles_errors(BreakerError)
     def cmd_tokenize(cls, args):
         """Break into sentences then words."""
-        breaker = Breaker(args.locale, base=getattr(args, "base", None))
+        breaker = Breaker(
+            args.locale,
+            base=getattr(args, "base", None),
+            max_sentence_chars=args.max_sentence_chars,
+        )
         cls._validate_provenance(args)
         skip_punct = getattr(args, "skip_punctuation", False)
         as_json = getattr(args, "json", False)

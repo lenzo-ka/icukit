@@ -264,13 +264,20 @@ class TestBreakerClass:
         assert default.break_line_spans(text) == raw.break_line_spans(text)
         assert default.break_grapheme_spans(text) == raw.break_grapheme_spans(text)
 
-    def test_sentence_override_is_cached_per_locale_and_base(self):
+    def test_sentence_override_is_cached_per_locale_base_and_bound(self):
         from icukit.breaker import _sentence_override
 
         _sentence_override.cache_clear()
         try:
-            assert _sentence_override("en_US", None) is _sentence_override("en_US", None)
-            assert _sentence_override("en_US", None) is not _sentence_override("en_US", "en-tn@1")
+            assert _sentence_override("en_US", None, 1024) is _sentence_override(
+                "en_US", None, 1024
+            )
+            assert _sentence_override("en_US", None, 1024) is not _sentence_override(
+                "en_US", "en-tn@1", 1024
+            )
+            assert _sentence_override("en_US", None, 1024) is not _sentence_override(
+                "en_US", None, None
+            )
         finally:
             _sentence_override.cache_clear()
 

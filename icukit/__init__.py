@@ -247,6 +247,7 @@ from .errors import (
     ParseError,
     PatternError,
     PluralError,
+    RegexLimitError,
     RegionError,
     RuleLoadError,
     RuleRefusal,
@@ -403,6 +404,8 @@ from .recognize import (
 from .regex import (
     CASE_INSENSITIVE,
     COMMENTS,
+    DEFAULT_REGEX_STACK_LIMIT,
+    DEFAULT_REGEX_TIME_LIMIT,
     DOTALL,
     MULTILINE,
     UnicodeRegex,
@@ -435,6 +438,7 @@ from .script import (
 )
 from .search import StringSearcher, search_all, search_count, search_first, search_replace
 from .sentence_override import (
+    DEFAULT_MAX_SENTENCE_CHARS,
     BreakBoundary,
     BreakDecision,
     BreakPredicate,
@@ -643,6 +647,7 @@ __all__ = [
     "FormatError",
     "ParseError",
     "PatternError",
+    "RegexLimitError",
     "TransliteratorError",
     "ScriptError",
     "NormalizationError",
@@ -763,6 +768,7 @@ __all__ = [
     "BreakBoundary",
     "BreakSegmentation",
     "CartletModelRef",
+    "DEFAULT_MAX_SENTENCE_CHARS",
     "PendingCandidate",
     "IncrementalSentenceBreaker",
     "SentenceOverride",
@@ -813,6 +819,8 @@ __all__ = [
     "MULTILINE",
     "DOTALL",
     "COMMENTS",
+    "DEFAULT_REGEX_TIME_LIMIT",
+    "DEFAULT_REGEX_STACK_LIMIT",
     # Script
     "detect_script",
     "detect_scripts",

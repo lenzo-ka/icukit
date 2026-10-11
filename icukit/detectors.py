@@ -813,6 +813,18 @@ class DateDetector(_GatedReader):
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:
+        # A decimal run is one word, so only offset zero is eligible. ICU date values
+        # have bounded numeric fields; 16 code points per pattern code point (and a
+        # 64-code-point floor) exceeds those ranges while preserving arbitrary padding
+        # widths. Avoid making every generated date parser scan the whole rejected run.
+        if len(text) > max(64, len(self.pattern) * 16) and _is_decimal_run(text):
+            return []
+        # ICU's strict date parser skips leading whitespace before failing at END.
+        # Calling it at every boundary of an all-whitespace input therefore rescans
+        # the remaining suffix quadratically. No date formatter emits a surface made
+        # only of whitespace, so reject that input with one bounded pass.
+        if text.isspace():
+            return []
         return _scan(
             text,
             self.locale,
@@ -1247,6 +1259,12 @@ def _is_word_joiner(character: str) -> bool:
 
 
 @functools.lru_cache(maxsize=16)
+def _is_decimal_run(text: str) -> bool:
+    """Whether ``text`` is one nonempty decimal run, shared across strict readers."""
+    return text.isdecimal()
+
+
+@functools.lru_cache(maxsize=16)
 def _word_interior_offsets(
     text: str, locale: str, edges: frozenset[int] | None = None
 ) -> frozenset[int]:
@@ -1424,13 +1442,25 @@ def _scan(
     plan = _scan_plan_for(text, locale, gate)
     ctx = _scan_context_from_plan(text, locale, plan)
     inspect_gate = GATE_STATS and gates_enabled() and gate is not None
-    starts = (
-        plan.grapheme_starts[locale]
-        if inspect_gate and plan is not None
-        else _grapheme_starts(text, locale)
-        if inspect_gate
-        else _candidate_starts_from_plan(text, locale, gate, plan)
-    )
+    if text and len(ctx.interior) == len(text) - 1:
+        # Every offset after zero is inside one uninterrupted word. Strict readers can
+        # therefore try only zero; iterating an admitted start at every digit made each
+        # reader rescan an already-proved interior on long digit runs. Gate diagnostics
+        # cover eligible starts, not these skipped word-interior offsets; the ordinary
+        # loop below excludes interiors before recording or auditing them as well.
+        starts = (
+            (0,)
+            if inspect_gate or not gates_enabled() or gate is None or gate.admits(text[0])
+            else ()
+        )
+    else:
+        starts = (
+            plan.grapheme_starts[locale]
+            if inspect_gate and plan is not None
+            else _grapheme_starts(text, locale)
+            if inspect_gate
+            else _candidate_starts_from_plan(text, locale, gate, plan)
+        )
     out: list[ValueDetection] = []
     cursor = 0
     for start_cp in starts:

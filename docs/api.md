@@ -139,6 +139,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`FormatError`](#icukiterrors) — class, `icukit.errors`
 - [`ParseError`](#icukiterrors) — class, `icukit.errors`
 - [`PatternError`](#icukiterrors) — class, `icukit.errors`
+- [`RegexLimitError`](#icukiterrors) — class, `icukit.errors`
 - [`TransliteratorError`](#icukiterrors) — class, `icukit.errors`
 - [`ScriptError`](#icukiterrors) — class, `icukit.errors`
 - [`NormalizationError`](#icukiterrors) — class, `icukit.errors`
@@ -250,6 +251,7 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`BreakBoundary`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`BreakSegmentation`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`CartletModelRef`](#icukitsentence-override) — class, `icukit.sentence_override`
+- [`DEFAULT_MAX_SENTENCE_CHARS`](#icukitsentence-override) — constant, `icukit.sentence_override`
 - [`PendingCandidate`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`IncrementalSentenceBreaker`](#icukitsentence-override) — class, `icukit.sentence_override`
 - [`SentenceOverride`](#icukitsentence-override) — class, `icukit.sentence_override`
@@ -296,6 +298,8 @@ Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 - [`MULTILINE`](#icukitregex) — constant, `icukit.regex`
 - [`DOTALL`](#icukitregex) — constant, `icukit.regex`
 - [`COMMENTS`](#icukitregex) — constant, `icukit.regex`
+- [`DEFAULT_REGEX_TIME_LIMIT`](#icukitregex) — constant, `icukit.regex`
+- [`DEFAULT_REGEX_STACK_LIMIT`](#icukitregex) — constant, `icukit.regex`
 - [`detect_script`](#icukitscript) — function, `icukit.script`
 - [`detect_scripts`](#icukitscript) — function, `icukit.script`
 - [`get_char_script`](#icukitscript) — function, `icukit.script`
@@ -1199,7 +1203,7 @@ Example:
     >>> breaker.break_words('Hello, world!', skip_punctuation=True)
     ['Hello', 'world']
 
-#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None)`
+#### `Breaker(locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024)`
 
 Initialize a Breaker instance.
 
@@ -1210,6 +1214,8 @@ Args:
         otherwise. ``"none"`` selects raw ICU without the list;
         ``"en-tn@1"``, ``"en-tn-cart@1"``, and ``"en-real-cart@1"``
         are opt-in English bases.
+    max_sentence_chars: Hard maximum sentence length in code points;
+        ``None`` disables forced boundaries.
 
 Raises:
     BreakerError: If the locale is invalid.
@@ -1446,14 +1452,16 @@ Args:
 Returns:
     List of segments at line break boundaries.
 
-### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None) -> 'list[BreakSpan]'`
+### `break_sentence_spans(text: 'str', locale: 'str' = 'en_US', *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024) -> 'list[BreakSpan]'`
 
 Return sentence spans from the locale default or selected base.
 
 The English default is ICU plus token integrity and the shipped list;
 non-English and POSIX defaults are raw ICU.
 
-### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None) -> 'list[str]'`
+``max_sentence_chars`` is a hard code-point bound; ``None`` disables it.
+
+### `break_sentences(text: 'str', locale: 'str' = 'en_US', skip_empty: 'bool' = True, *, base: "Literal['none', 'en-tn@1', 'en-tn-cart@1', 'en-real-cart@1'] | None" = None, max_sentence_chars: 'int | None' = 1024) -> 'list[str]'`
 
 Break text into sentences.
 
@@ -1466,6 +1474,8 @@ Args:
     base: Sentence base; ``None`` selects ICU plus token integrity and the
         shipped list for English except POSIX, and raw ICU otherwise.
         ``"none"`` selects raw ICU without the list.
+    max_sentence_chars: Hard maximum sentence length in code points;
+        ``None`` disables forced boundaries.
 
 Returns:
     List of sentence strings.
@@ -2605,7 +2615,7 @@ Args:
 Returns:
     Detections in source order (empty if nothing matches).
 
-### `regex_detect(text: 'str', pattern: 'str', type: 'str', *, flags: 'int' = 0) -> 'list[Detection]'`
+### `regex_detect(text: 'str', pattern: 'str', type: 'str', *, flags: 'int' = 0, time_limit: 'int | None' = 10000, stack_limit: 'int | None' = 8000000) -> 'list[Detection]'`
 
 Detect typed spans with an ICU regex whose match is the span.
 
@@ -2619,6 +2629,8 @@ Args:
     pattern: ICU regex; its match extent is the detected span.
     type: Type label carried on every detection.
     flags: ICU regex flags forwarded to the matcher.
+    time_limit: ICU engine steps allowed for each matching operation.
+    stack_limit: ICU regex stack bytes.
 
 Returns:
     Detections in source order (empty if nothing matches).
@@ -6505,6 +6517,14 @@ Flags
 
 `4`
 
+#### `DEFAULT_REGEX_STACK_LIMIT` (constant)
+
+`8000000`
+
+#### `DEFAULT_REGEX_TIME_LIMIT` (constant)
+
+`10000`
+
 #### `DOTALL` (constant)
 
 `32`
@@ -6528,6 +6548,8 @@ information including positions and captured groups.
 Attributes:
     pattern (str): The regex pattern string.
     flags (int): Combination of regex flags (CASE_INSENSITIVE, MULTILINE, etc.).
+    time_limit (int | None): ICU engine steps allowed per operation.
+    stack_limit (int | None): ICU regex stack bytes.
 
 Pattern Syntax:
     ICU regex supports extensive Unicode property matching:
@@ -6561,16 +6583,20 @@ Example:
         >>> print(match['groups'])
         {1: {'text': 'A', 'start': 6, 'end': 7}, 2: {'text': '123', 'start': 7, 'end': 10}}
 
-#### `UnicodeRegex(pattern: 'str', flags: 'int' = 0)`
+#### `UnicodeRegex(pattern: 'str', flags: 'int' = 0, *, time_limit: 'int | None' = 10000, stack_limit: 'int | None' = 8000000)`
 
 Initialize a Unicode regex.
 
 Args:
     pattern: ICU regex pattern.
     flags: Regex flags (CASE_INSENSITIVE, MULTILINE, etc.).
+    time_limit: ICU engine steps allowed for each matching operation;
+        ``None`` disables the limit.
+    stack_limit: ICU regex stack bytes; ``None`` uses ICU's unlimited setting.
 
 Raises:
     PatternError: If the pattern is invalid.
+    ValueError: If either limit is not a positive integer or ``None``.
 
 #### `find(text: 'str', start: 'int' = 0) -> 'dict[str, Any] | None'`
 
@@ -6728,7 +6754,7 @@ Returns:
 Raises:
     ValueError: If the expression is malformed.
 
-### `regex_find(pattern: 'str', text: 'str', flags: 'int' = 0) -> 'list[dict[str, Any]]'`
+### `regex_find(pattern: 'str', text: 'str', flags: 'int' = 0, *, time_limit: 'int | None' = 10000, stack_limit: 'int | None' = 8000000) -> 'list[dict[str, Any]]'`
 
 Find all matches of pattern in text.
 
@@ -6740,7 +6766,7 @@ Args:
 Returns:
     List of match dictionaries.
 
-### `regex_fullmatch(pattern: 'str', text: 'str', flags: 'int' = 0) -> 'bool'`
+### `regex_fullmatch(pattern: 'str', text: 'str', flags: 'int' = 0, *, time_limit: 'int | None' = 10000, stack_limit: 'int | None' = 8000000) -> 'bool'`
 
 Test whether a pattern matches the entire stripped text.
 
@@ -6754,7 +6780,7 @@ Args:
 Returns:
     True if the anchored pattern produces a match.
 
-### `regex_replace(pattern: 'str', text: 'str', replacement: 'str', flags: 'int' = 0, limit: 'int' = -1) -> 'str'`
+### `regex_replace(pattern: 'str', text: 'str', replacement: 'str', flags: 'int' = 0, limit: 'int' = -1, *, time_limit: 'int | None' = 10000, stack_limit: 'int | None' = 8000000) -> 'str'`
 
 Replace pattern matches in text.
 
@@ -6768,7 +6794,7 @@ Args:
 Returns:
     Text with replacements.
 
-### `regex_search(pattern: 'str', text: 'str', flags: 'int' = 0) -> 'bool'`
+### `regex_search(pattern: 'str', text: 'str', flags: 'int' = 0, *, time_limit: 'int | None' = 10000, stack_limit: 'int | None' = 8000000) -> 'bool'`
 
 Test whether a pattern occurs anywhere in text.
 
@@ -6780,7 +6806,7 @@ Args:
 Returns:
     True if at least one match is found.
 
-### `regex_split(pattern: 'str', text: 'str', flags: 'int' = 0, limit: 'int' = -1) -> 'list[str]'`
+### `regex_split(pattern: 'str', text: 'str', flags: 'int' = 0, limit: 'int' = -1, *, time_limit: 'int | None' = 10000, stack_limit: 'int | None' = 8000000) -> 'list[str]'`
 
 Split text by pattern.
 
@@ -7360,6 +7386,12 @@ Example:
     >>> [(item["offset"], item["layer"]) for item in override.decide("Hi. Bye.")]
     [(4, 'icu'), (8, 'icu')]
 
+### Constants and type aliases
+
+#### `DEFAULT_MAX_SENTENCE_CHARS` (constant)
+
+`1024`
+
 ### class `BreakBoundary`
 
 An open sentence boundary carrying both readings.
@@ -7457,7 +7489,7 @@ Example:
      {'offset': 12, 'end': 12, 'decision': 'break', 'alternatives': ('break',),
       'layer': 'icu', 'id': None, 'tokens_read': 0}]
 
-#### `IncrementalSentenceBreaker(owner: 'SentenceOverride', protection: "Literal['none', 'watermark']") -> 'None'`
+#### `IncrementalSentenceBreaker(owner: 'SentenceOverride', protection: "Literal['none', 'watermark']", *, _enforce_bound: 'bool' = True) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -7531,13 +7563,15 @@ Args:
     inventories: Exception inventories; word rules merge tokens and
         sentence rules suppress candidates.
     cache: Reuse immutable per-token features in incremental evaluation.
+    max_sentence_chars: Hard maximum sentence length in code points. ``None``
+        disables forced boundaries.
 
 Example:
     >>> override = SentenceOverride()
     >>> [(item["offset"], item["layer"]) for item in override.decide("Hello. Next.")]
     [(7, 'icu'), (12, 'icu')]
 
-#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True) -> 'None'`
+#### `SentenceOverride(locale: 'str' = 'en_US', /, *, base: "Literal['none'] | str | Path | BreakRuleSet | CartletModelRef | None" = None, before: 'Sequence[BreakRuleSet]' = (), after: 'Sequence[BreakRuleSet]' = (), inventories: 'Sequence[LoadedExceptionInventory]' = (), cache: 'bool' = True, max_sentence_chars: 'int | None' = 1024) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -8859,6 +8893,14 @@ Error related to patterns (regex, date format, etc.).
 ### class `PluralError`
 
 Error related to plural rules operations.
+
+### class `RegexLimitError`
+
+An ICU regex operation exceeded its configured resource limit.
+
+#### `RegexLimitError(limit: "Literal['time', 'stack']", value: 'int', pattern: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
 
 ### class `RegionError`
 

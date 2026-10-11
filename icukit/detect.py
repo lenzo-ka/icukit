@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from .regex import UnicodeRegex
+from .regex import DEFAULT_REGEX_STACK_LIMIT, DEFAULT_REGEX_TIME_LIMIT, UnicodeRegex
 from .search import StringSearcher
 
 __all__ = ["Detection", "regex_detect", "collation_detect"]
@@ -52,6 +52,8 @@ def regex_detect(
     type: str,
     *,
     flags: int = 0,
+    time_limit: int | None = DEFAULT_REGEX_TIME_LIMIT,
+    stack_limit: int | None = DEFAULT_REGEX_STACK_LIMIT,
 ) -> list[Detection]:
     """Detect typed spans with an ICU regex whose match is the span.
 
@@ -65,6 +67,8 @@ def regex_detect(
         pattern: ICU regex; its match extent is the detected span.
         type: Type label carried on every detection.
         flags: ICU regex flags forwarded to the matcher.
+        time_limit: ICU engine steps allowed for each matching operation.
+        stack_limit: ICU regex stack bytes.
 
     Returns:
         Detections in source order (empty if nothing matches).
@@ -73,7 +77,12 @@ def regex_detect(
         Whatever :class:`icukit.regex.UnicodeRegex` raises for an invalid or unhostable
         pattern -- notably a compile error for unbounded lookbehind.
     """
-    matcher = UnicodeRegex(pattern, flags)
+    matcher = UnicodeRegex(
+        pattern,
+        flags,
+        time_limit=time_limit,
+        stack_limit=stack_limit,
+    )
     return [
         Detection(text=m["text"], start=m["start"], end=m["end"], type=type)
         for m in matcher.find_all(text)

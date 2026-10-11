@@ -27,6 +27,7 @@ def break_args(**overrides):
         "include_whitespace": False,
         "json": True,
         "locale": "en_US",
+        "max_sentence_chars": 1024,
         "no_header": False,
         "output": None,
         "provenance": True,

@@ -15,6 +15,11 @@
   boundary produces readings both with and without the period; internal periods belong
   to the punctuated reading. Periods before a following number, after full unit words,
   and after one-letter symbols remain punctuation.
+- Sentence breaking now accepts `max_sentence_chars` (default 1,024; `None`
+  disables it) and reports forced boundaries with the `"forced"` layer.
+- ICU regex entry points now accept per-operation `time_limit` steps and
+  `stack_limit` bytes, with matching command-line options. Resource overruns
+  raise `RegexLimitError`.
 - `DetectionStream` through `DetectorSet.stream()` and `CompiledDetectorSet.stream()`,
   with paragraph-boundary segmentation by default, optional line or explicit
   boundaries, absolute offsets, `pending_from` on every batch, bounded pending text,
@@ -44,11 +49,33 @@
   isolated digits no longer pay those unsuccessful per-start costs.
 - Explicit Cartlet models may use a reduced `icukit.features@1` schema when every
   feature name is unique and belongs to the runtime schema.
+- **Behavior change:** Sentences longer than 1,024 code points are force-broken at
+  a clause, whitespace, grapheme, or code-point fallback boundary. The hard bound
+  wins over a protected span when no unprotected position fits.
+- **Behavior change:** Regex time and stack overruns raise instead of silently
+  returning no match or unchanged input.
+- **Behavior change:** Locale-list pattern filters use bounded ICU regular
+  expressions instead of Python regular expressions.
+- Invalid locale-list regular expressions now raise `PatternError` instead of
+  falling back to comma-separated literal matching.
+- **Behavior change:** Limited regex replacement uses ICU replacement syntax,
+  including numbered and named capture references.
+- The default pytest configuration excludes the exhaustive slow pathological-input
+  matrix. Run it explicitly with `pytest -m slow`; a full local gate runs both the
+  default suite and that command.
 
 ### Fixed
 
 - Locale-material files now receive the same depth and one-million-value checks as
   mapping input and are capped at 64 MiB before decoding.
+- **Behavior change:** Digit captures longer than Python's integer-string conversion
+  limit no longer abort plural-numeral or numeric-duration detection; their capture
+  value is `None`. Fraction, relative-date, and scientific-notation readers skip a
+  candidate whose digit run exceeds that limit instead of raising.
+- Pathological digit, whitespace, repeated spell-out, interval-separator, currency, and
+  measure runs remain linear. Readers now saturate rejected numeric fields, skip proved
+  interior starts and absent mandatory literal heads, reuse identical spell-out parses,
+  and index decimal-alternative containment instead of rescanning earlier spans.
 - Number and measure ranges in the flexible readers no longer read across a paragraph
   boundary (for example `3,5 °C` and `-5 °C` in Catalan, separated by a blank line).
 - Flexible readers add a whole reading for valid space-grouped numbers accepted by the
