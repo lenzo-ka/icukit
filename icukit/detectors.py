@@ -67,6 +67,7 @@ from ._gate import (
 from ._offsets import boundary_maps, u16_boundary_to_codepoint
 from .breaker import break_word_spans
 from .detect import Detection
+from .reflow import ReflowMode
 
 __all__ = [
     "ApproximateValue",
@@ -1583,14 +1584,20 @@ class DetectorSet:
         *,
         max_pending_chars: int = 4096,
         boundary: Literal["paragraph", "line", "explicit"] = "paragraph",
+        reflow: ReflowMode = "none",
     ):
-        """Return a boundary-segmented detector over arbitrary text chunks."""
+        """Return a boundary-segmented detector over arbitrary text chunks.
+
+        Reflowed streams detect an equal-length substituted view while reporting
+        original-text offsets, detection text, and capture text.
+        """
         from .stream import DetectionStream
 
         return DetectionStream(
             self,
             max_pending_chars=max_pending_chars,
             boundary=boundary,
+            reflow=reflow,
         )
 
     def __getstate__(self):

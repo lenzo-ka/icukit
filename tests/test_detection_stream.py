@@ -1,9 +1,10 @@
 import random
 import re
+from dataclasses import replace
 
 import pytest
 
-from icukit import DetectionBatch, DetectorSet, number_detectors
+from icukit import DetectionBatch, DetectorSet, number_detectors, reflow
 from icukit.detectors import DetectorRefusal
 from icukit.engine import reader_set
 from icukit.recognize import FlexibleNumberRangeDetector
@@ -40,6 +41,31 @@ def _random_chunks(length, seed=20261009):
 def _chunkings(text):
     tokens = [len(chunk) for chunk in re.findall(r"\S+|\s+", text)]
     return ([len(text)], [1] * len(text), tokens, _random_chunks(len(text)))
+
+
+def _restore_original_surfaces(found, source):
+    restored = []
+    for item in found:
+        original = dict(item)
+        original["text"] = source[item["start"] : item["end"]]
+        original["captures"] = tuple(
+            replace(capture, text=source[capture.start : capture.end])
+            for capture in item["captures"]
+        )
+        restored.append(original)
+    return restored
+
+
+def _reflow_reference(detectors, text, *, mode, boundary, max_pending_chars):
+    view = reflow(text, mode)
+    found, batches, stream = _run(
+        detectors,
+        view,
+        [len(view)],
+        boundary=boundary,
+        max_pending_chars=max_pending_chars,
+    )
+    return _restore_original_surfaces(found, text), batches, stream
 
 
 @pytest.mark.parametrize("chunks_index", range(4))
@@ -425,3 +451,188 @@ def test_boundary_violation_audit_reports_crossing_spans():
     }
     assert _boundary_violations("3–\n5", (detection,), "paragraph") == ()
     assert _boundary_violations("3–\n5", (detection,), "line") == ("number:range:0:4@3",)
+
+
+def _capital_bound_text(terminator, distance):
+    sample = terminator.join(
+        [
+            "a hard wrapped sample line that has a stable representative width",
+            "a second sample line that has a stable representative width here",
+            "a third sample line that has a stable representative width here",
+            "a fourth sample line that has a stable representative width here",
+            "a fifth sample line that has a stable representative width here",
+            "The quick brown fox jumps over the lazy dog and more",
+        ]
+    )
+    first = len(sample)
+    padding = distance - len(terminator) - 1
+    text = (
+        sample
+        + terminator
+        + "B"
+        + "y" * padding
+        + terminator
+        + "Cats are nice"
+        + terminator
+        + "Dogs too."
+        + terminator
+    )
+    assert text.index(terminator, first + len(terminator)) - first == distance
+    return text + "z" * (2100 - len(text))
+
+
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("boundary", ["paragraph", "line", "explicit"])
+@pytest.mark.parametrize("terminator", ["\n", "\r\n"])
+@pytest.mark.parametrize("distance", [1023, 1024, 1025])
+@pytest.mark.parametrize("chunking", ["one", "random"])
+def test_detection_reflow_freezes_at_the_whole_text_bound(
+    mode, boundary, terminator, distance, chunking
+):
+    text = _capital_bound_text(terminator, distance)
+    detectors = DetectorSet((PrefixDetector(),))
+    options = {"reflow": mode, "boundary": boundary, "max_pending_chars": 256}
+    expected, expected_batches, _reference_stream = _reflow_reference(
+        detectors,
+        text,
+        mode=mode,
+        boundary=boundary,
+        max_pending_chars=256,
+    )
+    chunks = [1] * len(text) if chunking == "one" else _random_chunks(len(text), distance)
+
+    found, batches, _stream = _run(detectors, text, chunks, **options)
+
+    assert found == expected
+    assert [cut for batch in batches for cut in batch.cuts] == [
+        cut for batch in expected_batches for cut in batch.cuts
+    ]
+
+
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("boundary", ["paragraph", "line", "explicit"])
+@pytest.mark.parametrize("terminator", ["\n", "\r\n"])
+@pytest.mark.parametrize("chunking", ["one", "random"])
+def test_detection_reflow_freezes_long_separators(mode, boundary, terminator, chunking):
+    first = "this paragraph runs on without terminal punctuation at its end"
+    following = "the next paragraph begins here and continues for a long while on and on " * 30
+    text = first + terminator * 5 + following + terminator
+    detectors = DetectorSet((PrefixDetector(),))
+    expected, expected_batches, _reference_stream = _reflow_reference(
+        detectors,
+        text,
+        mode=mode,
+        boundary=boundary,
+        max_pending_chars=256,
+    )
+    chunks = [1] * len(text) if chunking == "one" else _random_chunks(len(text), 147)
+
+    found, batches, _stream = _run(
+        detectors,
+        text,
+        chunks,
+        reflow=mode,
+        boundary=boundary,
+        max_pending_chars=256,
+    )
+
+    assert found == expected
+    assert [cut for batch in batches for cut in batch.cuts] == [
+        cut for batch in expected_batches for cut in batch.cuts
+    ]
+
+
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("boundary", ["paragraph", "line", "explicit"])
+@pytest.mark.parametrize("chunking", ["one", "random"])
+def test_detection_reflow_reads_wrapped_values(mode, boundary, chunking):
+    hard_wrap = "ordinary words make this source line long enough for joining and finish with "
+    text = (
+        hard_wrap
+        + "more ordinary prose across the first line ending here\n"
+        + hard_wrap
+        + "more ordinary prose across the second line ending here\n"
+        + hard_wrap
+        + "more ordinary prose across the third line ending here\n"
+        + hard_wrap
+        + "$\n12.50, followed by enough ordinary words to make this source line very long, "
+        + "then a measured value of 3\nkg, followed by enough ordinary words to make this "
+        + "source line very long, and the date May\n5, 2024."
+    )
+    detectors = reader_set(
+        "en_US",
+        flexible=True,
+        locales=(),
+        currencies=("USD",),
+        units=("kilogram",),
+    )
+    expected, _expected_batches, _reference_stream = _reflow_reference(
+        detectors,
+        text,
+        mode=mode,
+        boundary=boundary,
+        max_pending_chars=4096,
+    )
+    chunks = [1] * len(text) if chunking == "one" else _random_chunks(len(text), 911)
+
+    found, _batches, _stream = _run(
+        detectors,
+        text,
+        chunks,
+        reflow=mode,
+        boundary=boundary,
+    )
+
+    assert found == expected
+    assert all(text[item["start"] : item["end"]] == item["text"] for item in found)
+    assert all(
+        text[capture.start : capture.end] == capture.text
+        for item in found
+        for capture in item["captures"]
+    )
+    if mode != "none":
+        assert any(item["text"] == "$\n12.50" for item in found)
+        assert any(item["text"] == "3\nkg" for item in found)
+        assert any(item["text"] == "May\n5, 2024" for item in found)
+
+
+@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+def test_detection_reflow_retention_is_bounded_on_unterminated_input(mode):
+    stream = DetectionStream(
+        (PrefixDetector(),),
+        max_pending_chars=4096,
+        boundary="explicit",
+        reflow=mode,
+    )
+    maximum = 0
+    for _ in range(4):
+        stream.feed("word " * 13_108)
+        state = stream.pending()
+        maximum = max(maximum, state["total"] - state["buffered_from"])
+    stream.close()
+
+    assert maximum <= 4096 + 3 * 1024
+
+
+def test_detection_stream_reflow_validation_is_shared_by_both_factories():
+    message = "^reflow must be one of 'none', 'lines', 'paragraphs', 'auto'$"
+    with pytest.raises(ValueError, match=message):
+        number_detectors("en_US").stream(reflow="invalid")
+    with pytest.raises(ValueError, match=message):
+        number_detectors("en_US").compile(warm=False).stream(reflow="invalid")
+
+
+def test_compiled_detection_stream_reflows_and_restores_original_surfaces():
+    text = "A sufficiently long source line describes the measured value 3\nkg."
+    stream = (
+        reader_set("en_US", flexible=True, locales=(), currencies=(), units=("kilogram",))
+        .compile(warm=False)
+        .stream(reflow="lines")
+    )
+
+    stream.feed(text[:20])
+    stream.feed(text[20:])
+    found = stream.close().detections
+
+    assert any(item["text"] == "3\nkg" for item in found)
+    assert all(text[item["start"] : item["end"]] == item["text"] for item in found)

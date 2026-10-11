@@ -2009,9 +2009,12 @@ Detect with a context-local immutable scan plan, resetting it on every exit.
 
 Return one gate status row for every declared scan lane.
 
-#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph')`
+#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph', reflow: 'ReflowMode' = 'none')`
 
 Return a boundary-segmented stream using compiled whole-text detection.
+
+Reflowed streams detect an equal-length substituted view while reporting
+original-text offsets, detection text, and capture text.
 
 #### `warm() -> 'CompiledDetectorSet'`
 
@@ -2786,9 +2789,12 @@ Compile this gang explicitly, optionally forcing lazy reader state.
 
 The members' types, in order; a type repeats once per locale it is built for.
 
-#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph')`
+#### `stream(*, max_pending_chars: 'int' = 4096, boundary: "Literal['paragraph', 'line', 'explicit']" = 'paragraph', reflow: 'ReflowMode' = 'none')`
 
 Return a boundary-segmented detector over arbitrary text chunks.
+
+Reflowed streams detect an equal-length substituted view while reporting
+original-text offsets, detection text, and capture text.
 
 #### `with_(*more: 'Detector') -> 'DetectorSet'`
 
@@ -7903,6 +7909,12 @@ number range may cross one line break, so line mode is not guaranteed to preserv
 whole-text identity. Explicit mode settles only at :meth:`DetectionStream.flush`,
 :meth:`DetectionStream.boundary`, or close.
 
+Optional reflow substitutes selected terminators with spaces before boundary selection
+and detection. The view has the same code-point length as the source: offsets,
+detection ``text``, and capture ``text`` describe the original input, while values and
+specs are interpretations of the substituted view. Reflow decisions add at most their
+documented 1,024-code-point forward hold to the ordinary pending-segment bound.
+
 An open segment is length-bounded by ``max_pending_chars`` (4096 by default). When no
 configured boundary closes it in time, the stream examines the fixed cap-length
 prefix and cuts at its last grapheme edge immediately following whitespace, then at
@@ -7938,10 +7950,12 @@ Incrementally detect closed segments with bounded retention and absolute offsets
 ``boundary`` selects ``"paragraph"`` (the identity-preserving default for stock
 readers), ``"line"`` (lower latency without an identity guarantee), or
 ``"explicit"`` (only :meth:`flush`, :meth:`boundary`, and :meth:`close` settle).
+``reflow`` selects the equal-length view used for both boundaries and detection;
+public surfaces remain slices of the original input.
 The chunk passed to :meth:`feed` is appended before boundaries and cap cuts are
 drained, so it can transiently exceed the configured cap during that call.
 
-#### `DetectionStream(detectors: 'DetectorSet | object | Iterable[Detector]', /, *, max_pending_chars: 'int' = 4096, boundary: 'BoundaryMode' = 'paragraph') -> 'None'`
+#### `DetectionStream(detectors: 'DetectorSet | object | Iterable[Detector]', /, *, max_pending_chars: 'int' = 4096, boundary: 'BoundaryMode' = 'paragraph', reflow: 'ReflowMode' = 'none') -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
