@@ -123,7 +123,8 @@ class IncrementalReflow:
         """Transform only context whose decisions can affect the next frozen slice."""
         context_start = self._line_context_start(self._fed)
         if self.mode != "auto":
-            transformed = _substitute(self._slice(context_start, self._total_length), self.mode)
+            context_end = min(self._total_length, end + _REFLOW_HOLD_CHARS)
+            transformed = _substitute(self._slice(context_start, context_end), self.mode)
             return transformed[self._fed - context_start : end - context_start]
 
         block_index = bisect_right(self._block_starts, self._fed) - 1
@@ -150,20 +151,31 @@ class IncrementalReflow:
 
     def _separator_start(self, end: int) -> int:
         """Keep CRLF and blank-line separators on one side of the frontier."""
-        if (
+        split_crlf = (
             self._base_offset < end < self._total_length
             and self._char(end - 1) == "\r"
             and self._char(end) == "\n"
-        ):
-            return end - 1
+        )
         ruled = {"\n", "\r", "\x85", "\u2028"}
 
         def separator_char(char: str) -> bool:
             return char in ruled or _HORIZONTAL_SPACE.contains(char)
 
+        scan_start = max(self._base_offset, end - _REFLOW_HOLD_CHARS)
         left = end
-        while left > self._base_offset and separator_char(self._char(left - 1)):
+        while left > scan_start and separator_char(self._char(left - 1)):
             left -= 1
+        overlong = (
+            left == scan_start and left > self._base_offset and separator_char(self._char(left - 1))
+        )
+        if overlong:
+            # A blank separator beyond the policy horizon is always retained by
+            # every mode. Settle through the bounded frontier without walking
+            # back to the beginning of the run; keep a CRLF pair together by
+            # advancing through it.
+            return end + 1 if split_crlf else end
+        if split_crlf:
+            return end - 1
         right = end
         while right < self._total_length and separator_char(self._char(right)):
             right += 1
