@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import random
 from pathlib import Path
+from statistics import median
+from time import perf_counter
 
 import pytest
 
@@ -113,6 +115,180 @@ def test_unbroken_run_is_the_documented_safe_retention_fallback():
     assert emitted == []
     assert stream._text == text
     assert emitted + stream.close() == override.decide(text)
+
+
+@pytest.mark.parametrize("reflow", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("maximum", [64, 1024, None])
+def test_long_unterminated_random_chunkings_equal_whole_text(reflow, maximum):
+    text = "word " * 2400
+    override = SentenceOverride(
+        "en_US",
+        base="en-real-cart@1",
+        max_sentence_chars=maximum,
+        reflow=reflow,
+    )
+    expected = override.decide(text)
+
+    for seed in range(3):
+        stream = override.stream()
+        actual = []
+        for chunk in _random_chunks(text, seed):
+            actual.extend(stream.feed(chunk))
+        actual.extend(stream.close())
+
+        assert actual == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "." * 12_000,
+        "A.)" + " " * 11_996 + "B",
+    ],
+)
+@pytest.mark.parametrize("maximum", [64, 1024, None])
+def test_long_unresolved_terminator_context_equals_whole_text(text, maximum):
+    override = SentenceOverride("en_US", base="none", max_sentence_chars=maximum)
+    expected = override.decide(text)
+    stream = override.stream()
+    actual = []
+
+    for chunk in _random_chunks(text, 1701):
+        actual.extend(stream.feed(chunk))
+    actual.extend(stream.close())
+
+    assert actual == expected
+
+
+@pytest.mark.parametrize("maximum", [64, 1024])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a." + "x" * (16 * 1024),
+        "Hi. " + ")" * (16 * 1024),
+        "Hi. " + "x" * (16 * 1024),
+    ],
+    ids=["aterm-word", "close-run", "sentence-word"],
+)
+def test_forced_stream_makes_progress_with_bounded_live_state(text, maximum):
+    override = SentenceOverride("en_US", max_sentence_chars=maximum)
+    stream = override.stream()
+    actual = []
+
+    for start in range(0, len(text), 1024):
+        actual.extend(stream.feed(text[start : start + 1024]))
+        assert stream._bound_start >= min(len(text), start + 1024) - maximum
+        assert len(stream._bound_text) <= maximum
+        assert len(stream._text) <= sentence_override_module._STREAM_WINDOW + maximum
+        live = {
+            stream._base_offset + item["end"] for item in stream._sentence_candidates(stream._text)
+        }
+        assert all(
+            item["waiting_on"] == "forced" or item["offset"] in live for item in stream.pending()
+        )
+
+    actual.extend(stream.close())
+
+    assert actual == override.decide(text)
+
+
+@pytest.mark.parametrize("protection", ["none", "watermark"])
+def test_forced_compaction_preserves_protected_watermark_identity(protection):
+    text = "a." + "x" * (16 * 1024)
+    protected = [{"start": 0, "end": 1, "type": "initial"}]
+    override = SentenceOverride("en_US", max_sentence_chars=64)
+    stream = override.stream(protection=protection)
+    actual = []
+
+    for start in range(0, len(text), 1024):
+        end = min(len(text), start + 1024)
+        kwargs = {"protected": protected if start == 0 else ()}
+        if protection == "watermark":
+            kwargs["protected_through"] = end
+        actual.extend(stream.feed(text[start:end], **kwargs))
+        assert stream._bound_start >= end - 64
+        assert len(stream._bound_text) <= 64
+        assert len(stream._text) <= sentence_override_module._STREAM_WINDOW + 64
+
+    actual.extend(stream.close())
+
+    assert actual == override.decide(text, protected=protected)
+
+
+@pytest.mark.parametrize("base", ["none", "en-tn@1", "en-real-cart@1"])
+@pytest.mark.parametrize("following", ["", "X", " X", " x", ". Next"])
+def test_compacted_close_run_restores_late_candidate_context(base, following):
+    text = "." + ")" * (16 * 1024) + following
+    override = SentenceOverride("en_US", base=base, max_sentence_chars=64)
+    stream = override.stream()
+    actual = []
+
+    for start in range(0, len(text), 1024):
+        actual.extend(stream.feed(text[start : start + 1024]))
+        assert len(stream._text) <= sentence_override_module._STREAM_WINDOW + 64
+    actual.extend(stream.close())
+
+    assert actual == override.decide(text)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize(
+    "make_text",
+    [
+        lambda size: ("word " * (size // 5 + 1))[:size],
+        lambda size: "Hi. " + "x" * size,
+        lambda size: "Hi. " + ")" * size,
+    ],
+    ids=["unterminated", "terminator-word-run", "close-run"],
+)
+def test_unterminated_sentence_stream_scales_linearly(make_text):
+    def measure(size):
+        text = make_text(size)
+        samples = []
+        for _ in range(3):
+            stream = SentenceOverride("en_US").stream()
+            started = perf_counter()
+            for start in range(0, len(text), 1024):
+                stream.feed(text[start : start + 1024])
+            stream.close()
+            samples.append(perf_counter() - started)
+        return median(samples)
+
+    small = measure(16 * 1024)
+    large = measure(64 * 1024)
+
+    assert large / small < 8
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("unit", ["x", ")"], ids=["word-run", "close-run"])
+def test_sparse_terminator_icu_work_scales_linearly(monkeypatch, unit):
+    original = sentence_override_module._raw_break_sentence_spans
+
+    def measure(size):
+        work = 0
+        maximum_input = 0
+
+        def counted(text, locale):
+            nonlocal maximum_input, work
+            work += len(text)
+            maximum_input = max(maximum_input, len(text))
+            return original(text, locale)
+
+        monkeypatch.setattr(sentence_override_module, "_raw_break_sentence_spans", counted)
+        text = "Hi. " + unit * size
+        stream = SentenceOverride("en_US", max_sentence_chars=1024).stream()
+        for start in range(0, len(text), 1024):
+            stream.feed(text[start : start + 1024])
+        stream.close()
+        return work, maximum_input
+
+    small_work, small_maximum = measure(16 * 1024)
+    large_work, large_maximum = measure(256 * 1024)
+
+    assert large_work <= small_work * 20
+    assert small_maximum <= sentence_override_module._STREAM_WINDOW * 2
+    assert large_maximum <= sentence_override_module._STREAM_WINDOW * 2
 
 
 @pytest.mark.parametrize("base", ["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"])

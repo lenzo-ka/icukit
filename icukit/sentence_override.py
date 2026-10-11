@@ -95,6 +95,15 @@ _WHITE_SPACE_SINGLES = frozenset(
 )
 _FORCED_CLAUSE = icu.UnicodeSet(r"[\p{Sentence_Break=SContinue}\p{Pd}]")
 _FORCED_CLAUSE.freeze()
+_SENTENCE_TERMINATOR = icu.UnicodeSet(
+    r"[\p{Sentence_Break=ATerm}\p{Sentence_Break=STerm}"
+    r"\p{Sentence_Break=CR}\p{Sentence_Break=LF}\p{Sentence_Break=Sep}]"
+)
+_SENTENCE_TERMINATOR.freeze()
+_SENTENCE_CLOSE = icu.UnicodeSet(
+    r"[\p{Sentence_Break=Close}\p{Sentence_Break=Extend}\p{Sentence_Break=Format}]"
+)
+_SENTENCE_CLOSE.freeze()
 _OPS = {"in", "not_in", "prefix", "le", "ge"}
 _FEATURES = "icukit.features@1"
 _NAMED_RULE_BASES = {
@@ -1739,6 +1748,11 @@ def _is_white_space(char: str) -> bool:
     )
 
 
+def _has_sentence_terminator(text: str) -> bool:
+    """Whether ``text`` can introduce a non-END ICU sentence candidate."""
+    return any(_SENTENCE_TERMINATOR.contains(char) for char in text)
+
+
 def _read_edge_stable(end: int, text: str, closed: bool) -> bool:
     """Whether ICU's boundary at ``end`` is immutable under extension."""
     # ICU's WB4-transparent Extend, Format and ZWJ runs make code-point
@@ -2953,6 +2967,8 @@ class IncrementalSentenceBreaker:
         self._closed = False
         self._cache = _TokenFeatureCache(owner.cache, owner._run_requirements)
         self._run_prefix: _RunPrefix | None = None
+        self._has_terminator = False
+        self._carried_sentence_prefix = ""
         self.lookahead = owner.lookahead
         self._left_tokens = owner._left_tokens
 
@@ -3269,7 +3285,139 @@ class IncrementalSentenceBreaker:
         self._text = text[drop:]
         self._base_offset += drop
         self._protected = [item for item in self._protected if item["end"] > self._base_offset]
+        self._pending = [item for item in self._pending if item["offset"] > self._base_offset]
         self._cache.clear()
+        self._has_terminator = _has_sentence_terminator(self._text)
+
+    def _compact_forced_prefix(self) -> None:
+        """Bound the core after forced decisions have advanced it.
+
+        With no sentence terminator, ICU has only its provisional END candidate.
+        A forced boundary can therefore retire the old prefix without hiding a raw
+        candidate. Keep the ordinary stream window as left context so a later
+        terminator sees every bounded rule and inventory input. A run crossing the
+        new origin is summarized by the same prefix state as ordinary compaction.
+        Once forcing has advanced the retained sentence origin, the discarded prefix
+        cannot contribute another result at or below that origin. The run-prefix
+        summary preserves predicate inputs when the cut crosses a whitespace-free run;
+        a short carried sentence prefix restores an unresolved terminator candidate
+        after an oversized Close run. An unresolved terminator plus whitespace keeps
+        the exact text because the eventual candidate can retain that distant logical
+        end.
+        """
+        retain = max(self._base_offset, self._bound_start - _STREAM_WINDOW)
+        local_retain = retain - self._base_offset
+        if local_retain > 0 and _is_white_space(self._text[local_retain - 1]):
+            context = local_retain
+            while context > 0 and _is_white_space(self._text[context - 1]):
+                context -= 1
+            while context > 0 and _SENTENCE_CLOSE.contains(self._text[context - 1]):
+                context -= 1
+            if self._carried_sentence_prefix or (
+                context > 0 and _SENTENCE_TERMINATOR.contains(self._text[context - 1])
+            ):
+                # A pending terminator candidate can absorb an arbitrarily long
+                # whitespace tail. Retain that uncommon exactness fallback until a
+                # following nonspace fixes the candidate and its logical end.
+                return
+        for span in self._protected:
+            if span["end"] > retain:
+                retain = min(retain, span["start"])
+                break
+        drop = retain - self._base_offset
+        if drop <= 0:
+            return
+        text = self._text
+        if self._has_terminator and not self._carried_sentence_prefix:
+            for pending in self._pending:
+                context = min(len(text), pending["offset"] - self._base_offset)
+                while context > 0 and _is_white_space(text[context - 1]):
+                    context -= 1
+                while context > 0 and _SENTENCE_CLOSE.contains(text[context - 1]):
+                    context -= 1
+                if (
+                    context > 0
+                    and context <= drop
+                    and _SENTENCE_TERMINATOR.contains(text[context - 1])
+                ):
+                    start = max(0, context - _STREAM_WINDOW)
+                    self._carried_sentence_prefix = text[start:context]
+                    break
+        self._record_run_prefix(text, drop)
+        self._text = text[drop:]
+        self._base_offset = retain
+        self._protected = [item for item in self._protected if item["end"] > retain]
+        self._pending = [item for item in self._pending if item["offset"] > retain]
+        self._cache.clear()
+        self._has_terminator = _has_sentence_terminator(self._text)
+
+    def _refresh_end_pending(self) -> None:
+        """Replace stale provisional END state after bypassing the evaluator."""
+        self._pending = (
+            [
+                {
+                    "offset": self._total_length,
+                    "tokens_after": 0,
+                    "waiting_on": "icu",
+                }
+            ]
+            if self._text
+            else []
+        )
+
+    def _sentence_candidates(self, text: str) -> list[BreakSpan]:
+        """Return raw candidates, restoring one compacted terminator context."""
+        candidates = _raw_break_sentence_spans(text, self._owner.locale)
+        prefix = self._carried_sentence_prefix
+        if not prefix:
+            return candidates
+        prefix_length = len(prefix)
+        seen = {item["end"] for item in candidates}
+        for item in _raw_break_sentence_spans(prefix + text, self._owner.locale):
+            local_end = item["end"] - prefix_length
+            if local_end <= 0 or local_end in seen:
+                continue
+            local_start = max(0, item["start"] - prefix_length)
+            restored = dict(item)
+            restored.update(
+                text=text[local_start:local_end],
+                start=local_start,
+                end=local_end,
+                codepoint_start=local_start,
+                codepoint_end=local_end,
+            )
+            candidates.append(cast(BreakSpan, restored))
+            seen.add(local_end)
+        candidates.sort(key=lambda item: item["end"])
+        return candidates
+
+    def _deferred_transparent_results(
+        self,
+        previous_total: int,
+        chunk: str,
+    ) -> list[BreakDecision] | None:
+        """Advance a provisional END through Close/space without reevaluating it."""
+        if (
+            not chunk
+            or _has_sentence_terminator(chunk)
+            or not all(_is_white_space(char) or _SENTENCE_CLOSE.contains(char) for char in chunk)
+            or not any(
+                item["offset"] == previous_total and item["waiting_on"] == "icu"
+                for item in self._pending
+            )
+        ):
+            return None
+        for item in self._pending:
+            if item["offset"] == previous_total:
+                item["offset"] = self._total_length
+        forced = self._bounded_results((), closed=False)
+        if forced:
+            self._emitted_through = max(
+                self._emitted_through,
+                max(item["offset"] for item in forced),
+            )
+            self._compact_forced_prefix()
+        return forced
 
     def _evaluate(self, *, closed: bool) -> list[BreakDecision]:
         text = self._text
@@ -3291,7 +3439,7 @@ class IncrementalSentenceBreaker:
             and not self._owner.inventories
             and not protected
         )
-        candidates = _raw_break_sentence_spans(text, self._owner.locale)
+        candidates = self._sentence_candidates(text)
         toks = (
             []
             if plain_closed
@@ -3450,24 +3598,100 @@ class IncrementalSentenceBreaker:
             start = 0
             while start < len(chunk):
                 part = chunk[start : start + _STREAM_WINDOW]
+                previous_total = self._total_length
                 self._text += part
                 self._total_length += len(part)
                 self._append_bound_input(part)
+                self._has_terminator = self._has_terminator or _has_sentence_terminator(part)
                 if protected_through is not None:
                     self._watermark = min(protected_through, self._total_length)
-                emitted.extend(self._evaluate(closed=False))
+                deferred = self._deferred_transparent_results(previous_total, part)
+                if deferred is not None:
+                    emitted.extend(deferred)
+                elif self._has_terminator or self._carried_sentence_prefix:
+                    evaluated = self._evaluate(closed=False)
+                    if any(
+                        not _is_white_space(char) and not _SENTENCE_CLOSE.contains(char)
+                        for char in part
+                    ) and not any(item["offset"] < self._total_length for item in self._pending):
+                        self._carried_sentence_prefix = ""
+                    emitted.extend(evaluated)
+                    forced = [item for item in evaluated if item["layer"] == "forced"]
+                    if forced:
+                        self._emitted_through = max(
+                            self._emitted_through,
+                            max(item["offset"] for item in forced),
+                        )
+                        self._compact_forced_prefix()
+                else:
+                    self._refresh_end_pending()
+                    forced = self._bounded_results((), closed=False)
+                    emitted.extend(forced)
+                    if forced:
+                        self._emitted_through = max(
+                            self._emitted_through,
+                            max(item["offset"] for item in forced),
+                        )
+                        self._compact_forced_prefix()
                 start += len(part)
             return emitted
         self._text += chunk
         self._total_length = prospective_length
         self._append_bound_input(chunk, additions)
+        self._has_terminator = self._has_terminator or _has_sentence_terminator(chunk)
         if protected_through is not None:
             self._watermark = protected_through
-        return self._evaluate(closed=False)
+        if not self._has_terminator and not self._carried_sentence_prefix:
+            self._refresh_end_pending()
+            forced = self._bounded_results((), closed=False)
+            if forced:
+                self._emitted_through = max(
+                    self._emitted_through,
+                    max(item["offset"] for item in forced),
+                )
+                self._compact_forced_prefix()
+            return forced
+        deferred = (
+            None
+            if additions
+            else self._deferred_transparent_results(prospective_length - len(chunk), chunk)
+        )
+        if deferred is not None:
+            return deferred
+        evaluated = self._evaluate(closed=False)
+        if (
+            self._carried_sentence_prefix
+            and any(
+                not _is_white_space(char) and not _SENTENCE_CLOSE.contains(char) for char in chunk
+            )
+            and not any(item["offset"] < self._total_length for item in self._pending)
+        ):
+            self._carried_sentence_prefix = ""
+        forced = [item for item in evaluated if item["layer"] == "forced"]
+        if forced:
+            self._emitted_through = max(
+                self._emitted_through,
+                max(item["offset"] for item in forced),
+            )
+            self._compact_forced_prefix()
+        return evaluated
 
     def pending(self) -> list[PendingCandidate]:
         """Return snapshots of candidates that still need context or protection."""
         result = [dict(item) for item in self._pending]  # type: ignore[misc]
+        if (
+            not self._has_terminator
+            and bool(self._text)
+            and self._total_length > self._emitted_through
+            and not any(item["offset"] == self._total_length for item in result)
+        ):
+            result.append(
+                {
+                    "offset": self._total_length,
+                    "tokens_after": 0,
+                    "waiting_on": "icu",
+                }
+            )
         if self._held_decisions:
             held = self._held_decisions[0]
             if not any(item["offset"] == held["offset"] for item in result):
@@ -3502,6 +3726,8 @@ class IncrementalSentenceBreaker:
         self._bound_start = self._total_length
         self._bound_whitespace_start = self._total_length
         self._run_prefix = None
+        self._has_terminator = False
+        self._carried_sentence_prefix = ""
         # Cache keys and every eviction threshold are segment-local. A flush
         # starts a new coordinate space, so no prior key can be retained.
         self._cache.clear()

@@ -84,6 +84,15 @@
 
 ### Fixed
 
+- Incremental sentence breaking no longer rescans the complete open sentence on
+  every feed when input has no sentence terminator or has a terminator followed by
+  a long whitespace-free run. Work and retained core text now stay within the
+  configured sentence and stream windows, including for closing-character runs and
+  every reflow mode. Disabling the sentence-length bound retains the open input for
+  exact END evaluation but still scans it only once. A pending terminator followed
+  by an arbitrarily long whitespace tail remains the exact-retention fallback until
+  later text fixes its offset and logical end. Provisional END context advances
+  through whitespace and closing characters without a full rescan.
 - The generated date/time skeleton readers now include ICU hour patterns whose literal
   words distinguish them from bare numbers, including omitted `H` and locale-preference
   `j`/`J`/`C` patterns. Thus German `8 Uhr` and `08 Uhr`, French `8 h`, Bulgarian
