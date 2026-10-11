@@ -1,9 +1,12 @@
 import random
 import re
+import statistics
+import time
+from dataclasses import replace
 
 import pytest
 
-from icukit import DetectionBatch, DetectorSet, number_detectors
+from icukit import DetectionBatch, DetectorSet, number_detectors, reflow
 from icukit.detectors import DetectorRefusal
 from icukit.engine import reader_set
 from icukit.recognize import FlexibleNumberRangeDetector
@@ -42,6 +45,31 @@ def _chunkings(text):
     return ([len(text)], [1] * len(text), tokens, _random_chunks(len(text)))
 
 
+def _restore_original_surfaces(found, source):
+    restored = []
+    for item in found:
+        original = dict(item)
+        original["text"] = source[item["start"] : item["end"]]
+        original["captures"] = tuple(
+            replace(capture, text=source[capture.start : capture.end])
+            for capture in item["captures"]
+        )
+        restored.append(original)
+    return restored
+
+
+def _reflow_reference(detectors, text, *, mode, boundary, max_pending_chars):
+    view = reflow(text, mode)
+    found, batches, stream = _run(
+        detectors,
+        view,
+        [len(view)],
+        boundary=boundary,
+        max_pending_chars=max_pending_chars,
+    )
+    return _restore_original_surfaces(found, text), batches, stream
+
+
 @pytest.mark.parametrize("chunks_index", range(4))
 def test_default_paragraph_stream_is_whole_text_identical(chunks_index):
     text = (
@@ -56,6 +84,28 @@ def test_default_paragraph_stream_is_whole_text_identical(chunks_index):
 
     assert found == expected
     assert batches[-1].pending_from == len(text)
+
+
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
+def test_reflowed_paragraph_stream_is_whole_view_identical(mode):
+    text = (
+        "A sufficiently long source line contains $12.50 and continues without stopping\n"
+        "onto another sufficiently long line with 3 kg and still more ordinary prose.\n\n"
+        "A new paragraph contains May 5, 2024 and the range 3–5.\u2029Done."
+    )
+    detectors = reader_set("en_US", flexible=True).compile(warm=False)
+    expected = _restore_original_surfaces(detectors.detect(reflow(text, mode)), text)
+
+    found, batches, _stream = _run(
+        detectors,
+        text,
+        [len(text)],
+        reflow=mode,
+        max_pending_chars=len(text) + 1,
+    )
+
+    assert found == expected
+    assert all(not batch.cuts for batch in batches)
 
 
 @pytest.mark.parametrize(
@@ -425,3 +475,269 @@ def test_boundary_violation_audit_reports_crossing_spans():
     }
     assert _boundary_violations("3–\n5", (detection,), "paragraph") == ()
     assert _boundary_violations("3–\n5", (detection,), "line") == ("number:range:0:4@3",)
+
+
+def _capital_bound_text(terminator, distance):
+    sample = terminator.join(
+        [
+            "a hard wrapped sample line that has a stable representative width",
+            "a second sample line that has a stable representative width here",
+            "a third sample line that has a stable representative width here",
+            "a fourth sample line that has a stable representative width here",
+            "a fifth sample line that has a stable representative width here",
+            "The quick brown fox jumps over the lazy dog and more",
+        ]
+    )
+    first = len(sample)
+    padding = distance - len(terminator) - 1
+    text = (
+        sample
+        + terminator
+        + "B"
+        + "y" * padding
+        + terminator
+        + "Cats are nice"
+        + terminator
+        + "Dogs too."
+        + terminator
+    )
+    assert text.index(terminator, first + len(terminator)) - first == distance
+    return text + "z" * (2100 - len(text))
+
+
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("boundary", ["paragraph", "line", "explicit"])
+@pytest.mark.parametrize("terminator", ["\n", "\r\n"])
+@pytest.mark.parametrize("distance", [1023, 1024, 1025])
+@pytest.mark.parametrize("chunking", ["one", "random"])
+def test_detection_reflow_freezes_at_the_whole_text_bound(
+    mode, boundary, terminator, distance, chunking
+):
+    text = _capital_bound_text(terminator, distance)
+    detectors = DetectorSet((PrefixDetector(),))
+    options = {"reflow": mode, "boundary": boundary, "max_pending_chars": 256}
+    expected, expected_batches, _reference_stream = _reflow_reference(
+        detectors,
+        text,
+        mode=mode,
+        boundary=boundary,
+        max_pending_chars=256,
+    )
+    chunks = [1] * len(text) if chunking == "one" else _random_chunks(len(text), distance)
+
+    found, batches, _stream = _run(detectors, text, chunks, **options)
+
+    assert found == expected
+    assert [cut for batch in batches for cut in batch.cuts] == [
+        cut for batch in expected_batches for cut in batch.cuts
+    ]
+
+
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("boundary", ["paragraph", "line", "explicit"])
+@pytest.mark.parametrize("terminator", ["\n", "\r\n", "\x85", "\u2028"])
+@pytest.mark.parametrize("separator_length", [5, 1025])
+@pytest.mark.parametrize("chunking", ["one", "random"])
+def test_detection_reflow_freezes_long_separators(
+    mode, boundary, terminator, separator_length, chunking
+):
+    first = "this paragraph runs on without terminal punctuation at its end"
+    following = "the next paragraph begins here and continues for a long while on and on " * 30
+    text = first + terminator * separator_length + following + terminator
+    detectors = DetectorSet((PrefixDetector(),))
+    expected, expected_batches, _reference_stream = _reflow_reference(
+        detectors,
+        text,
+        mode=mode,
+        boundary=boundary,
+        max_pending_chars=256,
+    )
+    chunks = [1] * len(text) if chunking == "one" else _random_chunks(len(text), 147)
+
+    found, batches, _stream = _run(
+        detectors,
+        text,
+        chunks,
+        reflow=mode,
+        boundary=boundary,
+        max_pending_chars=256,
+    )
+
+    assert found == expected
+    assert [cut for batch in batches for cut in batch.cuts] == [
+        cut for batch in expected_batches for cut in batch.cuts
+    ]
+
+
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("boundary", ["paragraph", "line", "explicit"])
+@pytest.mark.parametrize("chunking", ["one", "random"])
+def test_detection_reflow_reads_wrapped_values(mode, boundary, chunking):
+    hard_wrap = "ordinary words make this source line long enough for joining and finish with "
+    text = (
+        hard_wrap
+        + "more ordinary prose across the first line ending here\n"
+        + hard_wrap
+        + "more ordinary prose across the second line ending here\n"
+        + hard_wrap
+        + "more ordinary prose across the third line ending here\n"
+        + hard_wrap
+        + "$\n12.50, followed by enough ordinary words to make this source line very long, "
+        + "then a measured value of 3\nkg, followed by enough ordinary words to make this "
+        + "source line very long and complete indeed, and the date May\n5, 2024."
+        + " It concludes with the wrapped range 3–\n5."
+    )
+    detectors = reader_set(
+        "en_US",
+        flexible=True,
+        locales=(),
+        currencies=("USD",),
+        units=("kilogram",),
+    )
+    expected, _expected_batches, _reference_stream = _reflow_reference(
+        detectors,
+        text,
+        mode=mode,
+        boundary=boundary,
+        max_pending_chars=4096,
+    )
+    chunks = [1] * len(text) if chunking == "one" else _random_chunks(len(text), 911)
+
+    found, _batches, _stream = _run(
+        detectors,
+        text,
+        chunks,
+        reflow=mode,
+        boundary=boundary,
+    )
+
+    assert found == expected
+    assert all(text[item["start"] : item["end"]] == item["text"] for item in found)
+    assert all(
+        text[capture.start : capture.end] == capture.text
+        for item in found
+        for capture in item["captures"]
+    )
+    if mode != "none":
+        assert any(item["text"] == "$\n12.50" for item in found)
+        assert any(item["text"] == "3\nkg" for item in found)
+        assert any(item["text"] == "May\n5, 2024" for item in found)
+        assert any(item["text"] == "3–\n5" for item in found)
+
+
+@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+def test_detection_reflow_retention_is_bounded_on_unterminated_input(mode):
+    stream = DetectionStream(
+        (PrefixDetector(),),
+        max_pending_chars=4096,
+        boundary="explicit",
+        reflow=mode,
+    )
+    maximum = 0
+    for _ in range(4):
+        stream.feed("word " * 13_108)
+        state = stream.pending()
+        maximum = max(maximum, state["total"] - state["buffered_from"])
+    stream.close()
+
+    assert maximum <= 4096 + 1024
+
+
+@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("boundary", ["paragraph", "line", "explicit"])
+@pytest.mark.parametrize("terminator", ["\n", "\r\n", "\x85", "\u2028", "\u2029"])
+def test_detection_reflow_retention_is_bounded_on_long_separator_runs(mode, boundary, terminator):
+    cap = 4096
+    stream = DetectionStream(
+        (PrefixDetector(),),
+        max_pending_chars=cap,
+        boundary=boundary,
+        reflow=mode,
+    )
+    text = (terminator * 20_000)[:20_000]
+
+    for start in range(0, len(text), 4096):
+        stream.feed(text[start : start + 4096])
+        state = stream.pending()
+        assert state["total"] - state["buffered_from"] <= cap + 1024
+
+    stream.close()
+
+
+@pytest.mark.slow
+def test_detection_reflow_separator_run_scales_linearly():
+    timings = {}
+    for size in (100_000, 400_000):
+        trials = []
+        for _ in range(3):
+            stream = DetectionStream(
+                (PrefixDetector(),),
+                max_pending_chars=4096,
+                boundary="explicit",
+                reflow="lines",
+            )
+            started = time.process_time()
+            for start in range(0, size, 4096):
+                stream.feed("\n" * min(4096, size - start))
+            stream.close()
+            trials.append(time.process_time() - started)
+        timings[size] = statistics.median(trials)
+
+    assert timings[400_000] / timings[100_000] <= 6, timings
+
+
+@pytest.mark.parametrize("operation", ["flush", "boundary"])
+@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+def test_explicit_boundaries_resolve_reflow_and_restore_surfaces(mode, operation):
+    text = (
+        "A sufficiently long source line contains the wrapped range 3–\n"
+        "5 and enough ordinary prose to join the lines."
+    )
+    detectors = reader_set("en_US", flexible=True, locales=(), currencies=(), units=())
+    stream = detectors.stream(boundary="explicit", reflow=mode)
+
+    assert stream.feed(text).detections == ()
+    batch = getattr(stream, operation)()
+
+    expected = _restore_original_surfaces(detectors.detect(reflow(text, mode)), text)
+    assert list(batch.detections) == expected
+    assert batch.cuts == (len(text),)
+    assert batch.pending_from == len(text)
+
+
+def test_reflow_reports_cap_cuts_when_their_decisions_settle():
+    text = "x" * 5000 + "\n" * 2000 + "3–\n5"
+
+    def cuts(mode):
+        stream = number_detectors("en_US").stream(
+            boundary="explicit", max_pending_chars=256, reflow=mode
+        )
+        batches = [stream.feed(text[:3000]), stream.feed(text[3000:]), stream.flush()]
+        batches.extend((stream.feed("9" * 300), stream.close()))
+        return [cut for batch in batches for cut in batch.cuts]
+
+    assert cuts("lines") == cuts("none")
+
+
+def test_detection_stream_reflow_validation_is_shared_by_both_factories():
+    message = "^reflow must be one of 'none', 'lines', 'paragraphs', 'auto'$"
+    with pytest.raises(ValueError, match=message):
+        number_detectors("en_US").stream(reflow="invalid")
+    with pytest.raises(ValueError, match=message):
+        number_detectors("en_US").compile(warm=False).stream(reflow="invalid")
+
+
+def test_compiled_detection_stream_reflows_and_restores_original_surfaces():
+    text = "A sufficiently long source line describes the measured value 3\nkg."
+    stream = (
+        reader_set("en_US", flexible=True, locales=(), currencies=(), units=("kilogram",))
+        .compile(warm=False)
+        .stream(reflow="lines")
+    )
+
+    stream.feed(text[:20])
+    stream.feed(text[20:])
+    found = stream.close().detections
+
+    assert any(item["text"] == "3\nkg" for item in found)
+    assert all(text[item["start"] : item["end"]] == item["text"] for item in found)

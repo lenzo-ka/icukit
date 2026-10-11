@@ -6,8 +6,10 @@
 
 - Add text-only `reflow()` and `ReflowMode`, plus offset-preserving `reflow=`
   modes on `SentenceOverride`, `Breaker`, `break_sentences`,
-  `break_sentence_spans`, the incremental sentence stream, and `ik break`
-  sentence and tokenization commands.
+  `break_sentence_spans`, the incremental sentence stream, detection streams from
+  `DetectorSet` and `CompiledDetectorSet`, and `ik break` sentence and tokenization
+  commands. Detection stream boundaries are selected on the reflowed view, while
+  detection and capture text remain original-source slices.
   The capital-run protection is intentionally limited to three or more
   capital-started lines no longer than 60 code points. Title-case headings,
   two-line and lowercase verse, CJK verse without cased letters, arrow bullets,
