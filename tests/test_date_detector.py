@@ -156,9 +156,19 @@ def test_date_detector_rejects_non_gmt_timezone():
         DateDetector("en_US", "yMd", tz="America/New_York")
 
 
-def test_date_detector_refuses_uninvertible_day_period_skeleton():
-    # en_US "hm" best pattern is 12-hour "h:mm a"; bare (h, m) cannot reproduce AM vs PM,
-    # so the detector refuses the skeleton rather than emit a non-invertible value (fugu #2).
+def test_date_detector_resolves_a_literal_12_hour_pattern_with_its_day_period():
+    detector = DateDetector("ee", "h")
+    formatter = icu.SimpleDateFormat(detector.pattern, icu.Locale("ee"))
+    formatter.setTimeZone(icu.TimeZone.getGMT())
+
+    detection = detector.detect(formatter.format(_instant()))[0]
+
+    assert detection["value"].fields == (("H", 0),)
+    assert {capture.name for capture in detection["captures"]} == {"H", "day-period"}
+    assert _rebuild(detection) == formatter.format(_instant())
+
+
+def test_date_detector_leaves_ordinary_day_period_patterns_to_the_flexible_reader():
     with pytest.raises(ValueError, match="invert"):
         DateDetector("en_US", "hm")
 

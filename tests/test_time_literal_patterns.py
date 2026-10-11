@@ -1,0 +1,267 @@
+"""ICU hour patterns whose literal text distinguishes them from bare numbers."""
+
+import icu
+import pytest
+
+from icukit.detectors import DateDetector, _pattern_has_word_literal, _pattern_runs
+from icukit.engine import (
+    DATE_TIME_SKELETON_FAMILY,
+    generated_detectors_report,
+    reader_set,
+)
+
+
+def _time() -> float:
+    calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale("en"))
+    calendar.clear()
+    calendar.set(2026, 0, 3, 20, 7, 6)
+    return calendar.getTime()
+
+
+@pytest.mark.parametrize(
+    ("locale", "surface", "fields"),
+    [
+        ("de_DE", "8 Uhr", (("H", 8),)),
+        ("de_DE", "08 Uhr", (("H", 8),)),
+        ("fr_FR", "8 h", (("H", 8),)),
+        ("bg_BG", "08:00 ч.", (("H", 8), ("m", 0))),
+        ("dsb", "zeg. 8:00", (("H", 8), ("m", 0))),
+        ("eo", "08H", (("H", 8),)),
+        ("zh", "8时", (("H", 8),)),
+    ],
+)
+def test_reader_set_reads_hour_pattern_literals_whole(locale, surface, fields):
+    detections = reader_set(locale).detect(surface)
+
+    assert any(
+        detection["start"] == 0
+        and detection["end"] == len(surface)
+        and detection["value"].fields == fields
+        for detection in detections
+        if hasattr(detection["value"], "fields")
+    )
+
+
+def test_literal_hour_keeps_the_plain_number_reading():
+    detections = reader_set("de_DE").detect("8 Uhr")
+
+    assert any(
+        detection["type"] == "date:H" and detection["text"] == "8 Uhr" for detection in detections
+    )
+    assert any(
+        detection["type"] == "number:decimal" and detection["text"] == "8"
+        for detection in detections
+    )
+
+
+@pytest.mark.parametrize(
+    ("surface", "hour_pattern"), [("8 Uhr", "H 'Uhr'"), ("08 Uhr", "HH 'Uhr'")]
+)
+def test_literal_hour_spec_records_the_width_actually_read(surface, hour_pattern):
+    detection = next(
+        item for item in DateDetector("de_DE", "H").detect(surface) if item["text"] == surface
+    )
+
+    assert detection["spec"].pattern == hour_pattern
+    hour = next(capture for capture in detection["captures"] if capture.name == "H")
+    assert hour.text == surface.split()[0]
+
+
+@pytest.mark.parametrize(
+    ("locale", "surface", "fragment", "whole_time"),
+    [
+        ("de_DE", "08:00 Uhr", "00 Uhr", "08:00"),
+        ("bg_BG", "08:00 ч.", "00 ч.", "08:00 ч."),
+    ],
+)
+def test_literal_hour_does_not_start_inside_a_time(locale, surface, fragment, whole_time):
+    detections = reader_set(locale).detect(surface)
+
+    assert not any(
+        detection["type"] == "date:H" and detection["text"] == fragment for detection in detections
+    )
+    assert any(
+        detection["start"] == 0
+        and detection["text"] == whole_time
+        and detection["type"] == "date:Hm"
+        for detection in detections
+    )
+
+
+@pytest.mark.parametrize(("surface", "start"), [("8 Uhr", 0), ("um 8 Uhr", 3)])
+def test_literal_hour_keeps_token_aligned_readings(surface, start):
+    detections = reader_set("de_DE").detect(surface)
+
+    assert any(
+        detection["type"] == "date:H"
+        and detection["start"] == start
+        and detection["end"] == len(surface)
+        and detection["value"].fields == (("H", 8),)
+        for detection in detections
+    )
+
+
+def test_literal_hour_skips_scan_when_its_literal_is_absent(monkeypatch):
+    detector = DateDetector("de_DE", "H")
+
+    def fail_scan(*args, **kwargs):
+        pytest.fail("literal-absent text reached the strict scanner")
+
+    monkeypatch.setattr("icukit.detectors._scan", fail_scan)
+
+    assert detector.detect("Am Morgen beginnt die Arbeit.") == []
+
+
+def test_literal_hour_skips_scan_when_its_literal_is_an_ordinary_word(monkeypatch):
+    detector = DateDetector("de_DE", "H")
+
+    def fail_scan(*args, **kwargs):
+        pytest.fail("literal prose without an adjacent digit reached the strict scanner")
+
+    monkeypatch.setattr("icukit.detectors._scan", fail_scan)
+
+    assert detector.detect("Die Uhr tickt und der Hund bellt im Haus.") == []
+
+
+@pytest.mark.parametrize(
+    ("locale", "surface", "expected_type"),
+    [
+        ("ja", "9西暦2026年", "date:Gy"),
+        ("zh_Hans_CN", "9公元2026年", "date:Gy"),
+        ("ii", "9ꃅꋊꊂ 2026 ꋍꆪ 3ꑍ", "date:Gy"),
+    ],
+)
+def test_literal_date_reader_can_start_after_an_adjacent_digit(locale, surface, expected_type):
+    assert any(
+        detection["type"] == expected_type and detection["start"] == 1
+        for detection in reader_set(locale).detect(surface)
+    )
+
+
+@pytest.mark.parametrize(
+    ("locale", "surface", "fragment"),
+    [
+        ("zh", "8时30分", "8时"),
+        ("dsb", "zeg. 8:00", "zeg. 8"),
+        ("dz", "ཆུ་ཚོད་༡༢:༠༠", "ཆུ་ཚོད་༡༢"),
+    ],
+)
+def test_literal_hour_does_not_end_inside_a_time(locale, surface, fragment):
+    assert not any(
+        detection["text"] == fragment and detection["type"] in {"date:H", "date:J"}
+        for detection in reader_set(locale).detect(surface)
+    )
+
+
+@pytest.mark.parametrize("separator", ["-", "–", "—"])
+def test_literal_hour_does_not_start_inside_a_range(separator):
+    detections = reader_set("de_DE").detect(f"8{separator}9 Uhr")
+
+    assert not any(detection["type"] == "date:H" for detection in detections)
+
+
+def test_locale_preference_day_period_literal_is_resolved():
+    generator = icu.DateTimePatternGenerator.createInstance(icu.Locale("ee"))
+    formatter = icu.SimpleDateFormat(generator.getBestPattern("j"), icu.Locale("ee"))
+    formatter.setTimeZone(icu.TimeZone.getGMT())
+    surface = formatter.format(_time())
+
+    detections = reader_set("ee").detect(surface)
+
+    assert any(
+        detection["start"] == 0
+        and detection["end"] == len(surface)
+        and detection["value"].fields == (("H", 20),)
+        for detection in detections
+        if hasattr(detection["value"], "fields")
+    )
+
+
+@pytest.mark.parametrize(("locale", "skeleton"), [("fr_CA", "Bh"), ("dsb", "Bh")])
+def test_icu_unparseable_literal_day_period_detector_is_reported(locale, skeleton):
+    report = generated_detectors_report(locale, (DATE_TIME_SKELETON_FAMILY,))
+
+    skipped = next(item for item in report.skipped if item.spec == skeleton)
+    assert "ICU-unparseable" in skipped.reason
+    assert all(detector.skeleton != skeleton for detector in report.detectors.detectors)
+
+
+def _reformat_detection(detection) -> str:
+    spec = detection["spec"]
+    calendar = icu.Calendar.createInstance(
+        icu.TimeZone.getGMT(), icu.Locale(f"{spec.locale}@calendar={spec.calendar}")
+    )
+    calendar.clear()
+    calendar_fields = {
+        "H": icu.Calendar.HOUR_OF_DAY,
+        "h": icu.Calendar.HOUR,
+        "m": icu.Calendar.MINUTE,
+        "s": icu.Calendar.SECOND,
+    }
+    for name, value in detection["value"].fields:
+        calendar.set(calendar_fields[name], value)
+    formatter = icu.SimpleDateFormat(spec.pattern, icu.Locale(spec.locale))
+    formatter.setTimeZone(icu.TimeZone.getGMT())
+    return formatter.format(calendar.getTime())
+
+
+@pytest.mark.slow
+def test_every_admitted_literal_12_hour_surface_round_trips_at_midnight_and_noon():
+    """Every admitted h/K plus day-period reader preserves the written instant."""
+    instants = []
+    for hour in (0, 12):
+        calendar = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale("en"))
+        calendar.clear()
+        calendar.set(2026, 0, 3, hour, 7, 6)
+        instants.append(calendar.getTime())
+
+    for locale in sorted(icu.Locale.getAvailableLocales()):
+        report = generated_detectors_report(locale, (DATE_TIME_SKELETON_FAMILY,))
+        for detector in report.detectors.detectors:
+            fields = {letter for letter, _ in _pattern_runs(detector.pattern)}
+            if (
+                not detector._literal_words
+                or not fields & {"h", "K"}
+                or not fields & {"a", "b", "B"}
+                or fields & {"E", "e", "c"}
+            ):
+                continue
+            for instant in instants:
+                surface = detector._df.format(instant)
+                full = [
+                    detection
+                    for detection in detector.detect(surface)
+                    if detection["start"] == 0 and detection["end"] == len(surface)
+                ]
+                assert full, (locale, detector.skeleton, detector.pattern, surface)
+                assert all(_reformat_detection(detection) == surface for detection in full)
+
+
+def test_every_icu_locale_hour_pattern_with_a_word_literal_is_invertible():
+    """Audit fixed cycles and the locale-preference j/J/C skeletons."""
+    requested = tuple(hour + rest for hour in "hHkKjJC" for rest in ("", "m", "ms"))
+    instant = _time()
+
+    for locale in sorted(icu.Locale.getAvailableLocales()):
+        icu_locale = icu.Locale(locale)
+        generator = icu.DateTimePatternGenerator.createInstance(icu_locale)
+        by_pattern = {
+            str(generator.getBestPattern(skeleton)): str(skeleton)
+            for skeleton in DATE_TIME_SKELETON_FAMILY.enumerate(locale)
+        }
+        checked = set()
+        for requested_skeleton in requested:
+            pattern = str(generator.getBestPattern(requested_skeleton))
+            if pattern in checked or not _pattern_has_word_literal(pattern):
+                continue
+            checked.add(pattern)
+            skeleton = by_pattern[pattern]
+            detector = DateDetector(locale, skeleton)
+            formatter = icu.SimpleDateFormat(pattern, icu_locale)
+            formatter.setTimeZone(icu.TimeZone.getGMT())
+            surface = formatter.format(instant)
+
+            assert any(
+                detection["start"] == 0 and detection["end"] == len(surface)
+                for detection in detector.detect(surface)
+            ), (locale, requested_skeleton, pattern, surface)

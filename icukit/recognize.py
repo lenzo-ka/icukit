@@ -44,6 +44,7 @@ from .breaker import _raw_break_sentence_spans, break_grapheme_spans
 from .detectors import (
     _EXTENDING_CATEGORIES,
     _GROUPING_SPACES,
+    _NUMBER_RUN_MARKS,
     ApproximateValue,
     Capture,
     CompactFormatSpec,
@@ -68,6 +69,7 @@ from .detectors import (
     _is_pattern_letter,
     _pattern_runs,
     _space_grouping_bounds,
+    _starts_inside_number_run,
     _widen_years,
     _word_edges,
     _word_interior_offsets,
@@ -969,7 +971,14 @@ _INTERVAL_SAMPLE_ENDS = {
 
 def _interval_fields(pattern: str) -> tuple[_DateField, ...]:
     """The date fields of one interval side, plus its AM/PM marker when it has one."""
-    fields = list(_date_fields(pattern))
+    # DateDetector exposes a display-only ``day-period`` capture. The interval reader
+    # has older endpoint machinery that needs the same ICU field under its semantic
+    # ``ampm`` name so it can combine it with ``h`` before building each endpoint.
+    fields = [
+        field
+        for field in _date_fields(pattern, resolve_day_period=False)
+        if field.name != "day-period"
+    ]
     for letter, width in _pattern_runs(pattern):
         if letter == "a":
             field_id = _letter_field_id(letter)
@@ -8566,9 +8575,6 @@ def _detect_flexible(
 _HYPHEN_MINUS = "-"
 # How far a range reader looks on either side of its separator for the endpoints.
 _RANGE_WINDOW = 48
-# A range's endpoint is not one number of a longer run joined by these ("14-3-3",
-# "2024-03-05", "2:07–4:07"), which is a code, a date, or a time, not a range.
-_RANGE_CHAIN_MARKS = frozenset({_HYPHEN_MINUS, ":", "/", "."})
 _PARAGRAPH_BOUNDARY = re.compile(r"(?:\r\n|\n)[ \t]*(?:\r\n|\n)|\u2029")
 
 
@@ -8757,8 +8763,8 @@ def _runs_on(text: str, start: int, end: int, marks: Iterable[str]) -> bool:
     Also where it starts with a sign right after a digit: the "-3" of "14-3-3" is
     joined to the 14, not a negative number.
     """
-    joins = _RANGE_CHAIN_MARKS | set(marks)
-    before = start >= 2 and text[start - 1] in joins and icu.Char.isdigit(text[start - 2])
+    joins = _NUMBER_RUN_MARKS | set(marks)
+    before = _starts_inside_number_run(text, start, marks)
     joined = start >= 1 and not icu.Char.isdigit(text[start]) and icu.Char.isdigit(text[start - 1])
     after = end + 1 < len(text) and text[end] in joins and icu.Char.isdigit(text[end + 1])
     return before or joined or after

@@ -2750,6 +2750,14 @@ refuses: a pattern with an era, read with a year of one to three digits ("Mar 15
 century). Its type is ``date:short-year:<skeleton>``, beside the text-date reader's
 ``date:short-year``, and a pattern without an era refuses it.
 
+In a pattern with a word literal, a 12-hour field accompanied by ICU's ``a``, ``b``,
+or ``B`` day period is resolved to a 24-hour ``H`` value; a 12-hour field without a
+period retains ``h`` because the surface does not choose morning or afternoon.
+One- and two-digit hour widths are both inverted with a spec carrying the width
+actually read. This covers ICU patterns such as German ``HH 'Uhr'`` without turning
+an undecorated number into a default time reading or widening the ordinary
+day-period readers.
+
 #### `DateDetector(locale: 'str', skeleton: 'str', tz: 'str' = 'GMT', *, short_years: 'bool' = False) -> 'None'`
 
 Initialize self.  See help(type(self)) for accurate signature.

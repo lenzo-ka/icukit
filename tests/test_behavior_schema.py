@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import get_args
 
+import icu
 import pytest
 
 from icukit import (
@@ -25,6 +26,7 @@ from icukit import (
     load_behavior_schema,
     reader_set,
 )
+from icukit.detectors import DateDetector
 
 DATA = Path(__file__).parent / "data/behaviors/conformance"
 
@@ -336,6 +338,31 @@ def test_skeleton_validation_checks_every_configured_locale(monkeypatch):
         ("en_US", "Hm"),
         ("en_GB", "Hm"),
     ]
+
+
+@pytest.mark.parametrize("locale", ["ko", "fr_CA", "de"])
+@pytest.mark.parametrize("skeleton", ["j", "jm", "Bh", "yMd", "yw", "Q", "!!!"])
+def test_skeleton_loader_acceptance_matches_date_detector_constructibility(locale, skeleton):
+    detector_error = None
+    try:
+        DateDetector(locale, skeleton)
+    except (icu.ICUError, ValueError) as error:
+        detector_error = error
+
+    loader_error = None
+    try:
+        load_behavior_schema(
+            {
+                "schema_version": 1,
+                "detection": {"locales": [locale], "skeletons": [skeleton]},
+            }
+        )
+    except BehaviorLoadError as error:
+        loader_error = error
+
+    assert (loader_error is None) == (detector_error is None)
+    if detector_error is not None:
+        assert str(detector_error) in loader_error.refusals[0].detail
 
 
 def test_multi_error_refusal_count_and_order_are_stable():
