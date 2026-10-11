@@ -63,7 +63,8 @@
 
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
   limit no longer abort plural-numeral or numeric-duration detection; their capture
-  value is `None`.
+  value is `None`. Fraction, relative-date, and scientific-notation readers skip a
+  candidate whose digit run exceeds that limit instead of raising.
 - Pathological digit, whitespace, repeated spell-out, interval-separator, currency, and
   measure runs remain linear. Readers now saturate rejected numeric fields, skip proved
   interior starts and absent mandatory literal heads, reuse identical spell-out parses,
