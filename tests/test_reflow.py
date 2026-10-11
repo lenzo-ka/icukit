@@ -293,7 +293,7 @@ def _capital_bound_text(terminator, distance):
     return text + "z" * (2100 - len(text))
 
 
-@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
 @pytest.mark.parametrize("terminator", ["\n", "\r\n"])
 @pytest.mark.parametrize("distance", [1023, 1024, 1025])
 @pytest.mark.parametrize("maximum", [64, 1024])
@@ -307,7 +307,7 @@ def test_reflow_stream_freezes_capital_boundaries_identically(mode, terminator, 
     assert _streamed(override, text, _random_sizes(len(text), distance + maximum)) == expected
 
 
-@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("mode", ["none", "lines", "paragraphs", "auto"])
 @pytest.mark.parametrize("terminator", ["\n", "\r\n"])
 @pytest.mark.parametrize("maximum", [64, 1024])
 def test_reflow_stream_freezes_long_separators_identically(mode, terminator, maximum):
