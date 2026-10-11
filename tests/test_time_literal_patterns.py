@@ -50,6 +50,51 @@ def test_literal_hour_keeps_the_plain_number_reading():
     )
 
 
+@pytest.mark.parametrize(
+    ("locale", "surface", "fragment", "whole_time"),
+    [
+        ("de_DE", "08:00 Uhr", "00 Uhr", "08:00"),
+        ("bg_BG", "08:00 ч.", "00 ч.", "08:00 ч."),
+    ],
+)
+def test_literal_hour_does_not_start_inside_a_time(locale, surface, fragment, whole_time):
+    detections = reader_set(locale).detect(surface)
+
+    assert not any(
+        detection["type"] == "date:H" and detection["text"] == fragment for detection in detections
+    )
+    assert any(
+        detection["start"] == 0
+        and detection["text"] == whole_time
+        and detection["type"] == "date:Hm"
+        for detection in detections
+    )
+
+
+@pytest.mark.parametrize(("surface", "start"), [("8 Uhr", 0), ("um 8 Uhr", 3)])
+def test_literal_hour_keeps_token_aligned_readings(surface, start):
+    detections = reader_set("de_DE").detect(surface)
+
+    assert any(
+        detection["type"] == "date:H"
+        and detection["start"] == start
+        and detection["end"] == len(surface)
+        and detection["value"].fields == (("H", 8),)
+        for detection in detections
+    )
+
+
+def test_literal_hour_skips_scan_when_its_literal_is_absent(monkeypatch):
+    detector = DateDetector("de_DE", "H")
+
+    def fail_scan(*args, **kwargs):
+        pytest.fail("literal-absent text reached the strict scanner")
+
+    monkeypatch.setattr("icukit.detectors._scan", fail_scan)
+
+    assert detector.detect("Am Morgen beginnt die Arbeit.") == []
+
+
 def test_locale_preference_day_period_literal_is_resolved():
     generator = icu.DateTimePatternGenerator.createInstance(icu.Locale("ee"))
     formatter = icu.SimpleDateFormat(generator.getBestPattern("j"), icu.Locale("ee"))

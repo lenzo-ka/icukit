@@ -462,27 +462,42 @@ def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
     return runs
 
 
-def _pattern_has_word_literal(pattern: str) -> bool:
-    """Whether a CLDR date pattern contains a letter outside its field runs.
+def _pattern_word_literals(pattern: str) -> tuple[str, ...]:
+    """Alphabetic literal runs in a CLDR date pattern, in pattern order.
 
     ASCII letters are pattern fields unless quoted; non-ASCII letters are literal
     text even without quotes (Japanese ``H時``). Doubled apostrophes are literal
     apostrophes. This tiny scanner follows CLDR date-pattern quoting because PyICU
     exposes only the finished pattern string, not its tokens.
     """
+    words: list[str] = []
+    word: list[str] = []
     quoted = False
     index = 0
     while index < len(pattern):
         character = pattern[index]
         if character == "'":
+            if word:
+                words.append("".join(word))
+                word.clear()
             if index + 1 < len(pattern) and pattern[index + 1] == "'":
                 index += 2
                 continue
             quoted = not quoted
         elif character.isalpha() and (quoted or not character.isascii()):
-            return True
+            word.append(character)
+        elif word:
+            words.append("".join(word))
+            word.clear()
         index += 1
-    return False
+    if word:
+        words.append("".join(word))
+    return tuple(words)
+
+
+def _pattern_has_word_literal(pattern: str) -> bool:
+    """Whether a CLDR date pattern contains a letter outside its field runs."""
+    return bool(_pattern_word_literals(pattern))
 
 
 def _hour_width_pattern(pattern: str, width: int) -> str:
@@ -711,7 +726,8 @@ class DateDetector(_GatedReader):
         self._df = icu.SimpleDateFormat(self.pattern, icu.Locale(locale))
         self._df.setTimeZone(icu.TimeZone.getGMT())
         patterns = [self.pattern]
-        if _pattern_has_word_literal(self.pattern):
+        self._literal_words = _pattern_word_literals(self.pattern)
+        if self._literal_words:
             patterns.extend(_hour_width_pattern(self.pattern, width) for width in (1, 2))
         self._formats = tuple(
             (pattern, self._date_formatter(pattern)) for pattern in dict.fromkeys(patterns)
@@ -740,7 +756,7 @@ class DateDetector(_GatedReader):
             "e",
             "c",
         }
-        if _pattern_has_word_literal(self.pattern):
+        if self._literal_words:
             _modeled.update({"a", "b", "B"})
         _letters = {letter for letter, _ in _pattern_runs(self.pattern)}
         _unmodeled = sorted(_letters - _modeled)
@@ -938,6 +954,11 @@ class DateDetector(_GatedReader):
         return value, tuple(captures), spec
 
     def detect(self, text: str) -> list[ValueDetection]:
+        # A literal-bearing pattern cannot match without each literal word. Most prose
+        # contains none of them, so avoid entering the strict scanner at all. The final
+        # parse-and-reformat check still decides every text that passes this coarse gate.
+        if self._literal_words and not all(word in text for word in self._literal_words):
+            return []
         # A decimal run is one word, so only offset zero is eligible. ICU date values
         # have bounded numeric fields; 16 code points per pattern code point (and a
         # 64-code-point floor) exceeds those ranges while preserving arbitrary padding
@@ -950,7 +971,7 @@ class DateDetector(_GatedReader):
         # only of whitespace, so reject that input with one bounded pass.
         if text.isspace():
             return []
-        return _scan(
+        found = _scan(
             text,
             self.locale,
             self.type,
@@ -958,6 +979,13 @@ class DateDetector(_GatedReader):
             gate=self._start_gates["scan"],
             stats_key=self._lane_key("scan"),
         )
+        if not self._literal_words:
+            return found
+        return [
+            detection
+            for detection in found
+            if not _starts_inside_number_run(text, detection["start"])
+        ]
 
 
 # --------------------------------------------------------------------------- numbers
@@ -1387,6 +1415,22 @@ def _is_word_joiner(character: str) -> bool:
 def _is_decimal_run(text: str) -> bool:
     """Whether ``text`` is one nonempty decimal run, shared across strict readers."""
     return text.isdecimal()
+
+
+_NUMBER_RUN_MARKS = frozenset({"-", ":", "/", "."})
+
+
+def _starts_inside_number_run(text: str, start: int, marks: Iterable[str] = ()) -> bool:
+    """Whether ``start`` continues a number joined by a code/date/time separator.
+
+    This is the left-context half of the range readers' run-on guard. It keeps a reader
+    from treating the ``00`` in ``08:00`` as a fresh numeric token, including when the
+    candidate continues with distinguishing literal text such as ``00 Uhr``.
+    """
+    joins = _NUMBER_RUN_MARKS | set(marks)
+    return (start >= 2 and text[start - 1] in joins and icu.Char.isdigit(text[start - 2])) or (
+        start >= 1 and not icu.Char.isdigit(text[start]) and icu.Char.isdigit(text[start - 1])
+    )
 
 
 @functools.lru_cache(maxsize=16)
