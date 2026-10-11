@@ -57,7 +57,9 @@ _REFUSAL_MESSAGES = {
 class DetectionBatch:
     """Detections settled by one call and the absolute open-segment start.
 
-    ``cuts`` contains cap and caller-imposed boundary offsets.
+    ``cuts`` contains cap and caller-imposed boundary offsets when their decisions
+    settle. Reflow can therefore defer a cap cut to :meth:`DetectionStream.flush` or
+    :meth:`DetectionStream.close`; concatenated cuts are unchanged.
     """
 
     detections: tuple[ValueDetection, ...]

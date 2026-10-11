@@ -222,6 +222,10 @@ class Capture:
     numeric (``day`` -> ``3``) or an enumerated member (``weekday`` -> ``"wednesday"``,
     ``month`` -> ``1``). ``form`` is how the surface encodes it: ``"numeric"``,
     ``"short"``, ``"wide"``, ``"narrow"``, or ``"symbol"``.
+
+    A detection stream with reflow keeps ``text`` as the original source slice but
+    derives capture values from the equal-length reflowed view. The value therefore
+    need not be a direct parse of the displayed surface in that case.
     """
 
     name: str
@@ -349,7 +353,9 @@ class ValueDetection(Detection):
     accepted detection. Recall recognizers such as ``Flexible*`` and abbreviations instead
     deposit structurally valid candidates with an explicit surface or annotation model.
     Abbreviation surfaces round-trip by identity; their expansions are annotations, never
-    reformats.
+    reformats. A detection stream with reflow is an additional carve-out: ``text`` remains
+    the original source slice while ``value`` and ``spec`` describe the equal-length
+    reflowed view, so ``reformat(spec, value) == text`` need not hold.
     """
 
     value: object

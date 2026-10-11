@@ -2624,6 +2624,10 @@ numeric (``day`` -> ``3``) or an enumerated member (``weekday`` -> ``"wednesday"
 ``month`` -> ``1``). ``form`` is how the surface encodes it: ``"numeric"``,
 ``"short"``, ``"wide"``, ``"narrow"``, or ``"symbol"``.
 
+A detection stream with reflow keeps ``text`` as the original source slice but
+derives capture values from the equal-length reflowed view. The value therefore
+need not be a direct parse of the displayed surface in that case.
+
 #### `Capture(name: 'str', start: 'int', end: 'int', text: 'str', value: 'object | None' = None, form: 'str | None' = None) -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
@@ -2953,7 +2957,9 @@ formatter-inverting detector family, ``reformat(spec, value) == text`` holds for
 accepted detection. Recall recognizers such as ``Flexible*`` and abbreviations instead
 deposit structurally valid candidates with an explicit surface or annotation model.
 Abbreviation surfaces round-trip by identity; their expansions are annotations, never
-reformats.
+reformats. A detection stream with reflow is an additional carve-out: ``text`` remains
+the original source slice while ``value`` and ``spec`` describe the equal-length
+reflowed view, so ``reformat(spec, value) == text`` need not hold.
 
 ### `abbreviation_detectors(locale: 'str' = 'en') -> 'DetectorSet'`
 
@@ -7937,7 +7943,9 @@ also cuts. Detections starting or ending at any cut are marked ``truncated``.
 
 Detections settled by one call and the absolute open-segment start.
 
-``cuts`` contains cap and caller-imposed boundary offsets.
+``cuts`` contains cap and caller-imposed boundary offsets when their decisions
+settle. Reflow can therefore defer a cap cut to :meth:`DetectionStream.flush` or
+:meth:`DetectionStream.close`; concatenated cuts are unchanged.
 
 #### `DetectionBatch(detections: 'tuple[ValueDetection, ...]', pending_from: 'int', cuts: 'tuple[int, ...]' = ()) -> None`
 
