@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import random
 from pathlib import Path
+from statistics import median
+from time import perf_counter
 
 import pytest
 
@@ -113,6 +115,48 @@ def test_unbroken_run_is_the_documented_safe_retention_fallback():
     assert emitted == []
     assert stream._text == text
     assert emitted + stream.close() == override.decide(text)
+
+
+@pytest.mark.parametrize("reflow", ["none", "lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("maximum", [64, 1024, None])
+def test_long_unterminated_random_chunkings_equal_whole_text(reflow, maximum):
+    text = "word " * 2400
+    override = SentenceOverride(
+        "en_US",
+        base="en-real-cart@1",
+        max_sentence_chars=maximum,
+        reflow=reflow,
+    )
+    expected = override.decide(text)
+
+    for seed in range(3):
+        stream = override.stream()
+        actual = []
+        for chunk in _random_chunks(text, seed):
+            actual.extend(stream.feed(chunk))
+        actual.extend(stream.close())
+
+        assert actual == expected
+
+
+@pytest.mark.slow
+def test_unterminated_sentence_stream_scales_linearly():
+    def measure(size):
+        text = ("word " * (size // 5 + 1))[:size]
+        samples = []
+        for _ in range(3):
+            stream = SentenceOverride("en_US").stream()
+            started = perf_counter()
+            for start in range(0, len(text), 1024):
+                stream.feed(text[start : start + 1024])
+            stream.close()
+            samples.append(perf_counter() - started)
+        return median(samples)
+
+    small = measure(16 * 1024)
+    large = measure(64 * 1024)
+
+    assert large / small < 8
 
 
 @pytest.mark.parametrize("base", ["none", "en-tn@1", "en-tn-cart@1", "en-real-cart@1"])

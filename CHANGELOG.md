@@ -75,6 +75,11 @@
 
 ### Fixed
 
+- Incremental sentence breaking no longer rescans the complete open sentence on
+  every feed when input has no sentence terminator. Work now scales with newly
+  supplied text plus the configured sentence and stream windows, including in
+  every reflow mode; disabling the sentence-length bound retains the open input
+  for exact END evaluation but still scans it only once.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
   limit no longer abort plural-numeral or numeric-duration detection; their capture
   value is `None`. Fraction, relative-date, and scientific-notation readers skip a
