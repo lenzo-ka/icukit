@@ -78,11 +78,15 @@
 ### Fixed
 
 - Incremental sentence breaking no longer rescans the complete open sentence on
-  every feed when input has no sentence terminator. Work now scales with newly
-  supplied text plus the configured sentence and stream windows, including in
-  every reflow mode; disabling the sentence-length bound retains the open input
-  for exact END evaluation but still scans it only once. Provisional END context
-  also advances through whitespace and closing characters without a full rescan.
+  every feed when input has no sentence terminator or has a terminator followed by
+  a long whitespace-free run. Work and retained core text now stay within the
+  configured sentence and stream windows, including for closing-character runs and
+  every reflow mode. Disabling the sentence-length bound retains the open input for
+  exact END evaluation but still scans it only once. A pending terminator followed
+  by an arbitrarily long whitespace tail remains the exact-retention fallback until
+  later text fixes its offset and logical end. Provisional END context advances
+  through whitespace and closing characters without a full rescan, and compaction
+  no longer leaves stale pending candidates that can stall forced emission.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
   limit no longer abort plural-numeral or numeric-duration detection; their capture
   value is `None`. Fraction, relative-date, and scientific-notation readers skip a
