@@ -4,6 +4,10 @@
 
 ### Added
 
+- Add text-only `reflow()` and `ReflowMode`, plus offset-preserving `reflow=`
+  modes on `SentenceOverride`, `Breaker`, `break_sentences`,
+  `break_sentence_spans`, the incremental sentence stream, and `ik break`
+  sentence and tokenization commands.
 - Flexible English measure readers accept periods after known abbreviated unit words
   of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
   curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
