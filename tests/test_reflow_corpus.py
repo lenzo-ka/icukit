@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from icukit import Breaker
+from icukit import Breaker, SentenceOverride
 from icukit.reflow import _substitute
 
 
@@ -23,6 +23,35 @@ def _assert_original_offsets(text, spans):
         )
 
 
+def _stream_decisions(text, mode):
+    stream = SentenceOverride("en_US", reflow=mode).stream()
+    result = []
+    for start in range(0, len(text), 997):
+        result.extend(stream.feed(text[start : start + 997]))
+    result.extend(stream.close())
+    return result
+
+
+def _assert_corpus(text):
+    for mode in ("none", "lines", "paragraphs", "auto"):
+        substituted = _substitute(text, mode)
+        spans = Breaker("en_US", reflow=mode).break_sentence_spans(text)
+        expected = Breaker("en_US").break_sentence_spans(substituted)
+
+        assert len(substituted) == len(text)
+        assert [(item["start"], item["end"]) for item in spans] == [
+            (item["start"], item["end"]) for item in expected
+        ]
+        assert _stream_decisions(text, mode) == SentenceOverride("en_US", reflow=mode).decide(text)
+        _assert_original_offsets(text, spans)
+
+
+def test_reflow_round_trip_excerpt():
+    text = (Path(__file__).with_name("data") / "pg11_excerpt.txt").read_text()
+
+    _assert_corpus(text)
+
+
 def test_reflow_round_trip_pg11():  # S
     configured = os.environ.get("ICUKIT_PG11")
     if not configured:
@@ -36,13 +65,4 @@ def test_reflow_round_trip_pg11():  # S
         pytest.skip("ICUKIT_PG11 does not name a readable file")
     text = path.read_text()
 
-    for mode in ("none", "lines", "paragraphs", "auto"):
-        substituted = _substitute(text, mode)
-        spans = Breaker("en_US", reflow=mode).break_sentence_spans(text)
-        expected = Breaker("en_US").break_sentence_spans(substituted)
-
-        assert len(substituted) == len(text)
-        assert [(item["start"], item["end"]) for item in spans] == [
-            (item["start"], item["end"]) for item in expected
-        ]
-        _assert_original_offsets(text, spans)
+    _assert_corpus(text)

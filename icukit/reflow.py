@@ -5,11 +5,9 @@ therefore intentionally small, named heuristics.  Unicode properties used by
 the heuristics come from ICU; the numeric thresholds and protected shapes are
 part of the documented policy.
 
-``_substitute`` is the offset-preserving path used by sentence breaking. It
-changes only selected line terminators to U+0020 and always returns exactly as
-many code points as it receives. ``reflow`` is the text-only form too:
-measurement on the two reference books found no material whole-path advantage
-from collapsing selected whitespace, so it keeps the same length contract.
+``reflow`` changes only selected line terminators to U+0020 and always returns
+exactly as many code points as it receives. Sentence breaking uses that
+equal-length view internally while retaining original text and offsets.
 
 The ruled terminators are LF, CR, CRLF, NEL, and U+2028. U+2029, VT, and FF
 are never rewritten. Every decision keeps its terminator unless the necessary
@@ -17,13 +15,20 @@ context appears within 1,024 code points. ``lines`` joins a lone terminator
 except before a list marker, beside an all-capital heading of at most 80 code
 points, before indentation of two horizontal spaces or one tab, after a line
 shorter than 40 code points, or inside a run of at least three capital-started
-nonblank lines. ``paragraphs`` also joins a blank separator when the preceding
-block is unterminated and the following block begins with neither a capital,
-list marker, nor heading. ``auto`` samples at most the first eight complete
-lines and 1,024 code points of each blank-line block. It selects ``lines`` when
-there are at least three sampled lines, at least 70 percent of non-final widths
-fall between 75 percent of the sample width and that width, and at least 50
-percent lack ICU sentence-terminal punctuation.
+nonblank lines no longer than 60 code points. ``paragraphs`` also joins a blank
+separator when the preceding block is unterminated and the following block
+begins with neither a capital, list marker, nor heading. ``auto`` samples at
+most the first eight complete lines and 1,024 code points of each blank-line
+block. It selects ``lines`` when there are at least three sampled lines, at
+least 70 percent of non-final widths fall between 75 percent of the sample
+width and that width, and at least 50 percent lack ICU sentence-terminal
+punctuation.
+
+The protection rules are deliberately narrow. They do not recognize
+title-case headings, two-line or lowercase verse, CJK verse without cased
+letters, arrow bullets, code, or legal formatting. Capital-started verse longer
+than 60 code points is also outside the measured rule. These shapes need an
+explicit protected span when retaining their line endings matters.
 """
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ _REFLOW_HOLD_CHARS = 1024
 _HEADING_MAX_CHARS = 80
 _SHORT_LINE_CHARS = 40
 _VERSE_MIN_CAPITAL_RUN = 3
+_VERSE_MAX_LINE_CHARS = 60
 _AUTO_LOOKAHEAD_LINES = 8
 _AUTO_LOOKAHEAD_CHARS = 1024
 _AUTO_MIN_LINES = 3
@@ -199,7 +205,7 @@ def _is_indented(text: str) -> bool:
 
 
 def _capital_run(lines: list[_Line], text: str, boundary: int) -> int:
-    """Count the single-spaced capital-started run containing a boundary."""
+    """Count a measured verse-like capital-started run containing a boundary."""
     boundary_offset = lines[boundary].content_end
 
     def eligible(index: int) -> bool:
@@ -208,6 +214,7 @@ def _capital_run(lines: list[_Line], text: str, boundary: int) -> int:
         leading = _leading_content(line_text)
         return (
             bool(_trim_horizontal(line_text))
+            and len(_trim_horizontal(line_text)) <= _VERSE_MAX_LINE_CHARS
             and leading is not None
             and abs(line.start + leading[0] - boundary_offset) <= _REFLOW_HOLD_CHARS
             and _UPPER_OR_TITLE.contains(leading[1])
@@ -419,29 +426,6 @@ def _substitute(text: str, mode: ReflowMode) -> str:
     return "".join(" " if index in replacements else char for index, char in enumerate(text))
 
 
-def _collapse(text: str, mode: ReflowMode) -> str:
-    """Return the measured text-only whitespace-collapsing path."""
-    substituted = _substitute(text, mode)
-    if mode == "none":
-        return substituted
-    result: list[str] = []
-    index = 0
-    while index < len(text):
-        if not _WHITE_SPACE.contains(text[index]):
-            result.append(text[index])
-            index += 1
-            continue
-        end = index + 1
-        while end < len(text) and _WHITE_SPACE.contains(text[end]):
-            end += 1
-        if any(text[position] != substituted[position] for position in range(index, end)):
-            result.append(" ")
-        else:
-            result.append(text[index:end])
-        index = end
-    return "".join(result)
-
-
 def reflow(text: str, mode: ReflowMode = "lines") -> str:
     """Reflow plain text while preserving its code-point length.
 
@@ -449,7 +433,9 @@ def reflow(text: str, mode: ReflowMode = "lines") -> str:
     endings, ``paragraphs`` may also join eligible blank-line separators, and
     ``auto`` applies ``lines`` only to blocks whose bounded sample resembles
     hard-wrapped prose. Protected headings, lists, indentation, short lines,
-    and capital-started verse runs remain broken.
+    and measured verse-like capital-started runs remain broken. The heuristic
+    intentionally does not infer title-case headings, two-line or lowercase
+    verse, CJK verse, arrow bullets, code, or legal formatting.
 
     The result has ``len(result) == len(text)``. Collapsing selected whitespace
     was measured on two reference books and did not improve the whole

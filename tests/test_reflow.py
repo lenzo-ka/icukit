@@ -2,6 +2,7 @@
 
 import inspect
 import json
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -26,16 +27,57 @@ def test_hard_wrap_fake_sentences_today():  # C
 
 
 def test_reflow_none_is_identity():  # C
-    text = _long("One hard-wrapped sentence") + "\ncontinues here. Next."
+    text = "One hard-wrapped sentence\ncontinues here. Next."
+    expected = [
+        {
+            "offset": 26,
+            "end": 25,
+            "decision": "break",
+            "alternatives": ("break",),
+            "layer": "icu",
+            "id": None,
+            "tokens_read": 0,
+        },
+        {
+            "offset": 42,
+            "end": 41,
+            "decision": "break",
+            "alternatives": ("break",),
+            "layer": "icu",
+            "id": None,
+            "tokens_read": 0,
+        },
+        {
+            "offset": 47,
+            "end": 47,
+            "decision": "break",
+            "alternatives": ("break",),
+            "layer": "icu",
+            "id": None,
+            "tokens_read": 0,
+        },
+    ]
 
-    assert Breaker("en_US").break_sentence_spans(text) == Breaker(
+    # Pinned output from main before reflow was added.
+    assert SentenceOverride("en_US", reflow="none").decide(text) == expected
+    assert [
+        item["text"] for item in Breaker("en_US", reflow="none").break_sentence_spans(text)
+    ] == [
+        "One hard-wrapped sentence\n",
+        "continues here. ",
+        "Next.",
+    ]
+    assert break_sentences(text, reflow="none") == [
+        "One hard-wrapped sentence\n",
+        "continues here. ",
+        "Next.",
+    ]
+    assert break_sentence_spans(text, reflow="none") == Breaker(
         "en_US", reflow="none"
     ).break_sentence_spans(text)
-    assert break_sentences(text) == break_sentences(text, reflow="none")
-    assert break_sentence_spans(text) == break_sentence_spans(text, reflow="none")
-    assert SentenceOverride("en_US").decide(text) == SentenceOverride(
-        "en_US", reflow="none"
-    ).decide(text)
+    assert SentenceOverride("en_US", reflow="none").identity == (
+        "sha256:eb3a675f131ba69673869a02f3d6ef76466c273661916c4ca7bb7633720cdfee"
+    )
     assert reflow(text, "none") == text
 
 
@@ -98,23 +140,43 @@ def test_reflow_contract():  # S
 def test_reflow_protections():  # S
     long_previous = _long("This preceding line would ordinarily reflow")
     fixtures = [
-        long_previous + "\n- a list item",
-        long_previous + "\nALL CAPS HEADING",
-        long_previous + "\n  indented verse",
-        "How doth the little crocodile\n    Improve his shining tail,\n"
-        "And pour the waters of the Nile\n    On every golden scale!",
-        "12 High Street\nSpringfield, IL 62704\nUSA\n\n",
-        _long("When winter winds arise across the silent and unbounded sea")
-        + "\n"
-        + _long("Bright lanterns answer softly from the distant harbor wall")
-        + "\n"
-        + _long("Cold travelers remember every road that led them home")
-        + "\n"
-        + _long("Warm morning gathers slowly over every field and stone"),
+        (long_previous + "\n- a list item", long_previous + "\n- a list item"),
+        (long_previous + "\nALL CAPS HEADING", long_previous + "\nALL CAPS HEADING"),
+        (long_previous + "\n  indented verse", long_previous + "\n  indented verse"),
+        (
+            "How doth the little crocodile\n    Improve his shining tail,\n"
+            "And pour the waters of the Nile\n    On every golden scale!",
+            "How doth the little crocodile\n    Improve his shining tail,\n"
+            "And pour the waters of the Nile\n    On every golden scale!",
+        ),
+        (
+            "12 High Street\nSpringfield, IL 62704\nUSA\n\n",
+            "12 High Street\nSpringfield, IL 62704\nUSA\n\n",
+        ),
+        (
+            "When winter winds arise across the silent sea tonight\n"
+            "Bright lanterns answer softly from the harbor wall\n"
+            "Cold travelers remember every road that led them home\n"
+            "Warm morning gathers slowly over field and stone",
+            "When winter winds arise across the silent sea tonight\n"
+            "Bright lanterns answer softly from the harbor wall\n"
+            "Cold travelers remember every road that led them home\n"
+            "Warm morning gathers slowly over field and stone",
+        ),
+        (
+            "Participants included Alice from accounting and corporate finance operations,\n"
+            "Bob from the warehouse and regional distribution center management team,\n"
+            "Carol from shipping and international customer support operations group,\n"
+            "Dave from the front office and facilities management coordination team.",
+            "Participants included Alice from accounting and corporate finance operations, "
+            "Bob from the warehouse and regional distribution center management team, "
+            "Carol from shipping and international customer support operations group, "
+            "Dave from the front office and facilities management coordination team.",
+        ),
     ]
-    for text in fixtures:
-        assert "\n" in _substitute(text, "lines")
-        assert reflow(text, "lines") == _substitute(text, "lines")
+    for text, expected in fixtures:
+        assert _substitute(text, "lines") == expected
+        assert reflow(text, "lines") == expected
 
     joining = _long("this unfinished block has no terminal punctuation") + "\n\nlower continues"
     protected = _long("this unfinished block has no terminal punctuation") + "\n\nUpper continues"
@@ -155,7 +217,10 @@ def test_reflow_hold_bound():  # S
     emitted.extend(stream.close())
 
     assert first_decision_length is not None
-    assert first_decision_length <= 2048
+    # A 1,024-code-point reflow hold plus the inner breaker's need to see one
+    # code point beyond its 1,024-code-point forcing deadline. With 1,024-code-
+    # point feeds, that decision arrives in the third chunk.
+    assert first_decision_length <= 3072
     assert emitted == SentenceOverride("en_US", reflow="auto").decide(text)
 
 
@@ -171,10 +236,103 @@ def test_reflow_forced_composition():  # S
             first_forced_seen = length
     emitted.extend(stream.close())
 
-    assert first_forced_seen is not None and first_forced_seen <= 2048
+    assert first_forced_seen is not None and first_forced_seen <= 2049
     assert emitted == override.decide(text)
     offsets = [0, *(item["offset"] for item in emitted if item["decision"] == "break")]
     assert all(end - start <= 1024 for start, end in zip(offsets, offsets[1:], strict=False))
+
+
+def _streamed(override, text, sizes):
+    stream = override.stream()
+    emitted = []
+    start = 0
+    for size in sizes:
+        emitted.extend(stream.feed(text[start : start + size]))
+        start += size
+    assert start == len(text)
+    emitted.extend(stream.close())
+    return emitted
+
+
+def _random_sizes(length, seed):
+    generator = random.Random(seed)
+    result = []
+    remaining = length
+    while remaining:
+        size = min(remaining, generator.randint(1, 173))
+        result.append(size)
+        remaining -= size
+    return result
+
+
+def _capital_bound_text(terminator, distance):
+    sample = terminator.join(
+        [
+            "a hard wrapped sample line that has a stable representative width",
+            "a second sample line that has a stable representative width here",
+            "a third sample line that has a stable representative width here",
+            "a fourth sample line that has a stable representative width here",
+            "a fifth sample line that has a stable representative width here",
+            "The quick brown fox jumps over the lazy dog and more",
+        ]
+    )
+    first = len(sample)
+    padding = distance - len(terminator) - 1
+    text = (
+        sample
+        + terminator
+        + "B"
+        + "y" * padding
+        + terminator
+        + "Cats are nice"
+        + terminator
+        + "Dogs too."
+        + terminator
+    )
+    assert text.index(terminator, first + len(terminator)) - first == distance
+    return text + "z" * (2100 - len(text))
+
+
+@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("terminator", ["\n", "\r\n"])
+@pytest.mark.parametrize("distance", [1023, 1024, 1025])
+@pytest.mark.parametrize("maximum", [64, 1024])
+def test_reflow_stream_freezes_capital_boundaries_identically(mode, terminator, distance, maximum):
+    text = _capital_bound_text(terminator, distance)
+    override = SentenceOverride("en_US", reflow=mode, max_sentence_chars=maximum)
+    expected = override.decide(text)
+
+    assert len(text) >= 2100
+    assert _streamed(override, text, [1] * len(text)) == expected
+    assert _streamed(override, text, _random_sizes(len(text), distance + maximum)) == expected
+
+
+@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+@pytest.mark.parametrize("terminator", ["\n", "\r\n"])
+@pytest.mark.parametrize("maximum", [64, 1024])
+def test_reflow_stream_freezes_long_separators_identically(mode, terminator, maximum):
+    first = "this paragraph runs on without terminal punctuation at its end"
+    following = "the next paragraph begins here and continues for a long while on and on " * 30
+    text = first + terminator * 5 + following + terminator
+    override = SentenceOverride("en_US", reflow=mode, max_sentence_chars=maximum)
+    expected = override.decide(text)
+
+    assert len(text) >= 2100
+    assert _streamed(override, text, [1] * len(text)) == expected
+    assert _streamed(override, text, _random_sizes(len(text), maximum)) == expected
+
+
+@pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
+def test_reflow_stream_compacts_settled_input(mode):
+    text = "word " * 40_000
+    stream = SentenceOverride("en_US", reflow=mode).stream()
+    maximum = 0
+    for start in range(0, len(text), 65_536):
+        stream.feed(text[start : start + 65_536])
+        maximum = max(maximum, len(stream._text))
+    stream.close()
+
+    assert maximum <= 3 * 1024
 
 
 @pytest.mark.parametrize("mode", ["lines", "paragraphs", "auto"])
@@ -247,3 +405,16 @@ def test_cli_reflow_bare_is_lines():  # S
     assert len(json.loads(plain.stdout)) == 2
     assert json.loads(bare.stdout) == json.loads(explicit.stdout)
     assert len(json.loads(bare.stdout)) == 1
+
+
+@pytest.mark.parametrize("file_first", [False, True])
+def test_cli_bare_reflow_does_not_consume_file(tmp_path, file_first):
+    text = _long("This unfinished hard-wrapped sentence continues") + "\non this line."
+    path = tmp_path / "input.txt"
+    path.write_text(text)
+    command = [sys.executable, "-m", "icukit.cli", "break", "sentences", "--json"]
+    command += [str(path), "--reflow"] if file_first else ["--reflow", str(path)]
+
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+
+    assert len(json.loads(result.stdout)) == 1

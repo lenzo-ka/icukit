@@ -34,7 +34,7 @@ import icu
 
 from ._offsets import OffsetMaps, offset_maps, set_span_offsets
 from .errors import BreakerError
-from .reflow import ReflowMode, _substitute
+from .reflow import ReflowMode, _substitute, _validate_mode
 
 __all__ = [
     "Breaker",
@@ -289,8 +289,7 @@ class Breaker:
             or max_sentence_chars <= 0
         ):
             raise ValueError("max_sentence_chars must be a positive int or None")
-        if reflow not in {"none", "lines", "paragraphs", "auto"}:
-            raise ValueError("reflow must be one of 'none', 'lines', 'paragraphs', 'auto'")
+        _validate_mode(reflow)
         self.locale = locale
         self.base = base
         self.max_sentence_chars = max_sentence_chars

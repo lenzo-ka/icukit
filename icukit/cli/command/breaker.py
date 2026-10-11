@@ -149,8 +149,8 @@ class BreakerCommand(SubcommandBase):
             choices=["none", "lines", "paragraphs", "auto"],
             metavar="MODE",
             help=(
-                "Reflow line endings before sentence breaking; bare --reflow uses lines "
-                "(default: none)"
+                "Reflow line endings before sentence breaking; bare --reflow uses lines and "
+                "does not consume a following non-mode file (default: none)"
             ),
         )
 

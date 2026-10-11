@@ -8,6 +8,11 @@
   modes on `SentenceOverride`, `Breaker`, `break_sentences`,
   `break_sentence_spans`, the incremental sentence stream, and `ik break`
   sentence and tokenization commands.
+  The capital-run protection is intentionally limited to three or more
+  capital-started lines no longer than 60 code points. Title-case headings,
+  two-line and lowercase verse, CJK verse without cased letters, arrow bullets,
+  code, and legal formatting require explicit protected spans when their line
+  endings must be retained.
 - Flexible English measure readers accept periods after known abbreviated unit words
   of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
   curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
@@ -65,6 +70,16 @@
 
 ### Fixed
 
+- Incremental sentence reflow now uses the same 1,024-code-point decision bound
+  as whole-text reflow, retains a long blank separator's preceding nonblank
+  line, and emits each separator wholly reflowed or wholly retained. Settled
+  source text is compacted, keeping streaming memory bounded and avoiding
+  repeated full-prefix copies on terminator-free input.
+- A bare `ik break ... --reflow` no longer consumes a following non-mode file;
+  it selects `lines` before or after the file argument. Explicit modes remain
+  available as `--reflow MODE` or `--reflow=MODE`.
+- The default `SentenceOverride(reflow="none")` identity remains the same as
+  before reflow support was added.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
   limit no longer abort plural-numeral or numeric-duration detection; their capture
   value is `None`. Fraction, relative-date, and scientific-notation readers skip a
