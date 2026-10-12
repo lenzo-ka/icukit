@@ -27,12 +27,15 @@
   all, and streaming memory stays bounded. A bare `--reflow` selects `lines`
   before or after a file argument. With the default `reflow="none"`, output
   and `SentenceOverride` identity are unchanged.
-- Flexible English measure readers accept periods after known abbreviated unit words
-  of two or more letters, including ICU forms such as `sq. ft.`, `oz.`, and `in.` and
+- **Behavior change:** Flexible English measure readers accept periods after known
+  abbreviated unit words of two or more letters, including ICU forms such as
+  `sq. ft.`, `oz.`, and `in.` and
   curated forms such as `lbs.` and `yds.`. A final abbreviation period at a sentence
   boundary produces readings both with and without the period; internal periods belong
   to the punctuated reading. Periods before a following number, after full unit words,
-  and after one-letter symbols remain punctuation.
+  and after one-letter symbols remain punctuation. Callers that assume sentence-final
+  punctuation is outside a detection must allow a reading to include the final period
+  and choose between the overlapping punctuated and unpunctuated readings.
 - Sentence breaking now accepts `max_sentence_chars` (default 1,024; `None`
   disables it) and reports forced boundaries with the `"forced"` layer.
 - ICU regex entry points now accept per-operation `time_limit` steps and
@@ -46,11 +49,12 @@
   for stock readers; the lower-latency line mode may split a wrapped number range and
   does not make that guarantee.
 - `detection_to_dict()` now includes `truncated` when a capped detection carries it.
-- `DETACHED_UNIT_FAMILY` preserves detached quote and prime marks under the guarded
-  `measure:detached-unit:<unit>` type. Default readers decline those marks after a
-  space where ICU writes them attached (`84 "`, `6 ′`); `guarded=True` or an explicit
-  guarded-family selection includes those readings for lattice consumers. Letter unit
-  symbols such as `24 h`, `62 d`, and `62 s` retain the default measure reading.
+- **Behavior change:** `DETACHED_UNIT_FAMILY` preserves detached quote and prime marks
+  under the guarded `measure:detached-unit:<unit>` type. Default readers decline those
+  marks after a space where ICU writes them attached (`84 "`, `6 ′`). Callers that
+  require the former detached-mark readings must pass `guarded=True` or explicitly
+  select `DETACHED_UNIT_FAMILY`; letter unit symbols such as `24 h`, `62 d`, and `62 s`
+  retain the default measure reading.
 - Add the opt-in `en-real-cart@1` English sentence-break model, selected with
   `base="en-real-cart@1"` and never the default. It is consulted only where the
   English exception list leaves a candidate undecided, uses eight features chosen by
@@ -69,9 +73,13 @@
   feature name is unique and belongs to the runtime schema.
 - **Behavior change:** Sentences longer than 1,024 code points are force-broken at
   a clause, whitespace, grapheme, or code-point fallback boundary. The hard bound
-  wins over a protected span when no unprotected position fits.
+  wins over a protected span when no unprotected position fits. Callers that require
+  exact unbounded END evaluation must pass `max_sentence_chars=None`, or pass a larger
+  bound when a finite application-specific maximum is appropriate.
 - **Behavior change:** Regex time and stack overruns raise instead of silently
-  returning no match or unchanged input.
+  returning no match or unchanged input. The defaults are `time_limit=10000` steps and
+  `stack_limit=8000000` bytes; callers must handle `RegexLimitError` or deliberately
+  adjust or disable the limits.
 - **Behavior change:** Locale-list pattern filters use bounded ICU regular
   expressions instead of Python regular expressions.
 - Invalid locale-list regular expressions now raise `PatternError` instead of
@@ -93,16 +101,18 @@
   by an arbitrarily long whitespace tail remains the exact-retention fallback until
   later text fixes its offset and logical end. Provisional END context advances
   through whitespace and closing characters without a full rescan.
-- The generated date/time skeleton readers now include ICU hour patterns whose literal
-  words distinguish them from bare numbers, including omitted `H` and locale-preference
-  `j`/`J`/`C` patterns. Thus German `8 Uhr` and `08 Uhr`, French `8 h`, Bulgarian
-  `08:00 ч.`, and equivalent forms across ICU locales are read whole while their
-  overlapping number readings remain. Literal-bearing twelve-hour patterns resolve
-  their ICU day period to an `H` field; a `J` pattern without a day period retains its
-  ambiguous `h`. These readers require a digit beside their distinguishing literal and
-  do not start or end inside a longer date, time, or range token. A detector whose ICU
-  parser cannot read its own canonical midnight surface is reported as skipped rather
-  than advertised. Ordinary day-period patterns remain with the flexible time reader.
+- **Behavior change:** The generated date/time skeleton readers now include ICU hour
+  patterns whose literal words distinguish them from bare numbers, including omitted
+  `H` and locale-preference `j`/`J`/`C` patterns. Thus German `8 Uhr` and `08 Uhr`,
+  French `8 h`, Bulgarian `08:00 ч.`, and equivalent forms across ICU locales are read
+  whole while their overlapping number readings remain. Literal-bearing twelve-hour
+  patterns resolve their ICU day period to an `H` field; a `J` pattern without a day
+  period retains its ambiguous `h`. These readers require a digit beside their
+  distinguishing literal and do not start or end inside a longer date, time, or range
+  token. A detector whose ICU parser cannot read its own canonical midnight surface is
+  reported as skipped rather than advertised. Ordinary day-period patterns remain with
+  the flexible time reader. Callers consuming default generated readers must accept and
+  rank or filter the additional overlapping `date:*` readings.
 - Locale-material files now receive the same depth and one-million-value checks as
   mapping input and are capped at 64 MiB before decoding.
 - **Behavior change:** Digit captures longer than Python's integer-string conversion
@@ -113,12 +123,16 @@
   measure runs remain linear. Readers now saturate rejected numeric fields, skip proved
   interior starts and absent mandatory literal heads, reuse identical spell-out parses,
   and index decimal-alternative containment instead of rescanning earlier spans.
-- Number and measure ranges in the flexible readers no longer read across a paragraph
-  boundary (for example `3,5 °C` and `-5 °C` in Catalan, separated by a blank line).
-- Flexible readers add a whole reading for valid space-grouped numbers accepted by the
-  locale's lenient ICU parser or used by locales of the same language, without removing
-  the separate integer readings they already produced. The downstream ranker therefore
-  chooses among 5, 300, and 5300 for `5 300`; lists whose widths do not fit the locale's
+- **Behavior change:** Number and measure ranges in the flexible readers no longer read
+  across a paragraph boundary (for example `3,5 °C` and `-5 °C` in Catalan,
+  separated by a blank line). Callers that previously treated blank-line-separated
+  endpoints as one range must handle them as separate paragraph content or perform
+  their own cross-paragraph aggregation.
+- **Behavior change:** Flexible readers add a whole reading for valid space-grouped
+  numbers accepted by the locale's lenient ICU parser or used by locales of the same
+  language, without removing the separate integer readings they already produced.
+  Callers and downstream rankers must handle the new overlapping whole candidate and
+  choose among 5, 300, and 5300 for `5 300`; lists whose widths do not fit the locale's
   grouping, such as `1 2 3` and `1999 2000`, keep only their separate readings. Strict
   readers retain their existing behavior and the locale's own CLDR convention.
 
