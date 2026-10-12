@@ -24,8 +24,28 @@ This setup is complete, and releases publish through `publish.yml`. It is kept f
    uv run --extra dev ruff format --check .
    uv run --extra dev python docs/generate.py --check
    uv run --extra dev python -m pytest tests/ -q
-   TIERGRAPH_FLOOR=$(sed -n 's/.*"tiergraph>=\([0-9][0-9.]*\).*/\1/p' pyproject.toml | head -n 1)
-   uv run --extra dev --with "tiergraph==$TIERGRAPH_FLOOR" python -m pytest tests/test_tiergraph_text_example.py -q
+   TIERGRAPH_FLOOR=$(
+     uv run --extra dev python - <<'PY'
+   import tomllib
+
+   from packaging.requirements import Requirement
+
+   with open("pyproject.toml", "rb") as file:
+       dev_requirements = tomllib.load(file)["project"]["optional-dependencies"]["dev"]
+   tiergraph = next(
+       requirement
+       for item in dev_requirements
+       if (requirement := Requirement(item)).name == "tiergraph"
+   )
+   if tiergraph.marker is None or tiergraph.marker.evaluate():
+       print(next(spec.version for spec in tiergraph.specifier if spec.operator == ">="))
+   PY
+   )
+   if [ -n "$TIERGRAPH_FLOOR" ]; then
+     uv run --extra dev --with "tiergraph==$TIERGRAPH_FLOOR" python -m pytest tests/test_tiergraph_text_example.py -q
+   else
+     echo "Skipping the tiergraph floor check because its development-extra marker excludes this Python."
+   fi
    actionlint .github/workflows/*.yml
    uv run --extra dev --with build python -m build
    ls -1 dist
@@ -33,7 +53,12 @@ This setup is complete, and releases publish through `publish.yml`. It is kept f
    uv run --extra dev python -c "import icukit; print(icukit.__version__)"
    ```
 
-   `ls` must show only `icukit-X.Y.Z.tar.gz` and `icukit-X.Y.Z-py3-none-any.whl`. Read the wheel listing to confirm that it contains the `icukit` package and its data. The printed version, filenames, and intended tag must agree. Remove `dist/`, `build/`, and `icukit.egg-info/` after inspection.
+   On Python 3.11, the tiergraph floor check is skipped because the development
+   extra's marker makes tiergraph unavailable there. `ls` must show only
+   `icukit-X.Y.Z.tar.gz` and `icukit-X.Y.Z-py3-none-any.whl`. Read the wheel
+   listing to confirm that it contains the `icukit` package and its data. The
+   printed version, filenames, and intended tag must agree. Remove `dist/`,
+   `build/`, and `icukit.egg-info/` after inspection.
 4. Commit the version and changelog changes, then tag that commit `vX.Y.Z` and push the commit and tag after CI passes.
 5. Create and publish a GitHub Release for `vX.Y.Z`. Publishing the release triggers `.github/workflows/publish.yml`, which builds the source distribution and pure-Python wheel, checks the tag against `icukit.__version__`, and uploads through PyPI Trusted Publishing.
 6. In a fresh virtual environment, run `pip install icukit==X.Y.Z` and confirm `python -c "import icukit; print(icukit.__version__)"` prints `X.Y.Z`.
