@@ -9,7 +9,7 @@ by inverting ICU's own formatting (see :func:`generated_detectors` and
 
 from __future__ import annotations
 
-__version__ = "0.9.1"
+__version__ = "0.10.0"
 
 
 def _check_icu_available():
