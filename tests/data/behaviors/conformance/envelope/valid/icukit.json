@@ -11,14 +11,21 @@
     "icukit": {
       "schema_version": 1,
       "sentence": {
-        "base": "en-tn@1"
+        "base": "en-tn@1",
+        "max_sentence_chars": 512,
+        "reflow": "lines"
       },
       "detection": {
         "guarded": true
       },
       "stream": {
         "max_pending_chars": 4096,
-        "boundary": "paragraph"
+        "boundary": "paragraph",
+        "reflow": "paragraphs"
+      },
+      "regex": {
+        "time_limit": 5000,
+        "stack_limit": 4000000
       }
     }
   }

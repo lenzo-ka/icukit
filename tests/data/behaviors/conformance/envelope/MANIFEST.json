@@ -57,7 +57,7 @@
       "expected": "valid"
     },
     "valid/icukit.json": {
-      "sha256": "sha256:ff061cac5b243f4480007e274e58b5c0db7048f529ccb6a4383a72e8108ab4c3",
+      "sha256": "sha256:09fa575642cfa8e8354b6d88a4a31aa7d837fec331d839017aa1415cc22ef5ff",
       "expected": "valid"
     }
   }
