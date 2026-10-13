@@ -11,7 +11,8 @@ readers of the readings the default readers refuse on purpose -- a lone "one" or
 "first", a lowercase Roman numeral, a month or weekday name alone, a bare hour, a date
 with a two- or three-digit year, a year range ICU never writes ("1914-1918",
 "1893–94"), or a detached quote or prime mark that ICU writes attached (``84 \"``
-beside ``84\"``) -- each under its own type, so a
+beside ``84\"``), or an ambiguous unit spelling such as ``5 V`` -- each under its own
+type, so a
 consumer that wants every path (a lattice for forced alignment) opts in with
 ``generated_detectors(locale, (*DEFAULT_FAMILIES, *GUARDED_FAMILIES))`` or adds one
 reader to a gang with ``DetectorSet.with_``, and one that does not leaves them out.
@@ -45,6 +46,7 @@ from .detectors import (
 from .material import LocaleMaterial, _require_loaded, locale_descends_from
 from .recognize import (
     AlphanumericRunsDetector,
+    FlexibleAmbiguousUnitDetector,
     FlexibleBareHourDetector,
     FlexibleCompactDetector,
     FlexibleCurrencyDetector,
@@ -91,6 +93,7 @@ from .unit_surfaces import curated_composed_units
 
 __all__ = [
     "ABBREVIATION_FAMILY",
+    "AMBIGUOUS_UNIT_FAMILY",
     "BARE_HOUR_FAMILY",
     "COMPACT_NUMBER_FAMILY",
     "DATE_INTERVAL_FAMILY",
@@ -968,12 +971,12 @@ def _read_regions(locale: str, locales: tuple[str, ...] | None) -> frozenset[str
 
 
 def _preferred_units(locale: str, locales: tuple[str, ...] | None) -> tuple[str, ...]:
-    """The single units CLDR's unit preferences give the regions the reader reads.
+    """The region-selected part of the default single-unit inventory.
 
-    A unit is read only where a region the reader reads prefers it: German text's "°F"
-    is not read, since no German locale's region prefers Fahrenheit, and "900 MHz" is
-    read in no locale. The full ICU unit inventory reads them at a larger cost to build
-    and to run; a caller who wants it passes ``units=``.
+    CLDR preferences supply the units used by the world and the regions the reader
+    reads. The caller adds the ICU unit families justified across regions by formatter
+    evidence and measured corpus gain; ICU writing a form is the authority for reading
+    it. ``units=`` remains the exact override for any other single-unit selection.
     """
     regions = _read_regions(locale, locales)
     found = dict.fromkeys(
@@ -1075,23 +1078,79 @@ def _chosen_currencies(locale: str, locales: tuple[str, ...] | None) -> tuple[st
 
 
 # The ICU unit types whose every unit the set reads in any locale: running text writes a
-# duration ("3 weeks", "2 fortnights") or a data size ("2 GB") whatever the region, and
-# CLDR's unit preferences name few of them (no week, no byte). Both types are small.
+# duration ("3 weeks", "2 fortnights"), data size ("2 GB"), frequency ("900 MHz"), or
+# micro/nanometer length ("530 nm") or voltage ("750 V") whatever the region, and
+# CLDR's unit preferences name few of them. Frequency, volt, micrometer, and nanometer
+# are the highest-gain subset of the full inventory that remains under the measured
+# per-row cost bound.
+# In English ICU writes nautical mile as ``nmi``. ``nm`` therefore remains the ICU
+# nanometer surface here, although aviation and marine writing also uses it for a
+# nautical mile.
 # The "-person" durations (week-person, year-person) are left out: ICU writes them as it
 # writes week and year, so each duration would read twice. They come in where CLDR's
 # preferences name them (person-age's year-person-and-month-person).
-_EVERY_REGION_UNIT_TYPES = ("duration", "digital")
+_EVERY_REGION_UNIT_TYPES = ("duration", "digital", "frequency")
+_EVERY_REGION_ADDITIONAL_UNITS = ("micrometer", "nanometer", "volt")
+
+
+@cache
+def _icu_single_units() -> tuple[str, ...]:
+    """Every enumerated non-currency ICU single unit with a canonical identifier."""
+    return tuple(
+        dict.fromkeys(
+            unit.getIdentifier()
+            for unit_type in icu.MeasureUnit.getAvailableTypes()
+            if unit_type != "currency"
+            for unit in icu.MeasureUnit.getAvailable(unit_type)
+            if unit.getIdentifier() and "-and-" not in unit.getIdentifier()
+        )
+    )
 
 
 def _every_region_units() -> tuple[str, ...]:
-    """Every unit ICU's inventory holds of :data:`_EVERY_REGION_UNIT_TYPES`, less the
-    "-person" durations."""
+    """The complete chosen types and high-yield individual units read in every region."""
     return tuple(
-        unit.getIdentifier()
-        for unit_type in _EVERY_REGION_UNIT_TYPES
-        for unit in icu.MeasureUnit.getAvailable(unit_type)
-        if unit.getIdentifier() and not unit.getIdentifier().endswith("-person")
+        dict.fromkeys(
+            (
+                *(
+                    unit.getIdentifier()
+                    for unit_type in _EVERY_REGION_UNIT_TYPES
+                    for unit in icu.MeasureUnit.getAvailable(unit_type)
+                    if unit.getIdentifier() and not unit.getIdentifier().endswith("-person")
+                ),
+                *_EVERY_REGION_ADDITIONAL_UNITS,
+            )
+        )
     )
+
+
+@cache
+def _widened_default_units() -> frozenset[str]:
+    """Units added to the default selection after 0.10.0."""
+    return frozenset(
+        (
+            *(
+                unit.getIdentifier()
+                for unit in icu.MeasureUnit.getAvailable("frequency")
+                if unit.getIdentifier()
+            ),
+            *_EVERY_REGION_ADDITIONAL_UNITS,
+        )
+    )
+
+
+def _flexible_measure_detector(
+    locale: str,
+    unit: str,
+    *,
+    locales: tuple[str, ...] | None,
+    default_selection: bool,
+) -> FlexibleMeasureDetector:
+    """Build a measure reader, guarding only units added to the default selection."""
+    reader = FlexibleMeasureDetector(locale, unit, locales=locales)
+    if default_selection and unit in _widened_default_units():
+        reader._exclude_ambiguous_surfaces = True
+    return reader
 
 
 def _single_units(
@@ -1118,6 +1177,12 @@ DETACHED_UNIT_FAMILY = _parameter_family(
     FlexibleDetachedUnitDetector,
 )
 
+AMBIGUOUS_UNIT_FAMILY = _parameter_family(
+    "ambiguous-unit",
+    lambda locale: _icu_single_units(),
+    FlexibleAmbiguousUnitDetector,
+)
+
 # The readings the default readers refuse on purpose, each under its own type; not in
 # DEFAULT_FAMILIES, so a consumer opts in (see the module docstring).
 GUARDED_FAMILIES = (
@@ -1130,6 +1195,7 @@ GUARDED_FAMILIES = (
     BARE_HOUR_FAMILY,
     SHORT_YEAR_INTERVAL_FAMILY,
     DETACHED_UNIT_FAMILY,
+    AMBIGUOUS_UNIT_FAMILY,
 )
 
 
@@ -1181,7 +1247,12 @@ def _flexible_families(
         _parameter_family(
             "measure",
             single_units,
-            lambda locale, unit: FlexibleMeasureDetector(locale, unit, locales=locales),
+            lambda locale, unit: _flexible_measure_detector(
+                locale,
+                unit,
+                locales=locales,
+                default_selection=units is None,
+            ),
         ),
         _parameter_family(
             "mixed-measure",
@@ -1228,13 +1299,8 @@ def _flexible_families(
                 "ICU's best pattern for the j skeleton has no hour field",
             ),
             SHORT_YEAR_INTERVAL_FAMILY,
-            DETACHED_UNIT_FAMILY
-            if locales is None and units is None
-            else _parameter_family(
-                "detached-unit",
-                single_units,
-                lambda locale, unit: FlexibleDetachedUnitDetector(locale, unit, locales=locales),
-            ),
+            DETACHED_UNIT_FAMILY,
+            AMBIGUOUS_UNIT_FAMILY,
         ]
     return tuple(families)
 
@@ -1387,19 +1453,28 @@ def flexible_detectors(
       ``locale`` writes with a symbol of its own rather than its ISO code (en_US's "¥");
       pass ISO codes to choose others.
     * ``units`` -- the units CLDR's unit preferences give the world and the regions of
-      the read locales, every unit of ICU's ``duration`` and ``digital`` types ("3
-      weeks", "2 GB"), and the composed units icukit's curated table chooses; and the
-      preferences' mixed units ("foot-and-inch") with each run of CLDR's default
-      duration order ("hour-and-minute-and-second"). A unit no read region prefers is
-      not read (German text's "°F", "900 MHz" anywhere). Pass ICU unit identifiers,
-      single or mixed, to choose others; the full ICU inventory reads more at more
-      cost.
+      the read locales, every unit of ICU's ``duration``, ``digital``, and ``frequency``
+      types, plus ICU's micrometer, nanometer, and volt units ("3 weeks", "2 GB", "900
+      MHz", "530 nm"), and the composed units icukit's curated table chooses; and the
+      preferences' mixed units
+      ("foot-and-inch") with each run of CLDR's default duration order
+      ("hour-and-minute-and-second"). These added ICU families provide the strongest
+      measured gain within the per-row cost bound. Pass ICU unit identifiers, single
+      or mixed, to choose others.
 
+    For units added to the default selection above, ambiguous spellings are withheld
+    from the ordinary measure type and are available under
+    ``measure:ambiguous-unit:<unit>`` when ``guarded=True``. Explicit ``units=``
+    selections retain every spelling accepted by their directly constructed readers.
+    In English ICU writes nautical mile as ``nmi``, so ``nm`` remains nanometer even
+    though aviation and marine text also uses ``nm`` for nautical mile.
     ``locales`` chooses the other locales of the language the language-wide readers
     read, and the locales the currencies and units are chosen from (every one by
     default). ``guarded`` adds the readers of the readings the default readers refuse on
-    purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
-    built is left out; :func:`flexible_detectors_report` names it and why.
+    purpose (:data:`GUARDED_FAMILIES`), each under its own type. The guarded families
+    remain complete when ``locales`` or ``units`` narrows the ordinary readers. A
+    member that cannot be built is left out; :func:`flexible_detectors_report` names it
+    and why.
 
     Construction is cached process-wide in a bounded memo keyed by every option; equal
     calls return the same frozen set. Calling :func:`icukit.cache.configure` with

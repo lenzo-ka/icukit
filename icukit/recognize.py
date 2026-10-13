@@ -117,6 +117,7 @@ __all__ = [
     "FlexibleCurrencyNameDetector",
     "FlexibleDateDetector",
     "FlexibleDateIntervalDetector",
+    "FlexibleAmbiguousUnitDetector",
     "FlexibleDetachedUnitDetector",
     "FlexibleFractionDetector",
     "FlexibleMeasureDetector",
@@ -4867,6 +4868,17 @@ def _measure_surfaces(
     return list(surfaces), list(rates)
 
 
+@cache
+def _is_single_letter_surface(surface: str) -> bool:
+    """Whether ``surface`` is one Unicode letter grapheme, optionally period-ended."""
+    base = surface.removesuffix(".")
+    return (
+        bool(base)
+        and sum(icu.Char.isalpha(character) for character in base) == 1
+        and len(break_grapheme_spans(base, "root")) == 1
+    )
+
+
 class FlexibleMeasureDetector(_GatedReader):
     """Recognize a flexible number followed by a reflectively derived ICU unit surface.
 
@@ -4885,7 +4897,11 @@ class FlexibleMeasureDetector(_GatedReader):
     Spacing stays flexible except for detached quote or prime marks. Those do not read
     after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
     :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
-    a separate type.
+    a separate type. Directly constructed readers retain every other spelling accepted
+    in 0.10.0, including scientific one-letter symbols. The default flexible reader set
+    may decline ambiguous spellings of units newly added to that set;
+    :class:`FlexibleAmbiguousUnitDetector` preserves those spellings under a guarded
+    type.
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
     number directly. A per form written without an amount ("/s", "per second") reads as
@@ -4894,10 +4910,12 @@ class FlexibleMeasureDetector(_GatedReader):
     """
 
     group = "measure"
-    _detached_only = False
+    _guarded_surface_kind: str | None = None
+    _exclude_ambiguous_surfaces = False
 
     def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale
+        self._language = icu.Locale(locale).getLanguage()
         self.locales = _locale_selection(locale, locales)
         self.unit = unit
         self.type = f"measure:{unit}"
@@ -4919,14 +4937,13 @@ class FlexibleMeasureDetector(_GatedReader):
         self._spaced_unit_surfaces = {
             (surface, target) for surface, _width, spaced, target in self._units if spaced
         }
-        language = icu.Locale(locale).getLanguage()
         wide = {
             (surface, target) for surface, width, _spaced, target in self._units if width == "wide"
         }
         abbreviations = {
             (surface, width, target)
             for surface, width, _spaced, target in self._units
-            if language == "en"
+            if self._language == "en"
             and width != "wide"
             and (surface, target) not in wide
             and len(surface.rsplit(" ", 1)[-1]) > 1
@@ -5046,6 +5063,29 @@ class FlexibleMeasureDetector(_GatedReader):
             and surface in {'"', "'", "″", "′"}
         )
 
+    def _is_guarded_ambiguous(self, surface: str, _unit: str) -> bool:
+        """Whether evidence makes a surface ambiguous in ordinary running text.
+
+        A Unicode letter occupying one grapheme is ambiguous in every script, with or
+        without a trailing period. Longer surfaces are guarded only when the census or
+        multilingual running-text sample shows that exact surface is an ordinary word
+        of the locale. No longer surface of the units added to the default selection
+        currently has such a witness, so there is no word-surface table.
+        """
+        return _is_single_letter_surface(surface)
+
+    def _guarded_kind(
+        self, surface: str, width: str, expects_space: bool, unit: str, has_space: bool
+    ) -> str | None:
+        """The opt-in family that owns this spelling, if the default declines it."""
+        if has_space and self._is_guarded_detached(surface, width, expects_space, unit):
+            return "detached"
+        if self._is_guarded_ambiguous(surface, unit) and (
+            self._exclude_ambiguous_surfaces or self._guarded_surface_kind == "ambiguous"
+        ):
+            return "ambiguous"
+        return None
+
     def _match(
         self,
         text: str,
@@ -5064,10 +5104,10 @@ class FlexibleMeasureDetector(_GatedReader):
         for surface, width, expects_space, unit in self._unit_heads[has_space].get(head, ()):
             # A detached mark can read as punctuation. Reject only when this
             # ICU-derived row attaches it; a spaced row sorts first.
-            guarded_detached = has_space and self._is_guarded_detached(
-                surface, width, expects_space, unit
-            )
-            if guarded_detached != self._detached_only:
+            if (
+                self._guarded_kind(surface, width, expects_space, unit, has_space)
+                != self._guarded_surface_kind
+            ):
                 continue
             # A rate's per form ("/km²") follows the number directly, not after a space.
             cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
@@ -5087,10 +5127,10 @@ class FlexibleMeasureDetector(_GatedReader):
             if found is not None:
                 return found
         for surface, width, expects_space, unit in self._period_unit_heads[has_space].get(head, ()):
-            guarded_detached = has_space and self._is_guarded_detached(
-                surface, width, expects_space, unit
-            )
-            if guarded_detached != self._detached_only:
+            if (
+                self._guarded_kind(surface, width, expects_space, unit, has_space)
+                != self._guarded_surface_kind
+            ):
                 continue
             cursor = number_end if unit != self.unit and not surface[:1].isalnum() else unit_start
             if not text.startswith(surface, cursor):
@@ -5161,6 +5201,11 @@ class FlexibleMeasureDetector(_GatedReader):
             return None
         for surface, width, _expects_space, unit in self._units:
             if unit == self.unit or not text.startswith(surface, start):
+                continue
+            ambiguous = self._is_guarded_ambiguous(surface, unit)
+            if self._guarded_surface_kind == "ambiguous" and not ambiguous:
+                continue
+            if self._exclude_ambiguous_surfaces and ambiguous:
                 continue
             end = start + len(surface)
             if self._continues_word(text, end):
@@ -5258,7 +5303,7 @@ class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):
     reader's flexible spacing.
     """
 
-    _detached_only = True
+    _guarded_surface_kind = "detached"
 
     def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
         super().__init__(locale, unit, locales=locales)
@@ -5274,6 +5319,28 @@ class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):
     def _match_per_form(self, text: str, start: int) -> _FlexibleMatch | None:
         """Decline bare per forms, which are not detached unit readings."""
         return None
+
+
+class FlexibleAmbiguousUnitDetector(FlexibleMeasureDetector):
+    """Recognize only unit spellings guarded for ordinary running-text collisions.
+
+    Single-letter surfaces in every script, plus any longer locale words demonstrated
+    ambiguous by the unit census or running-text sample, are absent from the ordinary
+    readers of units newly added to the default selection. No such longer word is
+    currently guarded. This reader preserves the single-letter paths under
+    ``measure:ambiguous-unit:<unit>`` for consumers that opt in.
+    """
+
+    _guarded_surface_kind = "ambiguous"
+
+    def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
+        super().__init__(locale, unit, locales=locales)
+        if not any(
+            self._is_guarded_ambiguous(surface, target)
+            for surface, _width, _expects_space, target in self._units
+        ):
+            raise ValueError(f"ICU exposes no guarded ambiguous surface for unit: {unit!r}")
+        self.type = f"measure:ambiguous-unit:{unit}"
 
 
 class FlexibleMixedMeasureDetector(_GatedReader):

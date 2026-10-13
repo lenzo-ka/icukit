@@ -12,6 +12,7 @@ LOCALES = ("en_US", "de_DE", "ja_JP")
 # The flexible readers whose constructor needs more than a locale: a width, a currency, a
 # skeleton, or a unit.
 NEEDS_MORE_THAN_A_LOCALE = {
+    "FlexibleAmbiguousUnitDetector",
     "FlexibleCompactDetector",
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",

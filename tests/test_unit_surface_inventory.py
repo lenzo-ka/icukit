@@ -118,6 +118,13 @@ def test_empty_and_default_unit_selections_are_distinct():
     assert unit_surface_inventory("en_US")
 
 
+@pytest.mark.parametrize("locale", ["en_US", "de_DE", "fr_FR", "ja_JP", "ru_RU", "zh_CN"])
+def test_widened_default_inventory_includes_the_measured_high_gain_units(locale):
+    units = {row.unit for row in unit_surface_inventory(locale)}
+
+    assert {"megahertz", "micrometer", "nanometer", "volt"} <= units
+
+
 def test_mixed_identifiers_are_omitted_because_components_own_the_surfaces():
     assert unit_surface_inventory("en_US", units=("foot-and-inch",)) == ()
 
@@ -128,3 +135,46 @@ def test_detached_quote_and_prime_surfaces_are_marked_attached_only():
 
     assert marks
     assert all(not row.spaced for row in marks)
+
+
+def test_ambiguous_surfaces_follow_default_and_explicit_reader_acceptance():
+    default_inventory = unit_surface_inventory("en_US", locales=())
+    explicit_inventory = unit_surface_inventory("en_US", locales=(), units=("volt",))
+    guarded_inventory = unit_surface_inventory("en_US", locales=(), guarded=True)
+    guarded_surfaces = {row.surface for row in guarded_inventory if row.unit == "volt"} - {
+        row.surface for row in default_inventory if row.unit == "volt"
+    }
+
+    assert "V" in guarded_surfaces
+    assert not is_unit_surface("V", "en_US", locales=())
+    assert is_unit_surface("V", "en_US", locales=(), guarded=True)
+    assert is_unit_surface("V", "en_US", locales=(), units=("volt",))
+    assert is_unit_surface("volts", "en_US", locales=(), units=("volt",))
+    assert not guarded_surfaces & {row.surface for row in default_inventory if row.unit == "volt"}
+    assert guarded_surfaces <= {row.surface for row in explicit_inventory}
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {},
+        {"locales": ("en_US",)},
+        {"units": ("meter",)},
+        {"locales": ("en_US",), "units": ("meter",)},
+    ],
+)
+def test_guarded_inventory_exactly_matches_live_unit_reader_surfaces(options):
+    gang = flexible_detectors("en_US", currencies=(), guarded=True, **options)
+    accepted = {}
+    for reader in gang.detectors:
+        if not isinstance(reader, FlexibleMeasureDetector):
+            continue
+        for surface, unit, source, spaced in reader._accepted_unit_surfaces():
+            key = (surface, unit, source)
+            accepted[key] = accepted.get(key, False) or spaced
+    expected = {
+        UnitSurface(surface, unit, source, spaced)
+        for (surface, unit, source), spaced in accepted.items()
+    }
+
+    assert set(unit_surface_inventory("en_US", guarded=True, **options)) == expected
