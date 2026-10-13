@@ -444,9 +444,9 @@ def _is_pattern_letter(char: str) -> bool:
     return char.isascii() and char.isalpha()
 
 
-def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
-    """Return unquoted CLDR pattern-letter runs."""
-    runs: list[tuple[str, int]] = []
+def _pattern_run_spans(pattern: str) -> list[tuple[str, int, int, int]]:
+    """Return unquoted CLDR pattern-letter runs with their pattern spans."""
+    runs: list[tuple[str, int, int, int]] = []
     quoted = False
     index = 0
     while index < len(pattern):
@@ -464,9 +464,41 @@ def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
         end = index + 1
         while end < len(pattern) and pattern[end] == letter:
             end += 1
-        runs.append((letter, end - index))
+        runs.append((letter, end - index, index, end))
         index = end
     return runs
+
+
+def _pattern_runs(pattern: str) -> list[tuple[str, int]]:
+    """Return unquoted CLDR pattern-letter runs."""
+    return [(letter, width) for letter, width, _, _ in _pattern_run_spans(pattern)]
+
+
+def _pattern_digit_boundaries(pattern: str) -> tuple[bool, bool]:
+    """Whether a pattern begins or ends with a field that writes decimal digits."""
+    runs = _pattern_run_spans(pattern)
+    if not runs:
+        return False, False
+
+    def writes_digits(letter: str, width: int) -> bool:
+        return letter in {"y", "d", "h", "H", "K", "k", "m", "s"} or (
+            letter in {"M", "L"} and width <= 2
+        )
+
+    first_letter, first_width, first_start, _ = runs[0]
+    last_letter, last_width, _, last_end = runs[-1]
+    return (
+        first_start == 0 and writes_digits(first_letter, first_width),
+        last_end == len(pattern) and writes_digits(last_letter, last_width),
+    )
+
+
+def _pattern_literal_boundaries(pattern: str) -> tuple[bool, bool]:
+    """Whether literal pattern text precedes or follows every field run."""
+    runs = _pattern_run_spans(pattern)
+    if not runs:
+        return bool(pattern), bool(pattern)
+    return runs[0][2] > 0, runs[-1][3] < len(pattern)
 
 
 def _pattern_word_literals(pattern: str) -> tuple[str, ...]:
@@ -779,6 +811,9 @@ class DateDetector(_GatedReader):
         self._formats = tuple(
             (pattern, self._date_formatter(pattern)) for pattern in dict.fromkeys(patterns)
         )
+        self._pattern_digit_edges = {
+            pattern: _pattern_digit_boundaries(pattern) for pattern, _ in self._formats
+        }
         self._fields = _date_fields(self.pattern)
         letters = {letter for letter, _ in _pattern_runs(self.pattern)}
         # Only readers introduced by the literal-hour expansion need the numeric
@@ -792,6 +827,7 @@ class DateDetector(_GatedReader):
             and letters & {"h", "H", "K", "k"}
             and (skeleton not in enumerated_skeletons or bool(letters & {"h", "K", "a", "b", "B"}))
         )
+        self._literal_hour = bool(self._literal_words and letters & {"h", "H", "K", "k"})
         self._has_era = "G" in letters
         current = icu.Calendar.createInstance(icu.TimeZone.getGMT(), icu.Locale(locale))
         year_position = icu.FieldPosition(icu.DateFormat.kYearField)
@@ -1011,15 +1047,32 @@ class DateDetector(_GatedReader):
             self._inv,
             gate=self._start_gates["scan"],
             stats_key=self._lane_key("scan"),
+            allow_interior_start=(lambda start: start > 0 and icu.Char.isdigit(text[start - 1]))
+            if self._literal_hour
+            and any(not starts for starts, _ in self._pattern_digit_edges.values())
+            else None,
         )
         if not self._guard_literal_hour_boundaries:
             return found
-        return [
-            detection
-            for detection in found
-            if not _starts_inside_number_run(text, detection["start"])
-            and not _ends_inside_number_run(text, detection["end"])
-        ]
+        kept = []
+        for detection in found:
+            starts_with_digits, ends_with_digits = self._pattern_digit_edges[
+                detection["spec"].pattern
+            ]
+            if starts_with_digits and _starts_inside_number_run(text, detection["start"]):
+                if not _starts_after_range_mark(text, detection["start"]):
+                    continue
+            if ends_with_digits and _ends_inside_number_run(text, detection["end"]):
+                if not _ends_before_range_mark(text, detection["end"]):
+                    continue
+            if (
+                not ends_with_digits
+                and detection["end"] < len(text)
+                and icu.Char.isdigit(text[detection["end"]])
+            ):
+                continue
+            kept.append(detection)
+        return kept
 
 
 # --------------------------------------------------------------------------- numbers
@@ -1452,6 +1505,7 @@ def _is_decimal_run(text: str) -> bool:
 
 
 _NUMBER_RUN_MARKS = frozenset({"-", "‐", "‑", "‒", "–", "—", "−", ":", "/", "."})
+_RANGE_RUN_MARKS = frozenset({"-", "‐", "‑", "‒", "–", "—", "−"})
 
 
 def _literal_word_has_neighboring_digit(text: str, word: str) -> bool:
@@ -1494,6 +1548,16 @@ def _ends_inside_number_run(text: str, end: int, marks: Iterable[str] = ()) -> b
     return (end + 1 < len(text) and text[end] in joins and icu.Char.isdigit(text[end + 1])) or (
         0 < end < len(text) and not icu.Char.isdigit(text[end - 1]) and icu.Char.isdigit(text[end])
     )
+
+
+def _starts_after_range_mark(text: str, start: int) -> bool:
+    """Whether a digit-starting reading follows a digit and dash-like range mark."""
+    return start >= 2 and text[start - 1] in _RANGE_RUN_MARKS and icu.Char.isdigit(text[start - 2])
+
+
+def _ends_before_range_mark(text: str, end: int) -> bool:
+    """Whether a digit-ending reading precedes a dash-like range mark and digit."""
+    return end + 1 < len(text) and text[end] in _RANGE_RUN_MARKS and icu.Char.isdigit(text[end + 1])
 
 
 @functools.lru_cache(maxsize=16)
@@ -1574,10 +1638,15 @@ def _scan_step(
     type_label: str,
     inv: _Inverter,
     ctx: _ScanContext,
+    *,
+    allow_interior_start: Callable[[int], bool] | None = None,
 ) -> ValueDetection | None:
     """Run the strict matcher at one start, refusing only impossible endpoints."""
     del locale  # the context already embodies the locale's grapheme and word rules
-    if start_cp not in ctx.boundaries or start_cp in ctx.interior:
+    if start_cp not in ctx.boundaries or (
+        start_cp in ctx.interior
+        and (allow_interior_start is None or not allow_interior_start(start_cp))
+    ):
         return None
     result = inv.parse(ctx.ustr, ctx.cp_to_u16[start_cp])
     if result is None:
@@ -1660,6 +1729,7 @@ def _scan(
     *,
     gate: StartGate | None = None,
     stats_key: str | None = None,
+    allow_interior_start: Callable[[int], bool] | None = None,
 ) -> list[ValueDetection]:
     """Windowed detection with reformat-equality acceptance and greedy longest-match.
 
@@ -1667,14 +1737,16 @@ def _scan(
     endpoint inside a grapheme simply continues. A successful parse whose endpoint is
     reversed, out of range, or inside a surrogate pair is a :class:`DetectorRefusal`.
     An accepted span must reproduce the formatter's canonical output exactly (rejecting
-    ICU's permissive coercions), and may neither start nor end inside a word between two
-    alphanumerics (see :func:`_word_interior_offsets`). After a match ``[s, e)`` the scan
-    resumes at ``e`` so one detector never self-overlaps.
+    ICU's permissive coercions), and ordinarily may neither start nor end inside a word
+    between two alphanumerics (see :func:`_word_interior_offsets`). A detector may admit
+    selected interior starts for a leading literal that its exact reformatting check
+    validates. After a match ``[s, e)`` the scan resumes at ``e`` so one detector never
+    self-overlaps.
     """
     plan = _scan_plan_for(text, locale, gate)
     ctx = _scan_context_from_plan(text, locale, plan)
     inspect_gate = GATE_STATS and gates_enabled() and gate is not None
-    if text and len(ctx.interior) == len(text) - 1:
+    if allow_interior_start is None and text and len(ctx.interior) == len(text) - 1:
         # Every offset after zero is inside one uninterrupted word. Strict readers can
         # therefore try only zero; iterating an admitted start at every digit made each
         # reader rescan an already-proved interior on long digit runs. Gate diagnostics
@@ -1698,20 +1770,38 @@ def _scan(
     for start_cp in starts:
         if start_cp < cursor:
             continue  # greedy: inside a prior match
-        if start_cp in ctx.interior:
+        if start_cp in ctx.interior and (
+            allow_interior_start is None or not allow_interior_start(start_cp)
+        ):
             continue  # a fragment of a longer token
         if inspect_gate and not gate.admits(text[start_cp]):
             _record(stats_key, "gated_out")
             if GATE_AUDIT:
                 _audit_probe(
                     stats_key,
-                    lambda start=start_cp: _scan_step(text, start, locale, type_label, inv, ctx),
+                    lambda start=start_cp: _scan_step(
+                        text,
+                        start,
+                        locale,
+                        type_label,
+                        inv,
+                        ctx,
+                        allow_interior_start=allow_interior_start,
+                    ),
                 )
             continue
         if GATE_STATS:
             _record(stats_key, "tried")
         try:
-            detection = _scan_step(text, start_cp, locale, type_label, inv, ctx)
+            detection = _scan_step(
+                text,
+                start_cp,
+                locale,
+                type_label,
+                inv,
+                ctx,
+                allow_interior_start=allow_interior_start,
+            )
         except Exception:
             if GATE_STATS:
                 _record(stats_key, "non_miss")

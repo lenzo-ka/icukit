@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Literal-hour readers no longer reject a complete ICU surface merely because a word
+  literal borders punctuation and a digit. Numeric run guards now apply only at a
+  pattern boundary that writes digits, while complete hour surfaces remain available
+  as range endpoints. Numeric field fragments such as `00 Uhr` within `08:00 Uhr` and
+  `8时` within `8时30分` remain excluded.
+
 ## [0.10.0] - 2026-10-12
 
 ### Added
