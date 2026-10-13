@@ -3745,7 +3745,7 @@ A reader that takes a parameter is built for each value chosen from ICU:
   ``locale`` writes with a symbol of its own rather than its ISO code (en_US's "¥");
   pass ISO codes to choose others.
 * ``units`` -- the units CLDR's unit preferences give the world and the regions of
-  the read locales, every unit of ICU's ``duration``, ``digital``, ``frequency``,
+  the read locales, every unit of ICU's ``duration``, ``digital``, and ``frequency``
   types, plus ICU's micrometer, nanometer, and volt units ("3 weeks", "2 GB", "900
   MHz", "530 nm"), and the composed units icukit's curated table chooses; and the
   preferences' mixed units
@@ -3758,11 +3758,15 @@ For units added to the default selection above, ambiguous spellings are withheld
 from the ordinary measure type and are available under
 ``measure:ambiguous-unit:<unit>`` when ``guarded=True``. Explicit ``units=``
 selections retain every spelling accepted by their directly constructed readers.
+In English ICU writes nautical mile as ``nmi``, so ``nm`` remains nanometer even
+though aviation and marine text also uses ``nm`` for nautical mile.
 ``locales`` chooses the other locales of the language the language-wide readers
 read, and the locales the currencies and units are chosen from (every one by
 default). ``guarded`` adds the readers of the readings the default readers refuse on
-purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
-built is left out; :func:`flexible_detectors_report` names it and why.
+purpose (:data:`GUARDED_FAMILIES`), each under its own type. The guarded families
+remain complete when ``locales`` or ``units`` narrows the ordinary readers. A
+member that cannot be built is left out; :func:`flexible_detectors_report` names it
+and why.
 
 Construction is cached process-wide in a bounded memo keyed by every option; equal
 calls return the same frozen set. Calling :func:`icukit.cache.configure` with
@@ -5896,9 +5900,10 @@ Initialize self.  See help(type(self)) for accurate signature.
 
 Recognize only unit spellings guarded for ordinary running-text collisions.
 
-Scientific one-letter symbols and the small set of word and punctuation forms
-demonstrated ambiguous by the unit census are absent from the ordinary measure
-reader. This reader preserves those paths under
+Single-letter surfaces in every script, plus any longer locale words demonstrated
+ambiguous by the unit census or running-text sample, are absent from the ordinary
+readers of units newly added to the default selection. No such longer word is
+currently guarded. This reader preserves the single-letter paths under
 ``measure:ambiguous-unit:<unit>`` for consumers that opt in.
 
 #### `FlexibleAmbiguousUnitDetector(locale: 'str', unit: 'str', *, locales: 'Iterable[str] | None' = None) -> 'None'`
@@ -9000,7 +9005,7 @@ Sri Lankan, Nepalese).
 A rate's per form maps to ``per-<unit>`` ("per km²": ``per-square-kilometer``).
 Empty for a language with no table.
 
-### `is_unit_surface(text: 'str', locale: 'str', *, locales: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None) -> 'bool'`
+### `is_unit_surface(text: 'str', locale: 'str', *, locales: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'bool'`
 
 Whether ``text`` is a unit surface in :func:`unit_surface_inventory`.
 
@@ -9008,7 +9013,7 @@ Raises:
     ValueError: If a selected unit identifier is unknown or non-canonical. The
         message includes that identifier.
 
-### `unit_surface_inventory(locale: 'str', *, locales: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None) -> 'tuple[UnitSurface, ...]'`
+### `unit_surface_inventory(locale: 'str', *, locales: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None, guarded: 'bool' = False) -> 'tuple[UnitSurface, ...]'`
 
 Return the unit surfaces accepted by flexible measure readers for ``locale``.
 
@@ -9024,12 +9029,15 @@ punctuation variants and spacing rules. Detached quote and prime spellings that
 require whitespace are guarded and are not accepted by this inventory. Ambiguous
 spellings of units newly added to the default selection are also guarded in the
 default inventory; an explicit ``units=`` selection reports all spellings its
-directly constructed readers accept.
+directly constructed readers accept. ``guarded=True`` adds the complete detached
+and ambiguous unit families, just as :func:`~icukit.flexible_detectors` does; those
+additions are not narrowed by ``locales`` or ``units``.
 
 Args:
     locale: ICU locale identifier for the readers.
     locales: Optional same-language locale selection, as for ``flexible_detectors``.
     units: Optional ICU unit identifiers, as for ``flexible_detectors``.
+    guarded: Whether to include the complete guarded unit families.
 
 Raises:
     ValueError: If a selected unit identifier is unknown or non-canonical. The

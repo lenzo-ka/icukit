@@ -1083,6 +1083,9 @@ def _chosen_currencies(locale: str, locales: tuple[str, ...] | None) -> tuple[st
 # CLDR's unit preferences name few of them. Frequency, volt, micrometer, and nanometer
 # are the highest-gain subset of the full inventory that remains under the measured
 # per-row cost bound.
+# In English ICU writes nautical mile as ``nmi``. ``nm`` therefore remains the ICU
+# nanometer surface here, although aviation and marine writing also uses it for a
+# nautical mile.
 # The "-person" durations (week-person, year-person) are left out: ICU writes them as it
 # writes week and year, so each duration would read twice. They come in where CLDR's
 # preferences name them (person-age's year-person-and-month-person).
@@ -1296,20 +1299,8 @@ def _flexible_families(
                 "ICU's best pattern for the j skeleton has no hour field",
             ),
             SHORT_YEAR_INTERVAL_FAMILY,
-            DETACHED_UNIT_FAMILY
-            if locales is None and units is None
-            else _parameter_family(
-                "detached-unit",
-                single_units,
-                lambda locale, unit: FlexibleDetachedUnitDetector(locale, unit, locales=locales),
-            ),
-            AMBIGUOUS_UNIT_FAMILY
-            if locales is None and units is None
-            else _parameter_family(
-                "ambiguous-unit",
-                single_units,
-                lambda locale, unit: FlexibleAmbiguousUnitDetector(locale, unit, locales=locales),
-            ),
+            DETACHED_UNIT_FAMILY,
+            AMBIGUOUS_UNIT_FAMILY,
         ]
     return tuple(families)
 
@@ -1462,7 +1453,7 @@ def flexible_detectors(
       ``locale`` writes with a symbol of its own rather than its ISO code (en_US's "¥");
       pass ISO codes to choose others.
     * ``units`` -- the units CLDR's unit preferences give the world and the regions of
-      the read locales, every unit of ICU's ``duration``, ``digital``, ``frequency``,
+      the read locales, every unit of ICU's ``duration``, ``digital``, and ``frequency``
       types, plus ICU's micrometer, nanometer, and volt units ("3 weeks", "2 GB", "900
       MHz", "530 nm"), and the composed units icukit's curated table chooses; and the
       preferences' mixed units
@@ -1475,11 +1466,15 @@ def flexible_detectors(
     from the ordinary measure type and are available under
     ``measure:ambiguous-unit:<unit>`` when ``guarded=True``. Explicit ``units=``
     selections retain every spelling accepted by their directly constructed readers.
+    In English ICU writes nautical mile as ``nmi``, so ``nm`` remains nanometer even
+    though aviation and marine text also uses ``nm`` for nautical mile.
     ``locales`` chooses the other locales of the language the language-wide readers
     read, and the locales the currencies and units are chosen from (every one by
     default). ``guarded`` adds the readers of the readings the default readers refuse on
-    purpose (:data:`GUARDED_FAMILIES`), each under its own type. A member that cannot be
-    built is left out; :func:`flexible_detectors_report` names it and why.
+    purpose (:data:`GUARDED_FAMILIES`), each under its own type. The guarded families
+    remain complete when ``locales`` or ``units`` narrows the ordinary readers. A
+    member that cannot be built is left out; :func:`flexible_detectors_report` names it
+    and why.
 
     Construction is cached process-wide in a bounded memo keyed by every option; equal
     calls return the same frozen set. Calling :func:`icukit.cache.configure` with

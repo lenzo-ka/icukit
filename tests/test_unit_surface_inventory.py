@@ -6,7 +6,7 @@ import pytest
 
 from icukit import UnitSurface, flexible_detectors, is_unit_surface, unit_surface_inventory
 from icukit.detectors import DetectorSet
-from icukit.recognize import FlexibleAmbiguousUnitDetector, FlexibleMeasureDetector
+from icukit.recognize import FlexibleMeasureDetector
 
 
 def _measure_gang(locale, *, locales=None, units=None):
@@ -140,12 +140,41 @@ def test_detached_quote_and_prime_surfaces_are_marked_attached_only():
 def test_ambiguous_surfaces_follow_default_and_explicit_reader_acceptance():
     default_inventory = unit_surface_inventory("en_US", locales=())
     explicit_inventory = unit_surface_inventory("en_US", locales=(), units=("volt",))
-    guarded = FlexibleAmbiguousUnitDetector("en_US", "volt", locales=())
-    guarded_surfaces = {row[0] for row in guarded._accepted_unit_surfaces()}
+    guarded_inventory = unit_surface_inventory("en_US", locales=(), guarded=True)
+    guarded_surfaces = {row.surface for row in guarded_inventory if row.unit == "volt"} - {
+        row.surface for row in default_inventory if row.unit == "volt"
+    }
 
     assert "V" in guarded_surfaces
     assert not is_unit_surface("V", "en_US", locales=())
+    assert is_unit_surface("V", "en_US", locales=(), guarded=True)
     assert is_unit_surface("V", "en_US", locales=(), units=("volt",))
     assert is_unit_surface("volts", "en_US", locales=(), units=("volt",))
     assert not guarded_surfaces & {row.surface for row in default_inventory if row.unit == "volt"}
     assert guarded_surfaces <= {row.surface for row in explicit_inventory}
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {},
+        {"locales": ("en_US",)},
+        {"units": ("meter",)},
+        {"locales": ("en_US",), "units": ("meter",)},
+    ],
+)
+def test_guarded_inventory_exactly_matches_live_unit_reader_surfaces(options):
+    gang = flexible_detectors("en_US", currencies=(), guarded=True, **options)
+    accepted = {}
+    for reader in gang.detectors:
+        if not isinstance(reader, FlexibleMeasureDetector):
+            continue
+        for surface, unit, source, spaced in reader._accepted_unit_surfaces():
+            key = (surface, unit, source)
+            accepted[key] = accepted.get(key, False) or spaced
+    expected = {
+        UnitSurface(surface, unit, source, spaced)
+        for (surface, unit, source), spaced in accepted.items()
+    }
+
+    assert set(unit_surface_inventory("en_US", guarded=True, **options)) == expected

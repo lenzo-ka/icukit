@@ -11,8 +11,9 @@
 - `unit_surface_inventory()` exposes the ICU-derived, curated, and punctuated unit
   spellings accepted by the flexible measure readers, with each `UnitSurface`
   identifying its source and whether whitespace before it is accepted;
-  `is_unit_surface()` tests membership in the same locale and unit selection. Invalid
-  unit identifiers raise `ValueError` from both functions.
+  `is_unit_surface()` tests membership in the same locale and unit selection. Pass
+  `guarded=True` to either function to include the complete guarded unit families.
+  Invalid unit identifiers raise `ValueError` from both functions.
 
 ### Fixed
 
@@ -98,11 +99,15 @@
   `10 µm`, and `530 nm` read in every locale. The full ICU inventory exceeded the
   per-row cost bound; these seven units retained the strongest measured gain. Pass
   `units=()` to build no unit readers, or an explicit `units=` iterable to replace the
-  default selection. Ambiguous spellings including scientific one-letter symbols
-  remain reachable with `guarded=True` or `AMBIGUOUS_UNIT_FAMILY`, under
+  default selection. Any single Unicode letter grapheme, in every script and with an
+  optional trailing period, remains reachable with `guarded=True` or
+  `AMBIGUOUS_UNIT_FAMILY`, under
   `measure:ambiguous-unit:<unit>` instead of the default measure type. Explicit
   `units=` selections and directly constructed `FlexibleMeasureDetector` readers keep
-  the same spellings and `measure:<unit>` readings as 0.10.0.
+  the same spellings and `measure:<unit>` readings as 0.10.0. The guarded unit families
+  remain complete when `locales=` or `units=` narrows the ordinary readers. ICU writes
+  English nautical mile as `nmi`; `nm` remains nanometer even though aviation and
+  marine usage can give it the other meaning.
 
 - Decode quoted literals in ICU date-interval separators, and skip interval parsing when
   a text has none of the decoded mandatory literals under the reader's exact separator

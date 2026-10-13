@@ -17,6 +17,8 @@ from icukit.engine import (
     DEFAULT_FAMILIES,
     DETACHED_UNIT_FAMILY,
     GUARDED_FAMILIES,
+    _flexible_measure_detector,
+    _preferred_units,
     flexible_detectors,
     generated_detectors,
 )
@@ -37,6 +39,7 @@ from icukit.recognize import (
     FlexibleWeekdayNameDetector,
     _detect_flexible,
 )
+from icukit.unit_surfaces import curated_composed_units
 
 GUARDED_TYPES = {
     "number:spellout-lone",
@@ -460,6 +463,23 @@ def test_explicit_volt_readers_keep_0_10_0_surfaces_spans_and_values(build):
     ]
 
 
+@pytest.mark.parametrize(
+    ("locale", "unit", "text", "surface"),
+    [
+        ("de_DE", "inch", "2007 in Norden", "2007 in"),
+        ("es_ES", "mile-scandinavian", "25 mil", "25 mil"),
+        ("en_US", "point", "10 points", "10 points"),
+        ("en_US", "kelvin", "81K download", "81K"),
+    ],
+)
+def test_explicit_unit_selections_keep_0_10_0_ambiguous_readings(locale, unit, text, surface):
+    assert [
+        (reading["type"], reading["text"])
+        for reading in flexible_detectors(locale, units=(unit,)).detect(text)
+        if reading["type"] == f"measure:{unit}"
+    ] == [(f"measure:{unit}", surface)]
+
+
 def test_default_volt_reader_guards_ambiguous_surfaces_only():
     gang = flexible_detectors("en_US")
     reader = next(reader for reader in gang.detectors if reader.type == "measure:volt")
@@ -475,6 +495,60 @@ class _V010FlexibleMeasureDetector(FlexibleMeasureDetector):
         if has_space and self._is_guarded_detached(surface, width, expects_space, unit):
             return "detached"
         return None
+
+
+def _v010_default_units(locale):
+    language = icu.Locale(locale).getLanguage()
+    return tuple(
+        dict.fromkeys(
+            (
+                *_preferred_units(locale, (icu.Locale(locale).getName(),)),
+                *(
+                    unit.getIdentifier()
+                    for unit_type in ("duration", "digital")
+                    for unit in icu.MeasureUnit.getAvailable(unit_type)
+                    if unit.getIdentifier() and not unit.getIdentifier().endswith("-person")
+                ),
+                *curated_composed_units(language),
+            )
+        )
+    )
+
+
+def _accepted_surface_map(readers):
+    accepted = {}
+    for reader in readers:
+        for surface, unit, source, spaced in reader._accepted_unit_surfaces():
+            key = (surface, unit, source)
+            accepted[key] = accepted.get(key, False) or spaced
+    return accepted
+
+
+@pytest.mark.parametrize("locale", ["en_US", "de_DE", "ru_RU", "hy_AM", "ka_GE", "zh_CN"])
+@pytest.mark.parametrize("default_selection", [True, False], ids=["default", "explicit"])
+def test_v010_default_surfaces_remain_in_the_ordinary_or_guarded_lattice(locale, default_selection):
+    for unit in _v010_default_units(locale):
+        try:
+            baseline = _V010FlexibleMeasureDetector(locale, unit, locales=())
+            ordinary = _flexible_measure_detector(
+                locale,
+                unit,
+                locales=(),
+                default_selection=default_selection,
+            )
+        except (icu.ICUError, ValueError):
+            continue
+        readers = [ordinary]
+        for guarded_class in (FlexibleDetachedUnitDetector, FlexibleAmbiguousUnitDetector):
+            try:
+                readers.append(guarded_class(locale, unit, locales=()))
+            except (icu.ICUError, ValueError):
+                pass
+        previous = _accepted_surface_map((baseline,))
+        current = _accepted_surface_map(readers)
+        for surface, spaced in previous.items():
+            assert surface in current, (locale, unit, surface)
+            assert not spaced or current[surface], (locale, unit, surface)
 
 
 @pytest.mark.parametrize("locale", ["en_US", "de_DE", "fr_FR", "ja_JP", "ru_RU", "zh_CN"])
@@ -515,24 +589,75 @@ def test_the_ambiguous_unit_family_is_independently_selectable():
 
 
 @pytest.mark.parametrize(
-    ("locale", "unit", "text"),
+    ("locale", "text", "surface"),
     [
-        ("de_DE", "inch", "2007 in"),
-        ("de_DE", "g-force", "3G"),
-        ("en_US", "stone", "21st"),
-        ("en_US", "farad", "02 F"),
-        ("en_US", "kelvin", "81K"),
-        ("en_US", "siemens", "1S"),
-        ("es_ES", "henry", "24H"),
-        ("es_ES", "mile-scandinavian", "25 mil"),
+        ("ru_RU", "5 В класс", "5 В"),
+        ("uk_UA", "5 В клас", "5 В"),
+        ("hy_AM", "5 Վ դասարան", "5 Վ"),
+        ("ka_GE", "5 ვ კლასი", "5 ვ"),
     ],
 )
-def test_running_text_collision_witnesses_are_guarded(locale, unit, text):
+def test_non_ascii_single_letter_volt_witnesses_are_guarded(locale, text, surface):
+    ordinary = [
+        reading
+        for reading in flexible_detectors(locale).detect(text)
+        if reading["type"] == "measure:volt"
+    ]
+    guarded = [
+        (reading["type"], reading["text"])
+        for reading in flexible_detectors(locale, guarded=True).detect(text)
+        if reading["type"] == "measure:ambiguous-unit:volt"
+    ]
+
+    assert ordinary == []
+    assert guarded == [("measure:ambiguous-unit:volt", surface)]
+
+
+def test_single_letter_grapheme_with_a_trailing_period_is_guarded():
+    ordinary = next(
+        reader for reader in flexible_detectors("ta_IN").detectors if reader.type == "measure:volt"
+    )
+    guarded = FlexibleAmbiguousUnitDetector("ta_IN", "volt", locales=())
+
+    assert ordinary.detect("5 வோ.") == []
+    assert [(reading["type"], reading["text"]) for reading in guarded.detect("5 வோ.")] == [
+        ("measure:ambiguous-unit:volt", "5 வோ.")
+    ]
+
+
+@pytest.mark.parametrize(
+    ("locale", "unit", "text"),
+    [
+        ("de_DE", "inch", "2007 in Norden"),
+        ("es_ES", "mile-scandinavian", "25 mil"),
+        ("en_US", "point", "10 point"),
+        ("en_US", "point", "10 points"),
+        ("en_US", "point", "10 pt"),
+    ],
+)
+def test_unwitnessed_word_and_wide_surfaces_are_not_guarded(locale, unit, text):
     assert FlexibleMeasureDetector(locale, unit).detect(text)
-    assert FlexibleAmbiguousUnitDetector(locale, unit).detect(text)
+    with pytest.raises(ValueError, match="no guarded ambiguous surface"):
+        FlexibleAmbiguousUnitDetector(locale, unit, locales=())
 
 
-def test_detached_unit_locale_selections_coexist_without_leaking_readings():
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"locales": ("en_US",)},
+        {"units": ("meter",)},
+        {"locales": ("en_US",), "units": ("meter",)},
+    ],
+)
+def test_guarded_unit_families_remain_complete_when_ordinary_readers_are_narrowed(options):
+    assert [
+        (reading["type"], reading["text"])
+        for reading in flexible_detectors("en_US", guarded=True, **options).detect("5 V")
+        if reading["type"] == "measure:ambiguous-unit:volt"
+    ] == [("measure:ambiguous-unit:volt", "5 V")]
+
+
+def test_detached_unit_family_is_complete_while_direct_readers_keep_locale_selections():
     italy = FlexibleDetachedUnitDetector("it_IT", "inch", locales=())
     switzerland = FlexibleDetachedUnitDetector("it_CH", "inch", locales=())
     assert detector_key(italy) != detector_key(switzerland)
@@ -547,11 +672,8 @@ def test_detached_unit_locale_selections_coexist_without_leaking_readings():
     assert own is flexible_detectors("en_US", locales=(), units=("inch",), guarded=True)
     assert widened is flexible_detectors("en_US", locales=("en_GB",), units=("inch",), guarded=True)
     assert own is not widened
-    assert detector_key(own_reader) != detector_key(widened_reader)
-    assert DetectorSet(()).with_(own_reader, widened_reader).detectors == (
-        own_reader,
-        widened_reader,
-    )
+    assert detector_key(own_reader) == detector_key(widened_reader)
+    assert DetectorSet(()).with_(own_reader, widened_reader).detectors == (widened_reader,)
 
     text = '1 "'
     expected = [(type_, text)]
@@ -560,7 +682,7 @@ def test_detached_unit_locale_selections_coexist_without_leaking_readings():
 
     own_compiled = DetectorSet((own_reader,)).compile(warm=False)
     widened_compiled = DetectorSet((widened_reader,)).compile(warm=False)
-    assert own_compiled.key.readers != widened_compiled.key.readers
+    assert own_compiled.key.readers == widened_compiled.key.readers
     assert [(item["type"], item["text"]) for item in own_compiled.detect(text)] == expected
     assert [(item["type"], item["text"]) for item in widened_compiled.detect(text)] == expected
 

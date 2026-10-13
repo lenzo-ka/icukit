@@ -121,9 +121,9 @@ def test_ambiguous_unit_availability_is_guarded_and_typed_separately():
         for row in availability("en_US", guarded=True)
         if row.family == "ambiguous-unit" and row.spec == "watt"
     )
-    assert watt.type is None
-    assert watt.source is None
-    assert watt.reason == "ICU exposes no guarded ambiguous surface for unit: 'watt'"
+    assert watt.type == "measure:ambiguous-unit:watt"
+    assert watt.source == "icu"
+    assert watt.reason is None
 
 
 def test_inline_curated_families_are_unavailable_without_a_language_table():
@@ -160,8 +160,8 @@ _GANGS_BEFORE = {
         "823c4241f43fe0e73e7c7c6f15f9780e5301cbd33a96f393ba7857b1cd05aa58",
     ),
     ("en_US", True): (
-        436,
-        "d4f4acc3a89c1c21b72aa03340ed751dd82ce9706bff819bddf36b23c6f83bd8",
+        456,
+        "cd54a23dbe91754d719841b204850fbc6b2677bce5600ebd85b5029bbba61ca3",
         "2d14df990633d737cfa578a6db989d8c30c8c9a890122042836ad393df932e1d",
     ),
     ("de", False): (
@@ -170,8 +170,8 @@ _GANGS_BEFORE = {
         "8b0e7b6cbfe7f449406bf79b1eb2a0f98674f7c83675b4ce9eebb25d266da78e",
     ),
     ("de", True): (
-        306,
-        "64f22871cfd1253a75b72df365679fad5ca8e8c0e0d43eba7991afcbd97ad195",
+        326,
+        "bf1476acd13010978d9a92709b0c57e5935078a05dc17c6573c10bc11c0cec83",
         "0c131cc9d1dd95331487a9a97ef5b6a7e9e8b7acf6a11b2de0492888358651f9",
     ),
     ("ja_JP", False): (
@@ -180,8 +180,8 @@ _GANGS_BEFORE = {
         "32eb8f4e413a32659b3e7f7721cd2525ef57ff02f07e8374f5ff85a9d6dafc7f",
     ),
     ("ja_JP", True): (
-        280,
-        "716158f88d5a7912788584341c5f494e5cf194da3ffd0b7b6fe5683d59eab8d1",
+        320,
+        "099ddffff7ce5f6c2d6bf1ea79bea0ebda5cddbecd83d175c031f9f21fe83b4e",
         "870c7f6008e3d09cd73d12505bfa9e119062af7789c67cc7a6008618ab0f3087",
     ),
     ("yo", False): (
@@ -190,8 +190,8 @@ _GANGS_BEFORE = {
         "c1b899734e4fb802a42bd8dc7fcc41a5caf8eddfed633948ce09a35e5d293577",
     ),
     ("yo", True): (
-        269,
-        "26e38ca3464d73722da34e3bf1f0abc67a7403077756b91dc89d8fe500c09d9c",
+        279,
+        "179ddcb64119da4a9dab1b32db1eeddb3a12b8a6916737395ec659ff3a4e9e2e",
         "8cbedd85266bbce9b50e09dd7c91d3b6f45c7c3f613ae49533384e0ef837baf0",
     ),
 }

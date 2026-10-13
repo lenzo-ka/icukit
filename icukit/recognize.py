@@ -4868,16 +4868,15 @@ def _measure_surfaces(
     return list(surfaces), list(rates)
 
 
-_AMBIGUOUS_SINGLE_LETTER_UNITS = frozenset(
-    {
-        "farad",
-        "g-force",
-        "henry",
-        "kelvin",
-        "siemens",
-        "volt",
-    }
-)
+@cache
+def _is_single_letter_surface(surface: str) -> bool:
+    """Whether ``surface`` is one Unicode letter grapheme, optionally period-ended."""
+    base = surface.removesuffix(".")
+    return (
+        bool(base)
+        and sum(icu.Char.isalpha(character) for character in base) == 1
+        and len(break_grapheme_spans(base, "root")) == 1
+    )
 
 
 class FlexibleMeasureDetector(_GatedReader):
@@ -4916,6 +4915,7 @@ class FlexibleMeasureDetector(_GatedReader):
 
     def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale
+        self._language = icu.Locale(locale).getLanguage()
         self.locales = _locale_selection(locale, locales)
         self.unit = unit
         self.type = f"measure:{unit}"
@@ -4937,14 +4937,13 @@ class FlexibleMeasureDetector(_GatedReader):
         self._spaced_unit_surfaces = {
             (surface, target) for surface, _width, spaced, target in self._units if spaced
         }
-        language = icu.Locale(locale).getLanguage()
         wide = {
             (surface, target) for surface, width, _spaced, target in self._units if width == "wide"
         }
         abbreviations = {
             (surface, width, target)
             for surface, width, _spaced, target in self._units
-            if language == "en"
+            if self._language == "en"
             and width != "wide"
             and (surface, target) not in wide
             and len(surface.rsplit(" ", 1)[-1]) > 1
@@ -5064,34 +5063,16 @@ class FlexibleMeasureDetector(_GatedReader):
             and surface in {'"', "'", "″", "′"}
         )
 
-    def _is_guarded_ambiguous(self, surface: str, unit: str) -> bool:
-        """Whether a surface has running-text meanings less specific than its unit."""
-        base_unit = unit.removeprefix("per-")
-        if (
-            base_unit in _AMBIGUOUS_SINGLE_LETTER_UNITS
-            and len(surface) == 1
-            and surface.isascii()
-            and surface.isalpha()
-        ):
-            return True
-        if base_unit in {"arc-minute", "arc-second"} and not any(
-            character.isalnum() for character in surface
-        ):
-            return True
-        folded = surface.casefold()
-        language = icu.Locale(self.locale).getLanguage()
-        return (
-            (base_unit == "stone" and folded == "st")
-            or base_unit == "point"
-            or (base_unit == "inch" and language == "de" and folded == "in")
-            or (
-                base_unit == "mile-scandinavian"
-                and language not in {"da", "fi", "is", "nb", "nn", "sv"}
-                and folded == "mil"
-            )
-            or (base_unit == "part" and unit.startswith("per-"))
-            or (base_unit == "em" and unit.startswith("per-") and folded in {"/em", "per em"})
-        )
+    def _is_guarded_ambiguous(self, surface: str, _unit: str) -> bool:
+        """Whether evidence makes a surface ambiguous in ordinary running text.
+
+        A Unicode letter occupying one grapheme is ambiguous in every script, with or
+        without a trailing period. Longer surfaces are guarded only when the census or
+        multilingual running-text sample shows that exact surface is an ordinary word
+        of the locale. No longer surface of the units added to the default selection
+        currently has such a witness, so there is no word-surface table.
+        """
+        return _is_single_letter_surface(surface)
 
     def _guarded_kind(
         self, surface: str, width: str, expects_space: bool, unit: str, has_space: bool
@@ -5343,9 +5324,10 @@ class FlexibleDetachedUnitDetector(FlexibleMeasureDetector):
 class FlexibleAmbiguousUnitDetector(FlexibleMeasureDetector):
     """Recognize only unit spellings guarded for ordinary running-text collisions.
 
-    Scientific one-letter symbols and the small set of word and punctuation forms
-    demonstrated ambiguous by the unit census are absent from the ordinary measure
-    reader. This reader preserves those paths under
+    Single-letter surfaces in every script, plus any longer locale words demonstrated
+    ambiguous by the unit census or running-text sample, are absent from the ordinary
+    readers of units newly added to the default selection. No such longer word is
+    currently guarded. This reader preserves the single-letter paths under
     ``measure:ambiguous-unit:<unit>`` for consumers that opt in.
     """
 

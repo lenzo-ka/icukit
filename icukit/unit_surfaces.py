@@ -115,26 +115,48 @@ def _unit_surface_inventory(
     locale: str,
     locales: tuple[str, ...] | None,
     units: tuple[str, ...] | None,
+    guarded: bool,
 ) -> tuple[UnitSurface, ...]:
     # Import lazily so the declarative curated accessors remain independent at import
     # time while the public inventory follows the reader's acceptance implementation.
-    from .engine import _flexible_measure_detector, _single_units
+    from .engine import _flexible_measure_detector, _icu_single_units, _single_units
+    from .recognize import FlexibleAmbiguousUnitDetector, FlexibleDetachedUnitDetector
 
     selected = _single_units(locale, locales, units)
-    rows: dict[UnitSurface, None] = {}
-    for unit in selected:
-        try:
-            reader = _flexible_measure_detector(
-                locale,
-                unit,
-                locales=locales,
-                default_selection=units is None,
+    readers = (
+        (_flexible_measure_detector, selected, locales, units is None),
+        *(
+            (
+                (FlexibleDetachedUnitDetector, _single_units(locale, None, None), None, False),
+                (FlexibleAmbiguousUnitDetector, _icu_single_units(), None, False),
             )
-        except (icu.ICUError, ValueError):
-            continue
-        for surface, target, source, spaced in reader._accepted_unit_surfaces():
-            rows.setdefault(UnitSurface(surface, target, source, spaced))
-    return tuple(sorted(rows, key=lambda row: (row.surface, row.unit, row.source, row.spaced)))
+            if guarded
+            else ()
+        ),
+    )
+    rows: dict[tuple[str, str, UnitSurfaceSource], bool] = {}
+    for build, selected_units, reader_locales, default_selection in readers:
+        for unit in selected_units:
+            try:
+                if build is _flexible_measure_detector:
+                    reader = build(
+                        locale,
+                        unit,
+                        locales=reader_locales,
+                        default_selection=default_selection,
+                    )
+                else:
+                    reader = build(locale, unit, locales=reader_locales)
+            except (icu.ICUError, ValueError):
+                continue
+            for surface, target, source, spaced in reader._accepted_unit_surfaces():
+                key = (surface, target, source)
+                rows[key] = rows.get(key, False) or spaced
+    inventory = (
+        UnitSurface(surface, unit, source, spaced)
+        for (surface, unit, source), spaced in rows.items()
+    )
+    return tuple(sorted(inventory, key=lambda row: (row.surface, row.unit, row.source, row.spaced)))
 
 
 def _canonical_units(units: Iterable[str] | None) -> tuple[str, ...] | None:
@@ -168,6 +190,7 @@ def unit_surface_inventory(
     *,
     locales: Iterable[str] | None = None,
     units: Iterable[str] | None = None,
+    guarded: bool = False,
 ) -> tuple[UnitSurface, ...]:
     """Return the unit surfaces accepted by flexible measure readers for ``locale``.
 
@@ -183,19 +206,22 @@ def unit_surface_inventory(
     require whitespace are guarded and are not accepted by this inventory. Ambiguous
     spellings of units newly added to the default selection are also guarded in the
     default inventory; an explicit ``units=`` selection reports all spellings its
-    directly constructed readers accept.
+    directly constructed readers accept. ``guarded=True`` adds the complete detached
+    and ambiguous unit families, just as :func:`~icukit.flexible_detectors` does; those
+    additions are not narrowed by ``locales`` or ``units``.
 
     Args:
         locale: ICU locale identifier for the readers.
         locales: Optional same-language locale selection, as for ``flexible_detectors``.
         units: Optional ICU unit identifiers, as for ``flexible_detectors``.
+        guarded: Whether to include the complete guarded unit families.
 
     Raises:
         ValueError: If a selected unit identifier is unknown or non-canonical. The
             message includes that identifier.
     """
     locale_selection, unit_selection = _selections(locale, locales, units)
-    return _unit_surface_inventory(locale, locale_selection, unit_selection)
+    return _unit_surface_inventory(locale, locale_selection, unit_selection, guarded)
 
 
 @cache
@@ -203,8 +229,11 @@ def _unit_surface_texts(
     locale: str,
     locales: tuple[str, ...] | None,
     units: tuple[str, ...] | None,
+    guarded: bool,
 ) -> frozenset[str]:
-    return frozenset(row.surface for row in _unit_surface_inventory(locale, locales, units))
+    return frozenset(
+        row.surface for row in _unit_surface_inventory(locale, locales, units, guarded)
+    )
 
 
 def is_unit_surface(
@@ -213,6 +242,7 @@ def is_unit_surface(
     *,
     locales: Iterable[str] | None = None,
     units: Iterable[str] | None = None,
+    guarded: bool = False,
 ) -> bool:
     """Whether ``text`` is a unit surface in :func:`unit_surface_inventory`.
 
@@ -221,4 +251,4 @@ def is_unit_surface(
             message includes that identifier.
     """
     locale_selection, unit_selection = _selections(locale, locales, units)
-    return text in _unit_surface_texts(locale, locale_selection, unit_selection)
+    return text in _unit_surface_texts(locale, locale_selection, unit_selection, guarded)
