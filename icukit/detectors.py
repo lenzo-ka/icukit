@@ -1047,10 +1047,6 @@ class DateDetector(_GatedReader):
             self._inv,
             gate=self._start_gates["scan"],
             stats_key=self._lane_key("scan"),
-            allow_interior_start=(lambda start: start > 0 and icu.Char.isdigit(text[start - 1]))
-            if self._literal_hour
-            and any(not starts for starts, _ in self._pattern_digit_edges.values())
-            else None,
         )
         if not self._guard_literal_hour_boundaries:
             return found
@@ -1638,15 +1634,10 @@ def _scan_step(
     type_label: str,
     inv: _Inverter,
     ctx: _ScanContext,
-    *,
-    allow_interior_start: Callable[[int], bool] | None = None,
 ) -> ValueDetection | None:
     """Run the strict matcher at one start, refusing only impossible endpoints."""
     del locale  # the context already embodies the locale's grapheme and word rules
-    if start_cp not in ctx.boundaries or (
-        start_cp in ctx.interior
-        and (allow_interior_start is None or not allow_interior_start(start_cp))
-    ):
+    if start_cp not in ctx.boundaries or start_cp in ctx.interior:
         return None
     result = inv.parse(ctx.ustr, ctx.cp_to_u16[start_cp])
     if result is None:
@@ -1729,7 +1720,6 @@ def _scan(
     *,
     gate: StartGate | None = None,
     stats_key: str | None = None,
-    allow_interior_start: Callable[[int], bool] | None = None,
 ) -> list[ValueDetection]:
     """Windowed detection with reformat-equality acceptance and greedy longest-match.
 
@@ -1738,15 +1728,13 @@ def _scan(
     reversed, out of range, or inside a surrogate pair is a :class:`DetectorRefusal`.
     An accepted span must reproduce the formatter's canonical output exactly (rejecting
     ICU's permissive coercions), and ordinarily may neither start nor end inside a word
-    between two alphanumerics (see :func:`_word_interior_offsets`). A detector may admit
-    selected interior starts for a leading literal that its exact reformatting check
-    validates. After a match ``[s, e)`` the scan resumes at ``e`` so one detector never
-    self-overlaps.
+    between two alphanumerics (see :func:`_word_interior_offsets`). After a match
+    ``[s, e)`` the scan resumes at ``e`` so one detector never self-overlaps.
     """
     plan = _scan_plan_for(text, locale, gate)
     ctx = _scan_context_from_plan(text, locale, plan)
     inspect_gate = GATE_STATS and gates_enabled() and gate is not None
-    if allow_interior_start is None and text and len(ctx.interior) == len(text) - 1:
+    if text and len(ctx.interior) == len(text) - 1:
         # Every offset after zero is inside one uninterrupted word. Strict readers can
         # therefore try only zero; iterating an admitted start at every digit made each
         # reader rescan an already-proved interior on long digit runs. Gate diagnostics
@@ -1770,9 +1758,7 @@ def _scan(
     for start_cp in starts:
         if start_cp < cursor:
             continue  # greedy: inside a prior match
-        if start_cp in ctx.interior and (
-            allow_interior_start is None or not allow_interior_start(start_cp)
-        ):
+        if start_cp in ctx.interior:
             continue  # a fragment of a longer token
         if inspect_gate and not gate.admits(text[start_cp]):
             _record(stats_key, "gated_out")
@@ -1786,7 +1772,6 @@ def _scan(
                         type_label,
                         inv,
                         ctx,
-                        allow_interior_start=allow_interior_start,
                     ),
                 )
             continue
@@ -1800,7 +1785,6 @@ def _scan(
                 type_label,
                 inv,
                 ctx,
-                allow_interior_start=allow_interior_start,
             )
         except Exception:
             if GATE_STATS:
