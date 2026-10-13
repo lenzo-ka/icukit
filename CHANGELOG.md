@@ -14,6 +14,19 @@
   `is_unit_surface()` tests membership in the same locale and unit selection. Invalid
   unit identifiers raise `ValueError` from both functions.
 
+### Fixed
+
+- Literal-hour readers no longer reject a complete ICU surface merely because a word
+  literal borders punctuation and a digit. Numeric run guards now apply only at a
+  pattern boundary that writes digits. Complete hour surfaces are kept as range
+  endpoints, including the right endpoint of ICU interval forms such as `09 Uhr` in
+  `08–09 Uhr`, since each is a complete reading of that endpoint.
+  Numeric field fragments such as `00 Uhr` within `08:00 Uhr` and `8时` within
+  `8时30分` remain excluded, and no reading starts inside an ICU word. This corrects the
+  0.10.0 entry, which said these readers do not start or end inside a longer date, time,
+  or range token: they do not start or end inside a longer number or time token, and
+  complete hour surfaces are kept as range endpoints.
+
 ## [0.10.0] - 2026-10-12
 
 ### Added
