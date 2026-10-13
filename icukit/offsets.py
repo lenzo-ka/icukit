@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections.abc import Iterable
 from typing import Literal, TypeAlias
 
@@ -18,24 +19,33 @@ _UNITS = frozenset(("codepoint", "utf8", "utf16"))
 class TextOffsets:
     """Convert any number of boundaries in one text using one shared map.
 
-    Offsets must identify boundaries between Unicode code points. An offset outside
-    its coordinate system raises :class:`IndexError`; a UTF-8 byte offset or UTF-16
-    code-unit offset inside a character raises :class:`ValueError`.
+    ``text`` is a read-only property. Offsets must identify boundaries between Unicode
+    code points. An offset outside its coordinate system raises :class:`IndexError`; a
+    UTF-8 byte offset or UTF-16 code-unit offset inside a character raises
+    :class:`ValueError`.
+
+    Python strings containing lone surrogates are supported. Their UTF-8 widths use
+    Python's ``surrogatepass`` error handling, so each surrogate occupies three bytes.
 
     Args:
         text: The text whose boundaries will be converted.
+
+    Raises:
+        TypeError: If ``text`` is not a string.
     """
 
-    __slots__ = ("_maps", "_utf8_to_cp", "text")
+    __slots__ = ("_maps", "_text")
 
     def __init__(self, text: str) -> None:
-        self.text = text
+        if not isinstance(text, str):
+            raise TypeError(f"text must be a str, not {type(text).__name__}")
+        self._text = text
         self._maps = offset_maps(text)
-        # Internal ICU consumers only need reverse UTF-16 lookup. Build the otherwise
-        # unnecessary UTF-8 reverse index here so existing span readers pay no cost.
-        self._utf8_to_cp = {
-            utf8_offset: codepoint for codepoint, utf8_offset in enumerate(self._maps.cp_to_utf8)
-        }
+
+    @property
+    def text(self) -> str:
+        """The mapped text. This property is read-only."""
+        return self._text
 
     def convert(
         self,
@@ -80,7 +90,13 @@ class TextOffsets:
                 self._raise_out_of_range(offset, source, maximum)
             return offset
         if source == "utf8":
-            return self._reverse(offset, source, self._utf8_to_cp, self._maps.cp_to_utf8[-1])
+            maximum = self._maps.cp_to_utf8[-1]
+            if not 0 <= offset <= maximum:
+                self._raise_out_of_range(offset, source, maximum)
+            codepoint = bisect_left(self._maps.cp_to_utf8, offset)
+            if self._maps.cp_to_utf8[codepoint] != offset:
+                raise ValueError(f"{source} offset {offset} is not a code-point boundary")
+            return codepoint
         return self._reverse(offset, source, self._maps.utf16_to_cp, self._maps.cp_to_utf16[-1])
 
     @staticmethod

@@ -55,6 +55,26 @@ def test_empty_text_has_one_boundary():
     assert offsets.convert((0,), source="utf8", target="utf16") == (0,)
 
 
+def test_lone_surrogates_use_surrogatepass_utf8_widths():
+    offsets = TextOffsets("\ud800a\udcff")
+
+    assert offsets.convert((0, 1, 2, 3), source="codepoint", target="utf8") == (0, 3, 4, 7)
+    assert offsets.convert((0, 3, 4, 7), source="utf8", target="utf16") == (0, 1, 2, 3)
+
+
+def test_text_must_be_a_string():
+    with pytest.raises(TypeError, match="text must be a str, not bytes"):
+        TextOffsets(b"ab")
+
+
+def test_text_is_read_only():
+    offsets = TextOffsets("ab")
+
+    assert offsets.text == "ab"
+    with pytest.raises(AttributeError):
+        offsets.text = "😀😀"
+
+
 def test_offsets_must_be_integers():
     with pytest.raises(TypeError, match="offset must be an int"):
         TextOffsets("a").convert((True,), source="codepoint", target="utf8")

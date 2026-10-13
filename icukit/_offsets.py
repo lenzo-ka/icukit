@@ -33,7 +33,7 @@ def _build_offset_maps(text: str) -> OffsetMaps:
     utf8_offset = 0
     utf16_offset = 0
     for cp_index, char in enumerate(text, 1):
-        utf8_offset += len(char.encode("utf-8"))
+        utf8_offset += len(char.encode("utf-8", errors="surrogatepass"))
         utf16_offset += 2 if ord(char) > 0xFFFF else 1
         cp_to_utf8.append(utf8_offset)
         cp_to_utf16.append(utf16_offset)
