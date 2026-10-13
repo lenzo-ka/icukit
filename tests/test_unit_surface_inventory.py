@@ -6,7 +6,7 @@ import pytest
 
 from icukit import UnitSurface, flexible_detectors, is_unit_surface, unit_surface_inventory
 from icukit.detectors import DetectorSet
-from icukit.recognize import FlexibleMeasureDetector
+from icukit.recognize import FlexibleAmbiguousUnitDetector, FlexibleMeasureDetector
 
 
 def _measure_gang(locale, *, locales=None, units=None):
@@ -118,6 +118,13 @@ def test_empty_and_default_unit_selections_are_distinct():
     assert unit_surface_inventory("en_US")
 
 
+@pytest.mark.parametrize("locale", ["en_US", "de_DE", "fr_FR", "ja_JP", "ru_RU", "zh_CN"])
+def test_widened_default_inventory_includes_the_measured_high_gain_units(locale):
+    units = {row.unit for row in unit_surface_inventory(locale)}
+
+    assert {"megahertz", "micrometer", "nanometer", "volt"} <= units
+
+
 def test_mixed_identifiers_are_omitted_because_components_own_the_surfaces():
     assert unit_surface_inventory("en_US", units=("foot-and-inch",)) == ()
 
@@ -128,3 +135,14 @@ def test_detached_quote_and_prime_surfaces_are_marked_attached_only():
 
     assert marks
     assert all(not row.spaced for row in marks)
+
+
+def test_ambiguous_surfaces_are_absent_from_the_default_inventory_and_reachable():
+    inventory = unit_surface_inventory("en_US", locales=(), units=("volt",))
+    guarded = FlexibleAmbiguousUnitDetector("en_US", "volt", locales=())
+    guarded_surfaces = {row[0] for row in guarded._accepted_unit_surfaces()}
+
+    assert "V" in guarded_surfaces
+    assert not is_unit_surface("V", "en_US", locales=(), units=("volt",))
+    assert is_unit_surface("volts", "en_US", locales=(), units=("volt",))
+    assert not guarded_surfaces & {row.surface for row in inventory}

@@ -167,16 +167,17 @@ def unit_surface_inventory(
 ) -> tuple[UnitSurface, ...]:
     """Return the unit surfaces accepted by flexible measure readers for ``locale``.
 
-    ``units=None`` selects exactly the CLDR-preferred, duration, digital, and
-    curated composed units selected by :func:`~icukit.flexible_detectors`. Passing
-    ``units`` selects the corresponding single-unit readers explicitly; ``units=()``
-    therefore selects none. Mixed-unit identifiers are omitted because their component
-    readers use these same surfaces.
+    ``units=None`` selects exactly the CLDR-preferred, duration, digital, frequency,
+    volt, micrometer, nanometer, and curated composed units selected by
+    :func:`~icukit.flexible_detectors`. Passing ``units`` selects the corresponding
+    single-unit readers explicitly; ``units=()`` therefore selects none. Mixed-unit
+    identifiers are omitted because their component readers use these same surfaces.
 
     ICU-derived and curated rows come from the constructed
     :class:`~icukit.FlexibleMeasureDetector`, along with its accepted English
     punctuation variants and spacing rules. Detached quote and prime spellings that
-    require whitespace are guarded and are not accepted by this default inventory.
+    require whitespace and ambiguous running-text spellings are guarded and are not
+    accepted by this default inventory.
 
     Args:
         locale: ICU locale identifier for the readers.

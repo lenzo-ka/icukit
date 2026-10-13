@@ -12,6 +12,7 @@ import pytest
 from icukit import DetectorSet
 from icukit.detectors import DateTimeValue, NumberValue, detector_key
 from icukit.engine import (
+    AMBIGUOUS_UNIT_FAMILY,
     DEFAULT_FAMILIES,
     DETACHED_UNIT_FAMILY,
     GUARDED_FAMILIES,
@@ -19,11 +20,13 @@ from icukit.engine import (
     generated_detectors,
 )
 from icukit.recognize import (
+    FlexibleAmbiguousUnitDetector,
     FlexibleBareHourDetector,
     FlexibleDateTimeDetector,
     FlexibleDetachedUnitDetector,
     FlexibleLoneSpelloutDetector,
     FlexibleLowercaseRomanDetector,
+    FlexibleMeasureDetector,
     FlexibleMonthNameDetector,
     FlexibleNumberDetector,
     FlexibleShortYearDateDetector,
@@ -44,6 +47,7 @@ GUARDED_TYPES = {
     "time:bare-hour",
     "date-interval:short-year:y",
     "measure:detached-unit:inch",
+    "measure:ambiguous-unit:volt",
 }
 
 
@@ -404,6 +408,47 @@ def test_the_detached_unit_family_is_independently_selectable():
     ]
     direct = FlexibleDetachedUnitDetector("en_US", "inch").detect("62 ″")
     assert found == [("measure:detached-unit:inch", "62 ″", direct[0]["value"])]
+
+
+def test_ambiguous_unit_surfaces_are_only_read_under_the_guarded_type():
+    ordinary = FlexibleMeasureDetector("en_US", "volt")
+    guarded = FlexibleAmbiguousUnitDetector("en_US", "volt")
+
+    assert [
+        row["text"] for row in ordinary.detect("The supply is 5 V but 5 volts is written out.")
+    ] == ["5 volts"]
+    assert [(row["type"], row["text"]) for row in guarded.detect("The supply is 5 V.")] == [
+        ("measure:ambiguous-unit:volt", "5 V")
+    ]
+
+
+def test_the_ambiguous_unit_family_is_independently_selectable():
+    assert AMBIGUOUS_UNIT_FAMILY in GUARDED_FAMILIES
+    gang = generated_detectors("en_US", (AMBIGUOUS_UNIT_FAMILY,))
+
+    assert [
+        (reading["type"], reading["text"])
+        for reading in gang.detect("5 V")
+        if reading["start"] == 0 and reading["end"] == 3
+    ] == [("measure:ambiguous-unit:volt", "5 V")]
+
+
+@pytest.mark.parametrize(
+    ("locale", "unit", "text"),
+    [
+        ("de_DE", "inch", "2007 in"),
+        ("de_DE", "g-force", "3G"),
+        ("en_US", "stone", "21st"),
+        ("en_US", "farad", "02 F"),
+        ("en_US", "kelvin", "81K"),
+        ("en_US", "siemens", "1S"),
+        ("es_ES", "henry", "24H"),
+        ("es_ES", "mile-scandinavian", "25 mil"),
+    ],
+)
+def test_running_text_collision_witnesses_are_guarded(locale, unit, text):
+    assert not FlexibleMeasureDetector(locale, unit).detect(text)
+    assert FlexibleAmbiguousUnitDetector(locale, unit).detect(text)
 
 
 def test_detached_unit_locale_selections_coexist_without_leaking_readings():

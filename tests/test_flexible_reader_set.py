@@ -35,6 +35,7 @@ from icukit.engine import _current_currencies, generated_detectors
 LOCALES = ("en_US", "de_DE", "ja_JP")
 
 GUARDED_CLASSES = {
+    "FlexibleAmbiguousUnitDetector",
     "FlexibleBareHourDetector",
     "FlexibleDetachedUnitDetector",
     "FlexibleLoneSpelloutDetector",
@@ -50,8 +51,9 @@ OPT_IN_CLASSES = {"MaterialLoneSpelloutDetector", "MaterialSpelloutDetector"}
 # The measure range readers' types, which name no unit.
 RANGE_TYPES = {"measure:range", "measure:approximately"}
 
-# The units every one of the three locales reads: the world's preferences, ICU's duration
-# and digital types, and the runs of CLDR's duration order.
+# The units every one of the three locales reads: the world's preferences; ICU's
+# duration, digital, and frequency types; the high-yield volt, micrometer, and
+# nanometer units; and the runs of CLDR's duration order.
 COMMON_UNITS = {
     "barrel",
     "bit",
@@ -140,6 +142,16 @@ COMMON_UNITS = {
     "year",
     "year-person",
     "year-person-and-month-person",
+}
+
+COMMON_UNITS |= {
+    "gigahertz",
+    "hertz",
+    "kilohertz",
+    "megahertz",
+    "micrometer",
+    "nanometer",
+    "volt",
 }
 
 EXPECTED_UNITS = {

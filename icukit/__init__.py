@@ -194,6 +194,7 @@ from .duration import WIDTH_WIDE as DURATION_WIDTH_WIDE
 from .duration import DurationFormatter, format_duration, parse_iso_duration
 from .engine import (
     ABBREVIATION_FAMILY,
+    AMBIGUOUS_UNIT_FAMILY,
     BARE_HOUR_FAMILY,
     COMPACT_NUMBER_FAMILY,
     DATE_INTERVAL_FAMILY,
@@ -372,6 +373,7 @@ from .plural import (
 from .recognize import (
     AlphanumericRunsDetector,
     AlphanumericRunsValue,
+    FlexibleAmbiguousUnitDetector,
     FlexibleBareHourDetector,
     FlexibleCompactDetector,
     FlexibleCurrencyDetector,
@@ -533,6 +535,7 @@ __all__ = [
     "availability",
     "available_languages",
     "FlexibleCompactDetector",
+    "FlexibleAmbiguousUnitDetector",
     "FlexibleCurrencyDetector",
     "FlexibleCurrencyNameDetector",
     "FlexibleDateDetector",
@@ -608,6 +611,7 @@ __all__ = [
     "detections_to_json",
     # Abbreviations
     "ABBREVIATION_FAMILY",
+    "AMBIGUOUS_UNIT_FAMILY",
     "BARE_HOUR_FAMILY",
     "COMPACT_NUMBER_FAMILY",
     "DATE_INTERVAL_FAMILY",
