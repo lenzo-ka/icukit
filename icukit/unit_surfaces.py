@@ -118,14 +118,18 @@ def _unit_surface_inventory(
 ) -> tuple[UnitSurface, ...]:
     # Import lazily so the declarative curated accessors remain independent at import
     # time while the public inventory follows the reader's acceptance implementation.
-    from .engine import _single_units
-    from .recognize import FlexibleMeasureDetector
+    from .engine import _flexible_measure_detector, _single_units
 
     selected = _single_units(locale, locales, units)
     rows: dict[UnitSurface, None] = {}
     for unit in selected:
         try:
-            reader = FlexibleMeasureDetector(locale, unit, locales=locales)
+            reader = _flexible_measure_detector(
+                locale,
+                unit,
+                locales=locales,
+                default_selection=units is None,
+            )
         except (icu.ICUError, ValueError):
             continue
         for surface, target, source, spaced in reader._accepted_unit_surfaces():
@@ -176,8 +180,10 @@ def unit_surface_inventory(
     ICU-derived and curated rows come from the constructed
     :class:`~icukit.FlexibleMeasureDetector`, along with its accepted English
     punctuation variants and spacing rules. Detached quote and prime spellings that
-    require whitespace and ambiguous running-text spellings are guarded and are not
-    accepted by this default inventory.
+    require whitespace are guarded and are not accepted by this inventory. Ambiguous
+    spellings of units newly added to the default selection are also guarded in the
+    default inventory; an explicit ``units=`` selection reports all spellings its
+    directly constructed readers accept.
 
     Args:
         locale: ICU locale identifier for the readers.

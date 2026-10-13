@@ -100,7 +100,9 @@
   `units=()` to build no unit readers, or an explicit `units=` iterable to replace the
   default selection. Ambiguous spellings including scientific one-letter symbols
   remain reachable with `guarded=True` or `AMBIGUOUS_UNIT_FAMILY`, under
-  `measure:ambiguous-unit:<unit>` instead of the default measure type.
+  `measure:ambiguous-unit:<unit>` instead of the default measure type. Explicit
+  `units=` selections and directly constructed `FlexibleMeasureDetector` readers keep
+  the same spellings and `measure:<unit>` readings as 0.10.0.
 
 - Decode quoted literals in ICU date-interval separators, and skip interval parsing when
   a text has none of the decoded mandatory literals under the reader's exact separator

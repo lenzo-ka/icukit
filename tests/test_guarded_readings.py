@@ -7,10 +7,11 @@ consumer that wants every path (forced alignment reads "May" as a month and as a
 includes it by type.
 """
 
+import icu
 import pytest
 
 from icukit import DetectorSet
-from icukit.detectors import DateTimeValue, NumberValue, detector_key
+from icukit.detectors import DateTimeValue, MeasureValue, NumberValue, detector_key
 from icukit.engine import (
     AMBIGUOUS_UNIT_FAMILY,
     DEFAULT_FAMILIES,
@@ -410,16 +411,96 @@ def test_the_detached_unit_family_is_independently_selectable():
     assert found == [("measure:detached-unit:inch", "62 ″", direct[0]["value"])]
 
 
-def test_ambiguous_unit_surfaces_are_only_read_under_the_guarded_type():
+def test_direct_measure_readers_retain_ambiguous_surfaces_under_the_measure_type():
     ordinary = FlexibleMeasureDetector("en_US", "volt")
     guarded = FlexibleAmbiguousUnitDetector("en_US", "volt")
 
     assert [
         row["text"] for row in ordinary.detect("The supply is 5 V but 5 volts is written out.")
-    ] == ["5 volts"]
+    ] == ["5 V", "5 volts"]
     assert [(row["type"], row["text"]) for row in guarded.detect("The supply is 5 V.")] == [
         ("measure:ambiguous-unit:volt", "5 V")
     ]
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: FlexibleMeasureDetector("en_US", "volt"),
+        lambda: next(
+            reader
+            for reader in flexible_detectors("en_US", units=("volt",)).detectors
+            if reader.type == "measure:volt"
+        ),
+    ],
+)
+def test_explicit_volt_readers_keep_0_10_0_surfaces_spans_and_values(build):
+    reader = build()
+    cases = [
+        ("12V", "12V", 0, 3, "12"),
+        ("12 V battery", "12 V", 0, 4, "12"),
+        ("1500 V", "1500 V", 0, 6, "1500"),
+        ("-48V", "-48V", 0, 4, "-48"),
+        (".5V", ".5V", 0, 3, "0.5"),
+    ]
+
+    assert [
+        (
+            reading["type"],
+            reading["text"],
+            reading["start"],
+            reading["end"],
+            reading["value"],
+        )
+        for text, _surface, _start, _end, _decimal in cases
+        for reading in reader.detect(text)
+    ] == [
+        ("measure:volt", surface, start, end, MeasureValue(decimal, "volt"))
+        for _text, surface, start, end, decimal in cases
+    ]
+
+
+def test_default_volt_reader_guards_ambiguous_surfaces_only():
+    gang = flexible_detectors("en_US")
+    reader = next(reader for reader in gang.detectors if reader.type == "measure:volt")
+
+    assert reader.detect("12V") == []
+    assert [row["text"] for row in reader.detect("12 volts")] == ["12 volts"]
+
+
+class _V010FlexibleMeasureDetector(FlexibleMeasureDetector):
+    """The 0.10.0 surface policy, used as a direct-construction oracle."""
+
+    def _guarded_kind(self, surface, width, expects_space, unit, has_space):
+        if has_space and self._is_guarded_detached(surface, width, expects_space, unit):
+            return "detached"
+        return None
+
+
+@pytest.mark.parametrize("locale", ["en_US", "de_DE", "fr_FR", "ja_JP", "ru_RU", "zh_CN"])
+def test_direct_measure_reader_retains_every_0_10_0_icu_surface(locale):
+    units = dict.fromkeys(
+        unit.getIdentifier()
+        for unit_type in icu.MeasureUnit.getAvailableTypes()
+        if unit_type != "currency"
+        for unit in icu.MeasureUnit.getAvailable(unit_type)
+        if unit.getIdentifier() and "-and-" not in unit.getIdentifier()
+    )
+
+    for unit in units:
+        try:
+            reader = FlexibleMeasureDetector(locale, unit, locales=())
+            baseline = _V010FlexibleMeasureDetector(locale, unit, locales=())
+        except (icu.ICUError, ValueError):
+            continue
+        texts = set()
+        for surface, _width, expects_space, target in baseline._units:
+            separator = (
+                "" if target != unit and not surface[:1].isalnum() else " " if expects_space else ""
+            )
+            texts.add(f"5{separator}{surface}")
+        for text in texts:
+            assert reader._match(text, 0) == baseline._match(text, 0), (locale, unit, text)
 
 
 def test_the_ambiguous_unit_family_is_independently_selectable():
@@ -447,7 +528,7 @@ def test_the_ambiguous_unit_family_is_independently_selectable():
     ],
 )
 def test_running_text_collision_witnesses_are_guarded(locale, unit, text):
-    assert not FlexibleMeasureDetector(locale, unit).detect(text)
+    assert FlexibleMeasureDetector(locale, unit).detect(text)
     assert FlexibleAmbiguousUnitDetector(locale, unit).detect(text)
 
 

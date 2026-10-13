@@ -4898,9 +4898,11 @@ class FlexibleMeasureDetector(_GatedReader):
     Spacing stays flexible except for detached quote or prime marks. Those do not read
     after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
     :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
-    a separate type. Scientific one-letter symbols and the small set of unit spellings
-    demonstrated to collide with ordinary running text are likewise declined;
-    :class:`FlexibleAmbiguousUnitDetector` preserves them under a guarded type.
+    a separate type. Directly constructed readers retain every other spelling accepted
+    in 0.10.0, including scientific one-letter symbols. The default flexible reader set
+    may decline ambiguous spellings of units newly added to that set;
+    :class:`FlexibleAmbiguousUnitDetector` preserves those spellings under a guarded
+    type.
     A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
     pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
     number directly. A per form written without an amount ("/s", "per second") reads as
@@ -4910,6 +4912,7 @@ class FlexibleMeasureDetector(_GatedReader):
 
     group = "measure"
     _guarded_surface_kind: str | None = None
+    _exclude_ambiguous_surfaces = False
 
     def __init__(self, locale: str, unit: str, *, locales: Iterable[str] | None = None) -> None:
         self.locale = locale
@@ -5096,7 +5099,9 @@ class FlexibleMeasureDetector(_GatedReader):
         """The opt-in family that owns this spelling, if the default declines it."""
         if has_space and self._is_guarded_detached(surface, width, expects_space, unit):
             return "detached"
-        if self._is_guarded_ambiguous(surface, unit):
+        if self._is_guarded_ambiguous(surface, unit) and (
+            self._exclude_ambiguous_surfaces or self._guarded_surface_kind == "ambiguous"
+        ):
             return "ambiguous"
         return None
 
@@ -5216,9 +5221,10 @@ class FlexibleMeasureDetector(_GatedReader):
         for surface, width, _expects_space, unit in self._units:
             if unit == self.unit or not text.startswith(surface, start):
                 continue
-            if self._is_guarded_ambiguous(surface, unit) != (
-                self._guarded_surface_kind == "ambiguous"
-            ):
+            ambiguous = self._is_guarded_ambiguous(surface, unit)
+            if self._guarded_surface_kind == "ambiguous" and not ambiguous:
+                continue
+            if self._exclude_ambiguous_surfaces and ambiguous:
                 continue
             end = start + len(surface)
             if self._continues_word(text, end):

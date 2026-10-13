@@ -1121,6 +1121,35 @@ def _every_region_units() -> tuple[str, ...]:
     )
 
 
+@cache
+def _widened_default_units() -> frozenset[str]:
+    """Units added to the default selection after 0.10.0."""
+    return frozenset(
+        (
+            *(
+                unit.getIdentifier()
+                for unit in icu.MeasureUnit.getAvailable("frequency")
+                if unit.getIdentifier()
+            ),
+            *_EVERY_REGION_ADDITIONAL_UNITS,
+        )
+    )
+
+
+def _flexible_measure_detector(
+    locale: str,
+    unit: str,
+    *,
+    locales: tuple[str, ...] | None,
+    default_selection: bool,
+) -> FlexibleMeasureDetector:
+    """Build a measure reader, guarding only units added to the default selection."""
+    reader = FlexibleMeasureDetector(locale, unit, locales=locales)
+    if default_selection and unit in _widened_default_units():
+        reader._exclude_ambiguous_surfaces = True
+    return reader
+
+
 def _single_units(
     locale: str, locales: tuple[str, ...] | None, units: tuple[str, ...] | None
 ) -> tuple[str, ...]:
@@ -1215,7 +1244,12 @@ def _flexible_families(
         _parameter_family(
             "measure",
             single_units,
-            lambda locale, unit: FlexibleMeasureDetector(locale, unit, locales=locales),
+            lambda locale, unit: _flexible_measure_detector(
+                locale,
+                unit,
+                locales=locales,
+                default_selection=units is None,
+            ),
         ),
         _parameter_family(
             "mixed-measure",
@@ -1437,8 +1471,10 @@ def flexible_detectors(
       measured gain within the per-row cost bound. Pass ICU unit identifiers, single
       or mixed, to choose others.
 
-    Ambiguous unit spellings are withheld from the ordinary measure type and are
-    available under ``measure:ambiguous-unit:<unit>`` when ``guarded=True``.
+    For units added to the default selection above, ambiguous spellings are withheld
+    from the ordinary measure type and are available under
+    ``measure:ambiguous-unit:<unit>`` when ``guarded=True``. Explicit ``units=``
+    selections retain every spelling accepted by their directly constructed readers.
     ``locales`` chooses the other locales of the language the language-wide readers
     read, and the locales the currencies and units are chosen from (every one by
     default). ``guarded`` adds the readers of the readings the default readers refuse on

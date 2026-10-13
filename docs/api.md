@@ -3754,8 +3754,10 @@ A reader that takes a parameter is built for each value chosen from ICU:
   measured gain within the per-row cost bound. Pass ICU unit identifiers, single
   or mixed, to choose others.
 
-Ambiguous unit spellings are withheld from the ordinary measure type and are
-available under ``measure:ambiguous-unit:<unit>`` when ``guarded=True``.
+For units added to the default selection above, ambiguous spellings are withheld
+from the ordinary measure type and are available under
+``measure:ambiguous-unit:<unit>`` when ``guarded=True``. Explicit ``units=``
+selections retain every spelling accepted by their directly constructed readers.
 ``locales`` chooses the other locales of the language the language-wide readers
 read, and the locales the currencies and units are chosen from (every one by
 default). ``guarded`` adds the readers of the readings the default readers refuse on
@@ -6101,9 +6103,11 @@ as "Ch. 5 sec. 2" do not present "5 sec." as a seconds reading.
 Spacing stays flexible except for detached quote or prime marks. Those do not read
 after a space when their ICU pattern joins them to the number (``84"``, ``6'``);
 :class:`FlexibleDetachedUnitDetector` reads the detached spellings on request under
-a separate type. Scientific one-letter symbols and the small set of unit spellings
-demonstrated to collide with ordinary running text are likewise declined;
-:class:`FlexibleAmbiguousUnitDetector` preserves them under a guarded type.
+a separate type. Directly constructed readers retain every other spelling accepted
+in 0.10.0, including scientific one-letter symbols. The default flexible reader set
+may decline ambiguous spellings of units newly added to that set;
+:class:`FlexibleAmbiguousUnitDetector` preserves those spellings under a guarded
+type.
 A rate ("1.0/km²", "3 per square kilometer") is read through CLDR's per-unit
 pattern, with the value's unit ``per-<unit>``; a symbol-only per form follows the
 number directly. A per form written without an amount ("/s", "per second") reads as
@@ -9017,8 +9021,10 @@ identifiers are omitted because their component readers use these same surfaces.
 ICU-derived and curated rows come from the constructed
 :class:`~icukit.FlexibleMeasureDetector`, along with its accepted English
 punctuation variants and spacing rules. Detached quote and prime spellings that
-require whitespace and ambiguous running-text spellings are guarded and are not
-accepted by this default inventory.
+require whitespace are guarded and are not accepted by this inventory. Ambiguous
+spellings of units newly added to the default selection are also guarded in the
+default inventory; an explicit ``units=`` selection reports all spellings its
+directly constructed readers accept.
 
 Args:
     locale: ICU locale identifier for the readers.

@@ -137,12 +137,15 @@ def test_detached_quote_and_prime_surfaces_are_marked_attached_only():
     assert all(not row.spaced for row in marks)
 
 
-def test_ambiguous_surfaces_are_absent_from_the_default_inventory_and_reachable():
-    inventory = unit_surface_inventory("en_US", locales=(), units=("volt",))
+def test_ambiguous_surfaces_follow_default_and_explicit_reader_acceptance():
+    default_inventory = unit_surface_inventory("en_US", locales=())
+    explicit_inventory = unit_surface_inventory("en_US", locales=(), units=("volt",))
     guarded = FlexibleAmbiguousUnitDetector("en_US", "volt", locales=())
     guarded_surfaces = {row[0] for row in guarded._accepted_unit_surfaces()}
 
     assert "V" in guarded_surfaces
-    assert not is_unit_surface("V", "en_US", locales=(), units=("volt",))
+    assert not is_unit_surface("V", "en_US", locales=())
+    assert is_unit_surface("V", "en_US", locales=(), units=("volt",))
     assert is_unit_surface("volts", "en_US", locales=(), units=("volt",))
-    assert not guarded_surfaces & {row.surface for row in inventory}
+    assert not guarded_surfaces & {row.surface for row in default_inventory if row.unit == "volt"}
+    assert guarded_surfaces <= {row.surface for row in explicit_inventory}
