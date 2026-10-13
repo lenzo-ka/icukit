@@ -89,6 +89,7 @@ def test_literal_hour_does_not_start_inside_a_time(locale, surface, fragment, wh
         detection["start"] == 0
         and detection["text"] == whole_time
         and detection["type"] == "date:Hm"
+        and detection["value"].fields == (("H", 8), ("m", 0))
         for detection in detections
     )
 
