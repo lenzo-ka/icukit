@@ -352,6 +352,7 @@ from .measure import (
     resolve_unit,
 )
 from .message import MessageFormatter, format_message
+from .offsets import OffsetUnit, TextOffsets
 from .parse import NumberParser, parse_currency, parse_number, parse_percent
 from .plural import (
     CATEGORY_FEW,
@@ -511,9 +512,16 @@ from .unicode import (
     list_categories,
     normalize,
 )
+from .unit_surfaces import UnitSurface, UnitSurfaceSource, is_unit_surface, unit_surface_inventory
 
 __all__ = [
     "__version__",
+    "OffsetUnit",
+    "TextOffsets",
+    "UnitSurface",
+    "UnitSurfaceSource",
+    "is_unit_surface",
+    "unit_surface_inventory",
     "BEHAVIOR_KIND",
     "BEHAVIOR_OPTION_NAMES",
     "BEHAVIOR_SCHEMA_VERSION",
