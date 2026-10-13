@@ -106,6 +106,26 @@ def test_detached_unit_availability_is_guarded_and_typed_separately():
     assert day.reason == "ICU exposes no guarded detached quote or prime surface for unit: 'day'"
 
 
+def test_ambiguous_unit_availability_is_guarded_and_typed_separately():
+    assert not any(row.family == "ambiguous-unit" for row in availability("en_US"))
+    rows = [
+        row
+        for row in availability("en_US", guarded=True)
+        if row.family == "ambiguous-unit" and row.spec == "volt"
+    ]
+    assert len(rows) == 1
+    assert rows[0].type == "measure:ambiguous-unit:volt"
+    assert rows[0].source == "icu"
+    watt = next(
+        row
+        for row in availability("en_US", guarded=True)
+        if row.family == "ambiguous-unit" and row.spec == "watt"
+    )
+    assert watt.type is None
+    assert watt.source is None
+    assert watt.reason == "ICU exposes no guarded ambiguous surface for unit: 'watt'"
+
+
 def test_inline_curated_families_are_unavailable_without_a_language_table():
     rows = availability("de")
     expected = {
@@ -135,43 +155,43 @@ def test_inline_curated_families_are_unavailable_without_a_language_table():
 _GANG_TEXT = "twenty-one; $45.50; 3 kg; 12%"
 _GANGS_BEFORE = {
     ("en_US", False): (
-        362,
-        "f6ea8158e6897683b8f595326a80c87b796d14bbbd9144b8755c425e1cb013b6",
+        369,
+        "98fc77e68aa002ecdeef831e39babbcc83271fa281a20f29fef78b41ba961dde",
         "823c4241f43fe0e73e7c7c6f15f9780e5301cbd33a96f393ba7857b1cd05aa58",
     ),
     ("en_US", True): (
-        417,
-        "fe72e959375266c6b6f4a99dc4cdda4bdb67e1d0a27c85c17f343fae4d650810",
+        436,
+        "d4f4acc3a89c1c21b72aa03340ed751dd82ce9706bff819bddf36b23c6f83bd8",
         "2d14df990633d737cfa578a6db989d8c30c8c9a890122042836ad393df932e1d",
     ),
     ("de", False): (
-        219,
-        "55aed956384fe5ec390f776a4e5c5f7c83751eb2eca243a79bfcb42a6e264e61",
+        226,
+        "5712fdf73d790927b23f80fc45869e70532dee41aad1bdf5b52d3ceeed7ce8ad",
         "8b0e7b6cbfe7f449406bf79b1eb2a0f98674f7c83675b4ce9eebb25d266da78e",
     ),
     ("de", True): (
-        286,
-        "02d4245422dd1193f68a2fab44242abd93a54e3bc05f01523a13679da1e7a2ab",
+        306,
+        "64f22871cfd1253a75b72df365679fad5ca8e8c0e0d43eba7991afcbd97ad195",
         "0c131cc9d1dd95331487a9a97ef5b6a7e9e8b7acf6a11b2de0492888358651f9",
     ),
     ("ja_JP", False): (
-        205,
-        "6fe3f6376118b67bfeb44fe110734e220056f414f0e390a8dd74734b5bba2072",
+        212,
+        "1fd148e85251c6d8d2cc43677114b4dfba3b19f8698859656e150f6cb7462a42",
         "32eb8f4e413a32659b3e7f7721cd2525ef57ff02f07e8374f5ff85a9d6dafc7f",
     ),
     ("ja_JP", True): (
-        261,
-        "f04836f9531d46d6fcbe3998a6f91b48f6c0e440a656b89bc7a238781fc7e96f",
+        280,
+        "716158f88d5a7912788584341c5f494e5cf194da3ffd0b7b6fe5683d59eab8d1",
         "870c7f6008e3d09cd73d12505bfa9e119062af7789c67cc7a6008618ab0f3087",
     ),
     ("yo", False): (
-        201,
-        "544504488e60ae39d2f39a7cbca00fc4f44d80811880650a8e798161411b3f32",
+        208,
+        "b7ac3f7f97724a037399c54ec5e98b065edf94620be49fe05eba3f05de152041",
         "c1b899734e4fb802a42bd8dc7fcc41a5caf8eddfed633948ce09a35e5d293577",
     ),
     ("yo", True): (
-        251,
-        "9c241f5b052a71f75281326db82834103648ce04bc3e24f925a0f38b2695c2e0",
+        269,
+        "26e38ca3464d73722da34e3bf1f0abc67a7403077756b91dc89d8fe500c09d9c",
         "8cbedd85266bbce9b50e09dd7c91d3b6f45c7c3f613ae49533384e0ef837baf0",
     ),
 }
