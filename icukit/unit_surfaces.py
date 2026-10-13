@@ -1,5 +1,4 @@
-"""
-Curated unit surfaces: the unit forms a language writes that ICU does not.
+"""Curated unit data and the public flexible-reader surface inventory.
 
 ICU and CLDR give the unit forms the measure reader inverts, and
 :func:`~icukit.icu_abbreviations` lists. A few forms English writes appear in no
@@ -10,6 +9,10 @@ ICU's. The same table names the units ICU composes from an SI prefix that are wo
 building ("kilovolt"), since ICU composes any prefix onto any unit and some
 compositions are false readings ("cc" is ICU's centicentury), and a few currency
 surfaces the currency reader does not take from ICU ("Rs" as the Indian rupee).
+
+The curated-table accessors remain declarative. The public inventory functions lazily
+load the reader engine because their contract is the live readers' accepted surfaces,
+including reader-derived punctuation and attachment rules.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ __all__ = [
 
 _DATA_DIR = Path(__file__).parent / "data" / "unit_surfaces"
 
-UnitSurfaceSource: TypeAlias = Literal["icu", "curated"]
+UnitSurfaceSource: TypeAlias = Literal["icu", "curated", "punctuated"]
 """The authority from which a measure-reader surface was derived."""
 
 
@@ -43,13 +46,18 @@ class UnitSurface:
     """One unit surface accepted by a flexible measure reader.
 
     ``unit`` is the canonical ICU identifier read from ``surface``. ``source`` is
-    ``"icu"`` when ICU formatting and equivalence data produced the surface, or
-    ``"curated"`` for a row in icukit's small supplemental table.
+    ``"icu"`` when ICU formatting and equivalence data produced the surface,
+    ``"curated"`` for a row in icukit's small supplemental table, or ``"punctuated"``
+    for an English abbreviation spelling accepted by the reader. ``spaced`` says the
+    reader accepts whitespace between the number and this surface. Every surface also
+    works attached; detached quote and prime forms have ``spaced=False`` because they
+    belong to the opt-in guarded reader when separated from the number.
     """
 
     surface: str
     unit: str
     source: UnitSurfaceSource
+    spaced: bool
 
 
 @cache
@@ -108,28 +116,47 @@ def _unit_surface_inventory(
     locales: tuple[str, ...] | None,
     units: tuple[str, ...] | None,
 ) -> tuple[UnitSurface, ...]:
-    # Import lazily to keep the declarative curated table independent of the reader
-    # engine while making the reader's own surface table the sole implementation.
+    # Import lazily so the declarative curated accessors remain independent at import
+    # time while the public inventory follows the reader's acceptance implementation.
     from .engine import _single_units
-    from .recognize import _locale_selection, _measure_surfaces
+    from .recognize import FlexibleMeasureDetector
 
-    selection = _locale_selection(locale, locales)
-    selected = _single_units(locale, selection, units)
+    selected = _single_units(locale, locales, units)
     rows: dict[UnitSurface, None] = {}
     for unit in selected:
-        measure_unit = icu.MeasureUnit.forIdentifier(unit)
-        if measure_unit.getIdentifier() != unit:
-            raise ValueError(f"unit is not a canonical ICU identifier: {unit!r}")
-        per_unit = f"per-{unit}"
         try:
-            per_valid = icu.MeasureUnit.forIdentifier(per_unit).getIdentifier() == per_unit
-        except icu.ICUError:
-            per_valid = False
-        surfaces, rates = _measure_surfaces(locale, unit, per_valid, selection)
-        for surface, width, _spaced, target in (*surfaces, *rates):
-            source: UnitSurfaceSource = "curated" if width == "curated" else "icu"
-            rows.setdefault(UnitSurface(surface, target, source))
-    return tuple(sorted(rows, key=lambda row: (row.surface, row.unit, row.source)))
+            reader = FlexibleMeasureDetector(locale, unit, locales=locales)
+        except (icu.ICUError, ValueError):
+            continue
+        for surface, target, source, spaced in reader._accepted_unit_surfaces():
+            rows.setdefault(UnitSurface(surface, target, source, spaced))
+    return tuple(sorted(rows, key=lambda row: (row.surface, row.unit, row.source, row.spaced)))
+
+
+def _canonical_units(units: Iterable[str] | None) -> tuple[str, ...] | None:
+    """Normalize a unit selection and enforce the public identifier contract."""
+    if units is None:
+        return None
+    selected = tuple(units)
+    for unit in selected:
+        try:
+            canonical = icu.MeasureUnit.forIdentifier(unit).getIdentifier()
+        except (icu.ICUError, TypeError):
+            canonical = None
+        if canonical != unit:
+            raise ValueError(f"unit is not a canonical ICU identifier: {unit!r}")
+    return selected
+
+
+def _selections(
+    locale: str,
+    locales: Iterable[str] | None,
+    units: Iterable[str] | None,
+) -> tuple[tuple[str, ...] | None, tuple[str, ...] | None]:
+    """Normalize selections exactly as the flexible reader gang does."""
+    from .recognize import _locale_selection
+
+    return _locale_selection(locale, locales), _canonical_units(units)
 
 
 def unit_surface_inventory(
@@ -140,22 +167,27 @@ def unit_surface_inventory(
 ) -> tuple[UnitSurface, ...]:
     """Return the unit surfaces accepted by flexible measure readers for ``locale``.
 
-    The default ``units`` are exactly the CLDR-preferred, duration, digital, and
+    ``units=None`` selects exactly the CLDR-preferred, duration, digital, and
     curated composed units selected by :func:`~icukit.flexible_detectors`. Passing
-    ``units`` selects the corresponding single-unit readers explicitly. Mixed-unit
-    identifiers are omitted because their component readers use these same surfaces.
+    ``units`` selects the corresponding single-unit readers explicitly; ``units=()``
+    therefore selects none. Mixed-unit identifiers are omitted because their component
+    readers use these same surfaces.
 
-    ICU-derived and curated rows pass through the same cached surface table used to
-    construct :class:`~icukit.FlexibleMeasureDetector`; this function does not maintain
-    a parallel spelling list.
+    ICU-derived and curated rows come from the constructed
+    :class:`~icukit.FlexibleMeasureDetector`, along with its accepted English
+    punctuation variants and spacing rules. Detached quote and prime spellings that
+    require whitespace are guarded and are not accepted by this default inventory.
 
     Args:
         locale: ICU locale identifier for the readers.
         locales: Optional same-language locale selection, as for ``flexible_detectors``.
         units: Optional ICU unit identifiers, as for ``flexible_detectors``.
+
+    Raises:
+        ValueError: If a selected unit identifier is unknown or non-canonical. The
+            message includes that identifier.
     """
-    locale_selection = None if locales is None else tuple(locales)
-    unit_selection = None if units is None else tuple(units)
+    locale_selection, unit_selection = _selections(locale, locales, units)
     return _unit_surface_inventory(locale, locale_selection, unit_selection)
 
 
@@ -175,7 +207,11 @@ def is_unit_surface(
     locales: Iterable[str] | None = None,
     units: Iterable[str] | None = None,
 ) -> bool:
-    """Whether ``text`` is a unit surface in :func:`unit_surface_inventory`."""
-    locale_selection = None if locales is None else tuple(locales)
-    unit_selection = None if units is None else tuple(units)
+    """Whether ``text`` is a unit surface in :func:`unit_surface_inventory`.
+
+    Raises:
+        ValueError: If a selected unit identifier is unknown or non-canonical. The
+            message includes that identifier.
+    """
+    locale_selection, unit_selection = _selections(locale, locales, units)
     return text in _unit_surface_texts(locale, locale_selection, unit_selection)

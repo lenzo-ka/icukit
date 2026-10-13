@@ -5484,12 +5484,19 @@ A text-offset coordinate system.
 
 Convert any number of boundaries in one text using one shared map.
 
-Offsets must identify boundaries between Unicode code points. An offset outside
-its coordinate system raises :class:`IndexError`; a UTF-8 byte offset or UTF-16
-code-unit offset inside a character raises :class:`ValueError`.
+``text`` is a read-only property. Offsets must identify boundaries between Unicode
+code points. An offset outside its coordinate system raises :class:`IndexError`; a
+UTF-8 byte offset or UTF-16 code-unit offset inside a character raises
+:class:`ValueError`.
+
+Python strings containing lone surrogates are supported. Their UTF-8 widths use
+Python's ``surrogatepass`` error handling, so each surrogate occupies three bytes.
 
 Args:
     text: The text whose boundaries will be converted.
+
+Raises:
+    TypeError: If ``text`` is not a string.
 
 #### `TextOffsets(text: 'str') -> 'None'`
 
@@ -8897,7 +8904,7 @@ Example:
 
 ## icukit.unit_surfaces
 
-Curated unit surfaces: the unit forms a language writes that ICU does not.
+Curated unit data and the public flexible-reader surface inventory.
 
 ICU and CLDR give the unit forms the measure reader inverts, and
 :func:`~icukit.icu_abbreviations` lists. A few forms English writes appear in no
@@ -8909,11 +8916,15 @@ building ("kilovolt"), since ICU composes any prefix onto any unit and some
 compositions are false readings ("cc" is ICU's centicentury), and a few currency
 surfaces the currency reader does not take from ICU ("Rs" as the Indian rupee).
 
+The curated-table accessors remain declarative. The public inventory functions lazily
+load the reader engine because their contract is the live readers' accepted surfaces,
+including reader-derived punctuation and attachment rules.
+
 ### Constants and type aliases
 
 #### `UnitSurfaceSource` (type alias)
 
-`Literal['icu', 'curated']`
+`Literal['icu', 'curated', 'punctuated']`
 
 The authority from which a measure-reader surface was derived.
 
@@ -8922,10 +8933,14 @@ The authority from which a measure-reader surface was derived.
 One unit surface accepted by a flexible measure reader.
 
 ``unit`` is the canonical ICU identifier read from ``surface``. ``source`` is
-``"icu"`` when ICU formatting and equivalence data produced the surface, or
-``"curated"`` for a row in icukit's small supplemental table.
+``"icu"`` when ICU formatting and equivalence data produced the surface,
+``"curated"`` for a row in icukit's small supplemental table, or ``"punctuated"``
+for an English abbreviation spelling accepted by the reader. ``spaced`` says the
+reader accepts whitespace between the number and this surface. Every surface also
+works attached; detached quote and prime forms have ``spaced=False`` because they
+belong to the opt-in guarded reader when separated from the number.
 
-#### `UnitSurface(surface: 'str', unit: 'str', source: 'UnitSurfaceSource') -> None`
+#### `UnitSurface(surface: 'str', unit: 'str', source: 'UnitSurfaceSource', spaced: 'bool') -> None`
 
 Initialize self.  See help(type(self)) for accurate signature.
 
@@ -8952,23 +8967,33 @@ Empty for a language with no table.
 
 Whether ``text`` is a unit surface in :func:`unit_surface_inventory`.
 
+Raises:
+    ValueError: If a selected unit identifier is unknown or non-canonical. The
+        message includes that identifier.
+
 ### `unit_surface_inventory(locale: 'str', *, locales: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None) -> 'tuple[UnitSurface, ...]'`
 
 Return the unit surfaces accepted by flexible measure readers for ``locale``.
 
-The default ``units`` are exactly the CLDR-preferred, duration, digital, and
+``units=None`` selects exactly the CLDR-preferred, duration, digital, and
 curated composed units selected by :func:`~icukit.flexible_detectors`. Passing
-``units`` selects the corresponding single-unit readers explicitly. Mixed-unit
-identifiers are omitted because their component readers use these same surfaces.
+``units`` selects the corresponding single-unit readers explicitly; ``units=()``
+therefore selects none. Mixed-unit identifiers are omitted because their component
+readers use these same surfaces.
 
-ICU-derived and curated rows pass through the same cached surface table used to
-construct :class:`~icukit.FlexibleMeasureDetector`; this function does not maintain
-a parallel spelling list.
+ICU-derived and curated rows come from the constructed
+:class:`~icukit.FlexibleMeasureDetector`, along with its accepted English
+punctuation variants and spacing rules. Detached quote and prime spellings that
+require whitespace are guarded and are not accepted by this default inventory.
 
 Args:
     locale: ICU locale identifier for the readers.
     locales: Optional same-language locale selection, as for ``flexible_detectors``.
     units: Optional ICU unit identifiers, as for ``flexible_detectors``.
+
+Raises:
+    ValueError: If a selected unit identifier is unknown or non-canonical. The
+        message includes that identifier.
 
 ## icukit.errors
 
