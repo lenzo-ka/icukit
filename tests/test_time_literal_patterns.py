@@ -3,7 +3,14 @@
 import icu
 import pytest
 
-from icukit.detectors import DateDetector, _pattern_has_word_literal, _pattern_runs
+from icukit.detectors import (
+    _NUMBER_RUN_MARKS,
+    _RANGE_RUN_MARKS,
+    DateDetector,
+    _pattern_has_word_literal,
+    _pattern_runs,
+    _word_interior_offsets,
+)
 from icukit.engine import (
     DATE_TIME_SKELETON_FAMILY,
     generated_detectors_report,
@@ -84,6 +91,7 @@ def test_literal_hour_does_not_start_inside_a_time(locale, surface, fragment, wh
         detection["start"] == 0
         and detection["text"] == whole_time
         and detection["type"] == "date:Hm"
+        and detection["value"].fields == (("H", 8), ("m", 0))
         for detection in detections
     )
 
@@ -98,6 +106,50 @@ def test_literal_hour_keeps_token_aligned_readings(surface, start):
         and detection["end"] == len(surface)
         and detection["value"].fields == (("H", 8),)
         for detection in detections
+    )
+
+
+@pytest.mark.parametrize("separator", ["/", "-", "–", ":"])
+def test_literal_hours_on_both_sides_of_punctuation_are_kept(separator):
+    text = f"8 Uhr{separator}9 Uhr"
+    detections = reader_set("de_DE").detect(text)
+
+    assert [
+        (detection["start"], detection["end"], detection["text"])
+        for detection in detections
+        if detection["type"] == "date:H"
+    ] == [(0, 5, "8 Uhr"), (6, 11, "9 Uhr")]
+
+
+def test_literal_hour_before_a_sentence_period_and_number_is_kept():
+    text = "Es ist 8 Uhr.9 Leute kamen"
+
+    assert any(
+        detection["type"] == "date:H" and detection["start"] == 7 and detection["end"] == 12
+        for detection in reader_set("de_DE").detect(text)
+    )
+
+
+@pytest.mark.parametrize(
+    ("locale", "text", "start", "fragment"),
+    [
+        ("dsb", "3zeg. 8:00", 1, "zeg. 8:00"),
+        ("dsb", "555-1234zeg. 8:00", 8, "zeg. 8:00"),
+        ("nds", "1.2.3Kl. 8.00", 5, "Kl. 8.00"),
+        ("nds", "2026-10-13Kl. 8.00", 10, "Kl. 8.00"),
+        ("dsb", "1.5zeg. 8:00", 3, "zeg. 8:00"),
+        ("dz", "123ཆུ་ཚོད་༠༨", 3, "ཆུ་ཚོད་༠༨"),
+        ("bg", "3.5сб, 08:00 ч.", 3, "сб, 08:00 ч."),
+        ("de", "5Sa., 8 Uhr morgens", 1, "Sa., 8 Uhr morgens"),
+        ("bg", "5сб, 08:00 ч.5", 1, "сб, 08:00 ч."),
+    ],
+)
+def test_literal_hour_does_not_start_inside_an_icu_word(locale, text, start, fragment):
+    assert not any(
+        detection["type"].startswith("date:")
+        and detection["start"] == start
+        and detection["text"] == fragment
+        for detection in reader_set(locale).detect(text)
     )
 
 
@@ -153,11 +205,28 @@ def test_literal_hour_does_not_end_inside_a_time(locale, surface, fragment):
     )
 
 
-@pytest.mark.parametrize("separator", ["-", "–", "—"])
-def test_literal_hour_does_not_start_inside_a_range(separator):
+@pytest.mark.parametrize("separator", sorted(_RANGE_RUN_MARKS))
+def test_literal_hour_is_kept_as_a_complete_range_endpoint(separator):
     detections = reader_set("de_DE").detect(f"8{separator}9 Uhr")
 
-    assert not any(detection["type"] == "date:H" for detection in detections)
+    assert any(
+        detection["type"] == "date:H" and detection["text"] == "9 Uhr" for detection in detections
+    )
+
+
+@pytest.mark.parametrize(
+    ("pattern", "edges"),
+    [
+        ("HH 'Uhr'", (True, False)),
+        ("'zeg'. H:mm", (False, True)),
+        ("H时", (True, False)),
+        ("ཆུ་ཚོད་HH", (False, True)),
+    ],
+)
+def test_pattern_digit_boundaries_follow_quoted_and_unquoted_runs(pattern, edges):
+    from icukit.detectors import _pattern_digit_boundaries
+
+    assert _pattern_digit_boundaries(pattern) == edges
 
 
 def test_locale_preference_day_period_literal_is_resolved():
@@ -235,6 +304,58 @@ def test_every_admitted_literal_12_hour_surface_round_trips_at_midnight_and_noon
                 ]
                 assert full, (locale, detector.skeleton, detector.pattern, surface)
                 assert all(_reformat_detection(detection) == surface for detection in full)
+
+
+@pytest.mark.slow
+def test_every_admitted_literal_hour_keeps_canonical_literal_boundaries():
+    """Separated literal-hour surfaces survive, but ICU-word fragments do not."""
+    from icukit.detectors import _pattern_literal_boundaries
+
+    instant = _time()
+    for locale in sorted(icu.Locale.getAvailableLocales()):
+        report = generated_detectors_report(locale, (DATE_TIME_SKELETON_FAMILY,))
+        for detector in report.detectors.detectors:
+            if not detector._literal_hour:
+                continue
+            surface = detector._df.format(instant)
+            starts_with_literal, ends_with_literal = _pattern_literal_boundaries(detector.pattern)
+            glued_contexts = []
+            if starts_with_literal:
+                glued_contexts.append((f"7{surface}", 1, 1))
+            if ends_with_literal:
+                glued_contexts.append((f"{surface}7", 0, len(surface)))
+            for text, start, boundary in glued_contexts:
+                if boundary not in _word_interior_offsets(text, locale):
+                    continue
+                assert not any(
+                    detection["start"] == start
+                    and detection["end"] == start + len(surface)
+                    and detection["text"] == surface
+                    for detection in detector.detect(text)
+                ), (locale, detector.skeleton, detector.pattern, surface, text)
+            if not detector._guard_literal_hour_boundaries:
+                continue
+            for mark in _NUMBER_RUN_MARKS | {"\u202f", "~", "～", "：", "／", "．"}:
+                contexts = []
+                if starts_with_literal:
+                    contexts.append((f"7{mark}{surface}", 2, 2))
+                if ends_with_literal:
+                    contexts.append((f"{surface}{mark}7", 0, len(surface)))
+                for text, start, boundary in contexts:
+                    found = any(
+                        detection["start"] == start
+                        and detection["end"] == start + len(surface)
+                        and detection["text"] == surface
+                        for detection in detector.detect(text)
+                    )
+                    expected = boundary not in _word_interior_offsets(text, locale)
+                    assert found is expected, (
+                        locale,
+                        detector.skeleton,
+                        detector.pattern,
+                        surface,
+                        text,
+                    )
 
 
 def test_every_icu_locale_hour_pattern_with_a_word_literal_is_invertible():
