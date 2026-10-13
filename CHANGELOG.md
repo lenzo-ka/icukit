@@ -79,6 +79,16 @@
 
 ### Changed
 
+- **Behavior change:** Default flexible readers now add every ICU-written single unit
+  in the `frequency` family plus `volt`, `micrometer`, and `nanometer` to the regional,
+  duration, digital, and curated selection, so forms such as `900 MHz`, `5 volts`,
+  `10 µm`, and `530 nm` read in every locale. The full ICU inventory exceeded the
+  per-row cost bound; these seven units retained the strongest measured gain. Pass
+  `units=()` to build no unit readers, or an explicit `units=` iterable to replace the
+  default selection. Ambiguous spellings including scientific one-letter symbols
+  remain reachable with `guarded=True` or `AMBIGUOUS_UNIT_FAMILY`, under
+  `measure:ambiguous-unit:<unit>` instead of the default measure type.
+
 - Decode quoted literals in ICU date-interval separators, and skip interval parsing when
   a text has none of the decoded mandatory literals under the reader's exact separator
   comparison. Narrow spell-out token comparisons by their folded prefix. Long runs of
