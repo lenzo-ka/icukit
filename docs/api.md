@@ -7,6 +7,12 @@ Version: 0.10.0
 Names exported by `icukit.__all__` (the `from icukit import ...` surface):
 
 - [`__version__`](#root-api-index) — constant, `icukit`
+- [`OffsetUnit`](#icukitoffsets) — alias, `icukit.offsets`
+- [`TextOffsets`](#icukitoffsets) — class, `icukit.offsets`
+- [`UnitSurface`](#icukitunit-surfaces) — class, `icukit.unit_surfaces`
+- [`UnitSurfaceSource`](#icukitunit-surfaces) — alias, `icukit.unit_surfaces`
+- [`is_unit_surface`](#icukitunit-surfaces) — function, `icukit.unit_surfaces`
+- [`unit_surface_inventory`](#icukitunit-surfaces) — function, `icukit.unit_surfaces`
 - [`BEHAVIOR_KIND`](#icukitbehavior) — constant, `icukit.behavior`
 - [`BEHAVIOR_OPTION_NAMES`](#icukitbehavior) — constant, `icukit.behavior`
 - [`BEHAVIOR_SCHEMA_VERSION`](#icukitbehavior) — constant, `icukit.behavior`
@@ -5462,6 +5468,48 @@ Example:
     ... )
     'She said hi'
 
+## icukit.offsets
+
+Convert text boundaries between code-point, UTF-8, and UTF-16 offsets.
+
+### Constants and type aliases
+
+#### `OffsetUnit` (type alias)
+
+`Literal['codepoint', 'utf8', 'utf16']`
+
+A text-offset coordinate system.
+
+### class `TextOffsets`
+
+Convert any number of boundaries in one text using one shared map.
+
+Offsets must identify boundaries between Unicode code points. An offset outside
+its coordinate system raises :class:`IndexError`; a UTF-8 byte offset or UTF-16
+code-unit offset inside a character raises :class:`ValueError`.
+
+Args:
+    text: The text whose boundaries will be converted.
+
+#### `TextOffsets(text: 'str') -> 'None'`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
+#### `convert(offsets: 'Iterable[int]', *, source: 'OffsetUnit', target: 'OffsetUnit') -> 'tuple[int, ...]'`
+
+Convert boundary ``offsets`` from ``source`` to ``target``.
+
+The result preserves input order and duplicates. Build one :class:`TextOffsets`
+for a text and reuse it when converting more than one collection of offsets.
+
+Args:
+    offsets: Boundary offsets to convert.
+    source: Coordinate system of ``offsets``.
+    target: Coordinate system of the returned offsets.
+
+Returns:
+    The corresponding offsets in ``target`` coordinates.
+
 ## icukit.parse
 
 Locale-aware parsing of numbers, currencies, and percentages.
@@ -8861,6 +8909,26 @@ building ("kilovolt"), since ICU composes any prefix onto any unit and some
 compositions are false readings ("cc" is ICU's centicentury), and a few currency
 surfaces the currency reader does not take from ICU ("Rs" as the Indian rupee).
 
+### Constants and type aliases
+
+#### `UnitSurfaceSource` (type alias)
+
+`Literal['icu', 'curated']`
+
+The authority from which a measure-reader surface was derived.
+
+### class `UnitSurface`
+
+One unit surface accepted by a flexible measure reader.
+
+``unit`` is the canonical ICU identifier read from ``surface``. ``source`` is
+``"icu"`` when ICU formatting and equivalence data produced the surface, or
+``"curated"`` for a row in icukit's small supplemental table.
+
+#### `UnitSurface(surface: 'str', unit: 'str', source: 'UnitSurfaceSource') -> None`
+
+Initialize self.  See help(type(self)) for accurate signature.
+
 ### `curated_composed_units(language: 'str') -> 'tuple[str, ...]'`
 
 The ICU units composed from an SI prefix that ``language``'s table chooses.
@@ -8879,6 +8947,28 @@ Sri Lankan, Nepalese).
 
 A rate's per form maps to ``per-<unit>`` ("per km²": ``per-square-kilometer``).
 Empty for a language with no table.
+
+### `is_unit_surface(text: 'str', locale: 'str', *, locales: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None) -> 'bool'`
+
+Whether ``text`` is a unit surface in :func:`unit_surface_inventory`.
+
+### `unit_surface_inventory(locale: 'str', *, locales: 'Iterable[str] | None' = None, units: 'Iterable[str] | None' = None) -> 'tuple[UnitSurface, ...]'`
+
+Return the unit surfaces accepted by flexible measure readers for ``locale``.
+
+The default ``units`` are exactly the CLDR-preferred, duration, digital, and
+curated composed units selected by :func:`~icukit.flexible_detectors`. Passing
+``units`` selects the corresponding single-unit readers explicitly. Mixed-unit
+identifiers are omitted because their component readers use these same surfaces.
+
+ICU-derived and curated rows pass through the same cached surface table used to
+construct :class:`~icukit.FlexibleMeasureDetector`; this function does not maintain
+a parallel spelling list.
+
+Args:
+    locale: ICU locale identifier for the readers.
+    locales: Optional same-language locale selection, as for ``flexible_detectors``.
+    units: Optional ICU unit identifiers, as for ``flexible_detectors``.
 
 ## icukit.errors
 

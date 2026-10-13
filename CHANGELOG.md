@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- `TextOffsets` converts any number of boundaries in one text among code-point,
+  UTF-8 byte, and UTF-16 code-unit offsets using the same maps as icukit's span and
+  ICU-boundary handling. Invalid offsets inside a character are rejected.
+- `unit_surface_inventory()` exposes the ICU-derived and curated unit spellings used
+  by the flexible measure readers, with each `UnitSurface` identifying its source;
+  `is_unit_surface()` tests membership in the same locale and unit selection.
+
 ## [0.10.0] - 2026-10-12
 
 ### Added
