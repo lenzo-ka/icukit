@@ -4940,6 +4940,7 @@ class FlexibleMeasureDetector(_GatedReader):
             if (surface, width, target) in abbreviations
             for variant in _english_internal_abbreviation_period_variants(surface)
         }
+        self._punctuated_units = tuple(period_units)
         self._periodizable_units = frozenset(abbreviations)
         # Longest first, those written as the text is (spaced or attached) ahead.
         self._ordered_units = {
@@ -4973,6 +4974,35 @@ class FlexibleMeasureDetector(_GatedReader):
                 "per-form": StartGate(chars=per_heads),
             },
         )
+
+    def _accepted_unit_surfaces(self) -> tuple[tuple[str, str, str, bool], ...]:
+        """The surfaces this reader accepts, with provenance and spaced acceptance."""
+        candidates: set[tuple[str, str, str]] = set()
+
+        def add(surface: str, target: str, source: str) -> None:
+            candidates.add((surface, target, source))
+
+        for surface, width, _expects_space, target in self._units:
+            source = "curated" if width == "curated" else "icu"
+            add(surface, target, source)
+            if (surface, width, target) in self._periodizable_units:
+                add(f"{surface}.", target, "punctuated")
+        for surface, _width, _expects_space, target in self._punctuated_units:
+            add(surface, target, "punctuated")
+            add(f"{surface}.", target, "punctuated")
+
+        def accepted(surface: str, target: str, spaced: bool) -> bool:
+            text = f"5{' ' if spaced else ''}{surface}"
+            found = self._match(text, 0)
+            return found is not None and found.end == len(text) and found.value.unit == target
+
+        rows = []
+        for surface, target, source in sorted(candidates):
+            attached = accepted(surface, target, False)
+            spaced = accepted(surface, target, True)
+            if attached or spaced:
+                rows.append((surface, target, source, spaced))
+        return tuple(rows)
 
     @staticmethod
     def _space(text: str, cursor: int) -> int:

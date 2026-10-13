@@ -2,18 +2,30 @@
 
 ## [Unreleased]
 
+### Added
+
+- `TextOffsets` converts any number of boundaries in one text among code-point,
+  UTF-8 byte, and UTF-16 code-unit offsets using the same maps as icukit's span and
+  ICU-boundary handling. Invalid offsets inside a character are rejected, lone
+  surrogates use `surrogatepass` UTF-8 widths, and the mapped text is read-only.
+- `unit_surface_inventory()` exposes the ICU-derived, curated, and punctuated unit
+  spellings accepted by the flexible measure readers, with each `UnitSurface`
+  identifying its source and whether whitespace before it is accepted;
+  `is_unit_surface()` tests membership in the same locale and unit selection. Invalid
+  unit identifiers raise `ValueError` from both functions.
+
 ### Fixed
 
 - Literal-hour readers no longer reject a complete ICU surface merely because a word
   literal borders punctuation and a digit. Numeric run guards now apply only at a
   pattern boundary that writes digits. Complete hour surfaces are kept as range
   endpoints, including the right endpoint of ICU interval forms such as `09 Uhr` in
-  `08–09 Uhr`: it is a true reading of the endpoint and the lattice keeps readings.
+  `08–09 Uhr`, since each is a complete reading of that endpoint.
   Numeric field fragments such as `00 Uhr` within `08:00 Uhr` and `8时` within
-  `8时30分` remain excluded. The 0.10.0 claim that these readers "do not start or end
-  inside a longer date, time, or range token" was not accurate. What holds now is that
-  they do not start or end inside a longer number or time token; complete hour surfaces
-  are kept as range endpoints.
+  `8时30分` remain excluded, and no reading starts inside an ICU word. This corrects the
+  0.10.0 entry, which said these readers do not start or end inside a longer date, time,
+  or range token: they do not start or end inside a longer number or time token, and
+  complete hour surfaces are kept as range endpoints.
 
 ## [0.10.0] - 2026-10-12
 
