@@ -145,5 +145,25 @@ mode order. RSS is the median increase in process maximum RSS after imports.
 
 ## Validation
 
-The final validation commands and commit identifiers are recorded here after the
-branch is merged with the final `origin/main` head.
+The branch merged `origin/main` at `d1cdcbbe9cd8312328064013b8265136cebedc50`
+after the implementation commits. The resulting merge commit is `e3075f4`.
+
+| Check | Result |
+|---|---|
+| `ruff check .` | passed |
+| `ruff format --check .` | passed, 260 files already formatted |
+| `python docs/generate.py --check` | passed, documentation up to date |
+| default pytest selection | 4,921 passed, 16 skipped, 3 expected xfails, 108 slow tests deselected; no failures |
+| `pytest -m slow` selection | all 108 passed |
+
+The default selection ran as 134 per-file shards. Slow tests ran in bounded node
+chunks; two aggregate chunks reached the 120-second probe ceiling, so their 12
+nodes were rerun individually and all passed. This preserves the complete pytest
+selections while keeping every probe within the required bound.
+
+Commits before this evidence update:
+
+- `a3d0147` — `Widen default unit selection`
+- `c895365` — `Document widened unit coverage`
+- `e3075f4` — merge `origin/main`
+- `26ab4e6` — `Update unit reader contract fixtures`
