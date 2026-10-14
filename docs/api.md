@@ -1,6 +1,6 @@
 # icukit API Reference
 
-Version: 0.10.0
+Version: 0.10.1
 
 ## Root API index
 

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-13
+
 ### Added
 
 - `TextOffsets` converts any number of boundaries in one text among code-point,
@@ -14,6 +16,24 @@
   `is_unit_surface()` tests membership in the same locale and unit selection. Pass
   `guarded=True` to either function to include the complete guarded unit families.
   Invalid unit identifiers raise `ValueError` from both functions.
+
+### Changed
+
+- **Behavior change:** Default flexible readers now add every ICU-written single unit
+  in the `frequency` family plus `volt`, `micrometer`, and `nanometer` to the regional,
+  duration, digital, and curated selection, so forms such as `900 MHz`, `5 volts`,
+  `10 µm`, and `530 nm` read in every locale. The full ICU inventory exceeded the
+  per-row cost bound; these seven units retained the strongest measured gain. Pass
+  `units=()` to build no unit readers, or an explicit `units=` iterable to replace the
+  default selection. Any single Unicode letter grapheme, in every script and with an
+  optional trailing period, remains reachable with `guarded=True` or
+  `AMBIGUOUS_UNIT_FAMILY`, under
+  `measure:ambiguous-unit:<unit>` instead of the default measure type. Explicit
+  `units=` selections and directly constructed `FlexibleMeasureDetector` readers keep
+  the same spellings and `measure:<unit>` readings as 0.10.0. The guarded unit families
+  remain complete when `locales=` or `units=` narrows the ordinary readers. ICU writes
+  English nautical mile as `nmi`; `nm` remains nanometer even though aviation and
+  marine usage can give it the other meaning.
 
 ### Fixed
 
@@ -92,22 +112,6 @@
   attribution and a per-document source receipt.
 
 ### Changed
-
-- **Behavior change:** Default flexible readers now add every ICU-written single unit
-  in the `frequency` family plus `volt`, `micrometer`, and `nanometer` to the regional,
-  duration, digital, and curated selection, so forms such as `900 MHz`, `5 volts`,
-  `10 µm`, and `530 nm` read in every locale. The full ICU inventory exceeded the
-  per-row cost bound; these seven units retained the strongest measured gain. Pass
-  `units=()` to build no unit readers, or an explicit `units=` iterable to replace the
-  default selection. Any single Unicode letter grapheme, in every script and with an
-  optional trailing period, remains reachable with `guarded=True` or
-  `AMBIGUOUS_UNIT_FAMILY`, under
-  `measure:ambiguous-unit:<unit>` instead of the default measure type. Explicit
-  `units=` selections and directly constructed `FlexibleMeasureDetector` readers keep
-  the same spellings and `measure:<unit>` readings as 0.10.0. The guarded unit families
-  remain complete when `locales=` or `units=` narrows the ordinary readers. ICU writes
-  English nautical mile as `nmi`; `nm` remains nanometer even though aviation and
-  marine usage can give it the other meaning.
 
 - Decode quoted literals in ICU date-interval separators, and skip interval parsing when
   a text has none of the decoded mandatory literals under the reader's exact separator
@@ -1199,7 +1203,8 @@
 
 - Initial release
 
-[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/lenzo-ka/icukit/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/lenzo-ka/icukit/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/lenzo-ka/icukit/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/lenzo-ka/icukit/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/lenzo-ka/icukit/compare/v0.8.0...v0.9.0
